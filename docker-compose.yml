@@ -1,0 +1,49 @@
+# Vela Gateway — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
+# Start with:  docker compose up -d
+# The backend reads connection info from backend/configs/config.yaml
+#
+# WARNING: the credentials below are weak defaults for local dev only. Ports are
+# bound to 127.0.0.1 so the datastores are NOT exposed on the host's network.
+# Do NOT use this file in production — run MySQL/Redis managed or hardened, with
+# secrets from the environment (C8).
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: vela-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: velaroot
+      MYSQL_DATABASE: vela_gateway
+      MYSQL_USER: vela
+      MYSQL_PASSWORD: velapass
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "127.0.0.1:3306:3306" # bind to loopback only — not the host's public interfaces
+    volumes:
+      - vela_mysql:/var/lib/mysql
+      # Schema is applied by the app, not initdb.d, so it is tracked in
+      # schema_migrations and there is a single migration source of truth:
+      #   VELA_MYSQL_DSN=... ./vela-gateway migrate   (then `init` for seed+admin)
+      # (Auto-running the SQL here would replay un-tracked, breaking later ALTERs.)
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uvela", "-pvelapass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: vela-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379" # loopback only
+    volumes:
+      - vela_redis:/data
+
+volumes:
+  vela_mysql:
+  vela_redis:

@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/motion.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/styles.css">
+<script src="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/_ds_bundle.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  html,body{ height:100%; margin:0; }
+  @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  @keyframes modalIn { from{opacity:0; transform:translate(-50%,-46%) scale(.97)} to{opacity:1; transform:translate(-50%,-50%) scale(1)} }
+  .scy{ overflow-y:auto; }
+  .scy::-webkit-scrollbar{ width:9px; height:9px; }
+  .scy::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.1); border-radius:8px; }
+  .scy::-webkit-scrollbar-track{ background:transparent; }
+</style>
+</helmet>
+
+<div data-theme="dark" data-screen-label="Vela 数据库网关" style="height:100vh; display:flex; background:var(--surface-page); color:var(--text-body); font-family:var(--font-body); overflow:hidden">
+
+  <!-- ===== LEFT RAIL ===== -->
+  <div style="width:74px; flex-shrink:0; border-right:1px solid var(--border-subtle); background:var(--surface-sunken); display:flex; flex-direction:column; align-items:center; padding:14px 0">
+    <div style="width:36px; height:36px; border-radius:10px; background:linear-gradient(135deg,#3b6ef6,#2dcde6); display:flex; align-items:center; justify-content:center; box-shadow:0 0 18px -4px rgba(45,205,230,.6)"><i data-lucide="sailboat" style="width:20px;height:20px;color:#fff"></i></div>
+    <div style="margin-top:22px; display:flex; flex-direction:column; gap:6px; width:100%; align-items:center">
+      <div onClick="{{ goTerminal }}" title="终端" style="width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navTerminalBg }};color:{{ navTerminalColor }};border:1px solid {{ navTerminalBorder }}"><i data-lucide="square-terminal" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navTerm }}</span></div>
+      <div onClick="{{ goApprove }}" title="审批待办" style="position:relative;width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navApproveBg }};color:{{ navApproveColor }};border:1px solid {{ navApproveBorder }}"><i data-lucide="clipboard-check" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navAppr }}</span><span style="position:absolute;top:5px;right:9px;min-width:15px;height:15px;padding:0 3px;border-radius:999px;background:var(--danger);color:#fff;font:700 9px var(--font-mono);display:flex;align-items:center;justify-content:center">{{ pendingCount }}</span></div>
+      <div onClick="{{ goDb }}" title="数据库配置" style="width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navDbBg }};color:{{ navDbColor }};border:1px solid {{ navDbBorder }}"><i data-lucide="database" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navDb }}</span></div>
+      <div onClick="{{ goRules }}" title="高危规则" style="width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navRulesBg }};color:{{ navRulesColor }};border:1px solid {{ navRulesBorder }}"><i data-lucide="shield-alert" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navRules }}</span></div>
+      <div onClick="{{ goPerms }}" title="权限管理" style="width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navPermsBg }};color:{{ navPermsColor }};border:1px solid {{ navPermsBorder }}"><i data-lucide="users-round" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navPerms }}</span></div>
+      <div onClick="{{ goAudit }}" title="审计日志" style="width:58px;height:52px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .15s ease;background:{{ navAuditBg }};color:{{ navAuditColor }};border:1px solid {{ navAuditBorder }}"><i data-lucide="scroll-text" style="width:21px;height:21px"></i><span style="font:600 9px var(--font-mono)">{{ L.navAudit }}</span></div>
+    </div>
+    <div style="margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:14px">
+      <div onClick="{{ goSettings }}" title="设置 / Settings" style="width:58px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s ease;background:{{ navSetBg }};color:{{ navSetColor }};border:1px solid {{ navSetBorder }}"><i data-lucide="settings" style="width:20px;height:20px"></i></div>
+      <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 12px var(--font-body);color:#fff">LW</div>
+    </div>
+  </div>
+
+  <!-- ===== TOP BAR + CONTENT ===== -->
+  <div style="flex:1; min-width:0; display:flex; flex-direction:column">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:center; gap:14px; height:54px; flex-shrink:0; padding:0 22px; border-bottom:1px solid var(--border-subtle); background:rgba(20,24,38,.55); backdrop-filter:blur(8px)">
+      <div style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">{{ pageTitle }}</div>
+      <div style="font:500 12px var(--font-mono); color:var(--text-faint)">{{ pageSub }}</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px">
+        <div style="display:flex; align-items:center; gap:7px; height:30px; padding:0 12px; border:1px solid var(--border-subtle); border-radius:999px; font:500 12px var(--font-mono); color:var(--text-muted)"><i data-lucide="activity" style="width:14px;height:14px;color:#2dcde6"></i>{{ L.gwOnline }}</div>
+        <div style="display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 11px; border-radius:999px; background:var(--warning-subtle); color:var(--warning-text); font:600 12px var(--font-mono)"><i data-lucide="hourglass" style="width:13px;height:13px"></i>{{ L.pending }} {{ pendingCount }}</div>
+        <div onClick="{{ toggleLang }}" title="中 / EN" style="display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 12px;border:1px solid var(--border-default);border-radius:999px;cursor:pointer;font:600 12px var(--font-mono);color:var(--text-body)"><i data-lucide="languages" style="width:14px;height:14px"></i>{{ L.langLabel }}</div>
+        <i data-lucide="bell" style="width:18px;height:18px;color:var(--text-muted)"></i>
+      </div>
+    </div>
+
+    <!-- ============================ TERMINAL MODULE ============================ -->
+    <sc-if value="{{ isTerminal }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1; min-height:0; display:grid; grid-template-columns:268px 1fr 340px">
+
+      <!-- tree -->
+      <div style="border-right:1px solid var(--border-subtle); display:flex; flex-direction:column; background:var(--surface-sunken)">
+        <div style="padding:16px 14px 10px">
+          <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:10px">数据库分层</div>
+          <div style="display:flex; align-items:center; gap:8px; height:34px; padding:0 11px; background:var(--surface-card); border:1px solid var(--border-subtle); border-radius:10px"><i data-lucide="search" style="width:14px;height:14px;color:var(--text-faint)"></i><span style="font:400 12px var(--font-body); color:var(--text-faint)">搜索实例 / 库 / 表</span></div>
+        </div>
+        <div class="scy" style="flex:1; padding:2px 8px 12px">
+          <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;font:600 12px var(--font-body);color:var(--text-body)"><i data-lucide="chevron-down" style="width:14px;height:14px;color:var(--text-muted)"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--danger)"></span>{{ L.prodEnv }}</div>
+          <div style="padding-left:14px">
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--accent-subtle);border:1px solid var(--accent-subtle-border);font:600 12px var(--font-mono);color:var(--accent-text)"><i data-lucide="database" style="width:14px;height:14px"></i>order-cluster<span style="margin-left:auto;font:600 10px var(--font-mono);color:var(--danger-text)">{{ L.highTag }}</span></div>
+            <div style="padding-left:20px;padding-top:2px">
+              <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;font:400 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="folder-open" style="width:13px;height:13px"></i>orders_db</div>
+              <div style="padding-left:16px">
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;font:400 12px var(--font-mono);color:var(--text-body)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--text-faint)"></i>orders</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.04);font:400 12px var(--font-mono);color:var(--text-strong)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--cyan-400)"></i>orders_2024_q3</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;font:400 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--text-faint)"></i>payments</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font:500 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="database" style="width:14px;height:14px"></i>user-cluster<span style="margin-left:auto;font:600 10px var(--font-mono);color:var(--warning-text)">{{ L.limitedTag }}</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;margin-top:4px;font:600 12px var(--font-body);color:var(--text-muted)"><i data-lucide="chevron-right" style="width:14px;height:14px"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--warning)"></span>{{ L.stagingEnv }}</div>
+          <div style="display:flex;align-items:center;gap:7px;padding:7px 8px;font:600 12px var(--font-body);color:var(--text-muted)"><i data-lucide="chevron-right" style="width:14px;height:14px"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--success)"></span>{{ L.devEnv }}</div>
+        </div>
+        <div style="padding:12px 14px; border-top:1px solid var(--border-subtle); font:500 11px var(--font-mono); color:var(--text-faint)">{{ L.treeFooter }}</div>
+      </div>
+
+      <!-- terminal -->
+      <div style="display:flex; flex-direction:column; min-width:0; background:var(--surface-page)">
+        <div style="display:flex; align-items:center; gap:2px; height:40px; padding:0 14px; border-bottom:1px solid var(--border-subtle)">
+          <div style="display:flex;align-items:center;gap:7px;height:30px;padding:0 13px;border-radius:8px 8px 0 0;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-bottom:none;font:500 12px var(--font-mono);color:var(--text-body)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>order-cluster · SQL</div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:10px;font:500 11px var(--font-mono);color:var(--text-faint)">
+            <label style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border:1px solid var(--accent-subtle-border);background:var(--accent-subtle);border-radius:8px;color:var(--accent-text);font:600 11px var(--font-mono);cursor:pointer"><i data-lucide="upload" style="width:13px;height:13px"></i>{{ L.uploadScript }}<input type="file" accept=".sql,text/plain" onChange="{{ onScriptFile }}" style="display:none" /></label>
+            <div onClick="{{ loadSampleScript }}" style="display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 10px;border:1px solid var(--border-default);border-radius:8px;color:var(--text-muted);cursor:pointer"><i data-lucide="file-code-2" style="width:13px;height:13px"></i>{{ L.sampleScript }}</div>
+            <span>{{ L.roleTag }}</span><span>{{ L.policyTag }}</span><i data-lucide="rotate-cw" style="width:14px;height:14px"></i>
+          </div>
+        </div>
+        <div class="scy" style="flex:1; padding:16px 18px; font-family:var(--font-mono); font-size:13px; line-height:1.75">
+          <sc-for list="{{ entries }}" as="e" hint-placeholder-count="3">
+            <sc-if value="{{ e.isInfo }}"><div style="color:var(--text-faint); margin-top:6px">{{ e.text }}</div></sc-if>
+            <sc-if value="{{ e.isCmd }}"><div style="margin-top:12px"><span style="color:#8facff">order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">{{ e.text }}</span></div></sc-if>
+            <sc-if value="{{ e.isOut }}"><div style="color:var(--text-body); padding-left:2px">{{ e.text }}</div></sc-if>
+            <sc-if value="{{ e.isSuccess }}"><div style="color:var(--success-text); padding-left:2px; display:flex; align-items:center; gap:7px"><i data-lucide="circle-check" style="width:14px;height:14px"></i>{{ e.text }}</div></sc-if>
+            <sc-if value="{{ e.isIntercept }}">
+              <div style="margin-top:10px; border:1px solid rgba(240,71,62,.4); border-left:3px solid var(--danger); border-radius:10px; background:var(--danger-subtle); padding:12px 14px">
+                <div style="display:flex;align-items:center;gap:8px;font:600 12px var(--font-body);color:var(--danger-text)"><i data-lucide="shield-alert" style="width:15px;height:15px"></i>{{ L.interceptTitle }}</div>
+                <div style="margin-top:7px;font:400 12px/1.6 var(--font-body);color:var(--text-body)">{{ L.hitRule }} <span style="color:var(--text-strong)">{{ e.rule }}</span></div>
+                <div style="margin-top:9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                  <span style="font:600 11px var(--font-mono);color:var(--text-muted)">{{ L.apGen }}</span>
+                  <span style="font:600 12px var(--font-mono);color:#8facff">{{ e.ap }}</span>
+                  <span style="display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>{{ L.pendBadge }}</span>
+                  <span style="font:500 11px var(--font-mono);color:var(--text-faint);margin-left:auto">{{ L.larkSync }}</span>
+                </div>
+              </div>
+            </sc-if>
+          </sc-for>
+          <!-- live prompt -->
+          <div style="margin-top:12px; display:flex; align-items:center; gap:8px">
+            <span style="color:#8facff; white-space:nowrap">order-cluster</span><span style="color:var(--cyan-400)">❯</span>
+            <input value="{{ input }}" onChange="{{ onInput }}" onKeyDown="{{ onKey }}" placeholder="{{ L.cmdPlaceholder }}" style="flex:1; min-width:0; background:transparent; border:none; outline:none; color:var(--text-strong); font-family:var(--font-mono); font-size:13px" />
+          </div>
+        </div>
+        <div style="height:36px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:16px; padding:0 16px; font:500 11px var(--font-mono); color:var(--text-faint)"><span style="color:var(--success-text)">{{ L.connected }}</span><span>dba_l2</span><span>{{ L.tryHint }} <span style="color:var(--text-body)">DROP TABLE orders_2024_q3;</span></span><span style="margin-left:auto">{{ L.utf8audit }}</span></div>
+      </div>
+
+      <!-- inspector -->
+      <div class="scy" style="border-left:1px solid var(--border-subtle); background:var(--surface-card); padding:16px 16px 24px">
+        <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase">{{ L.ctxTitle }}</div>
+        <div style="margin-top:14px; display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid {{ riskBorder }}; border-radius:12px; background:{{ riskBg }}">
+          <i data-lucide="{{ riskIcon }}" style="width:22px;height:22px;color:{{ riskColor }}"></i>
+          <div><div style="font:700 14px var(--font-display);color:{{ riskColor }};letter-spacing:-.01em">{{ riskTitle }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted)">{{ riskSub }}</div></div>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:11px">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">{{ L.targetInst }}</span><span style="font:500 12px var(--font-mono);color:var(--text-body)">prod-order-cluster</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">{{ L.dbLabel }}</span><span style="font:500 12px var(--font-mono);color:var(--text-body)">orders_db</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">{{ L.connRole }}</span><span style="font:500 12px var(--font-mono);color:#8facff">dba_l2</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">{{ L.gwPolicy }}</span><span style="font:500 12px var(--font-mono);color:var(--text-body)">strict</span></div>
+        </div>
+        <div style="margin-top:16px;height:1px;background:var(--border-subtle)"></div>
+        <div style="margin-top:14px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">{{ L.limitList }}</div>
+        <div style="margin-top:11px;display:flex;flex-wrap:wrap;gap:7px">
+          <sc-for list="{{ riskCmdsProd }}" as="c" hint-placeholder-count="6">
+            <span style="height:24px;padding:0 10px;display:inline-flex;align-items:center;border-radius:8px;background:{{ c.bg }};color:{{ c.color }};font:600 11px var(--font-mono)">{{ c.name }}</span>
+          </sc-for>
+        </div>
+        <div style="margin-top:8px;font:500 10px var(--font-mono);color:var(--text-faint)">{{ L.limitHint }}</div>
+        <div style="margin-top:18px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">{{ L.chainTitle }}</div>
+        <div style="margin-top:11px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:#fff">LW</div><div style="flex:1;font:600 12px var(--font-body);color:var(--text-body)">Lin Wei · {{ L.initiated }}</div></div>
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:var(--text-muted)">ZW</div><div style="flex:1;font:600 12px var(--font-body);color:var(--text-body)">张伟 · DBA 组长</div></div>
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:var(--text-muted)">LN</div><div style="flex:1;font:600 12px var(--font-body);color:var(--text-body)">李娜 · DBA 负责人</div></div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============================ APPROVAL INBOX MODULE ============================ -->
+    <sc-if value="{{ isApprove }}" hint-placeholder-val="{{ true }}">
+    <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+      <div style="display:flex; align-items:center; margin-bottom:18px">
+        <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">APPROVAL INBOX</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ pendingLabel }} {{ L.apprSubTail }}</div></div>
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center">
+          <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--accent-subtle-border);background:var(--accent-subtle);border-radius:10px;font:600 12px var(--font-mono);color:var(--accent-text)"><i data-lucide="inbox" style="width:14px;height:14px"></i>{{ L.mineAppr }}</div>
+          <div style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;font:500 12px var(--font-mono);color:var(--text-muted)">{{ L.allAppr }}</div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px; max-width:920px">
+        <sc-for list="{{ approvals }}" as="a" hint-placeholder-count="3">
+          <div style="border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-card)">
+            <div style="height:4px; background:linear-gradient(90deg,#f0473e,#ffb648)"></div>
+            <div style="padding:16px 20px">
+              <div style="display:flex; align-items:center; gap:10px">
+                <span style="font:700 15px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">{{ a.kw }} {{ L.apprCardTail }}</span>
+                <span style="display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:{{ a.riskBg }};color:{{ a.riskColor }};font:600 11px var(--font-mono)">{{ a.risk }}</span>
+                <span style="margin-left:auto;font:600 12px var(--font-mono);color:#8facff">#{{ a.id }}</span>
+                <span style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ a.time }}</span>
+              </div>
+              <div style="margin-top:12px;display:flex;gap:22px">
+                <div style="flex:1;min-width:0">
+                  <div style="background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:10px;padding:10px 13px;font:500 13px var(--font-mono);color:var(--text-body);word-break:break-all">{{ a.cmd }}</div>
+                  <div style="margin-top:11px;display:grid;grid-template-columns:1fr 1fr;gap:9px 20px">
+                    <div><span style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.apInitiator }}</span><div style="display:flex;align-items:center;gap:7px;margin-top:3px"><div style="width:22px;height:22px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">{{ a.ini }}</div><span style="font:600 12px var(--font-body);color:var(--text-body)">{{ a.who }}</span></div></div>
+                    <div><span style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.apTarget }}</span><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:5px">{{ a.env }} · {{ a.inst }}</div></div>
+                  </div>
+                  <div style="margin-top:10px"><span style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.apReason }}</span><div style="font:400 12.5px/1.5 var(--font-body);color:var(--text-body);margin-top:3px">{{ a.reason }}</div></div>
+                </div>
+              </div>
+            </div>
+            <sc-if value="{{ a.isPending }}">
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+              <div style="display:flex;align-items:center;gap:7px;font:500 11px var(--font-mono);color:var(--text-muted)"><i data-lucide="git-pull-request-arrow" style="width:14px;height:14px;color:#8facff"></i>{{ L.apChain }}</div>
+              <div style="margin-left:auto;display:flex;gap:10px">
+                <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="danger" onClick="{{ a.reject }}" hint-size="auto,38px">{{ L.apReject }}</x-import>
+                <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ a.approve }}" hint-size="auto,38px">{{ L.apApprove }}</x-import>
+              </div>
+            </div>
+            </sc-if>
+            <sc-if value="{{ a.isApproved }}">
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 20px;border-top:1px solid var(--border-subtle);background:var(--success-subtle);font:600 12px var(--font-mono);color:var(--success-text)"><i data-lucide="circle-check-big" style="width:15px;height:15px"></i>{{ L.apDone }}</div>
+            </sc-if>
+            <sc-if value="{{ a.isRejected }}">
+            <div style="display:flex;align-items:center;gap:8px;padding:13px 20px;border-top:1px solid var(--border-subtle);background:var(--danger-subtle);font:600 12px var(--font-mono);color:var(--danger-text)"><i data-lucide="circle-x" style="width:15px;height:15px"></i>{{ L.apRejected }}</div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============================ DB CONFIG MODULE ============================ -->
+    <sc-if value="{{ isDb }}" hint-placeholder-val="{{ true }}">
+    <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+      <div style="display:flex; align-items:center; margin-bottom:18px">
+        <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">CONNECTIONS</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ connCount }} {{ L.connSub }}</div></div>
+        <div style="margin-left:auto; display:flex; gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,40px">{{ L.importInst }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.newConn }}</x-import>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-card)">
+        <div style="display:grid; grid-template-columns:1.5fr 1fr 1.7fr 1fr 1fr 0.9fr; gap:12px; padding:12px 18px; border-bottom:1px solid var(--border-subtle); background:var(--surface-sunken); font:600 11px var(--font-mono); letter-spacing:.06em; color:var(--text-faint); text-transform:uppercase">
+          <span>{{ L.colInst }}</span><span>{{ L.colEngine }}</span><span>{{ L.colAddr }}</span><span>{{ L.colRole }}</span><span>{{ L.colPolicy }}</span><span>{{ L.colStatus }}</span>
+        </div>
+        <div style="padding:9px 18px;background:rgba(240,71,62,.06);display:flex;align-items:center;gap:8px;font:600 11px var(--font-mono);color:var(--danger-text)"><span style="width:6px;height:6px;border-radius:50%;background:var(--danger)"></span>{{ L.prodRow }}</div>
+        <sc-for list="{{ connProd }}" as="c" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr 1.7fr 1fr 1fr 0.9fr;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border-subtle);align-items:center">
+            <div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ c.name }}</div><div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ c.layer }}</div></div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-body)">{{ c.engine }}</div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ c.host }}</div>
+            <div style="font:500 12px var(--font-mono);color:{{ c.roleColor }}">{{ c.role }}</div>
+            <div><span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:{{ c.polBg }};color:{{ c.polColor }};font:600 11px var(--font-mono)">{{ c.policy }}</span></div>
+            <div><span onClick="{{ c.toggle }}" title="切换状态" style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;cursor:pointer;background:{{ c.stBg }};color:{{ c.stColor }};font:600 11px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>{{ c.stText }}</span></div>
+          </div>
+        </sc-for>
+        <div style="padding:9px 18px;background:rgba(245,165,36,.06);display:flex;align-items:center;gap:8px;font:600 11px var(--font-mono);color:var(--warning-text)"><span style="width:6px;height:6px;border-radius:50%;background:var(--warning)"></span>{{ L.stgRow }}</div>
+        <sc-for list="{{ connStg }}" as="c" hint-placeholder-count="1">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr 1.7fr 1fr 1fr 0.9fr;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border-subtle);align-items:center">
+            <div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ c.name }}</div><div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ c.layer }}</div></div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-body)">{{ c.engine }}</div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ c.host }}</div>
+            <div style="font:500 12px var(--font-mono);color:{{ c.roleColor }}">{{ c.role }}</div>
+            <div><span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:{{ c.polBg }};color:{{ c.polColor }};font:600 11px var(--font-mono)">{{ c.policy }}</span></div>
+            <div><span onClick="{{ c.toggle }}" title="切换状态" style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;cursor:pointer;background:{{ c.stBg }};color:{{ c.stColor }};font:600 11px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>{{ c.stText }}</span></div>
+          </div>
+        </sc-for>
+        <div style="padding:9px 18px;background:rgba(24,179,104,.06);display:flex;align-items:center;gap:8px;font:600 11px var(--font-mono);color:var(--success-text)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>{{ L.devRow }}</div>
+        <sc-for list="{{ connDev }}" as="c" hint-placeholder-count="1">
+          <div style="display:grid;grid-template-columns:1.5fr 1fr 1.7fr 1fr 1fr 0.9fr;gap:12px;padding:14px 18px;align-items:center">
+            <div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ c.name }}</div><div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ c.layer }}</div></div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-body)">{{ c.engine }}</div>
+            <div style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ c.host }}</div>
+            <div style="font:500 12px var(--font-mono);color:{{ c.roleColor }}">{{ c.role }}</div>
+            <div><span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:{{ c.polBg }};color:{{ c.polColor }};font:600 11px var(--font-mono)">{{ c.policy }}</span></div>
+            <div><span onClick="{{ c.toggle }}" title="切换状态" style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;cursor:pointer;background:{{ c.stBg }};color:{{ c.stColor }};font:600 11px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>{{ c.stText }}</span></div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- new connection mini form -->
+      <div style="margin-top:20px; border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); padding:20px 22px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px"><div style="font:600 14px var(--font-display); color:var(--text-strong)">{{ L.formNewConn }}</div><span style="font:600 12px var(--font-mono);color:var(--success-text)">{{ connSavedText }}</span></div>
+        <div style="font:500 12px var(--font-body); color:var(--text-muted); margin-bottom:16px">{{ L.formNewConnSub }}</div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px">
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fName }}</div><input value="{{ draftName }}" onChange="{{ onConnName }}" placeholder="order-cluster-2" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" /></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEngine }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ engineOpts }}" value="{{ draftEngine }}" onChange="{{ onConnEngine }}" hint-size="100%,40px"></x-import></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEnv }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ envSelectOpts }}" value="{{ draftEnv }}" onChange="{{ onConnEnv }}" hint-size="100%,40px"></x-import></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fAddr }}</div><input value="{{ draftHost }}" onChange="{{ onConnHost }}" placeholder="10.20.3.12:3306" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" /></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fPolicy }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ policyOpts }}" value="{{ draftPolicy }}" onChange="{{ onConnPolicy }}" hint-size="100%,40px"></x-import></div>
+          <div style="display:flex;align-items:flex-end"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" full-width="{{ true }}" onClick="{{ addConnection }}" hint-size="100%,40px">{{ L.fSave }}</x-import></div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============================ RISK RULES MODULE ============================ -->
+    <sc-if value="{{ isRules }}" hint-placeholder-val="{{ true }}">
+    <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+      <div style="display:flex; align-items:center; margin-bottom:18px">
+        <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">RISK POLICIES</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ L.riskSub }}</div></div>
+        <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openRuleForm }}" hint-size="auto,40px">{{ L.newRule }}</x-import></div>
+      </div>
+
+      <!-- editable high-risk command dictionary -->
+      <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); padding:18px 20px; margin-bottom:18px">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px">
+          <div style="width:32px;height:32px;border-radius:9px;background:var(--danger-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="list-x" style="width:17px;height:17px;color:var(--danger)"></i></div>
+          <div style="flex:1"><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.dictTitle }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.dictSub }}</div></div>
+          <div style="display:flex;border:1px solid var(--border-default);border-radius:10px;overflow:hidden">
+            <div onClick="{{ setEnvProd }}" style="height:32px;line-height:32px;padding:0 14px;cursor:pointer;font:600 11px var(--font-mono);background:{{ envTabProdBg }};color:{{ envTabProdColor }}">PROD</div>
+            <div onClick="{{ setEnvStg }}" style="height:32px;line-height:32px;padding:0 14px;cursor:pointer;font:600 11px var(--font-mono);border-left:1px solid var(--border-subtle);background:{{ envTabStgBg }};color:{{ envTabStgColor }}">STAGING</div>
+            <div onClick="{{ setEnvDev }}" style="height:32px;line-height:32px;padding:0 14px;cursor:pointer;font:600 11px var(--font-mono);border-left:1px solid var(--border-subtle);background:{{ envTabDevBg }};color:{{ envTabDevColor }}">DEV</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:9px; align-items:center">
+          <sc-for list="{{ riskCmds }}" as="c" hint-placeholder-count="7">
+            <div style="display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 6px 0 12px;border-radius:999px;background:{{ c.bg }};color:{{ c.color }};opacity:{{ c.op }};transition:opacity .15s ease">
+              <span style="font:600 12px var(--font-mono)">{{ c.name }}</span>
+              <span onClick="{{ c.cycle }}" title="切换等级" style="font:700 9px var(--font-mono);padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.1);cursor:pointer">{{ c.tag }}</span>
+              <span onClick="{{ c.remove }}" title="移除" style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;background:rgba(255,255,255,.08)"><i data-lucide="x" style="width:12px;height:12px"></i></span>
+            </div>
+          </sc-for>
+          <div style="display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 6px 0 12px;border:1px dashed var(--border-default);border-radius:999px">
+            <input value="{{ cmdDraft }}" onChange="{{ onCmdDraft }}" onKeyDown="{{ onCmdKey }}" placeholder="{{ L.addCmdPh }}" style="width:104px;background:transparent;border:none;outline:none;font:600 12px var(--font-mono);color:var(--text-body);text-transform:uppercase" />
+            <span onClick="{{ addRiskCmd }}" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--accent);color:#fff;cursor:pointer"><i data-lucide="plus" style="width:14px;height:14px"></i></span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:14px; margin-bottom:18px">
+        <div style="flex:1;border:1px solid var(--border-subtle);border-radius:12px;background:var(--surface-card);padding:16px 18px"><div style="font:700 26px var(--font-display);color:var(--danger-text);letter-spacing:-.02em">5</div><div style="font:500 12px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.statBlock }}</div></div>
+        <div style="flex:1;border:1px solid var(--border-subtle);border-radius:12px;background:var(--surface-card);padding:16px 18px"><div style="font:700 26px var(--font-display);color:var(--warning-text);letter-spacing:-.02em">2</div><div style="font:500 12px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.statAlert }}</div></div>
+        <div style="flex:1;border:1px solid var(--border-subtle);border-radius:12px;background:var(--surface-card);padding:16px 18px"><div style="font:700 26px var(--font-display);background:linear-gradient(135deg,#5e83fb,#2dcde6);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.02em">128</div><div style="font:500 12px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.statHits }}</div></div>
+        <div style="flex:1;border:1px solid var(--border-subtle);border-radius:12px;background:var(--surface-card);padding:16px 18px"><div style="font:700 26px var(--font-display);color:var(--text-strong);letter-spacing:-.02em">99.9%</div><div style="font:500 12px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.statCover }}</div></div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px">
+        <!-- rule 1 -->
+        <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--danger);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp0 }};transition:opacity .2s ease">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r1 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">P1</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">{{ L.actBlockAppr }}</span></div>
+            <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">env=PROD AND cmd IN (DROP, TRUNCATE, ALTER, RENAME) → 拦截 → 审批链 dba_lead → dba_owner</div>
+          </div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn0 }}" onChange="{{ ruleToggle0 }}" hint-size="44px,24px"></x-import>
+        </div>
+        <!-- rule 2 -->
+        <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--danger);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp1 }};transition:opacity .2s ease">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r2 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">P1</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">{{ L.actBlockAppr }}</span></div>
+            <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">cmd IN (DELETE, UPDATE) AND NOT contains(WHERE) → 拦截 → 审批</div>
+          </div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn1 }}" onChange="{{ ruleToggle1 }}" hint-size="44px,24px"></x-import>
+        </div>
+        <!-- rule 3 -->
+        <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--warning);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp2 }};transition:opacity .2s ease">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r3 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)">P2</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)">{{ L.actAppr }}</span></div>
+            <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">cmd IN (GRANT, REVOKE, CREATE USER, DROP USER) → 审批（安全负责人）</div>
+          </div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn2 }}" onChange="{{ ruleToggle2 }}" hint-size="44px,24px"></x-import>
+        </div>
+        <!-- rule 4 -->
+        <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--cyan-400);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp3 }};transition:opacity .2s ease">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r4 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">P3</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">{{ L.actAlert }}</span></div>
+            <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">est_rows &gt; 1,000,000 OR no_index_scan → 告警（不阻断）</div>
+          </div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn3 }}" onChange="{{ ruleToggle3 }}" hint-size="44px,24px"></x-import>
+        </div>
+        <!-- rule 5 -->
+        <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--text-faint);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp4 }};transition:opacity .2s ease">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r5 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--surface-sunken);color:var(--text-muted);font:600 10px var(--font-mono)">{{ L.actAlert }}</span></div>
+            <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">env=PROD AND time IN (00:00–06:00) AND qps &gt; 200 → 告警</div>
+          </div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn4 }}" onChange="{{ ruleToggle4 }}" hint-size="44px,24px"></x-import>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <!-- ============================ PERMISSIONS MODULE ============================ -->
+    <sc-if value="{{ isPerms }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1; min-height:0; display:flex; flex-direction:column">
+      <div style="display:flex;align-items:center;gap:8px;height:52px;flex-shrink:0;padding:0 24px;border-bottom:1px solid var(--border-subtle)">
+        <div onClick="{{ goRoleView }}" style="height:32px;line-height:32px;padding:0 16px;border-radius:9px;cursor:pointer;font:600 12px var(--font-body);background:{{ pmRoleBg }};color:{{ pmRoleColor }}">{{ L.tabRoleView }}</div>
+        <div onClick="{{ goUserView }}" style="height:32px;line-height:32px;padding:0 16px;border-radius:9px;cursor:pointer;font:600 12px var(--font-body);background:{{ pmUserBg }};color:{{ pmUserColor }}">{{ L.tabUserView }}</div>
+        <div style="margin-left:auto;font:500 11px var(--font-mono);color:var(--text-faint)">{{ permHint }}</div>
+      </div>
+      <sc-if value="{{ isRoleView }}" hint-placeholder-val="{{ true }}">
+      <div style="flex:1; min-height:0; display:grid; grid-template-columns:280px 1fr">
+      <!-- roles list -->
+      <div class="scy" style="border-right:1px solid var(--border-subtle); background:var(--surface-sunken); padding:18px 14px">
+        <div style="font:600 11px var(--font-mono);letter-spacing:.14em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px">{{ L.rolesTier }}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ roles }}" as="role" hint-placeholder-count="5">
+            <div onClick="{{ role.click }}" style="padding:12px 14px;border-radius:10px;cursor:pointer;transition:all .15s ease;background:{{ role.bg }};border:1px solid {{ role.border }}">
+              <div style="display:flex;align-items:center;gap:8px;font:600 13px var(--font-body);color:{{ role.nameColor }}"><i data-lucide="{{ role.icon }}" style="width:15px;height:15px;color:{{ role.iconColor }}"></i>{{ role.name }}</div>
+              <div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-top:4px">{{ role.layer }} · {{ role.count }} 人</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <!-- matrix -->
+      <div class="scy" style="padding:24px 28px">
+        <div style="display:flex;align-items:center;margin-bottom:6px"><div style="font:700 16px var(--font-display);color:var(--text-strong)">{{ L.matrixTitle }}{{ selRoleName }}</div><div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ openRoleForm }}" hint-size="auto,40px">{{ L.editRole }}</x-import></div></div>
+        <div style="font:500 12px var(--font-body);color:var(--text-muted);margin-bottom:18px">{{ selRoleSub }} · {{ L.matrixHint }}</div>
+
+        <div style="border:1px solid var(--border-subtle);border-radius:14px;overflow:hidden;background:var(--surface-card)">
+          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border-subtle);background:var(--surface-sunken);font:600 11px var(--font-mono);letter-spacing:.06em;color:var(--text-faint);text-transform:uppercase"><span>{{ L.colCap }}</span><span style="text-align:center">PROD</span><span style="text-align:center">STAGING</span><span style="text-align:center">DEV</span></div>
+          <sc-for list="{{ perm }}" as="row" hint-placeholder-count="6">
+            <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border-subtle);align-items:center">
+              <span style="font:500 13px var(--font-body);color:var(--text-body)">{{ row.cap }}</span>
+              <div style="display:flex;justify-content:center"><div onClick="{{ row.c0click }}" style="width:34px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-size:15px;color:{{ row.c0c }}" style-hover="background:var(--surface-sunken)">{{ row.c0s }}</div></div>
+              <div style="display:flex;justify-content:center"><div onClick="{{ row.c1click }}" style="width:34px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-size:15px;color:{{ row.c1c }}" style-hover="background:var(--surface-sunken)">{{ row.c1s }}</div></div>
+              <div style="display:flex;justify-content:center"><div onClick="{{ row.c2click }}" style="width:34px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:700;font-size:15px;color:{{ row.c2c }}" style-hover="background:var(--surface-sunken)">{{ row.c2s }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:22px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px">{{ L.menuTitle }}</div>
+        <div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:-6px;margin-bottom:12px">{{ L.menuSub }}</div>
+        <div style="border:1px solid var(--border-subtle);border-radius:14px;overflow:hidden;background:var(--surface-card);display:grid;grid-template-columns:1fr 1fr">
+          <sc-for list="{{ menus }}" as="mn" hint-placeholder-count="7">
+            <div style="display:flex;align-items:center;gap:11px;padding:13px 18px;border-bottom:1px solid var(--border-subtle)">
+              <i data-lucide="{{ mn.icon }}" style="width:17px;height:17px;color:var(--text-muted)"></i>
+              <span style="flex:1;font:600 13px var(--font-body);color:var(--text-body)">{{ mn.label }}</span>
+              <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ mn.on }}" onChange="{{ mn.toggle }}" hint-size="44px,24px"></x-import>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="margin-top:22px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase;margin-bottom:12px">{{ L.membersTitle }} · {{ memberCount }} {{ L.people }}</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <sc-for list="{{ members }}" as="mb" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:9px;padding:7px 8px 7px 7px;border:1px solid var(--border-subtle);border-radius:999px;background:var(--surface-card)"><div style="width:28px;height:28px;border-radius:50%;background:{{ mb.bg }};display:flex;align-items:center;justify-content:center;font:600 11px var(--font-body);color:{{ mb.color }}">{{ mb.i }}</div><span style="font:600 12px var(--font-body);color:var(--text-body)">{{ mb.n }}</span><span onClick="{{ mb.remove }}" title="移除成员" style="width:18px;height:18px;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer;color:var(--text-faint)" style-hover="background:var(--surface-sunken);color:var(--danger-text)"><i data-lucide="x" style="width:12px;height:12px"></i></span></div>
+          </sc-for>
+          <div onClick="{{ openMemberForm }}" style="display:flex;align-items:center;gap:7px;padding:7px 16px;border:1px dashed var(--border-default);border-radius:999px;color:var(--text-muted);font:600 12px var(--font-body);cursor:pointer" style-hover="border-color:var(--accent);color:var(--accent-text)"><i data-lucide="user-plus" style="width:15px;height:15px"></i>{{ L.addMember }}</div>
+        </div>
+      </div>
+      </div>
+      </sc-if>
+
+      <!-- USER VIEW -->
+      <sc-if value="{{ isUserView }}" hint-placeholder-val="{{ true }}">
+      <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+        <div style="display:flex; align-items:center; margin-bottom:18px">
+          <div><div style="font:700 16px var(--font-display);color:var(--text-strong)">{{ L.usersTitle }} · {{ userCount }} {{ L.people }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:3px">{{ L.usersSub }}</div></div>
+          <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openInvite }}" hint-size="auto,40px">{{ L.invite }}</x-import></div>
+        </div>
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-card)">
+          <div style="display:grid;grid-template-columns:1.5fr 1.6fr 2fr 1fr 1fr;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-subtle);background:var(--surface-sunken);font:600 11px var(--font-mono);letter-spacing:.05em;color:var(--text-faint);text-transform:uppercase"><span>{{ L.colUser }}</span><span>{{ L.colAcct }}</span><span>{{ L.colRoles }}</span><span>{{ L.colActive }}</span><span style="text-align:right">{{ L.colStatus }}</span></div>
+          <sc-for list="{{ users }}" as="u" hint-placeholder-count="9">
+            <div style="display:grid;grid-template-columns:1.5fr 1.6fr 2fr 1fr 1fr;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-subtle);align-items:center;opacity:{{ u.op }}">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:50%;background:{{ u.bg }};display:flex;align-items:center;justify-content:center;font:600 11px var(--font-body);color:{{ u.color }}">{{ u.i }}</div><div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ u.n }}</div><div style="font:500 10px var(--font-mono);color:var(--text-faint)">{{ u.dept }}</div></div></div>
+              <span style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ u.acct }}</span>
+              <div style="display:flex;flex-wrap:wrap;gap:5px">
+                <sc-for list="{{ u.roles }}" as="rn" hint-placeholder-count="1"><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">{{ rn }}</span></sc-for>
+                <sc-if value="{{ u.noRole }}"><span style="font:500 12px var(--font-mono);color:var(--text-faint)">{{ L.unassigned }}</span></sc-if>
+              </div>
+              <span style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ u.last }}</span>
+              <div style="display:flex;justify-content:flex-end"><div onClick="{{ u.toggle }}" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;cursor:pointer;font:600 11px var(--font-mono);background:{{ u.stBg }};color:{{ u.stColor }}"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>{{ u.stText }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:12px;font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.userFootHint }}</div>
+      </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <!-- ============================ AUDIT MODULE ============================ -->
+    <sc-if value="{{ isAudit }}" hint-placeholder-val="{{ true }}">
+    <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+      <div style="display:flex; align-items:center; margin-bottom:18px">
+        <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">AUDIT LOG</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ L.auditSub }}</div></div>
+        <div style="margin-left:auto; display:flex; gap:10px; align-items:center">
+          <span style="font:600 12px var(--font-mono);color:var(--success-text)">{{ auditExportText }}</span>
+          <div onClick="{{ cycleAuditFilter }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;font:500 12px var(--font-mono);cursor:pointer;color:{{ auditFilterColor }}"><i data-lucide="filter" style="width:14px;height:14px"></i>{{ auditFilterLabel }}</div>
+          <div onClick="{{ cycleAuditTime }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;font:500 12px var(--font-mono);color:var(--text-muted);cursor:pointer"><i data-lucide="calendar" style="width:14px;height:14px"></i>{{ auditTimeLabel }}</div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ doExport }}" hint-size="auto,36px">{{ L.exportCsv }}</x-import>
+        </div>
+      </div>
+
+      <!-- WEBHOOK PUSH CONFIG -->
+      <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); margin-bottom:18px; overflow:hidden">
+        <div style="display:flex; align-items:center; gap:12px; padding:16px 20px; border-bottom:1px solid var(--border-subtle)">
+          <div style="width:34px;height:34px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="webhook" style="width:18px;height:18px;color:var(--accent-text)"></i></div>
+          <div style="flex:1"><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.whTitle }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:2px">{{ L.whSub }}</div></div>
+          <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:var(--success-subtle);color:var(--success-text);font:600 11px var(--font-mono)"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>{{ L.whEnabled }}</span>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
+        </div>
+        <div style="padding:18px 20px; display:grid; grid-template-columns:1.6fr 1fr; gap:18px 22px">
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.whEndpoint }}</div>
+            <div style="display:flex;align-items:center;gap:8px;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px"><span style="display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:6px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">POST</span><span style="font:500 13px var(--font-mono);color:var(--text-body);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">https://siem.internal/api/v1/db-gateway/audit</span></div>
+          </div>
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.whSecret }}</div>
+            <div style="display:flex;align-items:center;gap:8px;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px"><i data-lucide="key-round" style="width:14px;height:14px;color:var(--text-faint)"></i><span style="font:500 13px var(--font-mono);color:var(--text-muted)">whsec_••••••••••3a9f</span><i data-lucide="copy" style="width:14px;height:14px;color:var(--text-faint);margin-left:auto"></i></div>
+          </div>
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.whEvents }}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:7px">
+              <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:8px;background:var(--danger-subtle);color:var(--danger-text);font:600 11px var(--font-mono)"><i data-lucide="check" style="width:12px;height:12px"></i>{{ L.evIntercept }}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:8px;background:var(--warning-subtle);color:var(--warning-text);font:600 11px var(--font-mono)"><i data-lucide="check" style="width:12px;height:12px"></i>{{ L.evApprove }}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:8px;background:var(--accent-subtle);color:var(--accent-text);font:600 11px var(--font-mono)"><i data-lucide="check" style="width:12px;height:12px"></i>{{ L.evExec }}</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:8px;border:1px dashed var(--border-default);color:var(--text-faint);font:600 11px var(--font-mono)">{{ L.evLogin }}</span>
+            </div>
+          </div>
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.whRetry }}</div>
+            <div style="display:flex;align-items:center;gap:14px;font:500 12px var(--font-mono);color:var(--text-muted)"><span>{{ L.whRetryDesc1 }}</span><span style="color:var(--border-strong)">·</span><span>{{ L.whRetryDesc2 }}</span><span style="color:var(--border-strong)">·</span><span style="color:var(--success-text)">{{ L.whRetryDesc3 }}</span></div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; padding:14px 20px; border-top:1px solid var(--border-subtle); background:var(--surface-raised)">
+          <div style="display:flex;align-items:center;gap:7px;font:500 12px var(--font-mono);color:{{ whColor }}"><i data-lucide="{{ whIcon }}" style="width:14px;height:14px"></i>{{ whStatus }}</div>
+          <div style="margin-left:auto;display:flex;gap:10px">
+            <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,36px">{{ L.whViewLog }}</x-import>
+            <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ testWebhook }}" hint-size="auto,36px">{{ L.whSendTest }}</x-import>
+          </div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-card)">
+        <div style="display:grid;grid-template-columns:0.9fr 1fr 1.1fr 2.2fr 0.8fr 1fr 0.9fr;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-subtle);background:var(--surface-sunken);font:600 11px var(--font-mono);letter-spacing:.05em;color:var(--text-faint);text-transform:uppercase"><span>{{ L.colTime }}</span><span>{{ L.colWho }}</span><span>{{ L.mInst }}</span><span>{{ L.colCmd }}</span><span>{{ L.colRisk }}</span><span>{{ L.colResult }}</span><span>{{ L.colAp }}</span></div>
+        <sc-for list="{{ auditRows }}" as="r" hint-placeholder-count="5">
+          <div style="display:grid;grid-template-columns:0.9fr 1fr 1.1fr 2.2fr 0.8fr 1fr 0.9fr;gap:12px;padding:13px 18px;border-bottom:1px solid var(--border-subtle);align-items:center">
+            <span style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ r.time }}</span>
+            <span style="font:500 12px var(--font-body);color:var(--text-body)">{{ r.who }}</span>
+            <span style="font:500 12px var(--font-mono);color:var(--text-muted)">{{ r.inst }}</span>
+            <span style="font:500 12px var(--font-mono);color:var(--text-body)"><span style="color:{{ r.kwColor }}">{{ r.kw }}</span>{{ r.rest }}</span>
+            <span><span style="display:inline-flex;height:20px;padding:0 8px;align-items:center;border-radius:999px;background:{{ r.riskBg }};color:{{ r.riskColor }};font:600 10px var(--font-mono)">{{ r.riskText }}</span></span>
+            <span style="display:flex;align-items:center;gap:5px;font:600 11px var(--font-mono);color:{{ r.resColor }}"><i data-lucide="{{ r.resIcon }}" style="width:12px;height:12px"></i>{{ r.resText }}</span>
+            <span style="font:600 11px var(--font-mono);color:{{ r.apColor }}">{{ r.apText }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:12px;font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.auditFootHint }}</div>
+    </div>
+    </sc-if>
+
+    <!-- ============================ SETTINGS MODULE ============================ -->
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ true }}">
+    <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
+      <div style="max-width:860px; display:flex; flex-direction:column; gap:18px">
+
+        <!-- Gateway -->
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
+          <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="shield" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setGw }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setGwSub }}</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setDefPolicy }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setDefPolicyD }}</div></div><div style="width:180px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ setPolicyOpts }}" defaultValue="strict" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setStrict }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setStrictD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setTimeout }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setTimeoutD }}</div></div><div style="font:600 13px var(--font-mono);color:var(--text-body);background:var(--surface-sunken);border:1px solid var(--border-default);border-radius:8px;padding:7px 14px">30s</div></div>
+        </div>
+
+        <!-- Approval -->
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
+          <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="git-pull-request-arrow" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setAppr }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setApprSub }}</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setApprTimeout }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setApprTimeoutD }}</div></div><div style="width:180px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ apprTimeoutOpts }}" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setDefApprovers }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setDefApproversD }}</div></div><div style="display:flex;gap:6px"><span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-body);color:var(--text-body)"><span style="width:20px;height:20px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">ZW</span>张伟</span><span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-body);color:var(--text-body)"><span style="width:20px;height:20px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">LN</span>李娜</span></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEscalate }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEscalateD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+        </div>
+
+        <!-- Session & security -->
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
+          <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="lock" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setSec }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setSecSub }}</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setTtl }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setTtlD }}</div></div><div style="width:160px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ ttlOpts }}" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIdle }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIdleD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setMfa }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setMfaD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIpAllow }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIpAllowD }}</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:600 12px var(--font-mono);color:var(--text-muted)">10.20.0.0/16</span><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,34px">{{ L.manage }}</x-import></div></div>
+        </div>
+
+        <!-- Notifications -->
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
+          <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="bell" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setNotify }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setNotifySub }}</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setLark }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setLarkD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEmail }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEmailD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setPush }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setPushD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+        </div>
+
+        <!-- Appearance & language -->
+        <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
+          <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="palette" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setAppearance }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setAppearanceSub }}</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setLangRow }}</div></div><div style="display:flex;border:1px solid var(--border-default);border-radius:9px;overflow:hidden"><div onClick="{{ setLangZh }}" style="height:34px;line-height:34px;padding:0 16px;cursor:pointer;font:600 12px var(--font-body);background:{{ langZhBg }};color:{{ langZhColor }}">中文</div><div onClick="{{ setLangEn }}" style="height:34px;line-height:34px;padding:0 16px;cursor:pointer;font:600 12px var(--font-body);border-left:1px solid var(--border-subtle);background:{{ langEnBg }};color:{{ langEnColor }}">English</div></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setThemeRow }}</div></div><div style="display:flex;border:1px solid var(--border-default);border-radius:9px;overflow:hidden"><div style="height:34px;line-height:34px;padding:0 16px;font:600 12px var(--font-body);background:var(--accent-subtle);color:var(--accent-text)">{{ L.themeDark }}</div><div style="height:34px;line-height:34px;padding:0 16px;font:600 12px var(--font-body);border-left:1px solid var(--border-subtle);color:var(--text-muted)">{{ L.themeLight }}</div></div></div>
+        </div>
+
+        <!-- About -->
+        <div style="display:flex;align-items:center;gap:14px;padding:16px 20px;border:1px solid var(--border-subtle);border-radius:14px;background:var(--surface-card)">
+          <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:18px;height:18px;color:#fff"></i></div>
+          <div style="flex:1"><div style="font:700 14px var(--font-display);color:var(--text-strong)">Vela Gateway</div><div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-top:2px">{{ L.verLabel }} 2.4.1 · {{ L.buildLabel }} 20260624</div></div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.saveSettings }}</x-import>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+  </div>
+
+  <!-- ===== SQL SCRIPT SCAN MODAL ===== -->
+  <sc-if value="{{ scriptModal }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ closeScript }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:680px; max-height:86vh; display:flex; flex-direction:column; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7); overflow:hidden">
+      <div style="height:4px; background:linear-gradient(90deg,#3b6ef6,#2dcde6)"></div>
+      <div style="padding:20px 24px 0">
+        <div style="display:flex; align-items:flex-start; gap:13px">
+          <div style="width:40px;height:40px;border-radius:11px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="file-search" style="width:21px;height:21px;color:var(--accent-text)"></i></div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px"><div style="font:700 17px var(--font-display);color:var(--text-strong);letter-spacing:-.02em">{{ L.scTitle }}</div><span style="font:600 12px var(--font-mono);color:#8facff">{{ scriptName }}</span></div>
+            <div style="margin-top:3px;font:400 12.5px/1.5 var(--font-body);color:var(--text-muted)">{{ L.scSub }}</div>
+          </div>
+          <div onClick="{{ closeScript }}" style="width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-faint)"><i data-lucide="x" style="width:18px;height:18px"></i></div>
+        </div>
+
+        <!-- summary stats -->
+        <div style="margin-top:16px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+          <div style="border:1px solid var(--border-subtle);border-radius:11px;padding:11px 14px;background:var(--surface-sunken)"><div style="font:700 22px var(--font-display);color:var(--text-strong)">{{ scriptCount }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:1px">{{ L.scTotal }}</div></div>
+          <div style="border:1px solid rgba(240,71,62,.3);border-radius:11px;padding:11px 14px;background:var(--danger-subtle)"><div style="font:700 22px var(--font-display);color:var(--danger-text)">{{ scriptHigh }}</div><div style="font:500 11px var(--font-mono);color:var(--danger-text);margin-top:1px">{{ L.scHigh }}</div></div>
+          <div style="border:1px solid rgba(245,165,36,.3);border-radius:11px;padding:11px 14px;background:var(--warning-subtle)"><div style="font:700 22px var(--font-display);color:var(--warning-text)">{{ scriptMid }}</div><div style="font:500 11px var(--font-mono);color:var(--warning-text);margin-top:1px">{{ L.scMid }}</div></div>
+          <div style="border:1px solid var(--border-subtle);border-radius:11px;padding:11px 14px;background:var(--surface-sunken)"><div style="font:700 22px var(--font-display);color:var(--success-text)">{{ scriptSafe }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:1px">{{ L.scSafe }}</div></div>
+        </div>
+
+        <div style="margin-top:14px;display:flex;align-items:center;gap:9px;padding:11px 14px;border-radius:10px;background:{{ scriptBannerBg }}"><i data-lucide="{{ scriptBannerIcon }}" style="width:17px;height:17px;color:{{ scriptBannerColor }}"></i><span style="font:600 12.5px var(--font-body);color:{{ scriptBannerColor }}">{{ scriptBannerText }}</span></div>
+
+        <div style="margin-top:16px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">{{ L.scStmtList }}</div>
+      </div>
+
+      <!-- statement list (scrolls) -->
+      <div class="scy" style="flex:1; min-height:80px; margin-top:10px; padding:0 24px">
+        <div style="display:flex; flex-direction:column; border:1px solid var(--border-subtle); border-radius:11px; overflow:hidden">
+          <sc-for list="{{ scriptStmts }}" as="s" hint-placeholder-count="5">
+            <div style="display:flex; align-items:flex-start; gap:11px; padding:11px 14px; border-bottom:1px solid var(--border-subtle); background:{{ s.rowBg }}">
+              <span style="font:600 11px var(--font-mono);color:var(--text-faint);margin-top:1px">{{ s.idx }}</span>
+              <div style="flex:1; min-width:0">
+                <div style="font:500 12.5px var(--font-mono);color:var(--text-body);word-break:break-all">{{ s.sql }}</div>
+                <sc-if value="{{ s.noWhere }}"><div style="margin-top:4px;display:inline-flex;align-items:center;gap:4px;font:600 10px var(--font-mono);color:var(--danger-text)"><i data-lucide="triangle-alert" style="width:11px;height:11px"></i>{{ L.scNoWhere }}</div></sc-if>
+              </div>
+              <span style="flex-shrink:0;display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:999px;background:{{ s.badgeBg }};color:{{ s.badgeColor }};font:600 10px var(--font-mono)">{{ s.badge }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <!-- submitted banner -->
+      <sc-if value="{{ scriptSubmitted }}">
+      <div style="margin:14px 24px 0;display:flex;align-items:center;gap:9px;padding:11px 14px;border-radius:10px;background:var(--warning-subtle)"><i data-lucide="hourglass" style="width:16px;height:16px;color:var(--warning-text)"></i><span style="font:600 12.5px var(--font-body);color:var(--warning-text)">{{ L.scSubmitted }}</span></div>
+      </sc-if>
+
+      <!-- footer -->
+      <div style="margin-top:16px;display:flex;align-items:center;gap:12px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="display:flex;align-items:center;gap:6px;font:500 11px var(--font-mono);color:var(--text-faint)"><span style="color:var(--success-text)">●</span>{{ L.utf8audit }}</div>
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeScript }}" hint-size="auto,40px">{{ L.scClose }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ runScript }}" hint-size="auto,40px">{{ scriptRunLabel }}</x-import>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== APPROVAL MODAL ===== -->
+  <sc-if value="{{ modalOpen }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ cancel }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:580px; max-width:92vw; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(45,205,230,.12); overflow:hidden; animation:modalIn .26s cubic-bezier(.16,1,.3,1)">
+      <div style="height:4px; background:linear-gradient(90deg,#f0473e,#ffb648)"></div>
+      <div style="padding:22px 26px 0">
+        <div style="display:flex; align-items:flex-start; gap:14px">
+          <div style="width:42px;height:42px;border-radius:12px;background:var(--danger-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="shield-alert" style="width:22px;height:22px;color:var(--danger)"></i></div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px"><div style="font:700 18px var(--font-display);color:var(--text-strong);letter-spacing:-.02em">{{ L.mApprTitle }}</div><span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:{{ modalBadgeBg }};color:{{ modalBadgeColor }};font:600 11px var(--font-mono)">{{ modalBadgeText }}</span></div>
+            <div style="margin-top:5px;font:400 12.5px/1.55 var(--font-body);color:var(--text-muted)">{{ L.mPolicyHit }} <span style="color:var(--text-body)">{{ L.mPolicyName }}</span>。{{ L.mApprDesc }}</div>
+          </div>
+        </div>
+        <div style="margin-top:18px;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 14px">
+          <div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-bottom:6px">{{ L.mPendCmd }} · {{ modalAp }}</div>
+          <div style="font:500 13.5px var(--font-mono);color:var(--text-strong); word-break:break-all">{{ modalCmd }}</div>
+        </div>
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.mEnv }}</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:3px">PROD</div></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.mInst }}</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:3px">order-cluster</div></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">{{ L.mRisk }}</div><div style="font:600 12px var(--font-mono);color:var(--danger-text);margin-top:3px">{{ L.mRiskVal }}</div></div>
+        </div>
+        <div style="margin-top:16px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">{{ L.mChain }}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--accent-subtle-border);background:var(--accent-subtle);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:#fff">LW</div><span style="font:600 11px var(--font-body);color:var(--accent-text)">{{ L.mYou }}</span></div>
+          <i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-faint)"></i>
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">ZW</div><span style="font:600 11px var(--font-body);color:var(--text-body)">{{ L.mZhang }}</span></div>
+          <i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-faint)"></i>
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">LN</div><span style="font:600 11px var(--font-body);color:var(--text-body)">{{ L.mLi }}</span></div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.mReason }} <span style="color:var(--danger-text)">*</span></div>
+          <textarea value="{{ reason }}" onChange="{{ onReason }}" placeholder="{{ L.mReasonPh }}" style="width:100%; box-sizing:border-box; min-height:62px; resize:none; border:1px solid var(--border-default); border-radius:10px; background:var(--surface-sunken); padding:11px 13px; font:400 13px var(--font-body); color:var(--text-body); outline:none"></textarea>
+        </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:8px;font:500 11.5px var(--font-mono);color:var(--text-muted)"><i data-lucide="radio" style="width:14px;height:14px;color:#2dcde6"></i>{{ L.mLarkNote1 }} <span style="color:#8facff">Lark · #dba-oncall</span> {{ L.mLarkNote2 }}</div>
+      </div>
+      <div style="margin-top:18px;display:flex;align-items:center;gap:12px;padding:14px 26px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="font:500 11px var(--font-mono);color:var(--text-faint)">审计 ID · {{ auditId }}</div>
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ cancel }}" hint-size="auto,40px">{{ L.mCancel }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ submit }}" hint-size="auto,40px">{{ L.mSubmit }}</x-import>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== NEW RULE FORM ===== -->
+  <sc-if value="{{ isRuleForm }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ closeForm }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:600px; max-width:92vw; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7); overflow:hidden; animation:modalIn .26s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border-subtle)">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="shield-plus" style="width:19px;height:19px;color:var(--accent-text)"></i></div>
+        <div><div style="font:700 16px var(--font-display);color:var(--text-strong);letter-spacing:-.01em">{{ L.rfTitle }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.rfSub }}</div></div>
+        <i data-lucide="x" onClick="{{ closeForm }}" style="width:18px;height:18px;color:var(--text-muted);margin-left:auto;cursor:pointer"></i>
+      </div>
+      <div style="padding:20px 24px; display:flex; flex-direction:column; gap:16px">
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.rfName }}</div>
+          <input placeholder="{{ L.rfNamePh }}" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-body);color:var(--text-body);outline:none" />
+        </div>
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.rfTriggers }}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <sc-for list="{{ ruleTriggers }}" as="t" hint-placeholder-count="5">
+              <div onClick="{{ t.toggle }}" style="display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px;border-radius:8px;cursor:pointer;font:600 11px var(--font-mono);background:{{ t.bg }};color:{{ t.color }};border:{{ t.border }}">
+                <sc-if value="{{ t.on }}"><i data-lucide="check" style="width:12px;height:12px"></i></sc-if>{{ t.name }}
+              </div>
+            </sc-for>
+            <div style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 5px 0 11px;border:1px dashed var(--border-default);border-radius:8px">
+              <input value="{{ ruleTrigDraft }}" onChange="{{ onTrigDraft }}" onKeyDown="{{ onTrigKey }}" placeholder="{{ L.rfCustomPh }}" style="width:78px;background:transparent;border:none;outline:none;font:600 11px var(--font-mono);color:var(--text-body);text-transform:uppercase" />
+              <span onClick="{{ addTrigger }}" style="width:19px;height:19px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:var(--accent);color:#fff;cursor:pointer"><i data-lucide="plus" style="width:12px;height:12px"></i></span>
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.rfEnv }}</div>
+            <div style="display:flex;border:1px solid var(--border-default);border-radius:10px;overflow:hidden">
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);background:var(--accent-subtle);color:var(--accent-text)">PROD</div>
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);color:var(--text-muted);border-left:1px solid var(--border-subtle)">STAGING</div>
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);color:var(--text-muted);border-left:1px solid var(--border-subtle)">DEV</div>
+            </div>
+          </div>
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.rfAction }}</div>
+            <div style="display:flex;border:1px solid var(--border-default);border-radius:10px;overflow:hidden">
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);background:var(--danger-subtle);color:var(--danger-text)">{{ L.rfActBlock }}</div>
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);color:var(--text-muted);border-left:1px solid var(--border-subtle)">{{ L.rfActApprove }}</div>
+              <div style="flex:1;text-align:center;height:38px;line-height:38px;font:600 12px var(--font-mono);color:var(--text-muted);border-left:1px solid var(--border-subtle)">{{ L.rfActAlert }}</div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:8px">{{ L.rfChain }}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-mono);color:var(--text-body)">dba_lead</span>
+            <i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-faint)"></i>
+            <span style="display:flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-mono);color:var(--text-body)">dba_owner</span>
+            <span style="display:flex;align-items:center;gap:5px;padding:5px 11px;border:1px dashed var(--border-default);border-radius:999px;font:600 11px var(--font-mono);color:var(--text-faint)"><i data-lucide="plus" style="width:12px;height:12px"></i>{{ L.rfAddApprover }}</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.rfFootHint }}</div>
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.rfCreate }}</x-import>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== EDIT ROLE FORM ===== -->
+  <sc-if value="{{ isRoleForm }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ closeForm }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:560px; max-width:92vw; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7); overflow:hidden; animation:modalIn .26s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 24px;border-bottom:1px solid var(--border-subtle)">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="user-cog" style="width:19px;height:19px;color:var(--accent-text)"></i></div>
+        <div><div style="font:700 16px var(--font-display);color:var(--text-strong);letter-spacing:-.01em">{{ L.erTitle }}{{ selRoleName }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.erSub }}</div></div>
+        <i data-lucide="x" onClick="{{ closeForm }}" style="width:18px;height:18px;color:var(--text-muted);margin-left:auto;cursor:pointer"></i>
+      </div>
+      <div style="padding:20px 24px; display:flex; flex-direction:column; gap:16px">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px">
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.erName }}</div>
+            <input value="{{ selRoleName }}" readonly style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:500 13px var(--font-body);color:var(--text-body);outline:none" />
+          </div>
+          <div>
+            <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.erTier }}</div>
+            <div style="height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);display:flex;align-items:center;padding:0 12px;font:500 13px var(--font-mono);color:var(--text-body)">{{ L.erGlobal }}<i data-lucide="chevron-down" style="width:14px;height:14px;margin-left:auto;color:var(--text-faint)"></i></div>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.erDefRole }}</div>
+          <div style="height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);display:flex;align-items:center;padding:0 12px;font:500 13px var(--font-mono);color:#8facff">dba_l2<i data-lucide="chevron-down" style="width:14px;height:14px;margin-left:auto;color:var(--text-faint)"></i></div>
+        </div>
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.erDesc }}</div>
+          <textarea style="width:100%;box-sizing:border-box;min-height:56px;resize:none;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:11px 13px;font:400 13px var(--font-body);color:var(--text-body);outline:none">{{ L.erDescVal }}</textarea>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border-subtle);border-radius:10px;background:var(--surface-sunken)">
+          <div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.erApprAllow }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.erApprAllowSub }}</div></div>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.save }}</x-import>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== ADD MEMBER PICKER ===== -->
+  <sc-if value="{{ isMemberForm }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ closeForm }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:480px; max-width:92vw; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7); overflow:hidden; animation:modalIn .26s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border-subtle)">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="user-plus" style="width:19px;height:19px;color:var(--accent-text)"></i></div>
+        <div><div style="font:700 16px var(--font-display);color:var(--text-strong);letter-spacing:-.01em">{{ L.mpTitle }}{{ selRoleName }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.mpSub }}</div></div>
+        <i data-lucide="x" onClick="{{ closeForm }}" style="width:18px;height:18px;color:var(--text-muted);margin-left:auto;cursor:pointer"></i>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin:14px 22px 6px;height:38px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken)"><i data-lucide="search" style="width:14px;height:14px;color:var(--text-faint)"></i><span style="font:400 12px var(--font-body);color:var(--text-faint)">{{ L.mpSearch }}</span></div>
+      <div class="scy" style="max-height:300px;padding:6px 14px 14px">
+        <sc-for list="{{ directory }}" as="p" hint-placeholder-count="6">
+          <div onClick="{{ p.add }}" style="display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;cursor:pointer" style-hover="background:var(--surface-sunken)">
+            <div style="width:32px;height:32px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 11px var(--font-body);color:var(--text-muted)">{{ p.i }}</div>
+            <div style="flex:1;min-width:0"><div style="font:600 13px var(--font-body);color:var(--text-body)">{{ p.n }}</div><div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ p.dept }}</div></div>
+            <sc-if value="{{ p.inRole }}"><span style="display:inline-flex;align-items:center;gap:5px;font:600 11px var(--font-mono);color:var(--success-text)"><i data-lucide="check" style="width:14px;height:14px"></i>{{ L.mpJoined }}</span></sc-if>
+            <sc-if value="{{ p.notInRole }}"><span style="display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 11px;border-radius:8px;background:var(--accent-subtle);color:var(--accent-text);font:600 11px var(--font-mono)"><i data-lucide="plus" style="width:13px;height:13px"></i>{{ L.mpAdd }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;align-items:center;padding:13px 22px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.mpFoot }}</div>
+        <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,38px">{{ L.done }}</x-import></div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ===== INVITE USER ===== -->
+  <sc-if value="{{ isInviteForm }}">
+  <div style="position:fixed; inset:0; z-index:50">
+    <div onClick="{{ closeForm }}" style="position:absolute; inset:0; background:rgba(4,6,12,.7); backdrop-filter:blur(3px)"></div>
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:480px; max-width:92vw; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7); overflow:hidden; animation:modalIn .26s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border-subtle)">
+        <div style="width:36px;height:36px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="mail-plus" style="width:19px;height:19px;color:var(--accent-text)"></i></div>
+        <div><div style="font:700 16px var(--font-display);color:var(--text-strong);letter-spacing:-.01em">{{ L.ivTitle }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.ivSub }}</div></div>
+        <i data-lucide="x" onClick="{{ closeForm }}" style="width:18px;height:18px;color:var(--text-muted);margin-left:auto;cursor:pointer"></i>
+      </div>
+      <div style="padding:20px 22px; display:flex; flex-direction:column; gap:16px">
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.ivEmail }}</div>
+          <input placeholder="name@vela.io" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" />
+        </div>
+        <div>
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.ivRole }}</div>
+          <div style="height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);display:flex;align-items:center;padding:0 12px;font:500 13px var(--font-body);color:var(--text-body)">{{ L.ivRoleVal }}<i data-lucide="chevron-down" style="width:14px;height:14px;margin-left:auto;color:var(--text-faint)"></i></div>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:11px 13px;border:1px solid var(--border-subtle);border-radius:10px;background:var(--surface-sunken)">
+          <i data-lucide="shield-check" style="width:15px;height:15px;color:#2dcde6;margin-top:1px"></i>
+          <div style="font:400 11.5px/1.5 var(--font-body);color:var(--text-muted)">{{ L.ivNote }}</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;padding:14px 22px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.ivSend }}</x-import>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;strictMode&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = {
+    mod: 'terminal',
+    lang: 'zh',
+    input: '',
+    apCounter: 2294,
+    auditCounter: 77310,
+    reason: '',
+    modalOpen: false,
+    modalCmd: '',
+    modalAp: '',
+    auditId: 'AUD-77310',
+    risk: 'idle',
+    webhook: 'idle',
+    scriptModal: false,
+    scriptName: '',
+    scriptStmts: [],
+    scriptSubmitted: false,
+    auditFilter: 'all',
+    auditTime: 0,
+    auditExport: false,
+    auditRows: [
+      { time:'22:41:07', who:'Lin Wei', inst:'order-cluster', kw:'TRUNCATE', kwColor:'var(--danger-text)', rest:' TABLE orders_2024_q3;', risk:'high', result:'pending', ap:'#AP-2294' },
+      { time:'22:38:55', who:'Chen Hao', inst:'order-cluster', kw:'DROP', kwColor:'var(--danger-text)', rest:' TABLE tmp_export;', risk:'high', result:'done', ap:'#AP-2290' },
+      { time:'22:31:02', who:'Wang Min', inst:'user-cluster', kw:'UPDATE', kwColor:'var(--warning-text)', rest:" users SET tier='vip' WHERE id=88;", risk:'mid', result:'done', ap:'' },
+      { time:'22:24:40', who:'Zhang Wei', inst:'order-cluster', kw:'DELETE', kwColor:'var(--danger-text)', rest:' FROM orders;', risk:'high', result:'reject', ap:'#AP-2288' },
+      { time:'22:19:13', who:'Lin Wei', inst:'analytics-ro', kw:'SELECT', kwColor:'var(--cyan-400)', rest:' * FROM events;', risk:'low', result:'warn', ap:'' }
+    ],
+    formModal: null,
+    modalLvl: 'high',
+    cmdDraft: '',
+    ruleEnv: 'prod',
+    ruleTriggers: [
+      { name:'DROP', on:true }, { name:'TRUNCATE', on:true }, { name:'ALTER', on:false }, { name:'DELETE', on:false }, { name:'GRANT', on:false }
+    ],
+    ruleTrigDraft: '',
+    riskCmds: [
+      { name:'DROP',     env:{ prod:'high', staging:'mid', dev:'off' } },
+      { name:'TRUNCATE', env:{ prod:'high', staging:'mid', dev:'off' } },
+      { name:'DELETE',   env:{ prod:'high', staging:'mid', dev:'off' } },
+      { name:'ALTER',    env:{ prod:'high', staging:'mid', dev:'off' } },
+      { name:'RENAME',   env:{ prod:'high', staging:'mid', dev:'off' } },
+      { name:'GRANT',    env:{ prod:'mid',  staging:'mid', dev:'off' } },
+      { name:'REVOKE',   env:{ prod:'mid',  staging:'mid', dev:'off' } }
+    ],
+    rulesOn: [true, true, true, true, false],
+    selRole: 'admin',
+    roleMenus: {
+      admin: { terminal:true, approve:true, db:true, rules:true, perms:true, audit:true, settings:true },
+      owner: { terminal:true, approve:true, db:true, rules:true, perms:true, audit:true, settings:true },
+      l2:    { terminal:true, approve:true, db:true, rules:true, perms:false, audit:true, settings:false },
+      ro:    { terminal:true, approve:false, db:false, rules:false, perms:false, audit:true, settings:false },
+      audit: { terminal:false, approve:false, db:false, rules:false, perms:false, audit:true, settings:false }
+    },
+    connDraft: { name:'', host:'', engine:'MySQL 8.0', env:'PROD · L1 核心', policy:'strict' },
+    connSaved: false,
+    connections: [
+      { name:'order-cluster', layer:'L1 核心 · 写', engine:'MySQL 8.0', host:'10.20.3.11:3306', role:'dba_l2', policy:'strict', env:'PROD', status:'online' },
+      { name:'user-cluster', layer:'L1 核心 · 写', engine:'PostgreSQL 15', host:'10.20.3.18:5432', role:'dba_l2', policy:'strict', env:'PROD', status:'online' },
+      { name:'analytics-ro', layer:'L2 只读副本', engine:'ClickHouse', host:'10.20.4.6:8123', role:'readonly', policy:'audit', env:'PROD', status:'online' },
+      { name:'order-cluster-stg', layer:'L3 预发', engine:'MySQL 8.0', host:'10.30.1.11:3306', role:'dba_l2', policy:'approve-1', env:'STAGING', status:'online' },
+      { name:'sandbox-dev', layer:'L4 沙盒', engine:'MySQL 8.0', host:'10.40.0.5:3306', role:'developer', policy:'audit-only', env:'DEV', status:'online' }
+    ],
+    pmView: 'roles',
+    userStatus: { 'Qian Yi': 'disabled' },
+    directory: [
+      { n:'Lin Wei', i:'LW', dept:'DBA 组', acct:'linwei@vela.io', last:'2 分钟前' },
+      { n:'Chen Hao', i:'CH', dept:'DBA 组', acct:'chenhao@vela.io', last:'14 分钟前' },
+      { n:'Wang Min', i:'WM', dept:'平台工程', acct:'wangmin@vela.io', last:'1 小时前' },
+      { n:'Zhang Wei', i:'ZW', dept:'DBA 组', acct:'zhangwei@vela.io', last:'刚刚' },
+      { n:'Li Na', i:'LN', dept:'DBA 组', acct:'lina@vela.io', last:'3 小时前' },
+      { n:'Sun Qi', i:'SQ', dept:'数据平台', acct:'sunqi@vela.io', last:'昨天' },
+      { n:'Zhao Lei', i:'ZL', dept:'研发一部', acct:'zhaolei@vela.io', last:'2 天前' },
+      { n:'Qian Yi', i:'QY', dept:'研发二部', acct:'qianyi@vela.io', last:'30 天前' },
+      { n:'Hu Jun', i:'HJ', dept:'安全合规', acct:'hujun@vela.io', last:'5 小时前' }
+    ],
+    roles: [
+      { id:'admin', name:'平台管理员', icon:'crown', layer:'L0 · 全局', count:3,
+        members:[{n:'Lin Wei',i:'LW'},{n:'Chen Hao',i:'CH'},{n:'Wang Min',i:'WM'}],
+        perm:[['allow','allow','allow'],['approve','allow','allow'],['approve','approve','allow'],['approve','approve','approve'],['allow','allow','allow'],['allow','allow','deny']] },
+      { id:'owner', name:'DBA 负责人', icon:'shield', layer:'L1 · 终审', count:2,
+        members:[{n:'Zhang Wei',i:'ZW'},{n:'Li Na',i:'LN'}],
+        perm:[['allow','allow','allow'],['approve','allow','allow'],['approve','approve','allow'],['approve','approve','approve'],['allow','allow','allow'],['allow','allow','allow']] },
+      { id:'l2', name:'DBA L2', icon:'user-cog', layer:'L2 · 执行(需审批)', count:6,
+        members:[{n:'Lin Wei',i:'LW'},{n:'Chen Hao',i:'CH'},{n:'Sun Qi',i:'SQ'}],
+        perm:[['allow','allow','allow'],['approve','approve','allow'],['approve','approve','allow'],['deny','deny','deny'],['deny','deny','deny'],['deny','deny','deny']] },
+      { id:'ro', name:'研发只读', icon:'code', layer:'L3 · 只读', count:42,
+        members:[{n:'Zhao Lei',i:'ZL'},{n:'Qian Yi',i:'QY'}],
+        perm:[['allow','allow','allow'],['deny','deny','allow'],['deny','deny','allow'],['deny','deny','deny'],['deny','deny','deny'],['deny','deny','deny']] },
+      { id:'audit', name:'审计员', icon:'eye', layer:'L3 · 只看日志', count:4,
+        members:[{n:'Hu Jun',i:'HJ'},{n:'Audit Bot',i:'AB'}],
+        perm:[['allow','allow','allow'],['deny','deny','deny'],['deny','deny','deny'],['deny','deny','deny'],['deny','deny','deny'],['deny','deny','deny']] }
+    ],
+    approvals: [
+      { id:'AP-2294', cmd:'TRUNCATE TABLE orders_2024_q3;', kw:'TRUNCATE', who:'Lin Wei', ini:'LW', env:'PROD', inst:'order-cluster', lvl:'high', risk:'高危 P1', reason:'Q3 归档表清理，已确认无服务引用，变更窗口 23:00–23:30', time:'22:41', status:'pending' },
+      { id:'AP-2293', cmd:'ALTER TABLE orders DROP COLUMN legacy_ref;', kw:'ALTER', who:'Chen Hao', ini:'CH', env:'PROD', inst:'order-cluster', lvl:'high', risk:'高危 P1', reason:'下线已废弃字段 legacy_ref', time:'22:35', status:'pending' },
+      { id:'AP-2292', cmd:'GRANT SELECT ON analytics.* TO reporter;', kw:'GRANT', who:'Wang Min', ini:'WM', env:'PROD', inst:'analytics-ro', lvl:'mid', risk:'权限 P2', reason:'报表平台只读授权', time:'22:20', status:'pending' }
+    ],
+    entries: [
+      { kind:'info', text:'# 会话已连接 prod-order-cluster · 角色 dba_l2 · 网关策略 strict · 审计 ON' },
+      { kind:'cmd',  text:"SELECT count(*) FROM orders WHERE status='paid';" },
+      { kind:'out',  text:'+ 42,318 rows · 12ms' }
+    ]
+  };
+
+  riskRe = /\b(drop|truncate|alter|rename|grant|revoke)\b/i;
+  noWhereRe = /\b(delete|update)\b(?![\s\S]*\bwhere\b)/i;
+  caps = ['SELECT 查询','INSERT / UPDATE','DDL（DROP / ALTER）','权限变更 GRANT','管理连接配置','审批高危命令'];
+  engines = ['MySQL 8.0','PostgreSQL 15','ClickHouse','Redis 7','TiDB'];
+  envOpts = [{ label:'PROD · L1 核心', env:'PROD', layer:'L1 核心 · 写' }, { label:'STAGING · L3 预发', env:'STAGING', layer:'L3 预发' }, { label:'DEV · L4 沙盒', env:'DEV', layer:'L4 沙盒' }];
+  policies = [{ name:'strict' }, { name:'approve-1' }, { name:'audit-only' }];
+
+  onConnName = (ev) => this.setState({ connDraft: Object.assign({}, this.state.connDraft, { name: ev.target.value }) });
+  onConnHost = (ev) => this.setState({ connDraft: Object.assign({}, this.state.connDraft, { host: ev.target.value }) });
+  onConnEngine = (ev) => this.setState({ connDraft: Object.assign({}, this.state.connDraft, { engine: ev.target.value }) });
+  onConnEnv = (ev) => this.setState({ connDraft: Object.assign({}, this.state.connDraft, { env: ev.target.value }) });
+  onConnPolicy = (ev) => this.setState({ connDraft: Object.assign({}, this.state.connDraft, { policy: ev.target.value }) });
+  toggleConnStatus = (name) => () => this.setState({ connections: this.state.connections.map(c => c.name === name ? Object.assign({}, c, { status: c.status === 'online' ? 'maint' : 'online' }) : c) });
+  addConnection = () => {
+    const d = this.state.connDraft;
+    if (!d.name.trim() || !d.host.trim()) return;
+    const eo = this.envOpts.find(o => o.label === d.env) || this.envOpts[0];
+    const conn = { name:d.name.trim(), layer:eo.layer, engine:d.engine, host:d.host.trim(), role: eo.env==='DEV' ? 'developer' : 'dba_l2', policy:d.policy, env:eo.env, status:'online' };
+    this.setState({ connections:[...this.state.connections, conn], connDraft:{ name:'', host:'', engine:'MySQL 8.0', env:'PROD · L1 核心', policy:'strict' }, connSaved:true });
+    setTimeout(() => this.setState({ connSaved:false }), 2600);
+  };
+
+  toggleRule = (i) => () => { const r = this.state.rulesOn.slice(); r[i] = !r[i]; this.setState({ rulesOn: r }); };
+  cycleCell = (r, c) => () => {
+    const order = ['allow','approve','deny'];
+    this.setState({ roles: this.state.roles.map(role => {
+      if (role.id !== this.state.selRole) return role;
+      const p = role.perm.map(row => row.slice());
+      p[r][c] = order[(order.indexOf(p[r][c]) + 1) % 3];
+      return Object.assign({}, role, { perm:p });
+    }) });
+  };
+  selectRole = (id) => () => this.setState({ selRole: id });
+  toggleMenu = (key) => () => {
+    const rm = Object.assign({}, this.state.roleMenus);
+    const cur = Object.assign({}, rm[this.state.selRole]);
+    cur[key] = !cur[key];
+    rm[this.state.selRole] = cur;
+    this.setState({ roleMenus: rm });
+  };
+  setPmView = (v) => () => this.setState({ pmView: v });
+  openInvite = () => this.setState({ formModal: 'invite' });
+  toggleUser = (name) => () => {
+    const s = Object.assign({}, this.state.userStatus);
+    s[name] = s[name] === 'disabled' ? 'active' : 'disabled';
+    this.setState({ userStatus: s });
+  };
+  openMemberForm = () => this.setState({ formModal: 'member' });
+  addMember = (person) => () => {
+    this.setState({ roles: this.state.roles.map(role => {
+      if (role.id !== this.state.selRole || role.members.some(m => m.n === person.n)) return role;
+      return Object.assign({}, role, { members:[...role.members, { n:person.n, i:person.i }], count: role.count + 1 });
+    }) });
+  };
+  removeMember = (name) => () => {
+    this.setState({ roles: this.state.roles.map(role => {
+      if (role.id !== this.state.selRole || !role.members.some(m => m.n === name)) return role;
+      return Object.assign({}, role, { members: role.members.filter(m => m.n !== name), count: Math.max(0, role.count - 1) });
+    }) });
+  };
+  actApproval = (id, status) => () => {
+    const a = this.state.approvals.find(x => x.id === id);
+    const approvals = this.state.approvals.map(x => x.id === id ? Object.assign({}, x, { status }) : x);
+    const entries = this.state.entries.slice();
+    if (a) {
+      if (status === 'approved') entries.push({ kind:'success', text:`审批单 #${id} 已通过 · 网关代执行 ${a.cmd}` });
+      else entries.push({ kind:'out', text:`· 审批单 #${id} 已驳回 · ${a.cmd} 未执行` });
+    }
+    this.setState({ approvals, entries });
+  };
+
+  openRuleForm = () => this.setState({ formModal: 'rule' });
+  openRoleForm = () => this.setState({ formModal: 'role' });
+  closeForm = () => this.setState({ formModal: null });
+
+  toggleTrigger = (name) => () => this.setState({ ruleTriggers: this.state.ruleTriggers.map(t => t.name === name ? { name:t.name, on:!t.on } : t) });
+  onTrigDraft = (ev) => this.setState({ ruleTrigDraft: ev.target.value.toUpperCase() });
+  addTrigger = () => {
+    const n = (this.state.ruleTrigDraft || '').trim().toUpperCase().replace(/[^A-Z_ ]/g,'');
+    if (!n) return;
+    if (this.state.ruleTriggers.some(t => t.name === n)) { this.setState({ ruleTrigDraft: '' }); return; }
+    this.setState({ ruleTriggers: [...this.state.ruleTriggers, { name:n, on:true }], ruleTrigDraft: '' });
+  };
+  onTrigKey = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); this.addTrigger(); } };
+
+  onCmdDraft = (ev) => this.setState({ cmdDraft: ev.target.value.toUpperCase() });
+  addRiskCmd = () => {
+    const n = (this.state.cmdDraft || '').trim().toUpperCase().replace(/[^A-Z_ ]/g,'');
+    if (!n) return;
+    if (this.state.riskCmds.some(c => c.name === n)) { this.setState({ cmdDraft: '' }); return; }
+    this.setState({ riskCmds: [...this.state.riskCmds, { name:n, env:{ prod:'high', staging:'high', dev:'off' } }], cmdDraft: '' });
+  };
+  onCmdKey = (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); this.addRiskCmd(); } };
+  removeRiskCmd = (name) => () => this.setState({ riskCmds: this.state.riskCmds.filter(c => c.name !== name) });
+  setRuleEnv = (e) => () => this.setState({ ruleEnv: e });
+  cycleRiskLevel = (name) => () => {
+    const next = { high:'mid', mid:'off', off:'high' };
+    const env = this.state.ruleEnv;
+    this.setState({ riskCmds: this.state.riskCmds.map(c => {
+      if (c.name !== name) return c;
+      const ne = Object.assign({}, c.env); ne[env] = next[c.env[env]];
+      return { name:c.name, env:ne };
+    }) });
+  };
+
+  flag(e){
+    return Object.assign({}, e, {
+      isInfo: e.kind==='info', isCmd: e.kind==='cmd', isOut: e.kind==='out',
+      isSuccess: e.kind==='success', isIntercept: e.kind==='intercept'
+    });
+  }
+
+  setMod = (m) => () => this.setState({ mod: m });
+  toggleLang = () => this.setState({ lang: this.state.lang === 'zh' ? 'en' : 'zh' });
+  setLang = (l) => () => this.setState({ lang: l });
+
+  onInput = (ev) => this.setState({ input: ev.target.value });
+  onReason = (ev) => this.setState({ reason: ev.target.value });
+
+  scanText = (text) => {
+    const names = this.state.riskCmds.map(c => c.name);
+    const re = names.length ? new RegExp('\\b(' + names.join('|') + ')\\b', 'i') : null;
+    // strip block + line comments, split on ;
+    const cleaned = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*--.*$/gm, '');
+    const raw = cleaned.split(';');
+    const stmts = [];
+    raw.forEach(s => {
+      const sql = s.trim().replace(/\s+/g, ' ');
+      if (!sql) return;
+      const matched = re ? (sql.match(re) || [])[0] : null;
+      const hit = matched ? this.state.riskCmds.find(c => c.name === matched.toUpperCase()) : null;
+      const prodLvl = hit ? hit.env.prod : null;
+      const noWhere = this.noWhereRe.test(sql);
+      const verb = ((sql.match(/^\s*([a-z_]+)/i) || [])[1] || '').toUpperCase();
+      let risk = 'safe';
+      if (hit && prodLvl === 'high') risk = 'high';
+      else if (hit && prodLvl === 'mid') risk = 'mid';
+      else if (noWhere) risk = 'high';
+      stmts.push({ sql, risk, cmd: (matched ? matched.toUpperCase() : verb), noWhere });
+    });
+    return stmts;
+  };
+
+  onScriptFile = (ev) => {
+    const file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target.result || '');
+      this.setState({ scriptModal: true, scriptName: file.name, scriptStmts: this.scanText(text), scriptSubmitted: false });
+    };
+    reader.readAsText(file);
+    ev.target.value = '';
+  };
+
+  loadSampleScript = () => {
+    const sample = "-- migration_2026q3.sql\nSELECT count(*) FROM orders WHERE status='paid';\nUPDATE users SET tier='vip' WHERE id=88;\nALTER TABLE orders DROP COLUMN legacy_ref;\nDELETE FROM sessions;\nTRUNCATE TABLE orders_2024_q3;\nINSERT INTO audit_log(evt) VALUES('migrate');";
+    this.setState({ scriptModal: true, scriptName: 'migration_2026q3.sql', scriptStmts: this.scanText(sample), scriptSubmitted: false });
+  };
+
+  closeScript = () => this.setState({ scriptModal: false, scriptSubmitted: false });
+
+  runScript = () => {
+    const risky = this.state.scriptStmts.filter(s => s.risk !== 'safe').length;
+    if (risky > 0) {
+      this.setState({ scriptSubmitted: true, apCounter: this.state.apCounter + 1 });
+    } else {
+      const entries = this.state.entries.slice();
+      entries.push({ kind:'cmd', text:'\\i ' + this.state.scriptName });
+      entries.push({ kind:'success', text:'脚本执行成功 · ' + this.state.scriptStmts.length + ' 条语句' });
+      this.setState({ entries, scriptModal: false });
+    }
+  };
+
+  onKey = (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const cmd = (this.state.input || '').trim();
+    if (!cmd) return;
+    const entries = this.state.entries.slice();
+    entries.push({ kind:'cmd', text: cmd });
+
+    const strict = this.props.strictMode !== false;
+    const names = this.state.riskCmds.map(c => c.name);
+    const re = names.length ? new RegExp('\\b(' + names.join('|') + ')\\b', 'i') : null;
+    const matched = re ? (cmd.match(re) || [])[0] : null;
+    const hit = matched ? this.state.riskCmds.find(c => c.name === matched.toUpperCase()) : null;
+    const prodLvl = hit ? hit.env.prod : null;
+    const isHigh = (hit && prodLvl !== 'off') || (strict && this.noWhereRe.test(cmd));
+
+    if (isHigh) {
+      const lvl = prodLvl && prodLvl !== 'off' ? prodLvl : 'high';
+      const ap = 'AP-' + (this.state.apCounter + 1);
+      const aud = 'AUD-' + (this.state.auditCounter + 1);
+      entries.push({ kind:'intercept', rule:'「高危命令字典」— PROD 禁止直接执行', ap: '#'+ap });
+      this.setState({
+        entries, input:'', apCounter: this.state.apCounter+1, auditCounter: this.state.auditCounter+1,
+        modalOpen:true, modalCmd: cmd, modalAp: '#'+ap, auditId: aud, reason:'', risk:'high', modalLvl: lvl
+      });
+    } else if (/^\s*(select|show|desc|describe|explain)/i.test(cmd)) {
+      const r = Math.floor(Math.random()*9000+200).toLocaleString();
+      const ms = Math.floor(Math.random()*40+4);
+      entries.push({ kind:'out', text:`+ ${r} rows · ${ms}ms` });
+      this.setState({ entries, input:'', risk:'safe' });
+    } else {
+      entries.push({ kind:'success', text:'执行成功 · 0 行受影响' });
+      this.setState({ entries, input:'', risk:'safe' });
+    }
+  };
+
+  testWebhook = () => {
+    if (this.state.webhook === 'sending') return;
+    this.setState({ webhook: 'sending' });
+    setTimeout(() => this.setState({ webhook: 'ok' }), 900);
+  };
+
+  timeOpts = ['近 24h','近 7 天','近 30 天'];
+  cycleAuditFilter = () => { const o = ['all','high','mid','low']; this.setState({ auditFilter: o[(o.indexOf(this.state.auditFilter) + 1) % 4] }); };
+  cycleAuditTime = () => this.setState({ auditTime: (this.state.auditTime + 1) % 3 });
+  doExport = () => { this.setState({ auditExport: true }); setTimeout(() => this.setState({ auditExport: false }), 2600); };
+
+  cancel = () => {
+    const entries = this.state.entries.slice();
+    entries.push({ kind:'out', text:'· 已取消提交，命令未执行' });
+    this.setState({ modalOpen:false, entries });
+  };
+
+  submit = () => {
+    const entries = this.state.entries.slice();
+    entries.push({ kind:'success', text:`审批单 ${this.state.modalAp} 已提交 · 等待 张伟 审批 · 已通知 Lark` });
+    const id = this.state.modalAp.replace('#','');
+    const kw = ((this.state.modalCmd || '').trim().split(/\s+/)[0] || '').toUpperCase();
+    const approvals = [{ id, cmd:this.state.modalCmd, kw, who:'Lin Wei', ini:'LW', env:'PROD', inst:'order-cluster', lvl:'high', risk:'高危 P1', reason:this.state.reason || '—', time:'刚刚', status:'pending' }, ...this.state.approvals];
+    this.setState({ modalOpen:false, entries, approvals });
+  };
+
+  componentDidMount(){ this._draw(); }
+  componentDidUpdate(){ this._draw(); }
+  _draw(){ const f=()=>{ try{ window.lucide && window.lucide.createIcons(); }catch(e){} }; f(); setTimeout(f,60); }
+
+  renderVals() {
+    const m = this.state.mod;
+    const tr = (zh, en) => this.state.lang === 'zh' ? zh : en;
+    const L = {
+      navTerm: tr('终端','Term'), navAppr: tr('审批','Appr'), navDb: tr('配置','DB'), navRules: tr('规则','Rules'), navPerms: tr('权限','Roles'), navAudit: tr('审计','Audit'),
+      gwOnline: tr('网关在线 · p50 12ms','Gateway online · p50 12ms'), pending: tr('待审批','Pending'), langLabel: tr('EN','中'),
+      // terminal
+      treeTitle: tr('数据库分层','Database tiers'), search: tr('搜索实例 / 库 / 表','Search instance / db / table'),
+      prodEnv: tr('生产环境 · PROD','Production · PROD'), stagingEnv: tr('预发 · STAGING','Staging · STAGING'), devEnv: tr('测试 · DEV','Dev · DEV'),
+      highTag: tr('高危','High'), limitedTag: tr('受限','Limited'), treeFooter: tr('3 环境 · 9 实例 · 已接入网关','3 envs · 9 instances · gated'),
+      roleTag: tr('角色 dba_l2','Role dba_l2'), policyTag: tr('strict 策略','strict policy'),
+      interceptTitle: tr('命令已被网关拦截 · 禁止直接执行','Intercepted by gateway · direct execution blocked'),
+      hitRule: tr('命中规则','Matched rule'), apGen: tr('已生成审批单','Approval created'), pendBadge: tr('待审批','Pending'), larkSync: tr('已同步 Lark · #dba-oncall','Synced to Lark · #dba-oncall'),
+      cmdPlaceholder: tr('输入 SQL，Enter 执行 · 高危命令将进入审批','Type SQL, Enter to run · high-risk goes to approval'),
+      connected: tr('● 已连接','● Connected'), tryHint: tr('试试','Try'), utf8audit: tr('UTF-8 · 审计 ON','UTF-8 · Audit ON'),
+      uploadScript: tr('上传脚本','Upload script'), sampleScript: tr('示例','Sample'),
+      scTitle: tr('SQL 脚本扫描','SQL script scan'), scSub: tr('执行前自动检测高危命令 · 命中即转审批','Pre-execution risk scan · matches route to approval'),
+      scTotal: tr('条语句','statements'), scHigh: tr('高危','High-risk'), scMid: tr('需审批','Needs approval'), scSafe: tr('安全','Safe'),
+      scStmtList: tr('语句明细','Statement breakdown'), scNoWhere: tr('无 WHERE','no WHERE'),
+      scClean: tr('未检出高危命令，可直接执行','No high-risk commands — safe to run'),
+      scRisky: tr('检出高危命令，执行需经审批','High-risk found — execution requires approval'),
+      scRun: tr('执行脚本','Run script'), scSubmitAppr: tr('提交审批后执行','Submit for approval'),
+      scSubmitted: tr('已提交审批 · 高危语句由网关代执行','Submitted · gateway will run high-risk after approval'),
+      scClose: tr('关闭','Close'), scDrop: tr('或拖入 .sql 文件','or drop a .sql file'),
+      ctxTitle: tr('执行上下文 · 风险检查','Context · Risk check'), targetInst: tr('目标实例','Target'), dbLabel: tr('数据库','Database'), connRole: tr('连接角色','Conn role'), gwPolicy: tr('网关策略','Gateway policy'),
+      limitList: tr('受限命令清单 · PROD','Restricted commands · PROD'), limitHint: tr('在「高危命令规则」中按环境新增 / 调整','Add / adjust per env under Risk policies'), chainTitle: tr('审批链 · 高危 DDL','Approval chain · high-risk DDL'), initiated: tr('发起','initiator'),
+      // db config
+      connEyebrow: 'CONNECTIONS', connSub: tr('个实例 · 按环境分层管理，统一经网关代理执行','instances · tiered by env, all proxied by the gateway'),
+      importInst: tr('导入实例','Import'), newConn: tr('新建连接','New connection'),
+      colInst: tr('实例 / 分层','Instance / tier'), colEngine: tr('引擎','Engine'), colAddr: tr('地址','Address'), colRole: tr('默认角色','Default role'), colPolicy: tr('网关策略','Policy'), colStatus: tr('状态','Status'),
+      prodRow: tr('生产环境 · PROD · 默认拦截高危命令','Production · PROD · high-risk blocked by default'), stgRow: tr('预发 · STAGING · 高危命令仅需一级审批','Staging · STAGING · single-level approval'), devRow: tr('测试 · DEV · 自由执行，仅审计','Dev · DEV · free execution, audit only'),
+      online: tr('在线','Online'), maint: tr('维护','Maint'),
+      formNewConn: tr('新建连接','New connection'), formNewConnSub: tr('接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。','Once added, all commands are proxied, policy-checked and audited. Pick engine / env / policy.'),
+      fName: tr('实例名称','Instance name'), fEngine: tr('引擎','Engine'), fEnv: tr('分层环境','Tier / env'), fAddr: tr('地址 : 端口','Host : port'), fPolicy: tr('网关策略','Gateway policy'), fSave: tr('测试连接并保存','Test & save'),
+      // rules
+      riskEyebrow: 'RISK POLICIES', riskSub: tr('命令在网关侧实时匹配规则 · 命中后执行 拦截 / 审批 / 告警','Commands matched at the gateway · then block / approve / alert'), newRule: tr('新建规则','New rule'),
+      dictTitle: tr('高危命令字典','High-risk command dictionary'), dictSub: tr('按环境分别配置 · 点击徽标切换 拦截 / 审批 / 放行 · PROD 设置直接驱动终端拦截','Per-environment · click a badge to cycle Block / Approve / Allow · PROD drives terminal interception'),
+      addCmdPh: tr('新增命令…','Add command…'),
+      statBlock: tr('拦截类规则','Blocking rules'), statAlert: tr('仅告警规则','Alert-only rules'), statHits: tr('本月命中拦截','Blocks this month'), statCover: tr('策略覆盖率','Policy coverage'),
+      r1: tr('高危 DDL 二级审批','High-risk DDL · two-level approval'), r2: tr('无 WHERE 的 DELETE / UPDATE','DELETE / UPDATE without WHERE'), r3: tr('权限变更 GRANT / REVOKE','Privilege change GRANT / REVOKE'), r4: tr('全表扫描 / 大结果集','Full scan / large result set'), r5: tr('生产连接夜间限流','PROD nightly rate-limit'),
+      actBlockAppr: tr('拦截 + 审批','Block + approve'), actAppr: tr('审批','Approve'), actAlert: tr('告警','Alert'),
+      // perms
+      tabRoleView: tr('角色视图','Roles'), tabUserView: tr('用户视图','Users'), rolesTier: tr('角色 · 分层','Roles · tiers'),
+      matrixTitle: tr('权限矩阵 · ','Permissions · '), matrixHint: tr('点击单元格切换 ✓ 允许 → ⚑ 需审批 → — 禁止','Click a cell to cycle ✓ Allow → ⚑ Approval → — Deny'),
+      membersTitle: tr('成员','Members'), people: tr('人','people'), addMember: tr('添加成员','Add member'), editRole: tr('编辑角色','Edit role'),
+      capSelect: tr('SELECT 查询','SELECT query'), capWrite: tr('INSERT / UPDATE','INSERT / UPDATE'), capDdl: tr('DDL（DROP / ALTER）','DDL (DROP / ALTER)'), capGrant: tr('权限变更 GRANT','GRANT privilege'), capConn: tr('管理连接配置','Manage connections'), capApprove: tr('审批高危命令','Approve high-risk'),
+      colCap: tr('能力','Capability'),
+      usersTitle: tr('用户','Users'), usersSub: tr('账号、角色与登录状态 · 角色变化与角色视图实时同步','Accounts, roles & login status · synced with role view'), invite: tr('邀请用户','Invite user'),
+      colUser: tr('用户','User'), colAcct: tr('账号','Account'), colRoles: tr('角色','Roles'), colActive: tr('最近活跃','Last active'), unassigned: tr('未分配','Unassigned'),
+      enabled: tr('启用','Enabled'), disabled: tr('停用','Disabled'), userFootHint: tr('点击状态徽标可启用 / 停用账号 · 停用后该用户所有会话立即失效','Click a status badge to enable / disable · disabling kills all sessions'),
+      // audit
+      auditEyebrow: 'AUDIT LOG', auditSub: tr('每条命令均不可篡改记录 · 含拦截、审批与执行结果','Tamper-proof record of every command · intercepts, approvals & results'),
+      exportCsv: tr('导出 CSV','Export CSV'), whTitle: tr('Webhook 推送','Webhook push'), whSub: tr('将审计事件实时推送至远端 SIEM / 数据湖 / 告警通道','Stream audit events to a remote SIEM / data lake / alert channel'),
+      whEnabled: tr('已启用','Enabled'), whEndpoint: tr('推送地址 Endpoint','Endpoint'), whSecret: tr('签名密钥 HMAC-SHA256','Signing secret · HMAC-SHA256'), whEvents: tr('推送事件','Events'),
+      evIntercept: tr('命令拦截','Intercepts'), evApprove: tr('审批流转','Approvals'), evExec: tr('高危执行','High-risk exec'), evLogin: tr('登录会话','Login'),
+      whRetry: tr('重试 & 投递','Retry & delivery'), whRetryDesc1: tr('最多重试 5 次','Up to 5 retries'), whRetryDesc2: tr('退避 2ⁿ s','Backoff 2ⁿ s'), whRetryDesc3: tr('成功率 99.7%','99.7% success'),
+      whViewLog: tr('查看投递日志','Delivery log'), whSendTest: tr('发送测试事件','Send test event'),
+      colTime: tr('时间','Time'), colWho: tr('操作人','User'), colCmd: tr('命令','Command'), colRisk: tr('风险','Risk'), colResult: tr('结果','Result'), colAp: tr('审批单','Approval'),
+      auditFootHint: tr('点击「全部风险」可按 高危 / 中 / 低 过滤 · 导出含完整命令与审批链','Click the filter to scope by High / Med / Low · export includes full command & chain'),
+      // approval inbox
+      apprEyebrow: 'APPROVAL INBOX', apprSubTail: tr('· 通过后由网关代执行，全程写入审计','· on approval the gateway executes it, fully audited'),
+      mineAppr: tr('待我审批','To approve'), allAppr: tr('全部','All'),
+      apprCardTail: tr('· 高危命令审批','· high-risk approval'),
+      apInitiator: tr('发起人','Requester'), apTarget: tr('目标','Target'), apReason: tr('操作原因','Reason'),
+      apChain: tr('你 · DBA 组长 → 终审 李娜','You · DBA lead → final Li Na'), apReject: tr('驳回','Reject'), apApprove: tr('通过并代执行','Approve & run'),
+      apDone: tr('已通过 · 网关已代执行 · 已写入审计与 Lark','Approved · executed by gateway · audited & Lark-notified'), apRejected: tr('已驳回 · 命令未执行 · 已通知发起人','Rejected · not executed · requester notified'),
+      // modals
+      mApprTitle: tr('该命令需要审批后执行','This command needs approval before running'),
+      mApprDesc: tr('提交后将生成 Lark 审批卡并通知审批人，通过后由网关代执行。','Submitting creates a Lark approval card; on approval the gateway executes it.'),
+      mPolicyHit: tr('命中策略','Matched policy'), mPolicyName: tr('「PROD · 高危 DDL 二级审批」','"PROD · high-risk DDL two-level approval"'),
+      mPendCmd: tr('待执行命令','Pending command'), mEnv: tr('环境','Env'), mInst: tr('实例','Instance'), mRisk: tr('风险','Risk'), mRiskVal: tr('不可逆 · 锁表','Irreversible · table lock'),
+      mChain: tr('审批链','Approval chain'), mYou: tr('你','You'), mZhang: tr('张伟 · 组长','Zhang · lead'), mLi: tr('李娜 · 负责人','Li Na · owner'),
+      mReason: tr('操作原因','Reason'), mReasonPh: tr('请说明本次高危操作的原因与变更窗口…','Explain the reason and change window…'),
+      mLarkNote1: tr('提交后同步告警至','On submit, alert is synced to'), mLarkNote2: tr('与值班负责人','and the on-call owner'),
+      mCancel: tr('取消','Cancel'), mSubmit: tr('提交审批','Submit'),
+      // rule form
+      rfTitle: tr('新建高危规则','New high-risk rule'), rfSub: tr('命中后在网关侧执行拦截 / 审批 / 告警','On match, block / approve / alert at the gateway'),
+      rfName: tr('规则名称','Rule name'), rfNamePh: tr('例如：禁止生产库 DROP DATABASE','e.g. Block DROP DATABASE on PROD'),
+      rfTriggers: tr('触发命令 · 可自定义','Trigger commands · custom'), rfCustomPh: tr('自定义…','Custom…'),
+      rfEnv: tr('适用环境','Environments'), rfAction: tr('命中动作','Action'), rfChain: tr('审批链','Approval chain'), rfAddApprover: tr('增加审批人','Add approver'),
+      rfActBlock: tr('拦截+审批','Block+approve'), rfActApprove: tr('仅审批','Approve only'), rfActAlert: tr('仅告警','Alert only'),
+      rfFootHint: tr('保存后立即对匹配会话生效','Takes effect immediately on matching sessions'), rfCreate: tr('创建规则','Create rule'),
+      // role form
+      erTitle: tr('编辑角色 · ','Edit role · '), erSub: tr('分层授权与默认连接角色','Tiered authorization & default connection role'),
+      erName: tr('角色名称','Role name'), erTier: tr('分层等级','Tier'), erDefRole: tr('默认连接角色','Default conn role'), erDesc: tr('描述','Description'),
+      erDescVal: tr('可管理全部环境连接配置与高危命令审批，受二级审批约束。','Can manage all env connections and approve high-risk commands, subject to two-level approval.'),
+      erApprAllow: tr('允许审批高危命令','Allow approving high-risk'), erApprAllowSub: tr('作为审批链节点参与放行','Acts as a node in the approval chain'),
+      erGlobal: tr('L0 · 全局','L0 · Global'), save: tr('保存更改','Save changes'),
+      // member picker
+      mpTitle: tr('添加成员 · ','Add member · '), mpSub: tr('从组织目录选择，点击即加入该角色','Pick from the directory; click to add to this role'),
+      mpSearch: tr('搜索成员 / 部门','Search member / dept'), mpJoined: tr('已加入','Joined'), mpAdd: tr('添加','Add'),
+      mpFoot: tr('成员变更即时生效','Member changes apply instantly'), done: tr('完成','Done'),
+      // invite
+      ivTitle: tr('邀请用户','Invite user'), ivSub: tr('发送邀请并预分配角色，接受后即接入网关','Send an invite with a pre-assigned role'),
+      ivEmail: tr('工作邮箱','Work email'), ivRole: tr('预分配角色','Pre-assigned role'), ivRoleVal: tr('研发只读','Read-only dev'),
+      ivNote: tr('新用户默认仅 DEV 可执行、PROD 只读；高危命令一律走审批。','New users get DEV-execute, PROD read-only; high-risk always goes to approval.'),
+      ivSend: tr('发送邀请','Send invite'),
+      cancel: tr('取消','Cancel'),
+      // settings
+      setGw: tr('网关策略','Gateway policy'), setGwSub: tr('全局命令代理与拦截策略','Global proxy & interception'),
+      setDefPolicy: tr('默认网关策略','Default policy'), setDefPolicyD: tr('新接入实例的默认策略','Default for newly added instances'),
+      setStrict: tr('严格模式','Strict mode'), setStrictD: tr('拦截无 WHERE 的 DELETE / UPDATE','Block DELETE / UPDATE without WHERE'),
+      setTimeout: tr('命令执行超时','Command timeout'), setTimeoutD: tr('超时自动中断并回滚','Auto-abort & rollback on timeout'),
+      setAppr: tr('审批','Approval'), setApprSub: tr('审批流转与超时策略','Approval flow & timeouts'),
+      setApprTimeout: tr('审批超时处理','On approval timeout'), setApprTimeoutD: tr('超时未审批的处理方式','What happens when no one acts'),
+      setDefApprovers: tr('默认审批人','Default approvers'), setDefApproversD: tr('高危命令的兜底审批链','Fallback chain for high-risk'),
+      setEscalate: tr('升级到负责人','Escalate to owner'), setEscalateD: tr('组长超时后升级终审','Escalate after lead timeout'),
+      setSec: tr('会话与安全','Session & security'), setSecSub: tr('登录会话与访问控制','Sessions & access control'),
+      setTtl: tr('会话有效期','Session TTL'), setTtlD: tr('超过后需重新登录','Re-login required after'),
+      setIdle: tr('空闲自动锁定','Idle auto-lock'), setIdleD: tr('15 分钟无操作锁定终端','Lock terminal after 15 min idle'),
+      setMfa: tr('强制 MFA','Require MFA'), setMfaD: tr('生产连接强制二次验证','2FA required for PROD'),
+      setIpAllow: tr('IP 允许列表','IP allowlist'), setIpAllowD: tr('仅允许列表内 IP 访问网关','Only listed IPs may reach the gateway'), manage: tr('管理','Manage'),
+      setNotify: tr('通知','Notifications'), setNotifySub: tr('事件通知与值班推送','Event & on-call alerts'),
+      setLark: tr('Lark 告警频道','Lark alert channel'), setLarkD: tr('高危事件推送至 #dba-oncall','High-risk events to #dba-oncall'),
+      setEmail: tr('邮件通知','Email notifications'), setEmailD: tr('每日审计摘要邮件','Daily audit digest email'),
+      setPush: tr('拦截即时通知','Instant intercept push'), setPushD: tr('命令被拦截时实时通知发起人','Notify requester on interception'),
+      setAppearance: tr('外观与语言','Appearance & language'), setAppearanceSub: tr('界面主题与显示语言','Theme & display language'),
+      setLangRow: tr('界面语言','Language'), setThemeRow: tr('主题','Theme'), themeDark: tr('深色','Dark'), themeLight: tr('浅色','Light'),
+      setAbout: tr('关于','About'), verLabel: tr('版本','Version'), buildLabel: tr('构建','Build'), saveSettings: tr('保存设置','Save settings'),
+      // menu access
+      menuTitle: tr('菜单权限','Menu access'), menuSub: tr('控制该角色可见 / 可进入的功能菜单','Which menus this role can see / open'),
+      m_terminal: tr('Web 命令行','Web CLI'), m_approve: tr('审批待办','Approval inbox'), m_db: tr('数据库配置','Connections'), m_rules: tr('高危规则','Risk policies'), m_perms: tr('用户与权限','Users & roles'), m_audit: tr('审计日志','Audit log'), m_settings: tr('系统设置','Settings')
+    };
+    const setPolicyOpts = this.policies.map(p => p.name);
+    const apprTimeoutOpts = [tr('超时自动驳回','Auto-reject'), tr('超时自动升级','Auto-escalate'), tr('保持等待','Keep waiting')];
+    const ttlOpts = [tr('8 小时','8 hours'), tr('4 小时','4 hours'), tr('24 小时','24 hours')];
+    const lvlMeta = (lvl) => lvl==='high' ? { bg:'var(--danger-subtle)', color:'var(--danger-text)', tag:tr('拦截','Block') }
+      : lvl==='mid' ? { bg:'var(--warning-subtle)', color:'var(--warning-text)', tag:tr('审批','Approve') }
+      : { bg:'var(--surface-sunken)', color:'var(--text-muted)', tag:tr('放行','Allow') };
+    const navBg = (on) => on ? 'var(--accent-subtle)' : 'transparent';
+    const navColor = (on) => on ? 'var(--accent-text)' : 'var(--text-muted)';
+    const navBorder = (on) => on ? 'var(--accent-subtle-border)' : 'transparent';
+    const titles = {
+      terminal:[tr('Web 命令行','Web CLI'), tr('prod-order-cluster · dba_l2','prod-order-cluster · dba_l2')],
+      approve:[tr('审批待办','Approval inbox'), tr('你的审批队列 · DBA 组长视角','Your queue · DBA lead view')],
+      db:[tr('数据库配置','Connections'), tr('9 实例 · 3 环境分层','9 instances · 3 tiers')],
+      rules:[tr('高危命令规则','Risk policies'), tr('strict 策略 · 实时匹配','strict · live matching')],
+      perms:[tr('用户与权限','Users & roles'), tr('5 角色 · 分层授权','5 roles · tiered auth')],
+      audit:[tr('审计日志','Audit log'), tr('不可篡改 · 全量留痕','Tamper-proof · full trail')],
+      settings:[tr('系统设置','Settings'), tr('网关策略 · 安全 · 通知','Gateway · security · notifications')]
+    };
+    const risk = this.state.risk;
+    const riskMap = {
+      idle: { title:tr('等待命令','Awaiting command'), sub:tr('输入 SQL 后实时检查','Live check as you type'), icon:'scan-search', color:'var(--text-muted)', bg:'var(--surface-sunken)', border:'var(--border-subtle)' },
+      safe: { title:tr('低风险 · 可执行','Low risk · OK to run'), sub:tr('未命中受限命令','No restricted command matched'), icon:'shield-check', color:'var(--success-text)', bg:'var(--success-subtle)', border:'rgba(24,179,104,.4)' },
+      high: { title:tr('高危操作 · P1','High-risk · P1'), sub:tr('DDL · 需审批后代执行','DDL · needs approval to run'), icon:'alert-octagon', color:'var(--danger-text)', bg:'var(--danger-subtle)', border:'rgba(240,71,62,.4)' }
+    };
+    const rk = riskMap[risk];
+    const whMap = {
+      idle:    { status:tr('上次投递 22:41:07 · 200 OK · 38ms','Last delivery 22:41:07 · 200 OK · 38ms'), icon:'circle-check', color:'var(--success-text)' },
+      sending: { status:tr('正在发送测试事件…','Sending test event…'), icon:'loader', color:'var(--accent-text)' },
+      ok:      { status:tr('测试事件已投递 · 200 OK · 41ms','Test event delivered · 200 OK · 41ms'), icon:'circle-check', color:'var(--success-text)' }
+    };
+    const wh = whMap[this.state.webhook];
+
+    const symMap = { allow:{s:'✓',c:'var(--success-text)'}, approve:{s:'⚑',c:'var(--warning-text)'}, deny:{s:'—',c:'var(--text-faint)'} };
+    const sel = this.state.roles.find(r => r.id === this.state.selRole) || this.state.roles[0];
+    const roleNameMap = { admin:tr('平台管理员','Platform admin'), owner:tr('DBA 负责人','DBA owner'), l2:tr('DBA L2','DBA L2'), ro:tr('研发只读','Read-only dev'), audit:tr('审计员','Auditor') };
+    const roleLayerMap = { admin:tr('L0 · 全局','L0 · Global'), owner:tr('L1 · 终审','L1 · Final'), l2:tr('L2 · 执行(需审批)','L2 · Execute (approval)'), ro:tr('L3 · 只读','L3 · Read-only'), audit:tr('L3 · 只看日志','L3 · Logs only') };
+    const roleName = (id) => roleNameMap[id] || id;
+    const capsT = [L.capSelect, L.capWrite, L.capDdl, L.capGrant, L.capConn, L.capApprove];
+    const permView = sel.perm.map((row, r) => ({
+      cap: capsT[r],
+      c0s: symMap[row[0]].s, c0c: symMap[row[0]].c, c0click: this.cycleCell(r,0),
+      c1s: symMap[row[1]].s, c1c: symMap[row[1]].c, c1click: this.cycleCell(r,1),
+      c2s: symMap[row[2]].s, c2c: symMap[row[2]].c, c2click: this.cycleCell(r,2)
+    }));
+    const rolesView = this.state.roles.map(role => ({
+      id: role.id, name: roleName(role.id), icon: role.icon, layer: roleLayerMap[role.id] || role.layer, count: role.count,
+      bg: role.id===sel.id ? 'var(--accent-subtle)' : 'transparent',
+      border: role.id===sel.id ? 'var(--accent-subtle-border)' : 'var(--border-subtle)',
+      nameColor: role.id===sel.id ? 'var(--accent-text)' : 'var(--text-body)',
+      iconColor: role.id===sel.id ? 'var(--accent-text)' : 'var(--text-muted)',
+      click: this.selectRole(role.id)
+    }));
+    const membersView = sel.members.map((mm, idx) => ({
+      n: mm.n, i: mm.i,
+      bg: idx===0 ? 'linear-gradient(135deg,#5e83fb,#2dcde6)' : '#232838',
+      color: idx===0 ? '#fff' : 'var(--text-muted)',
+      remove: this.removeMember(mm.n)
+    }));
+    const menuView = [
+      { icon:'square-terminal', label:L.m_terminal, on:this.state.roleMenus[sel.id].terminal, toggle:this.toggleMenu('terminal') },
+      { icon:'clipboard-check', label:L.m_approve, on:this.state.roleMenus[sel.id].approve, toggle:this.toggleMenu('approve') },
+      { icon:'database', label:L.m_db, on:this.state.roleMenus[sel.id].db, toggle:this.toggleMenu('db') },
+      { icon:'shield-alert', label:L.m_rules, on:this.state.roleMenus[sel.id].rules, toggle:this.toggleMenu('rules') },
+      { icon:'users-round', label:L.m_perms, on:this.state.roleMenus[sel.id].perms, toggle:this.toggleMenu('perms') },
+      { icon:'scroll-text', label:L.m_audit, on:this.state.roleMenus[sel.id].audit, toggle:this.toggleMenu('audit') },
+      { icon:'settings', label:L.m_settings, on:this.state.roleMenus[sel.id].settings, toggle:this.toggleMenu('settings') }
+    ];
+    const directoryView = this.state.directory.map(p => ({
+      n: p.n, i: p.i, dept: p.dept,
+      inRole: sel.members.some(m => m.n === p.n),
+      notInRole: !sel.members.some(m => m.n === p.n),
+      add: this.addMember(p)
+    }));
+    const usersView = this.state.directory.map((p, idx) => {
+      const roleNames = this.state.roles.filter(r => r.members.some(m => m.n === p.n)).map(r => r.name);
+      const active = this.state.userStatus[p.n] !== 'disabled';
+      return {
+        n: p.n, i: p.i, dept: p.dept, acct: p.acct, last: p.last,
+        roles: roleNames, noRole: roleNames.length === 0,
+        bg: idx===0 ? 'linear-gradient(135deg,#5e83fb,#2dcde6)' : '#232838',
+        color: idx===0 ? '#fff' : 'var(--text-muted)',
+        op: active ? '1' : '.5',
+        stText: active ? tr('启用','Enabled') : tr('停用','Disabled'),
+        stBg: active ? 'var(--success-subtle)' : 'var(--surface-sunken)',
+        stColor: active ? 'var(--success-text)' : 'var(--text-muted)',
+        toggle: this.toggleUser(p.n)
+      };
+    });
+    const pv = this.state.pmView;
+
+    const polMeta = (p) => p==='strict' ? { bg:'var(--danger-subtle)', color:'var(--danger-text)' }
+      : p==='audit-only' ? { bg:'var(--surface-sunken)', color:'var(--text-muted)' }
+      : { bg:'var(--warning-subtle)', color:'var(--warning-text)' };
+    const connRow = (c) => ({
+      name:c.name, layer:c.layer, engine:c.engine, host:c.host, role:c.role,
+      roleColor: c.role.indexOf('dba')===0 ? '#8facff' : 'var(--text-muted)',
+      policy:c.policy, polBg:polMeta(c.policy).bg, polColor:polMeta(c.policy).color,
+      stText: c.status==='online' ? tr('在线','Online') : tr('维护','Maint'),
+      stBg: c.status==='online' ? 'var(--success-subtle)' : 'var(--warning-subtle)',
+      stColor: c.status==='online' ? 'var(--success-text)' : 'var(--warning-text)',
+      toggle: this.toggleConnStatus(c.name)
+    });
+    const d = this.state.connDraft;
+
+    const riskMeta = (r) => r==='high' ? { t:tr('高危','High'), bg:'var(--danger-subtle)', c:'var(--danger-text)' } : r==='mid' ? { t:tr('中','Med'), bg:'var(--warning-subtle)', c:'var(--warning-text)' } : { t:tr('低','Low'), bg:'var(--accent-subtle)', c:'var(--accent-text)' };
+    const resMeta = (s) => s==='pending' ? { t:tr('审批中','Pending'), c:'var(--warning-text)', icon:'hourglass' } : s==='done' ? { t:tr('已执行','Executed'), c:'var(--success-text)', icon:'circle-check' } : s==='reject' ? { t:tr('已拒绝','Rejected'), c:'var(--danger-text)', icon:'circle-x' } : { t:tr('已告警','Alerted'), c:'var(--warning-text)', icon:'triangle-alert' };
+    const af = this.state.auditFilter;
+    const auditView = this.state.auditRows.filter(r => af==='all' || r.risk===af).map(r => ({
+      time:r.time, who:r.who, inst:r.inst, kw:r.kw, kwColor:r.kwColor, rest:r.rest,
+      riskText: riskMeta(r.risk).t, riskBg: riskMeta(r.risk).bg, riskColor: riskMeta(r.risk).c,
+      resText: resMeta(r.result).t, resColor: resMeta(r.result).c, resIcon: resMeta(r.result).icon,
+      apText: r.ap || '—', apColor: r.ap ? '#8facff' : 'var(--text-faint)'
+    }));
+    const filterLabels = { all:tr('全部风险','All risk'), high:tr('高危','High'), mid:tr('中','Med'), low:tr('低','Low') };
+
+    const ro = this.state.rulesOn;
+    const apView = this.state.approvals.map(a => Object.assign({}, a, {
+      risk: a.lvl==='high' ? tr('高危 P1','High P1') : tr('权限 P2','Privilege P2'),
+      isPending: a.status==='pending', isApproved: a.status==='approved', isRejected: a.status==='rejected',
+      riskBg: a.lvl==='high' ? 'var(--danger-subtle)' : 'var(--warning-subtle)',
+      riskColor: a.lvl==='high' ? 'var(--danger-text)' : 'var(--warning-text)',
+      approve: this.actApproval(a.id, 'approved'),
+      reject: this.actApproval(a.id, 'rejected')
+    }));
+    const pending = apView.filter(a => a.isPending).length;
+
+    return {
+      isTerminal: m==='terminal', isApprove: m==='approve', isDb: m==='db', isRules: m==='rules', isPerms: m==='perms', isAudit: m==='audit',
+      navTerminalBg:navBg(m==='terminal'), navTerminalColor:navColor(m==='terminal'), navTerminalBorder:navBorder(m==='terminal'),
+      navApproveBg:navBg(m==='approve'), navApproveColor:navColor(m==='approve'), navApproveBorder:navBorder(m==='approve'),
+      navDbBg:navBg(m==='db'), navDbColor:navColor(m==='db'), navDbBorder:navBorder(m==='db'),
+      navRulesBg:navBg(m==='rules'), navRulesColor:navColor(m==='rules'), navRulesBorder:navBorder(m==='rules'),
+      navPermsBg:navBg(m==='perms'), navPermsColor:navColor(m==='perms'), navPermsBorder:navBorder(m==='perms'),
+      navAuditBg:navBg(m==='audit'), navAuditColor:navColor(m==='audit'), navAuditBorder:navBorder(m==='audit'),
+      goTerminal:this.setMod('terminal'), goApprove:this.setMod('approve'), goDb:this.setMod('db'), goRules:this.setMod('rules'),
+      goPerms:this.setMod('perms'), goAudit:this.setMod('audit'),
+      pageTitle: titles[m][0], pageSub: titles[m][1], pendingCount: pending,
+      entries: this.state.entries.map(e => this.flag(e)),
+      input: this.state.input, onInput: this.onInput, onKey: this.onKey,
+      riskTitle: rk.title, riskSub: rk.sub, riskIcon: rk.icon, riskColor: rk.color, riskBg: rk.bg, riskBorder: rk.border,
+      whStatus: wh.status, whIcon: wh.icon, whColor: wh.color, testWebhook: this.testWebhook,
+      L: L, lang: this.state.lang, toggleLang: this.toggleLang,
+      onScriptFile: this.onScriptFile, loadSampleScript: this.loadSampleScript,
+      scriptModal: this.state.scriptModal, scriptName: this.state.scriptName,
+      scriptSubmitted: this.state.scriptSubmitted, closeScript: this.closeScript, runScript: this.runScript,
+      scriptCount: this.state.scriptStmts.length,
+      scriptHigh: this.state.scriptStmts.filter(s => s.risk==='high').length,
+      scriptMid: this.state.scriptStmts.filter(s => s.risk==='mid').length,
+      scriptSafe: this.state.scriptStmts.filter(s => s.risk==='safe').length,
+      scriptRisky: this.state.scriptStmts.some(s => s.risk!=='safe'),
+      scriptRunLabel: this.state.scriptStmts.some(s => s.risk!=='safe') ? L.scSubmitAppr : L.scRun,
+      scriptBannerText: this.state.scriptStmts.some(s => s.risk!=='safe') ? L.scRisky : L.scClean,
+      scriptBannerBg: this.state.scriptStmts.some(s => s.risk!=='safe') ? 'var(--danger-subtle)' : 'var(--success-subtle)',
+      scriptBannerColor: this.state.scriptStmts.some(s => s.risk!=='safe') ? 'var(--danger-text)' : 'var(--success-text)',
+      scriptBannerIcon: this.state.scriptStmts.some(s => s.risk!=='safe') ? 'shield-alert' : 'shield-check',
+      scriptStmts: this.state.scriptStmts.map((s, i) => {
+        const me = s.risk==='high' ? { bg:'var(--danger-subtle)', c:'var(--danger-text)', t:L.scHigh }
+          : s.risk==='mid' ? { bg:'var(--warning-subtle)', c:'var(--warning-text)', t:L.scMid }
+          : { bg:'var(--surface-sunken)', c:'var(--text-muted)', t:L.scSafe };
+        return { idx: String(i+1).padStart(2,'0'), sql: s.sql, cmd: s.cmd, badge: me.t, badgeBg: me.bg, badgeColor: me.c,
+          isRisky: s.risk!=='safe', noWhere: s.noWhere, rowBg: s.risk==='high' ? 'rgba(240,71,62,.05)' : 'transparent' };
+      }),
+      isSettings: m==='settings', goSettings: this.setMod('settings'),
+      navSetBg: navBg(m==='settings'), navSetColor: navColor(m==='settings'), navSetBorder: navBorder(m==='settings'),
+      setPolicyOpts: setPolicyOpts, apprTimeoutOpts: apprTimeoutOpts, ttlOpts: ttlOpts,
+      langZhBg: this.state.lang==='zh' ? 'var(--accent-subtle)' : 'transparent', langZhColor: this.state.lang==='zh' ? 'var(--accent-text)' : 'var(--text-muted)',
+      langEnBg: this.state.lang==='en' ? 'var(--accent-subtle)' : 'transparent', langEnColor: this.state.lang==='en' ? 'var(--accent-text)' : 'var(--text-muted)',
+      setLangZh: this.setLang('zh'), setLangEn: this.setLang('en'),
+      perm: permView, approvals: apView, pendingLabel: tr(pending + ' 项待你审批', pending + ' awaiting you'),
+      connProd: this.state.connections.filter(c => c.env==='PROD').map(connRow),
+      connStg: this.state.connections.filter(c => c.env==='STAGING').map(connRow),
+      connDev: this.state.connections.filter(c => c.env==='DEV').map(connRow),
+      connCount: this.state.connections.length,
+      draftName: d.name, draftHost: d.host, draftEngine: d.engine, draftEnv: d.env, draftPolicy: d.policy,
+      engineOpts: this.engines, envSelectOpts: this.envOpts.map(o => o.label), policyOpts: this.policies.map(p => p.name),
+      onConnName: this.onConnName, onConnHost: this.onConnHost, onConnEngine: this.onConnEngine, onConnEnv: this.onConnEnv, onConnPolicy: this.onConnPolicy,
+      addConnection: this.addConnection, connSavedText: this.state.connSaved ? tr('✓ 已保存并接入网关','✓ Saved & gated') : '',
+      auditRows: auditView, auditFilterLabel: filterLabels[af], auditFilterColor: af==='all' ? 'var(--text-muted)' : 'var(--accent-text)',
+      cycleAuditFilter: this.cycleAuditFilter, auditTimeLabel: this.timeOpts[this.state.auditTime], cycleAuditTime: this.cycleAuditTime,
+      doExport: this.doExport, auditExportText: this.state.auditExport ? tr('✓ 已导出 ' + auditView.length + ' 条', '✓ Exported ' + auditView.length + ' rows') : '',
+      roles: rolesView, members: membersView, menus: menuView, selRoleName: roleName(sel.id), memberCount: sel.count,
+      directory: directoryView, isMemberForm: this.state.formModal==='member', openMemberForm: this.openMemberForm,
+      isRoleView: pv==='roles', isUserView: pv==='users', users: usersView, userCount: this.state.directory.length,
+      goRoleView: this.setPmView('roles'), goUserView: this.setPmView('users'), openInvite: this.openInvite,
+      isInviteForm: this.state.formModal==='invite',
+      pmRoleBg: pv==='roles' ? 'var(--accent-subtle)' : 'transparent', pmRoleColor: pv==='roles' ? 'var(--accent-text)' : 'var(--text-muted)',
+      pmUserBg: pv==='users' ? 'var(--accent-subtle)' : 'transparent', pmUserColor: pv==='users' ? 'var(--accent-text)' : 'var(--text-muted)',
+      permHint: pv==='roles' ? tr('5 角色 · 分层授权','5 roles · tiered auth') : tr(this.state.directory.length + ' 用户 · 点击状态可启停', this.state.directory.length + ' users · toggle status'),
+      selRoleSub: (roleLayerMap[sel.id] || sel.layer) + ' · ' + tr(sel.count + ' 名成员', sel.count + ' members'),
+      ruleOn0:ro[0], ruleOn1:ro[1], ruleOn2:ro[2], ruleOn3:ro[3], ruleOn4:ro[4],
+      ruleToggle0:this.toggleRule(0), ruleToggle1:this.toggleRule(1), ruleToggle2:this.toggleRule(2), ruleToggle3:this.toggleRule(3), ruleToggle4:this.toggleRule(4),
+      ruleOp0:ro[0]?'1':'.5', ruleOp1:ro[1]?'1':'.5', ruleOp2:ro[2]?'1':'.5', ruleOp3:ro[3]?'1':'.5', ruleOp4:ro[4]?'1':'.5',
+      modalOpen: this.state.modalOpen, modalCmd: this.state.modalCmd, modalAp: this.state.modalAp,
+      auditId: this.state.auditId, reason: this.state.reason, onReason: this.onReason,
+      submit: this.submit, cancel: this.cancel,
+      isRuleForm: this.state.formModal==='rule', isRoleForm: this.state.formModal==='role',
+      openRuleForm: this.openRuleForm, openRoleForm: this.openRoleForm, closeForm: this.closeForm,
+      ruleTriggers: this.state.ruleTriggers.map(t => ({
+        name:t.name, on:t.on,
+        bg: t.on ? 'var(--danger-subtle)' : 'transparent',
+        color: t.on ? 'var(--danger-text)' : 'var(--text-faint)',
+        border: t.on ? '1px solid transparent' : '1px dashed var(--border-default)',
+        toggle: this.toggleTrigger(t.name)
+      })),
+      ruleTrigDraft: this.state.ruleTrigDraft, onTrigDraft: this.onTrigDraft, onTrigKey: this.onTrigKey, addTrigger: this.addTrigger,
+      riskCmds: this.state.riskCmds.map(c => {
+        const lvl = c.env[this.state.ruleEnv]; const me = lvlMeta(lvl);
+        return { name:c.name, bg:me.bg, color:me.color, tag:me.tag, op: lvl==='off' ? '.5' : '1',
+          remove: this.removeRiskCmd(c.name), cycle: this.cycleRiskLevel(c.name) };
+      }),
+      riskCmdsProd: this.state.riskCmds.filter(c => c.env.prod !== 'off').map(c => {
+        const me = lvlMeta(c.env.prod); return { name:c.name, bg:me.bg, color:me.color };
+      }),
+      ruleEnv: this.state.ruleEnv,
+      envTabProdBg: this.state.ruleEnv==='prod' ? 'var(--accent-subtle)' : 'transparent',
+      envTabProdColor: this.state.ruleEnv==='prod' ? 'var(--accent-text)' : 'var(--text-muted)',
+      envTabStgBg: this.state.ruleEnv==='staging' ? 'var(--accent-subtle)' : 'transparent',
+      envTabStgColor: this.state.ruleEnv==='staging' ? 'var(--accent-text)' : 'var(--text-muted)',
+      envTabDevBg: this.state.ruleEnv==='dev' ? 'var(--accent-subtle)' : 'transparent',
+      envTabDevColor: this.state.ruleEnv==='dev' ? 'var(--accent-text)' : 'var(--text-muted)',
+      setEnvProd: this.setRuleEnv('prod'), setEnvStg: this.setRuleEnv('staging'), setEnvDev: this.setRuleEnv('dev'),
+      cmdDraft: this.state.cmdDraft, onCmdDraft: this.onCmdDraft, onCmdKey: this.onCmdKey, addRiskCmd: this.addRiskCmd,
+      modalBadgeText: this.state.modalLvl==='high' ? tr('高危 P1','High P1') : tr('权限 P2','Privilege P2'),
+      modalBadgeBg: this.state.modalLvl==='high' ? 'var(--danger-subtle)' : 'var(--warning-subtle)',
+      modalBadgeColor: this.state.modalLvl==='high' ? 'var(--danger-text)' : 'var(--warning-text)'
+    };
+  }
+}
+</script>
+</body>
+</html>

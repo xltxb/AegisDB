@@ -1,0 +1,43 @@
+/* ============================================================
+   Vela — Spacing & layout tokens (4px base grid)
+   ============================================================ */
+
+:root {
+  --space-0:   0;
+  --space-px:  1px;
+  --space-0-5: 2px;
+  --space-1:   4px;
+  --space-1-5: 6px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;
+  --space-20:  80px;
+  --space-24:  96px;
+  --space-32:  128px;
+
+  /* ---- Container widths ---- */
+  --container-sm:  640px;
+  --container-md:  860px;
+  --container-lg:  1080px;
+  --container-xl:  1280px;
+  --container-2xl: 1480px;
+
+  /* ---- Control heights (44px min hit target on touch) ---- */
+  --control-sm: 32px;
+  --control-md: 40px;
+  --control-lg: 48px;
+
+  /* ---- Z-index scale ---- */
+  --z-base:    0;     /* @kind other */
+  --z-raised:  10;    /* @kind other */
+  --z-sticky:  100;   /* @kind other */
+  --z-overlay: 1000;  /* @kind other */
+  --z-modal:   1100;  /* @kind other */
+  --z-toast:   1200;  /* @kind other */
+}

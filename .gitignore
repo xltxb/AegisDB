@@ -1,0 +1,36 @@
+# ---- Backend (Go) ----
+/backend/bin/
+/backend/server
+/backend/server.exe
+*.test
+*.out
+vela-gateway.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ---- Packaged build output (build.sh) ----
+/dist/
+
+# ---- Frontend (Node) ----
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+*.local
+
+# ---- Env / secrets ----
+.env
+.env.*
+!.env.example
+backend/configs/config.local.yaml
+
+# ---- Editor / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Local tooling / test artifacts ----
+.claude/settings.local.json
+/frontend/test-results/
+/frontend/playwright-report/

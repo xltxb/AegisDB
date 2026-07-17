@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<style>
+  body { margin:0; background:#fff; color:var(--text-body); }
+  .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
+  .doc-frame { width:100%; border-collapse:collapse; }
+  .doc-frame td { padding:0; }
+  .hdr-space, .ftr-space { display:none; }
+  h1,h2,h3 { text-wrap:balance; }
+  p,li { text-wrap:pretty; }
+  .t { width:100%; border-collapse:collapse; margin:14px 0 4px; }
+  .t th { text-align:left; font:600 10.5px/1.4 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); background:var(--surface-sunken); border:1px solid var(--border-subtle); padding:8px 11px; }
+  .t td { font:400 13px/1.5 var(--font-body); color:var(--text-body); border:1px solid var(--border-subtle); padding:9px 11px; vertical-align:top; }
+  .t td.id { font:600 11.5px/1.5 var(--font-mono); color:var(--accent-text); white-space:nowrap; }
+  pre { background:#0e1422; border:1px solid var(--border-default); border-radius:10px; padding:14px 16px; overflow-x:auto; font:500 11.5px/1.62 var(--font-mono); color:#c9d4ea; margin:12px 0; }
+  pre .k { color:#7aa2ff; } pre .s { color:#5fd0a8; } pre .c { color:#5b6479; } pre .a { color:#2dcde6; }
+  code.inl { font:600 12px var(--font-mono); color:var(--accent-text); background:var(--accent-subtle); padding:1px 5px; border-radius:4px; }
+  @page { size:A4; margin:0; }
+  @media print {
+    html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html, body { margin:0; padding:0; }
+    .doc { max-width:none !important; margin:0 !important; padding:0 0.7in !important; box-shadow:none !important; }
+    .hdr-space, .ftr-space { display:table-cell; height:0.7in; }
+    h1,h2,h3,h4 { break-after:avoid; }
+    figure, pre, blockquote, table, tr, .keep { break-inside:avoid; }
+    p, li { orphans:3; widows:3; }
+  }
+</style>
+</helmet>
+
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+<div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
+  <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">Vela Gateway</span>
+  <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Frontend Engineering</span>
+</div>
+
+<div style="font:600 12px var(--font-mono); letter-spacing:.18em; color:var(--accent-text); text-transform:uppercase">前端开发文档 · FRONTEND</div>
+<h1 style="font:700 33px/1.15 var(--font-display); color:var(--text-strong); letter-spacing:-.025em; margin:10px 0 12px">数据库管理网关<br>前端开发文档(Vue 3)</h1>
+<p style="font:400 15px/1.6 var(--font-body); color:var(--text-muted); margin:0 0 22px; max-width:62ch">本文面向前端工程师,基于产品原型与 PRD,约定 Vue 3 技术栈、工程结构、路由与状态、各模块实现要点、API 对接契约、三层权限控制、国际化与主题。配套:《后端开发文档 (Go Gin)》、《数据库网关 PRD》。</p>
+
+<table class="t keep"><tbody>
+  <tr><td class="id" style="width:24%">技术栈</td><td>Vue 3 · TypeScript · Vite</td><td class="id" style="width:22%">状态/路由</td><td>Pinia · Vue Router</td></tr>
+  <tr><td class="id">关联文档</td><td>PRD v1.0 / 后端 Go Gin</td><td class="id">更新</td><td>2026-06-25</td></tr>
+</tbody></table>
+
+<!-- 1 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">01</span> 技术栈与选型</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Stack</div>
+<table class="t">
+  <thead><tr><th style="width:26%">类别</th><th style="width:30%">选型</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>框架</td><td>Vue 3 (Composition API, <code class="inl">&lt;script setup&gt;</code>)</td><td>组合式 API + TypeScript 全量类型。</td></tr>
+    <tr><td>构建</td><td>Vite 5</td><td>开发热更新、生产构建、按模块分包。</td></tr>
+    <tr><td>状态管理</td><td>Pinia</td><td>按领域拆 store(auth/connections/roles…)。</td></tr>
+    <tr><td>路由</td><td>Vue Router 4</td><td>动态路由 + 菜单权限守卫。</td></tr>
+    <tr><td>HTTP</td><td>Axios</td><td>统一实例、拦截器、错误码处理。</td></tr>
+    <tr><td>终端</td><td>xterm.js</td><td>Web 命令行渲染;WebSocket 流式交互。</td></tr>
+    <tr><td>SQL 编辑</td><td>CodeMirror 6 (sql)</td><td>语法高亮、脚本预览。</td></tr>
+    <tr><td>国际化</td><td>vue-i18n</td><td>zh / en 双语,与设置联动。</td></tr>
+    <tr><td>UI 基础</td><td>Vela Design Tokens</td><td>沿用设计系统 CSS 变量与深/浅主题;组件按 Vela 视觉自建或封装。</td></tr>
+    <tr><td>工具</td><td>VueUse · dayjs · zod</td><td>组合工具、时间、表单/响应校验。</td></tr>
+  </tbody>
+</table>
+
+<!-- 2 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">02</span> 工程结构</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Project Layout</div>
+<pre><code>src/
+├─ main.ts                 <span class="c"># 应用入口、插件注册</span>
+├─ App.vue
+├─ router/
+│  ├─ index.ts             <span class="c"># 路由表</span>
+│  └─ guards.ts            <span class="c"># 登录 + 菜单权限守卫</span>
+├─ stores/                 <span class="c"># Pinia</span>
+│  ├─ auth.ts  connections.ts  roles.ts  users.ts
+│  ├─ riskRules.ts  approvals.ts  audit.ts  terminal.ts
+│  └─ settings.ts  i18n.ts
+├─ api/
+│  ├─ http.ts              <span class="c"># axios 实例 + 拦截器</span>
+│  └─ modules/*.ts         <span class="c"># 各领域接口</span>
+├─ views/                  <span class="c"># 路由级页面 = 七大模块</span>
+│  ├─ terminal/  approvals/  connections/  riskRules/
+│  ├─ permissions/  audit/  settings/
+├─ components/             <span class="c"># 复用组件</span>
+│  ├─ terminal/Xterm.vue  RiskInspector.vue  InterceptModal.vue
+│  ├─ script/ScriptScanModal.vue
+│  ├─ permission/CapabilityMatrix.vue  MenuAccess.vue
+│  └─ common/*  (VButton VBadge VSwitch VSelect …)
+├─ directives/permission.ts <span class="c"># v-permission</span>
+├─ locales/  zh.ts  en.ts
+├─ styles/  tokens.css  theme.css
+└─ types/  *.d.ts          <span class="c"># 与后端 DTO 对齐</span>
+</code></pre>
+
+<!-- 3 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">03</span> 路由与菜单权限</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Routing &amp; Menu Guard</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">每个路由声明 <code class="inl">meta.menuKey</code>,与后端返回的 <code class="inl">menus</code> 对应。守卫在导航时校验登录态与菜单可见性,无权限重定向到首个可见菜单。</p>
+<table class="t">
+  <thead><tr><th style="width:30%">路由</th><th style="width:24%">menuKey</th><th>页面</th></tr></thead>
+  <tbody>
+    <tr><td class="id">/terminal</td><td class="id">terminal</td><td>Web 命令行终端</td></tr>
+    <tr><td class="id">/approvals</td><td class="id">approve</td><td>审批待办</td></tr>
+    <tr><td class="id">/connections</td><td class="id">db</td><td>数据库配置</td></tr>
+    <tr><td class="id">/risk-rules</td><td class="id">rules</td><td>高危命令规则</td></tr>
+    <tr><td class="id">/permissions</td><td class="id">perms</td><td>用户与权限</td></tr>
+    <tr><td class="id">/audit</td><td class="id">audit</td><td>审计日志</td></tr>
+    <tr><td class="id">/settings</td><td class="id">settings</td><td>系统设置</td></tr>
+  </tbody>
+</table>
+<pre><code><span class="k">router</span>.beforeEach(<span class="k">async</span> (to) =&gt; {
+  <span class="k">const</span> auth = useAuthStore()
+  <span class="k">if</span> (!auth.token) <span class="k">return</span> { name: <span class="s">'login'</span> }
+  <span class="k">if</span> (!auth.loaded) <span class="k">await</span> auth.fetchMe()   <span class="c">// user + menus + capabilities</span>
+  <span class="k">const</span> key = to.meta.menuKey <span class="k">as</span> <span class="a">string</span> | <span class="k">undefined</span>
+  <span class="k">if</span> (key &amp;&amp; !auth.menus[key]) <span class="k">return</span> { path: auth.firstVisibleRoute }
+})</code></pre>
+
+<!-- 4 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">04</span> 状态管理(Pinia)</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Stores</div>
+<table class="t">
+  <thead><tr><th style="width:24%">Store</th><th>关键 state / action</th></tr></thead>
+  <tbody>
+    <tr><td class="id">auth</td><td>user, role, menus, capabilities, token / login(), fetchMe(), logout()</td></tr>
+    <tr><td class="id">connections</td><td>list, byEnv / fetch(), create(), toggleStatus(), test()</td></tr>
+    <tr><td class="id">roles</td><td>list, selectedId, matrix, members / select(), cycleCell(), toggleMenu(), addMember()</td></tr>
+    <tr><td class="id">riskRules</td><td>commands(env→level), strictMode / cycleLevel(), addCommand(), removeCommand()</td></tr>
+    <tr><td class="id">terminal</td><td>entries, input, connectionId / run(), onIntercept()</td></tr>
+    <tr><td class="id">approvals</td><td>list(mine/all) / fetch(), approve(), reject(), submit()</td></tr>
+    <tr><td class="id">audit</td><td>rows, filter, timeRange / fetch(), export()</td></tr>
+    <tr><td class="id">settings</td><td>gateway, approval, security, notify, webhook / fetch(), save(), testWebhook()</td></tr>
+    <tr><td class="id">i18n</td><td>lang('zh'|'en') / setLang()</td></tr>
+  </tbody>
+</table>
+
+<!-- 5 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">05</span> 核心模块实现要点</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Module Notes</div>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.1 Web 命令行终端</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">三栏布局:左侧分层树、中间 xterm 终端、右侧风险检查面板。提交命令时<strong>先调风险预检</strong>,命中高危则打开拦截/提交卡,不直接执行;否则经 WebSocket 下发由网关代执行并回显。</p>
+<pre><code><span class="k">async function</span> onSubmit(sql: <span class="a">string</span>) {
+  <span class="k">const</span> r = <span class="k">await</span> api.risk.check({ connectionId, sql })   <span class="c">// 三层判定</span>
+  <span class="k">if</span> (r.requiresApproval) {
+    interceptModal.open({ sql, ...r })                  <span class="c">// 填原因 → 提交审批</span>
+  } <span class="k">else</span> {
+    terminalWs.send({ type: <span class="s">'exec'</span>, sql })             <span class="c">// 网关代执行</span>
+  }
+}</code></pre>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.2 SQL 脚本上传与扫描</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">读取 <code class="inl">.sql</code> 文件后 <code class="inl">multipart</code> 上传至 <code class="inl">POST /scripts/scan</code>;后端返回逐条语句风险与统计,前端渲染扫描报告。检出高危则主按钮变"提交审批后执行"。</p>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.3 权限矩阵与菜单权限</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><code class="inl">CapabilityMatrix.vue</code> 单元格点击循环 allow→approve→deny,按角色与环境保存;<code class="inl">MenuAccess.vue</code> 逐菜单开关。保存调用 <code class="inl">PUT /roles/:id/capabilities</code> 与 <code class="inl">/menus</code>。</p>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.4 高危字典三态</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">字典按环境(PROD/STAGING/DEV)Tab 切换,命令徽标点击循环 拦截/审批/放行,调用 <code class="inl">PATCH /risk-commands/:name</code>。PROD 配置驱动终端与脚本扫描。</p>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.5 审批待办</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">列表区分"待我审批 / 全部";卡片展示命令、发起人、原因、审批链;通过/拒绝调用对应接口并乐观更新状态。</p>
+
+<!-- 6 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">06</span> API 对接契约</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">API Contract</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">统一前缀 <code class="inl">/api/v1</code>,Bearer Token 鉴权,响应包 <code class="inl">{ code, msg, data }</code>。详细字段见后端文档第 06 章。</p>
+<table class="t">
+  <thead><tr><th style="width:38%">Endpoint</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td class="id">POST /auth/login · GET /auth/me</td><td>登录;拉取 user + menus + capabilities</td></tr>
+    <tr><td class="id">POST /risk/check</td><td>命令风险预检(三层判定)</td></tr>
+    <tr><td class="id">WS /terminal/ws</td><td>终端流式执行</td></tr>
+    <tr><td class="id">POST /scripts/scan · /execute</td><td>脚本扫描 / 执行</td></tr>
+    <tr><td class="id">GET/POST/PATCH /connections</td><td>连接配置</td></tr>
+    <tr><td class="id">GET /roles · PUT /roles/:id/(menus|capabilities)</td><td>角色权限</td></tr>
+    <tr><td class="id">GET/POST/PATCH/DELETE /risk-commands</td><td>高危字典</td></tr>
+    <tr><td class="id">GET /approvals · :id/approve|reject</td><td>审批</td></tr>
+    <tr><td class="id">GET /audit · /audit/export</td><td>审计 / 导出</td></tr>
+    <tr><td class="id">GET/PUT /settings · /settings/webhook/test</td><td>设置 / Webhook</td></tr>
+  </tbody>
+</table>
+<pre><code><span class="c">// api/http.ts</span>
+<span class="k">const</span> http = axios.create({ baseURL: <span class="s">'/api/v1'</span>, timeout: <span class="a">15000</span> })
+http.interceptors.request.use(c =&gt; { c.headers.Authorization = <span class="s">`Bearer ${auth.token}`</span>; <span class="k">return</span> c })
+http.interceptors.response.use(r =&gt; {
+  <span class="k">if</span> (r.data.code !== <span class="a">0</span>) { toast.error(r.data.msg); <span class="k">throw</span> r.data }
+  <span class="k">return</span> r.data.data
+}, e =&gt; { <span class="k">if</span> (e.response?.status === <span class="a">401</span>) auth.logout(); <span class="k">throw</span> e })</code></pre>
+
+<!-- 7 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">07</span> 三层权限控制(前端)</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Client-side Authorization</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">前端仅做<strong>展示层收敛</strong>(藏入口、灰按钮),真正的拦截以后端为准:</p>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>菜单层:</strong>路由守卫 + 动态侧栏,按 <code class="inl">menus</code> 渲染。</li>
+  <li><strong>能力层:</strong><code class="inl">v-permission="'ddl:prod'"</code> 指令按能力矩阵禁用/隐藏操作。</li>
+  <li><strong>命令层:</strong>提交前 <code class="inl">/risk/check</code> 决定放行/审批/拦截。</li>
+</ul>
+<pre><code><span class="c">// directives/permission.ts</span>
+<span class="k">export const</span> vPermission = {
+  mounted(el, { value }) {
+    <span class="k">if</span> (!useAuthStore().can(value)) el.setAttribute(<span class="s">'disabled'</span>, <span class="s">'true'</span>)
+  }
+}</code></pre>
+
+<!-- 8 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 国际化与主题</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">i18n &amp; Theme</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>i18n:</strong>vue-i18n 维护 <code class="inl">zh / en</code>,顶栏与设置切换 <code class="inl">locale</code>;数据类内容(实例名、SQL、人名)不翻译。<strong>主题:</strong>沿用 Vela CSS 变量,<code class="inl">&lt;html data-theme="dark"&gt;</code> 切换深/浅,业务样式只用语义 token <code class="inl">var(--surface-card)</code> 等。</p>
+
+<!-- 9 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> 终端 WebSocket 协议</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Terminal WS</div>
+<table class="t">
+  <thead><tr><th style="width:24%">方向 / type</th><th>载荷</th></tr></thead>
+  <tbody>
+    <tr><td class="id">→ exec</td><td>{ connectionId, sql }</td></tr>
+    <tr><td class="id">← output</td><td>{ rows, ms } 或文本流</td></tr>
+    <tr><td class="id">← intercept</td><td>{ rule, approvalNo, auditId }</td></tr>
+    <tr><td class="id">← error</td><td>{ message }</td></tr>
+  </tbody>
+</table>
+
+<!-- 10 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">10</span> 构建、规范与交付</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Build &amp; Conventions</div>
+<ul style="margin:0; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>规范:</strong>ESLint + Prettier + <code class="inl">vue-tsc</code> 类型检查;组件 PascalCase,store/composable <code class="inl">useXxx</code>。</li>
+  <li><strong>类型:</strong><code class="inl">types/</code> 与后端 DTO 一一对应,接口返回经 zod 校验。</li>
+  <li><strong>构建:</strong>Vite 按路由懒加载分包;环境变量 <code class="inl">VITE_API_BASE</code> / <code class="inl">VITE_WS_BASE</code>。</li>
+  <li><strong>测试:</strong>Vitest 单测核心 store 与风险预检逻辑;Playwright 走通拦截→审批→执行主流程。</li>
+</ul>
+
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>Vela Gateway · 前端开发文档 (Vue 3)</span><span style="margin-left:auto">机密 · 内部</span></div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch(e){} };
+    if (!window.lucide) { const s=document.createElement('script'); s.src='https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'; s.onload=draw; document.head.appendChild(s); } else draw();
+    setTimeout(draw, 400);
+  }
+}
+</script>
+</body>
+</html>

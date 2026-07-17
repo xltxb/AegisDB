@@ -1,0 +1,13 @@
+-- 0002_audit_prev_unique.sql — authoritative schema change, applied by migrate.
+--
+-- Enforce hash-chain linearity at the database layer: a UNIQUE index on prev_hash
+-- makes it impossible for two audit rows to chain onto the same predecessor. The
+-- in-process auditMu only serializes writes within a single process; under a
+-- multi-connection pool or horizontal scale-out it cannot, so the chain could
+-- fork. This constraint closes that gap; appendAudit retries on the resulting
+-- duplicate-key error to keep the chain linear (A4).
+--
+-- The single genesis row uses '' (empty string) as its predecessor, so exactly
+-- one genesis row is permitted. Applying this on a database that already contains
+-- a fork will fail — that is intended (it surfaces pre-existing corruption).
+ALTER TABLE tbl_audit_log ADD UNIQUE KEY uk_audit_prev (prev_hash);
