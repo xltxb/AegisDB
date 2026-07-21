@@ -24,6 +24,7 @@
   loginBtn: '登录', loginHint: "演示账号 linwei{'@'}vela.io · 密码 vela123", loginError: '邮箱或密码错误',
   // terminal
   treeTitle: '数据库分层', search: '搜索实例 / 库 / 表',
+  schemaLoading: '加载库表中…', schemaEmpty: '— 无可显示的数据库 —',
   prodEnv: '生产环境 · PROD', stagingEnv: '预发 · STAGING', devEnv: '测试 · DEV',
   highTag: '高危', limitedTag: '受限', treeFooter: '3 环境 · 9 实例 · 已接入网关',
   interceptTitle: '命令已被网关拦截 · 禁止直接执行',

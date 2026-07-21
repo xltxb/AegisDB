@@ -70,24 +70,11 @@ func (h *Handler) PatchConnection(c *gin.Context) {
 	resp.OK(c, conn)
 }
 
-// GetConnectionSchema returns a connection's simulated db→table tree (US#11).
+// GetConnectionSchema returns a connection's database→table tree: introspected
+// live from the target when the connection has real credentials, otherwise the
+// seeded (simulated) tree. See Services.ConnectionSchema.
 func (h *Handler) GetConnectionSchema(c *gin.Context) {
-	id := pathID(c)
-	objs, _ := h.Repo.SchemaForConnection(id)
-	// Group objects into databases, preserving the repo's (db, table) ordering.
-	order := []string{}
-	byDB := map[string][]dto.SchemaTableDTO{}
-	for _, o := range objs {
-		if _, seen := byDB[o.Database]; !seen {
-			order = append(order, o.Database)
-		}
-		byDB[o.Database] = append(byDB[o.Database], dto.SchemaTableDTO{Name: o.Tbl})
-	}
-	dbs := make([]dto.SchemaDBDTO, 0, len(order))
-	for _, name := range order {
-		dbs = append(dbs, dto.SchemaDBDTO{Name: name, Tables: byDB[name]})
-	}
-	resp.OK(c, dto.ConnectionSchemaResp{ConnectionID: id, Databases: dbs})
+	resp.OK(c, h.Svc.ConnectionSchema(middleware.CurrentUser(c), pathID(c)))
 }
 
 // ---------------------------------------------------------------- Roles

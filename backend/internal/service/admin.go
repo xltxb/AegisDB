@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"velagateway/internal/dto"
+	"velagateway/internal/gateway"
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/pkg/crypto"
@@ -36,6 +37,53 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 		return nil, err
 	}
 	return c, nil
+}
+
+// ConnectionSchema returns a connection's database→table tree. When the connection
+// has real credentials it introspects the live target; otherwise it falls back to
+// the seeded (simulated) tree. Live-introspection failures are reported in the
+// response's Error field (not as a transport error) so the UI can show why the tree
+// is empty. Access is tag-gated just like execution.
+func (s *Services) ConnectionSchema(u *model.User, connID int64) dto.ConnectionSchemaResp {
+	out := dto.ConnectionSchemaResp{ConnectionID: connID, Databases: []dto.SchemaDBDTO{}}
+	conn, err := s.Repo.GetConnection(connID)
+	if err != nil {
+		out.Error = "连接不存在"
+		return out
+	}
+	if !s.canAccessConn(u, conn) {
+		out.Error = "无权访问该连接"
+		return out
+	}
+	if gateway.RealExecSupported(conn) {
+		groups, err := gateway.RealSchema(conn)
+		if err != nil {
+			out.Error = "加载库表失败: " + err.Error()
+			return out
+		}
+		for _, g := range groups {
+			tables := make([]dto.SchemaTableDTO, 0, len(g.Tables))
+			for _, t := range g.Tables {
+				tables = append(tables, dto.SchemaTableDTO{Name: t})
+			}
+			out.Databases = append(out.Databases, dto.SchemaDBDTO{Name: g.Database, Tables: tables})
+		}
+		return out
+	}
+	// No credentials → simulated connection: return the seeded tree (if any).
+	objs, _ := s.Repo.SchemaForConnection(connID)
+	order := []string{}
+	byDB := map[string][]dto.SchemaTableDTO{}
+	for _, o := range objs {
+		if _, seen := byDB[o.Database]; !seen {
+			order = append(order, o.Database)
+		}
+		byDB[o.Database] = append(byDB[o.Database], dto.SchemaTableDTO{Name: o.Tbl})
+	}
+	for _, name := range order {
+		out.Databases = append(out.Databases, dto.SchemaDBDTO{Name: name, Tables: byDB[name]})
+	}
+	return out
 }
 
 // AccessibleConnections returns the connections a user's role may see: all of

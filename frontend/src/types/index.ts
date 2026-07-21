@@ -224,6 +224,7 @@ export interface WebhookConfig {
 export interface ConnectionSchema {
   connectionId: number
   databases: { name: string; tables: { name: string }[] }[]
+  error?: string
 }
 
 export interface WebhookDelivery {

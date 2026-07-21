@@ -7,14 +7,22 @@ import type { Connection, ConnectionSchema } from '@/types'
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
 const emit = defineEmits<{ select: [number]; selectDb: [number, string] }>()
 
-// Schema (db → tables) for the selected instance, fetched from the gateway.
+// Schema (db → tables) for the selected instance, introspected live from the
+// gateway. Real introspection can take a moment and may fail (bad creds / network),
+// so track a loading flag and surface the returned error instead of a silent empty.
 const schema = ref<ConnectionSchema | null>(null)
+const schemaLoading = ref(false)
 watch(() => props.selectedId, async (id) => {
   schema.value = null
   if (!id) return
+  schemaLoading.value = true
   try {
     schema.value = await api.connectionSchema(id)
-  } catch { /* leave tree without a schema on failure */ }
+  } catch {
+    schema.value = null
+  } finally {
+    schemaLoading.value = false
+  }
 }, { immediate: true })
 
 const search = ref('')
@@ -68,8 +76,11 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
               <span v-if="tag(c)" class="tag" :class="tag(c)!.cls">{{ $t(tag(c)!.text as any) }}</span>
             </div>
             <!-- live schema (db → tables) for the selected instance -->
-            <div v-if="c.id === selectedId && schema" class="ind2">
-              <template v-for="d in schema.databases" :key="d.name">
+            <div v-if="c.id === selectedId" class="ind2">
+              <div v-if="schemaLoading" class="shint">{{ $t('schemaLoading') }}</div>
+              <div v-else-if="schema && schema.error" class="shint err">{{ schema.error }}</div>
+              <div v-else-if="schema && !schema.databases.length" class="shint">{{ $t('schemaEmpty') }}</div>
+              <template v-else-if="schema" v-for="d in schema.databases" :key="d.name">
                 <div class="db" :class="{ sel: d.name === selectedDb }" @click.stop="emit('selectDb', c.id, d.name)"><FolderOpen :size="13" />{{ d.name }}</div>
                 <div class="ind3">
                   <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
@@ -120,5 +131,7 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
 .tbl { display: flex; align-items: center; gap: 7px; padding: 4px 8px; font: 400 12px var(--font-mono); color: var(--text-muted); }
 .tbl.sel { border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: var(--text-strong); }
 .empty { padding: 6px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.shint { padding: 5px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.shint.err { color: var(--danger-text); white-space: normal; word-break: break-word; }
 .foot { padding: 12px 14px; border-top: 1px solid var(--border-subtle); font: 500 11px var(--font-mono); color: var(--text-faint); }
 </style>

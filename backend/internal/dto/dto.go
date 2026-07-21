@@ -140,10 +140,13 @@ type RoleTagsReq struct {
 	Tags []string `json:"tags"`
 }
 
-// ConnectionSchemaResp is the db→table tree of a connection (US#11).
+// ConnectionSchemaResp is the db→table tree of a connection. For a connection with
+// real credentials it is introspected live; Error carries the reason when live
+// introspection fails (empty tree otherwise) so the UI can explain the empty state.
 type ConnectionSchemaResp struct {
 	ConnectionID int64         `json:"connectionId"`
 	Databases    []SchemaDBDTO `json:"databases"`
+	Error        string        `json:"error,omitempty"`
 }
 
 type SchemaDBDTO struct {
