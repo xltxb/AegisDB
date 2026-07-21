@@ -69,6 +69,12 @@ type ExecResp struct {
 	Output      string `json:"output,omitempty"`
 	Rows        int    `json:"rows,omitempty"`
 	Ms          int    `json:"ms,omitempty"`
+	// Columns/Data carry the real result set for a read (Data capped for the
+	// terminal); empty for a simulated connection, where the client synthesises a
+	// preview from Rows. Truncated marks a result set larger than the display cap.
+	Columns   []string   `json:"columns,omitempty"`
+	Data      [][]string `json:"data,omitempty"`
+	Truncated bool       `json:"truncated,omitempty"`
 }
 
 // ---- Data export ----

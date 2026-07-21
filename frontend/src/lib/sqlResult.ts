@@ -119,6 +119,28 @@ export function synthTable(sql: string, rowCount: number, limit = 12): SynthTabl
   return { columns, rows, numeric: columns.map(isNumericCol) }
 }
 
+// numericByData reports, per column, whether every non-empty cell parses as a
+// number — so a real result set is right-aligned by actual content, not by a
+// heuristic on the column name.
+function numericByData(columns: string[], rows: string[][]): boolean[] {
+  return columns.map((_, i) => {
+    let sawValue = false
+    for (const r of rows) {
+      const v = r[i]
+      if (v == null || v === '') continue
+      sawValue = true
+      if (!/^-?\d+(\.\d+)?$/.test(v.trim())) return false
+    }
+    return sawValue
+  })
+}
+
+// buildTable makes a renderable table from a REAL result set (columns + rows
+// returned by the target DB) — the non-synthetic path.
+export function buildTable(columns: string[], rows: string[][]): SynthTable {
+  return { columns, rows, numeric: numericByData(columns, rows) }
+}
+
 // ---- rendering ----------------------------------------------------------
 
 const pad = (s: string, w: number, right: boolean) =>

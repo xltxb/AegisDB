@@ -11,9 +11,10 @@ import ScriptScanModal from '@/components/modals/ScriptScanModal.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import { useAuthStore } from '@/stores/auth'
+import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
-import { ANSI, c, isSelect, synthTable, renderTable } from '@/lib/sqlResult'
+import { ANSI, c, isSelect, synthTable, buildTable, renderTable } from '@/lib/sqlResult'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
 // One fully-isolated terminal session bound to a single connection. Each tab
@@ -89,6 +90,49 @@ const outLines = (arr: string[]) => arr.forEach((l) => out(l))
 const cssVar = (name: string, fb: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb
 
+const ui = useUIStore()
+
+// xtermTheme follows the app theme. xterm's DEFAULT 16-colour ANSI ramp is tuned
+// for dark backgrounds, so on the light theme the result table (cyan numbers, gray
+// rules) was near-invisible; each mode gets an explicit ramp with the right
+// contrast for its background. Surface/foreground read the live CSS tokens.
+function xtermTheme() {
+  const light = ui.resolvedTheme() === 'light'
+  const base = {
+    background: cssVar('--surface-page', light ? '#f6f8fb' : '#0d1117'),
+    foreground: cssVar('--text-body', light ? '#232838' : '#d7dee8'),
+    cursor: cssVar('--accent-text', light ? '#2553e0' : '#58a6ff'),
+    cursorAccent: cssVar('--surface-page', light ? '#ffffff' : '#0d1117'),
+    selectionBackground: light ? 'rgba(59,110,246,0.20)' : 'rgba(88,166,255,0.35)',
+  }
+  if (light) {
+    return {
+      ...base,
+      black: '#232838', red: '#d42a21', green: '#0f9355', yellow: '#a96606',
+      blue: '#2553e0', magenta: '#6438f0', cyan: '#0c8da8', white: '#4b5468',
+      brightBlack: '#69748b', brightRed: '#ac1f18', brightGreen: '#0c7344',
+      brightYellow: '#8a5a06', brightBlue: '#1c41b8', brightMagenta: '#5a2ad6',
+      brightCyan: '#106f86', brightWhite: '#232838',
+    }
+  }
+  return {
+    ...base,
+    black: '#2b313e', red: '#ff6b61', green: '#43d17f', yellow: '#f5b642',
+    blue: '#60a5fa', magenta: '#c4b5fd', cyan: '#3fd0e6', white: '#d7dee8',
+    brightBlack: '#8b93a7', brightRed: '#ff8f87', brightGreen: '#6ee7a0',
+    brightYellow: '#fcd34d', brightBlue: '#93c5fd', brightMagenta: '#d8c9ff',
+    brightCyan: '#8beef8', brightWhite: '#f4f7fc',
+  }
+}
+
+// Repaint the live terminal when the app theme is switched.
+watch(() => ui.theme, () => {
+  if (term) {
+    term.options.theme = xtermTheme()
+    term.refresh(0, term.rows - 1)
+  }
+})
+
 function promptText() { return c(ANSI.blue, props.conn.name) + ' ' + c(ANSI.cyan, '❯') + ' ' }
 function promptLen() { return props.conn.name.length + 3 }
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
@@ -117,14 +161,10 @@ onMounted(() => {
   loadDbs()
   term = new Terminal({
     fontFamily: cssVar('--font-mono', 'ui-monospace, Menlo, Consolas, monospace'),
-    fontSize: 13,
-    lineHeight: 1.35,
+    fontSize: 14,
+    lineHeight: 1.4,
     cursorBlink: true,
-    theme: {
-      background: cssVar('--surface-page', '#0d1117'),
-      foreground: cssVar('--text-body', '#c9d1d9'),
-      cursor: cssVar('--accent-text', '#58a6ff'),
-    },
+    theme: xtermTheme(),
   })
   fit = new FitAddon()
   term.loadAddon(fit)
@@ -291,9 +331,16 @@ function onWsMessage(m: any) {
   editor.resume()
 }
 
-function renderOutput(m: { text?: string; rows?: number; ms?: number }) {
+function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: string[]; data?: string[][]; truncated?: boolean }) {
   const rows = m.rows || 0
-  if (isSelect(pendingSql.value) && rows > 0) {
+  if (m.columns && m.columns.length) {
+    // Real result set returned by the target DB.
+    const tb = buildTable(m.columns, m.data || [])
+    outLines(renderTable(tb))
+    const more = m.truncated ? ` · 已截断,显示前 ${tb.rows.length}` : ''
+    out(c(ANSI.gray, `(${tb.rows.length} 行${more} · ${m.ms ?? 0}ms)`))
+  } else if (isSelect(pendingSql.value) && rows > 0) {
+    // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)
     outLines(renderTable(tb))
     const shown = tb.rows.length
@@ -319,7 +366,8 @@ function renderExecEnvelope(env: { code: number; data?: any }) {
     renderIntercept({ rule: env.data?.rule, approvalNo: env.data?.approvalNo })
     auth.pendingCount++
   } else {
-    renderOutput({ text: env.data?.output, rows: env.data?.rows, ms: env.data?.ms })
+    renderOutput({ text: env.data?.output, rows: env.data?.rows, ms: env.data?.ms,
+      columns: env.data?.columns, data: env.data?.data, truncated: env.data?.truncated })
   }
 }
 

@@ -28,6 +28,21 @@ watch(() => props.selectedId, async (id) => {
 const search = ref('')
 const collapsed = ref<Record<string, boolean>>({ staging: true, dev: true })
 
+// Per-database expand state (collapsed by default so a cluster with many databases
+// stays scannable). Keyed by connection:database so switching instances resets it.
+const dbOpen = ref<Record<string, boolean>>({})
+const dbKey = (cid: number, name: string) => `${cid}:${name}`
+const isDbOpen = (cid: number, name: string) => !!dbOpen.value[dbKey(cid, name)]
+function toggleDb(cid: number, name: string) {
+  const k = dbKey(cid, name)
+  dbOpen.value[k] = !dbOpen.value[k]
+}
+// Clicking a database selects it as the target and expands it to reveal its tables.
+function selectDb(cid: number, name: string) {
+  dbOpen.value[dbKey(cid, name)] = true
+  emit('selectDb', cid, name)
+}
+
 const envMeta: Record<string, { label: string; dot: string }> = {
   prod: { label: 'prodEnv', dot: 'danger' },
   staging: { label: 'stagingEnv', dot: 'warning' },
@@ -81,9 +96,14 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
               <div v-else-if="schema && schema.error" class="shint err">{{ schema.error }}</div>
               <div v-else-if="schema && !schema.databases.length" class="shint">{{ $t('schemaEmpty') }}</div>
               <template v-else-if="schema" v-for="d in schema.databases" :key="d.name">
-                <div class="db" :class="{ sel: d.name === selectedDb }" @click.stop="emit('selectDb', c.id, d.name)"><FolderOpen :size="13" />{{ d.name }}</div>
-                <div class="ind3">
+                <div class="db" :class="{ sel: d.name === selectedDb }" @click.stop="selectDb(c.id, d.name)">
+                  <component :is="isDbOpen(c.id, d.name) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" @click.stop="toggleDb(c.id, d.name)" />
+                  <FolderOpen :size="13" />{{ d.name }}
+                  <span class="tcnt">{{ d.tables.length }}</span>
+                </div>
+                <div v-if="isDbOpen(c.id, d.name)" class="ind3">
                   <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                  <div v-if="!d.tables.length" class="tbl empty">— 空库 —</div>
                 </div>
               </template>
             </div>
@@ -124,7 +144,8 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
 .tag.danger { color: var(--danger-text); }
 .tag.warn { color: var(--warning-text); }
 .ind2 { padding-left: 20px; padding-top: 2px; }
-.db { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 7px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.db { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.tcnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
 .db:hover { color: var(--text-body); background: rgba(255, 255, 255, 0.03); }
 .db.sel { background: var(--accent-subtle); color: var(--accent-text); font-weight: 600; }
 .ind3 { padding-left: 16px; }

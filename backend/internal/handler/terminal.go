@@ -462,6 +462,7 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			conn.WriteJSON(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule})
 			continue
 		}
-		conn.WriteJSON(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk})
+		conn.WriteJSON(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
+			"columns": r.Columns, "data": r.Data, "truncated": r.Truncated})
 	}
 }

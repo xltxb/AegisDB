@@ -155,7 +155,8 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 	default: // allow
 		res := s.Executor.Run(conn, sql)
 		s.recordAudit(u, conn, sql, v.Risk, execResultStatus(res), "", "exec")
-		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, Rows: res.Rows, Ms: res.Ms}, nil
+		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
+			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
 }
 
@@ -336,7 +337,8 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		s.recordAudit(initiator, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
 			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", actor.Name, clip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
-		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms}, nil
+		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
+			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
 	// Same atomic guard on the reject path.
 	claimed, cerr := s.Repo.ClaimApproval(id, model.StatusPending, model.StatusRejected)

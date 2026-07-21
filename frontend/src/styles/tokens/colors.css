@@ -85,9 +85,9 @@
   --border-strong:   var(--slate-400);
 
   --text-strong:     var(--slate-900);
-  --text-body:       var(--slate-700);
-  --text-muted:      var(--slate-500);
-  --text-faint:      var(--slate-400);
+  --text-body:       var(--slate-800);
+  --text-muted:      var(--slate-600); /* raised from slate-500 for legibility (AA) */
+  --text-faint:      var(--slate-500); /* raised from slate-400 — slate-400 failed contrast on white */
   --text-on-accent:  #ffffff;
   --text-inverse:    var(--slate-50);
 

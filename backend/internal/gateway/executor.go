@@ -9,12 +9,18 @@ import (
 	"velagateway/internal/model"
 )
 
-// ExecResult is the outcome of a proxied command execution.
+// ExecResult is the outcome of a proxied command execution. For a real read,
+// Columns/Data carry the actual result set (Data capped at maxResultRows for the
+// terminal); for a simulated read they stay empty and the client synthesises a
+// preview from Rows.
 type ExecResult struct {
-	Output string
-	Rows   int
-	Ms     int
-	Err    error // non-nil when the target DB rejected the statement
+	Output    string
+	Rows      int
+	Ms        int
+	Columns   []string   // result-set column names (real reads only)
+	Data      [][]string // result rows as strings, capped (real reads only)
+	Truncated bool       // true when the result set exceeded maxResultRows
+	Err       error      // non-nil when the target DB rejected the statement
 }
 
 // Executor proxies a command to the target instance on behalf of the user.

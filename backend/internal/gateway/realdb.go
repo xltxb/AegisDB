@@ -150,8 +150,14 @@ func dialPool(driver, dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
-// RealRun executes sql against the real target instance: a read returns its row
-// count, a write returns rows-affected.
+// maxResultRows caps how many result rows a terminal read returns for display, so
+// a `SELECT *` on a huge table can't flood the socket or the xterm buffer. Exports
+// (RealQueryEach) are unbounded — this only applies to the interactive terminal.
+const maxResultRows = 200
+
+// RealRun executes sql against the real target instance. A read returns the actual
+// result set (columns + up to maxResultRows rows, marking Truncated if there are
+// more); a write returns rows-affected.
 func RealRun(conn *model.Connection, query string) (ExecResult, error) {
 	db, release, err := openConn(conn)
 	if err != nil {
@@ -166,11 +172,39 @@ func RealRun(conn *model.Connection, query string) (ExecResult, error) {
 			return ExecResult{}, err
 		}
 		defer rows.Close()
-		n := 0
-		for rows.Next() {
-			n++
+		cols, err := rows.Columns()
+		if err != nil {
+			return ExecResult{}, err
 		}
-		return ExecResult{Output: fmt.Sprintf("+ %s rows", thousands(n)), Rows: n}, rows.Err()
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		data := [][]string{}
+		truncated := false
+		for rows.Next() {
+			if len(data) >= maxResultRows {
+				truncated = true
+				break
+			}
+			if err := rows.Scan(ptrs...); err != nil {
+				return ExecResult{}, err
+			}
+			rec := make([]string, len(cols))
+			for i, v := range vals {
+				rec[i] = cellString(v)
+			}
+			data = append(data, rec)
+		}
+		if err := rows.Err(); err != nil {
+			return ExecResult{}, err
+		}
+		out := fmt.Sprintf("+ %s rows", thousands(len(data)))
+		if truncated {
+			out = fmt.Sprintf("+ %s+ rows (显示前 %d)", thousands(maxResultRows), maxResultRows)
+		}
+		return ExecResult{Output: out, Rows: len(data), Columns: cols, Data: data, Truncated: truncated}, nil
 	}
 	res, err := db.ExecContext(ctx, query)
 	if err != nil {
