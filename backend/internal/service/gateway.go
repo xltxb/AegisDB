@@ -266,19 +266,34 @@ func (s *Services) isChainMember(approvalID int64, u *model.User) bool {
 }
 
 // defaultChainSteps returns the fallback approval chain (DBA-owner role members).
+// defaultChainSteps builds the approver chain from the members of the "owner"
+// (DBA 负责人) role. When that role has no members yet (e.g. a fresh install),
+// it falls back to the platform admins so high-risk commands are never created
+// with an empty chain that no one could ever approve.
 func (s *Services) defaultChainSteps() []model.ApprovalStep {
-	steps := []model.ApprovalStep{}
-	owner, err := s.Repo.GetRoleByCode("owner")
-	if err != nil {
-		return steps
-	}
-	members, _ := s.Repo.MembersOfRole(owner.ID)
+	members := s.approverPool()
+	steps := make([]model.ApprovalStep, 0, len(members))
 	for i, m := range members {
 		steps = append(steps, model.ApprovalStep{
 			StepOrder: i + 1, ApproverID: m.ID, Approver: m.Name, Status: "waiting",
 		})
 	}
 	return steps
+}
+
+// approverPool returns the users eligible to approve: the "owner" role members,
+// or the "admin" members as a fallback when no owner has been assigned yet.
+func (s *Services) approverPool() []model.User {
+	if owner, err := s.Repo.GetRoleByCode("owner"); err == nil {
+		if members, _ := s.Repo.MembersOfRole(owner.ID); len(members) > 0 {
+			return members
+		}
+	}
+	if admin, err := s.Repo.GetRoleByCode("admin"); err == nil {
+		members, _ := s.Repo.MembersOfRole(admin.ID)
+		return members
+	}
+	return nil
 }
 
 // Approve / Reject act on an approval; on approval the gateway executes the

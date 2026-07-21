@@ -114,7 +114,7 @@
   setGw: 'Gateway policy', setGwSub: 'Global proxy & interception', setDefPolicy: 'Default policy', setDefPolicyD: 'Default for newly added instances',
   setStrict: 'Strict mode', setStrictD: 'Block DELETE / UPDATE without WHERE', setTimeout: 'Command timeout', setTimeoutD: 'Auto-abort & rollback on timeout',
   setAppr: 'Approval', setApprSub: 'Approval flow & timeouts', setApprTimeout: 'On approval timeout', setApprTimeoutD: 'What happens when no one acts',
-  setDefApprovers: 'Default approvers', setDefApproversD: 'Fallback chain for high-risk', setEscalate: 'Escalate to owner', setEscalateD: 'Escalate after lead timeout',
+  setDefApprovers: 'Default approvers', setDefApproversD: "Chain = 'DBA owner' role members (admins as fallback) — manage on Permissions", setApproversEmpty: 'No approvers set', setApproversManage: 'Manage in Permissions', setEscalate: 'Escalate to owner', setEscalateD: 'Escalate after lead timeout',
   setSec: 'Session & security', setSecSub: 'Sessions & access control', setTtl: 'Session TTL', setTtlD: 'Re-login required after',
   setIdle: 'Idle auto-lock', setIdleD: 'Lock terminal after 15 min idle', setMfa: 'Require MFA', setMfaD: '2FA required for PROD',
   setIpAllow: 'IP allowlist', setIpAllowD: 'Only listed IPs may reach the gateway', manage: 'Manage',

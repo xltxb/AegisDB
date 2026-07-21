@@ -180,15 +180,12 @@ func (s *Services) ListRolesBrief() ([]dto.RoleBrief, error) {
 	return out, nil
 }
 
-// DefaultApprovers returns the fallback approval chain (DBA-owner role members).
+// DefaultApprovers returns the approval chain shown in settings: the "owner"
+// (DBA 负责人) role members, falling back to admins when no owner is assigned —
+// matching the chain that defaultChainSteps actually builds.
 func (s *Services) DefaultApprovers() []dto.MemberDTO {
 	out := []dto.MemberDTO{}
-	owner, err := s.Repo.GetRoleByCode("owner")
-	if err != nil {
-		return out
-	}
-	members, _ := s.Repo.MembersOfRole(owner.ID)
-	for _, m := range members {
+	for _, m := range s.approverPool() {
 		out = append(out, dto.MemberDTO{ID: m.ID, Name: m.Name, Initials: m.Initials, Dept: m.Dept})
 	}
 	return out

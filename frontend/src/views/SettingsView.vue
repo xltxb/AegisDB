@@ -8,10 +8,16 @@ import MfaModal from '@/components/modals/MfaModal.vue'
 import IpAllowlistModal from '@/components/modals/IpAllowlistModal.vue'
 import WebhookPanel from '@/components/settings/WebhookPanel.vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/api'
 import type { Member } from '@/types'
+
+const router = useRouter()
+// The approval chain is the "DBA 负责人" role membership — managed on the
+// Permissions page, not here (settings only displays it).
+function goPerms() { router.push('/permissions') }
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -188,7 +194,7 @@ async function save() {
       <section v-show="activeTab === 'approval'" class="card">
         <div class="shead"><div class="sic"><GitPullRequestArrow :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setAppr') }}</div><div class="ss">{{ $t('setApprSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect v-model="apprTimeout" :options="[$t('autoReject'), $t('autoEscalate'), $t('keepWaiting')]" /></div></div>
-        <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span></div></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span><span v-if="!approvers.length" class="apv-empty">{{ $t('setApproversEmpty') }}</span><a class="apv-manage" @click="goPerms">{{ $t('setApproversManage') }}</a></div></div>
         <div class="srow last"><div class="grow"><div class="rt">{{ $t('setEscalate') }}</div><div class="rd">{{ $t('setEscalateD') }}</div></div><VSwitch v-model="escalate" /></div>
       </section>
 
@@ -293,7 +299,10 @@ async function save() {
 .chipval { font: 600 13px var(--font-mono); color: var(--text-body); background: var(--surface-sunken); border: 1px solid var(--border-default); border-radius: 8px; padding: 7px 14px; }
 .pathinput { width: 300px; height: 34px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-strong); font: 500 12px var(--font-mono); outline: none; }
 .pathinput:focus { border-color: var(--accent-text); }
-.approvers { display: flex; gap: 6px; }
+.approvers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.apv-empty { font: 500 12px var(--font-body); color: var(--warning-text); }
+.apv-manage { font: 600 12px var(--font-body); color: var(--accent-text); cursor: pointer; white-space: nowrap; }
+.apv-manage:hover { text-decoration: underline; }
 .apv { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 5px; border: 1px solid var(--border-default); border-radius: 999px; font: 600 11px var(--font-body); color: var(--text-body); }
 .ava { width: 20px; height: 20px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 9px var(--font-body); color: var(--text-muted); }
 .ipwrap { display: flex; align-items: center; gap: 10px; }

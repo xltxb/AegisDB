@@ -617,11 +617,12 @@ async function runScript() {
 
 <style scoped>
 .session { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-page); }
-.actionbar { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 14px; border-bottom: 1px solid var(--border-subtle); min-width: 0; overflow: hidden; }
-.host { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 500 12px var(--font-mono); color: var(--text-body); }
+.actionbar { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 14px; background: var(--surface-raised); border-bottom: 1px solid var(--border-subtle); min-width: 0; overflow: hidden; }
+.host { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 600 12px var(--font-mono); color: var(--text-strong); }
+.curdb { color: var(--accent-text); }
 .online { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; transition: background var(--dur-fast) var(--ease-out); }
 .online.off { background: var(--warning); }
-.actions { flex-shrink: 0; display: flex; align-items: center; gap: 10px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.actions { flex-shrink: 0; display: flex; align-items: center; gap: 10px; font: 500 11px var(--font-mono); color: var(--text-muted); }
 .upload {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
   border: 1px solid var(--accent-subtle-border); background: var(--accent-subtle); border-radius: 8px;
@@ -638,12 +639,12 @@ async function runScript() {
 .pick-item:hover { background: var(--accent-subtle); color: var(--accent-text); }
 .pn { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--font-mono); }
 .pm { flex-shrink: 0; font: 500 10px var(--font-mono); color: var(--text-faint); }
-.refresh { color: var(--text-faint); cursor: pointer; transition: color var(--dur-fast) var(--ease-out); }
+.refresh { color: var(--text-muted); cursor: pointer; transition: color var(--dur-fast) var(--ease-out); }
 .refresh:hover { color: var(--accent-text); }
 .xterm-wrap { flex: 1; min-height: 0; padding: 10px 12px 4px; overflow: hidden; }
 .xterm-host { width: 100%; height: 100%; }
 .xterm-host :deep(.xterm) { height: 100%; }
-.statusbar { height: 36px; border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 16px; padding: 0 16px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.statusbar { height: 36px; background: var(--surface-raised); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 16px; padding: 0 16px; font: 500 11px var(--font-mono); color: var(--text-muted); }
 .statusbar .ok { color: var(--success-text); }
 .statusbar .ok.warn { color: var(--warning-text); }
 .statusbar .hl { color: var(--text-body); }

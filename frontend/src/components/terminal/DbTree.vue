@@ -125,7 +125,7 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
   background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 10px;
 }
 .searchbox input { flex: 1; background: transparent; border: none; outline: none; font: 400 12px var(--font-body); color: var(--text-body); }
-.body { flex: 1; padding: 2px 8px 12px; }
+.body { flex: 1; min-height: 0; padding: 2px 8px 12px; }
 .env { display: flex; align-items: center; gap: 7px; padding: 7px 8px; font: 600 12px var(--font-body); color: var(--text-body); cursor: pointer; }
 .env.muted { color: var(--text-muted); margin-top: 4px; }
 .cnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }

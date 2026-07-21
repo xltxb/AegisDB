@@ -47,7 +47,9 @@ select {
 /* custom scrollbar (matches prototype .scy) */
 .scy { overflow-y: auto; }
 .scy::-webkit-scrollbar { width: 9px; height: 9px; }
-.scy::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 8px; }
+/* border-strong adapts per theme, so the thumb stays visible on light + dark. */
+.scy::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.scy::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 .scy::-webkit-scrollbar-track { background: transparent; }
 
 /* hover helper used across cards/cells */
