@@ -122,7 +122,9 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 268px 1fr 340px; }
+/* minmax(0,1fr) row caps every cell to the grid height so inner panels scroll
+   instead of stretching the row to their content. */
+.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 268px 1fr 340px; grid-template-rows: minmax(0, 1fr); }
 .term { display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
 .tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
 .tab {

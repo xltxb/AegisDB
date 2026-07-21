@@ -117,7 +117,9 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
 </template>
 
 <style scoped>
-.tree { border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; background: var(--surface-sunken); }
+/* min-height/overflow let this grid cell shrink to the row height so .body can
+   actually scroll (a grid item defaults to min-height:auto = content height). */
+.tree { min-height: 0; overflow: hidden; border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; background: var(--surface-sunken); }
 .head { padding: 16px 14px 10px; }
 .eyebrow { font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 10px; }
 .searchbox {

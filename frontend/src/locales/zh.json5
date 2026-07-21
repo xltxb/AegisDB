@@ -130,7 +130,7 @@
   setGw: '网关策略', setGwSub: '全局命令代理与拦截策略', setDefPolicy: '默认网关策略', setDefPolicyD: '新接入实例的默认策略',
   setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断并回滚',
   setAppr: '审批', setApprSub: '审批流转与超时策略', setApprTimeout: '审批超时处理', setApprTimeoutD: '超时未审批的处理方式',
-  setDefApprovers: '默认审批人', setDefApproversD: "审批链 = 「DBA 负责人」角色成员(无则回落管理员),在权限页管理", setApproversEmpty: '未设置审批人', setApproversManage: '前往权限管理', setEscalate: '升级到负责人', setEscalateD: '组长超时后升级终审',
+  setDefApprovers: '默认审批人', setDefApproversD: "审批链 = 「DBA 负责人」角色成员(无则回落管理员),在权限页管理", setApproversEmpty: '未设置审批人', setApproversManage: '前往权限管理', setEscalate: '升级到负责人', setEscalateD: '组长超时后升级终审', setSelfApprove: '允许自审', setSelfApproveD: '允许发起人审批自己的单子(默认关,关闭时强制双人制)',
   setSec: '会话与安全', setSecSub: '登录会话与访问控制', setTtl: '会话有效期', setTtlD: '超过后需重新登录',
   setIdle: '空闲自动锁定', setIdleD: '15 分钟无操作锁定终端', setMfa: '强制 MFA', setMfaD: '生产连接强制二次验证',
   setIpAllow: 'IP 允许列表', setIpAllowD: '仅允许列表内 IP 访问网关', manage: '管理',

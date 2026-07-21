@@ -55,6 +55,7 @@ const policy = ref('strict')
 const strict = ref(true)
 const apprTimeout = ref('')
 const escalate = ref(true)
+const allowSelf = ref(false)
 const ttl = ref('')
 const idle = ref(true)
 const idleMinutes = ref(15)
@@ -100,6 +101,7 @@ onMounted(async () => {
     strict.value = s.strictMode
     policy.value = parse(g['gateway.defaultPolicy'], 'strict')
     escalate.value = parse(g['approval.escalate'], true)
+    allowSelf.value = parse(g['approval.allowSelfApprove'], false)
     mfa.value = parse(g['security.requireMFA'], true)
     idle.value = parse(g['security.idleLock'], true)
     idleMinutes.value = Number(parse(g['security.idleMinutes'], 15)) || 15
@@ -146,6 +148,7 @@ async function save() {
       'gateway.defaultPolicy': policy.value,
       'approval.onTimeout': onTimeout,
       'approval.escalate': escalate.value,
+      'approval.allowSelfApprove': allowSelf.value,
       'script.savePath': scriptPath.value.trim(),
       'export.savePath': exportPath.value.trim(),
       'security.sessionTTL': ttlKey,
@@ -195,7 +198,8 @@ async function save() {
         <div class="shead"><div class="sic"><GitPullRequestArrow :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setAppr') }}</div><div class="ss">{{ $t('setApprSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect v-model="apprTimeout" :options="[$t('autoReject'), $t('autoEscalate'), $t('keepWaiting')]" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span><span v-if="!approvers.length" class="apv-empty">{{ $t('setApproversEmpty') }}</span><a class="apv-manage" @click="goPerms">{{ $t('setApproversManage') }}</a></div></div>
-        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setEscalate') }}</div><div class="rd">{{ $t('setEscalateD') }}</div></div><VSwitch v-model="escalate" /></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setEscalate') }}</div><div class="rd">{{ $t('setEscalateD') }}</div></div><VSwitch v-model="escalate" /></div>
+        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setSelfApprove') }}</div><div class="rd">{{ $t('setSelfApproveD') }}</div></div><VSwitch v-model="allowSelf" /></div>
       </section>
 
       <!-- Security -->

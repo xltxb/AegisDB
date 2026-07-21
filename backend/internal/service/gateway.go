@@ -306,9 +306,10 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 	if ap.Status != model.StatusPending {
 		return nil, ErrAlreadyDecided
 	}
-	// The initiator may never decide their own ticket, even if they are also a
-	// chain member — that would defeat the two-person control (R16).
-	if actor != nil && actor.ID == ap.InitiatorID {
+	// The initiator may not decide their own ticket (two-person control, R16) —
+	// unless an admin has explicitly enabled self-approval (small teams / single
+	// operator). Default off preserves the segregation-of-duties guarantee.
+	if actor != nil && actor.ID == ap.InitiatorID && !s.settingBool("approval.allowSelfApprove", false) {
 		return nil, ErrForbidden
 	}
 	// Only a member on this approval's chain may act on it — holding the approve
