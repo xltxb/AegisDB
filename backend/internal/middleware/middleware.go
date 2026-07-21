@@ -111,8 +111,16 @@ func AdminOnly(repo *repository.Repo) gin.HandlerFunc {
 			resp.Abort(c, resp.CodeUnauthorized, "未登录")
 			return
 		}
-		role, err := repo.GetRole(u.RoleID)
-		if err != nil || role == nil || role.Code != "admin" {
+		// Any role the user holds granting the admin code satisfies the guard
+		// (union semantics — a user may be admin via a secondary role).
+		isAdmin := false
+		for _, code := range repo.RoleCodesForIDs(repo.EffectiveRoleIDs(u)) {
+			if code == "admin" {
+				isAdmin = true
+				break
+			}
+		}
+		if !isAdmin {
 			resp.Abort(c, resp.CodeForbidden, "仅平台管理员可执行此操作")
 			return
 		}
@@ -128,7 +136,7 @@ func MenuGuard(repo *repository.Repo, key string) gin.HandlerFunc {
 			resp.Abort(c, resp.CodeUnauthorized, "未登录")
 			return
 		}
-		menus, _ := repo.MenusForRole(u.RoleID)
+		menus, _ := repo.MenusForRoles(repo.EffectiveRoleIDs(u))
 		if !menus[key] {
 			resp.Abort(c, resp.CodeForbidden, "无菜单权限")
 			return

@@ -322,6 +322,139 @@ func (r *Repo) RemoveMember(roleID, userID int64) error {
 	return r.db.Where("role_id = ? AND user_id = ?", roleID, userID).Delete(&model.RoleMember{}).Error
 }
 
+// RoleIDsOfUser returns the role ids a user is a member of (tbl_role_member).
+func (r *Repo) RoleIDsOfUser(userID int64) ([]int64, error) {
+	var ids []int64
+	err := r.db.Model(&model.RoleMember{}).Where("user_id = ?", userID).Order("role_id asc").Pluck("role_id", &ids).Error
+	return ids, err
+}
+
+// EffectiveRoleIDs is the deduplicated set of roles that govern a user's
+// permissions: their primary role (tbl_user.role_id) unioned with every role
+// they are a member of. All permission resolution (menus, capability matrix,
+// tags, oversight) is computed over this set so multiple roles compose (union).
+func (r *Repo) EffectiveRoleIDs(u *model.User) []int64 {
+	if u == nil {
+		return nil
+	}
+	seen := map[int64]bool{}
+	out := []int64{}
+	if u.RoleID != 0 {
+		seen[u.RoleID] = true
+		out = append(out, u.RoleID)
+	}
+	ids, _ := r.RoleIDsOfUser(u.ID)
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// SetUserRoles replaces a user's role membership set atomically. The first id is
+// also written to tbl_user.role_id as the primary role (drives display/JWT).
+func (r *Repo) SetUserRoles(userID int64, roleIDs []int64) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&model.RoleMember{}).Error; err != nil {
+			return err
+		}
+		seen := map[int64]bool{}
+		for _, rid := range roleIDs {
+			if rid == 0 || seen[rid] {
+				continue
+			}
+			seen[rid] = true
+			if err := tx.Create(&model.RoleMember{RoleID: rid, UserID: userID}).Error; err != nil {
+				return err
+			}
+		}
+		if len(roleIDs) > 0 {
+			if err := tx.Model(&model.User{}).Where("id = ?", userID).Update("role_id", roleIDs[0]).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// RoleCodesForIDs returns the role codes for a set of role ids (for oversight /
+// admin checks that must consider every role a user holds).
+func (r *Repo) RoleCodesForIDs(ids []int64) []string {
+	if len(ids) == 0 {
+		return nil
+	}
+	var codes []string
+	r.db.Model(&model.Role{}).Where("id IN ?", ids).Pluck("code", &codes)
+	return codes
+}
+
+// MenusForRoles returns the union of menu access across several roles: a menu is
+// visible if ANY of the roles enables it.
+func (r *Repo) MenusForRoles(ids []int64) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, id := range ids {
+		m, err := r.MenusForRole(id)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range m {
+			if v {
+				out[k] = true
+			}
+		}
+	}
+	return out, nil
+}
+
+// levelRank orders capability levels from most to least permissive.
+var levelRank = map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
+
+// MatrixForRoles merges several roles' capability matrices, keeping the MOST
+// permissive level per capability×env cell (union semantics for the /me view).
+func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error) {
+	out := map[string]map[string]string{}
+	for _, id := range ids {
+		m, err := r.MatrixForRole(id)
+		if err != nil {
+			return nil, err
+		}
+		for cap, envs := range m {
+			if out[cap] == nil {
+				out[cap] = map[string]string{}
+			}
+			for env, level := range envs {
+				if cur, ok := out[cap][env]; !ok || levelRank[level] < levelRank[cur] {
+					out[cap][env] = level
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// TagsForRoles returns the union of DB tags across roles. A role with no tags is
+// unrestricted; if ANY of the user's roles is unrestricted the user sees every
+// connection, so unrestricted=true is returned and the tag list is irrelevant.
+func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool) {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, id := range ids {
+		tags := r.TagsForRole(id)
+		if len(tags) == 0 {
+			return nil, true
+		}
+		for _, t := range tags {
+			if !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
+		}
+	}
+	return out, false
+}
+
 // ----------------------------------------------------------------- Connections
 
 func (r *Repo) ListConnections() ([]model.Connection, error) {

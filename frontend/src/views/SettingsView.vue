@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound } from 'lucide-vue-next'
+import { Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound, Webhook } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -16,6 +16,17 @@ import type { Member } from '@/types'
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
+
+// Tabbed sections — only the active panel renders, so the page stays compact.
+const tabs = [
+  { id: 'gateway', icon: Shield, label: 'setGw' },
+  { id: 'approval', icon: GitPullRequestArrow, label: 'setAppr' },
+  { id: 'security', icon: Lock, label: 'setSec' },
+  { id: 'notify', icon: Bell, label: 'setNotify' },
+  { id: 'webhook', icon: Webhook, label: 'setWebhookTab' },
+  { id: 'appearance', icon: Palette, label: 'setAppearance' },
+]
+const activeTab = ref('gateway')
 
 // per-user MFA enrollment (distinct from the requireMFA policy toggle)
 const mfaModalOpen = ref(false)
@@ -156,8 +167,15 @@ async function save() {
 <template>
   <div class="scy page">
     <div class="col">
+      <!-- Tab bar: switch between setting groups instead of one long scroll -->
+      <div class="tabs">
+        <button v-for="tb in tabs" :key="tb.id" class="tab" :class="{ active: activeTab === tb.id }" @click="activeTab = tb.id">
+          <component :is="tb.icon" :size="15" />{{ $t(tb.label) }}
+        </button>
+      </div>
+
       <!-- Gateway -->
-      <section class="card">
+      <section v-show="activeTab === 'gateway'" class="card">
         <div class="shead"><div class="sic"><Shield :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setGw') }}</div><div class="ss">{{ $t('setGwSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefPolicy') }}</div><div class="rd">{{ $t('setDefPolicyD') }}</div></div><div class="w180"><VSelect v-model="policy" :options="policyOpts" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setStrict') }}</div><div class="rd">{{ $t('setStrictD') }}</div></div><VSwitch :model-value="strict" @update:model-value="toggleStrict" /></div>
@@ -167,7 +185,7 @@ async function save() {
       </section>
 
       <!-- Approval -->
-      <section class="card">
+      <section v-show="activeTab === 'approval'" class="card">
         <div class="shead"><div class="sic"><GitPullRequestArrow :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setAppr') }}</div><div class="ss">{{ $t('setApprSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect v-model="apprTimeout" :options="[$t('autoReject'), $t('autoEscalate'), $t('keepWaiting')]" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span></div></div>
@@ -175,7 +193,7 @@ async function save() {
       </section>
 
       <!-- Security -->
-      <section class="card">
+      <section v-show="activeTab === 'security'" class="card">
         <div class="shead"><div class="sic"><Lock :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setSec') }}</div><div class="ss">{{ $t('setSecSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setTtl') }}</div><div class="rd">{{ $t('setTtlD') }}</div></div><div class="w160"><VSelect v-model="ttl" :options="[$t('ttl8'), $t('ttl4'), $t('ttl24')]" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setIdle') }}</div><div class="rd">{{ $t('setIdleD') }}</div></div><VSwitch v-model="idle" /></div>
@@ -197,7 +215,7 @@ async function save() {
       </section>
 
       <!-- Notifications -->
-      <section class="card">
+      <section v-show="activeTab === 'notify'" class="card">
         <div class="shead"><div class="sic"><Bell :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setNotify') }}</div><div class="ss">{{ $t('setNotifySub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setLark') }}</div><div class="rd">{{ $t('setLarkD') }}</div></div><VSwitch v-model="lark" /></div>
         <div v-if="lark" class="larkcfg">
@@ -214,10 +232,10 @@ async function save() {
       </section>
 
       <!-- Webhook (audit event forwarding) -->
-      <WebhookPanel />
+      <WebhookPanel v-show="activeTab === 'webhook'" />
 
       <!-- Appearance -->
-      <section class="card">
+      <section v-show="activeTab === 'appearance'" class="card">
         <div class="shead"><div class="sic"><Palette :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setAppearance') }}</div><div class="ss">{{ $t('setAppearanceSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setLangRow') }}</div></div><div class="seg"><div class="si" :class="{ active: ui.lang === 'zh' }" @click="ui.setLang('zh')">中文</div><div class="si" :class="{ active: ui.lang === 'en' }" @click="ui.setLang('en')">English</div></div></div>
         <div class="srow last"><div class="grow"><div class="rt">{{ $t('setThemeRow') }}</div></div><div class="seg"><div class="si" :class="{ active: ui.theme === 'dark' }" @click="ui.setTheme('dark')">{{ $t('themeDark') }}</div><div class="si" :class="{ active: ui.theme === 'light' }" @click="ui.setTheme('light')">{{ $t('themeLight') }}</div><div class="si" :class="{ active: ui.theme === 'system' }" @click="ui.setTheme('system')">{{ $t('themeSystem') }}</div></div></div>
@@ -239,7 +257,17 @@ async function save() {
 
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
-.col { max-width: 860px; display: flex; flex-direction: column; gap: 18px; }
+.col { max-width: 820px; display: flex; flex-direction: column; gap: 18px; }
+/* Tab bar — switch between setting groups so only one panel shows at a time. */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.tab {
+  display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px;
+  border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card);
+  font: 500 12.5px var(--font-body); color: var(--text-muted); cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.tab:hover { color: var(--text-body); border-color: var(--border-strong); }
+.tab.active { border-color: var(--accent-subtle-border); background: var(--accent-subtle); color: var(--accent-text); font-weight: 600; }
 .card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }

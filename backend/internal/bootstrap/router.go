@@ -109,6 +109,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 
 		// users — read is perms-menu; mutations are admin-only
 		a.GET("/users", menu("perms"), h.ListUsers)
+		a.POST("/users", menu("perms"), admin, h.CreateUser)
 		a.POST("/users/invite", menu("perms"), admin, h.InviteUser)
 		a.PATCH("/users/:id", menu("perms"), admin, h.PatchUser)
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)

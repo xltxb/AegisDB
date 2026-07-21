@@ -8,7 +8,9 @@ import (
 // B9: revoking a role's terminal menu must cut off an already-open WS session on
 // its next command. Menu changes don't bump the token version, so the per-exec
 // re-validation has to re-check the menu too — otherwise a live socket keeps
-// executing SQL after its access was pulled.
+// executing SQL after its access was pulled. Menus are resolved as the union
+// across the user's roles; linwei holds only the admin role, so revoking admin's
+// terminal menu removes access.
 func TestTerminalWS_MenuRevokedMidConnection(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123") // admin: terminal menu + all connections

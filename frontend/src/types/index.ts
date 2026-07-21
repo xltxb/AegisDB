@@ -14,6 +14,9 @@ export interface Me {
   roleCode: string
   roleName: string
   layer: string
+  roleIds: number[]
+  roleNames: string[]
+  roleCodes: string[]
   canApprove: boolean
   mfaEnabled: boolean
   menus: Record<string, boolean>
@@ -100,6 +103,8 @@ export interface UserView {
   initials: string
   dept: string
   roles: string[]
+  roleIds: number[]
+  primaryRoleId: number
   status: 'active' | 'disabled' | 'invited'
   mfaEnabled: boolean
   lastActive: string

@@ -1,5 +1,5 @@
 // English locale — ported from the prototype's tr() pairs.
-export default {
+{
   navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAppr: 'Appr', navDb: 'DB', navRules: 'Rules', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
   t_export: 'Data export', t_exportSub: 'SQL export · compressed & encrypted', t_uploads: 'Script upload', t_uploadsSub: 'Upload and manage your script files',
   uploadTitle: 'Upload script file', uploadSub: 'Upload .sql scripts to the server — visible & managed only by you',
@@ -18,7 +18,7 @@ export default {
   t_settings: 'Settings', t_settingsSub: 'Gateway · security · notifications',
   subDb: '{n} instances · 3 tiers', subPerms: '{r} roles · {u} users', subRules: '{n} risk commands · live matching',
   loginTitle: 'Database Gateway', loginSub: 'Sign in to the console', loginEmail: 'Work email', loginPassword: 'Password',
-  loginBtn: 'Sign in', loginHint: 'Demo: linwei@vela.io · password vela123', loginError: 'Wrong email or password',
+  loginBtn: 'Sign in', loginHint: "Demo: linwei{'@'}vela.io · password vela123", loginError: 'Wrong email or password',
   treeTitle: 'Database tiers', search: 'Search instance / db / table',
   prodEnv: 'Production · PROD', stagingEnv: 'Staging · STAGING', devEnv: 'Dev · DEV',
   highTag: 'High', limitedTag: 'Limited', treeFooter: '3 envs · 9 instances · gated',
@@ -102,6 +102,14 @@ export default {
   mpTitle: 'Add member · ', mpSub: 'Pick from the directory; click to add to this role', mpSearch: 'Search member / dept', mpJoined: 'Joined', mpAdd: 'Add', mpFoot: 'Member changes apply instantly', done: 'Done',
   ivTitle: 'Invite user', ivSub: 'Send an invite with a pre-assigned role', ivEmail: 'Work email', ivRole: 'Pre-assigned role',
   ivNote: 'New users get DEV-execute, PROD read-only; high-risk always goes to approval.', ivSend: 'Send invite', cancel: 'Cancel',
+  // create account (admin) + multi-role
+  addAccount: 'Add account',
+  cuTitle: 'Create account', cuSub: 'Admin-created; usable right after you set a password', cuName: 'Name', cuNamePh: 'Blank uses the email prefix',
+  cuPw: 'Initial password', cuPwPh: 'At least 8 chars', cuRoles: 'Roles (multi-select; first is primary)',
+  cuNote: 'The account is active on creation — the user can sign in with the email and initial password. Permissions are the union of the selected roles.',
+  cuCreate: 'Create account', cuInvalid: 'Enter an email, an 8+ char password, and pick at least one role', cuFailed: 'Create failed',
+  urTitle: 'Role assignment', urHint: 'Multi-select · permissions are unioned', urSave: 'Save roles',
+  urNeedOne: 'Keep at least one role', urSaved: '✓ Roles updated', urFailed: 'Save failed',
   setGw: 'Gateway policy', setGwSub: 'Global proxy & interception', setDefPolicy: 'Default policy', setDefPolicyD: 'Default for newly added instances',
   setStrict: 'Strict mode', setStrictD: 'Block DELETE / UPDATE without WHERE', setTimeout: 'Command timeout', setTimeoutD: 'Auto-abort & rollback on timeout',
   setAppr: 'Approval', setApprSub: 'Approval flow & timeouts', setApprTimeout: 'On approval timeout', setApprTimeoutD: 'What happens when no one acts',
@@ -137,6 +145,7 @@ export default {
   opWarnPrefix: 'Operating on', opWarnCaution: 'be careful',
   mfaStepTitle: 'Two-factor required', mfaStepDesc: 'This PROD operation requires a 6-digit code', mfaVerify: 'Verify & run',
   mfaBadCode: 'Invalid code, try again', mfaLocked: 'Session locked due to inactivity — please sign in again',
+  setWebhookTab: 'Webhook',
   setNotify: 'Notifications', setNotifySub: 'Event & on-call alerts', setLark: 'Lark (Feishu) channel', setLarkD: 'Push an approval card to Lark for high-risk commands',
   larkWebhook: 'Webhook URL', larkSecret: 'Sign secret', larkSecretPh: 'Lark bot signature secret (optional)', larkConsole: 'Console URL', larkSendTest: 'Send test card', larkSending: 'Sending…', larkTestFail: 'Send failed',
   setEmail: 'Email notifications', setEmailD: 'Daily audit digest email', setPush: 'Instant intercept push', setPushD: 'Notify requester on interception',

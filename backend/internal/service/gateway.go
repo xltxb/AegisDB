@@ -24,12 +24,27 @@ func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
 	if err != nil {
 		return nil, err
 	}
-	menus, _ := s.Repo.MenusForRole(u.RoleID)
-	matrix, _ := s.Repo.MatrixForRole(u.RoleID)
+	// Permissions compose across every role the user holds (union): menus and the
+	// capability matrix merge (most permissive), and CanApprove is true if any role
+	// can approve. The primary role still drives the displayed role name/layer.
+	ids := s.Repo.EffectiveRoleIDs(u)
+	menus, _ := s.Repo.MenusForRoles(ids)
+	matrix, _ := s.Repo.MatrixForRoles(ids)
+	canApprove := false
+	roleNames := []string{}
+	roleCodes := []string{}
+	for _, id := range ids {
+		if r, e := s.Repo.GetRole(id); e == nil && r != nil {
+			canApprove = canApprove || r.CanApprove
+			roleNames = append(roleNames, r.Name)
+			roleCodes = append(roleCodes, r.Code)
+		}
+	}
 	return &dto.MeResp{
 		ID: u.ID, Name: u.Name, Email: u.Email, Initials: u.Initials,
 		RoleID: role.ID, RoleCode: role.Code, RoleName: role.Name, Layer: role.Layer,
-		CanApprove: role.CanApprove, MfaEnabled: u.MFAEnabled && u.MFASecret != "", Menus: menus, Capabilities: matrix,
+		RoleIDs: ids, RoleNames: roleNames, RoleCodes: roleCodes,
+		CanApprove: canApprove, MfaEnabled: u.MFAEnabled && u.MFASecret != "", Menus: menus, Capabilities: matrix,
 	}, nil
 }
 
@@ -39,7 +54,7 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.Risk
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	v := s.Engine.Evaluate(u.RoleID, conn.Env, sql)
+	v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql)
 	return &dto.RiskCheckResp{
 		Risk:             v.Risk,
 		Action:           v.Action,
@@ -90,8 +105,9 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 // most dangerous part rather than its leading verb.
 func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
+	roleIDs := s.Repo.EffectiveRoleIDs(u)
 	for _, st := range stmts {
-		v := s.Engine.Evaluate(u.RoleID, conn.Env, st)
+		v := s.Engine.EvaluateRoles(roleIDs, conn.Env, st)
 		if actionRank(v.Action) > actionRank(strict.Action) {
 			strict = v
 		}
@@ -116,7 +132,7 @@ func actionRank(a string) int {
 // this out lets a whole-script execution validate MFA ONCE up front instead of
 // per statement (which forced an empty code on every line — R18).
 func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
-	return s.applyVerdict(u, conn, sql, s.Engine.Evaluate(u.RoleID, conn.Env, sql), reason)
+	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql), reason)
 }
 
 // applyVerdict routes a judged command to deny / approve / allow and records the
@@ -192,7 +208,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 		}
 	}
 	if worst != "" {
-		if v := s.Engine.Evaluate(u.RoleID, conn.Env, worst); v.Action == gateway.ActionDeny {
+		if v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, worst); v.Action == gateway.ActionDeny {
 			s.recordAudit(u, conn, "\\i "+filename, model.RiskHigh, model.ResultRejected, "", "intercept")
 			return nil, ErrForbidden
 		}

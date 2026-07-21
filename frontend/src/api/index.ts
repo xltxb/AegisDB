@@ -94,9 +94,12 @@ export const api = {
 
   // ---- users ----
   users: () => http.get<any, Envelope<UserView[]>>('/users').then(ok),
-  patchUser: (id: number, body: { status?: string; roleId?: number }) =>
+  patchUser: (id: number, body: { status?: string; roleId?: number; roleIds?: number[] }) =>
     http.patch(`/users/${id}`, body),
   invite: (email: string, roleId: number) => http.post('/users/invite', { email, roleId }),
+  createUser: (body: { email: string; name?: string; password: string; roleIds: number[] }) =>
+    http.post<any, Envelope<any>>('/users', body).then(ok),
+  setUserRoles: (id: number, roleIds: number[]) => http.patch(`/users/${id}`, { roleIds }),
   // admin user management: password reset + OTP binding
   setUserPassword: (id: number, password: string) =>
     http.post<any, Envelope<any>>(`/users/${id}/password`, { password }).then(ok),

@@ -1,5 +1,5 @@
 // Chinese locale — ported from the prototype's tr() pairs.
-export default {
+{
   // nav / topbar
   navTerm: '终端', navExport: '导出', navUploads: '上传', navAppr: '审批', navDb: '配置', navRules: '规则', navPerms: '权限', navAudit: '审计', navSettings: '设置',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
@@ -21,7 +21,7 @@ export default {
   subDb: '{n} 实例 · 3 环境分层', subPerms: '{r} 角色 · {u} 用户', subRules: '{n} 条高危命令 · 实时匹配',
   // login
   loginTitle: '数据库管理网关', loginSub: '登录以进入控制台', loginEmail: '工作邮箱', loginPassword: '密码',
-  loginBtn: '登录', loginHint: '演示账号 linwei@vela.io · 密码 vela123', loginError: '邮箱或密码错误',
+  loginBtn: '登录', loginHint: "演示账号 linwei{'@'}vela.io · 密码 vela123", loginError: '邮箱或密码错误',
   // terminal
   treeTitle: '数据库分层', search: '搜索实例 / 库 / 表',
   prodEnv: '生产环境 · PROD', stagingEnv: '预发 · STAGING', devEnv: '测试 · DEV',
@@ -117,6 +117,14 @@ export default {
   // invite
   ivTitle: '邀请用户', ivSub: '发送邀请并预分配角色，接受后即接入网关', ivEmail: '工作邮箱', ivRole: '预分配角色',
   ivNote: '新用户默认仅 DEV 可执行、PROD 只读；高危命令一律走审批。', ivSend: '发送邀请', cancel: '取消',
+  // create account (admin) + multi-role
+  addAccount: '新建账户',
+  cuTitle: '新建账户', cuSub: '由管理员直接创建，设初始密码后即可登录', cuName: '姓名', cuNamePh: '留空则用邮箱前缀',
+  cuPw: '初始密码', cuPwPh: '至少 8 位', cuRoles: '角色（可多选，第一个为主角色）',
+  cuNote: '账户创建后状态即为「启用」，用户可用邮箱与初始密码直接登录；权限取所选角色的并集。',
+  cuCreate: '创建账户', cuInvalid: '请填写邮箱、至少 8 位密码并至少选一个角色', cuFailed: '创建失败',
+  urTitle: '角色分配', urHint: '可多选 · 权限取并集', urSave: '保存角色',
+  urNeedOne: '至少保留一个角色', urSaved: '✓ 角色已更新', urFailed: '保存失败',
   // settings
   setGw: '网关策略', setGwSub: '全局命令代理与拦截策略', setDefPolicy: '默认网关策略', setDefPolicyD: '新接入实例的默认策略',
   setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断并回滚',
@@ -153,6 +161,7 @@ export default {
   opWarnPrefix: '正在操作', opWarnCaution: '请谨慎操作',
   mfaStepTitle: '需要二次验证', mfaStepDesc: '该生产操作要求输入 6 位验证码', mfaVerify: '验证并执行',
   mfaBadCode: '验证码错误，请重试', mfaLocked: '会话已因空闲锁定，请重新登录',
+  setWebhookTab: 'Webhook',
   setNotify: '通知', setNotifySub: '事件通知与值班推送', setLark: 'Lark(飞书)告警频道', setLarkD: '高危命令待审批时推送飞书审批卡片',
   larkWebhook: 'Webhook 地址', larkSecret: '签名密钥', larkSecretPh: '飞书机器人签名校验密钥(可选)', larkConsole: '控制台地址', larkSendTest: '发送测试卡片', larkSending: '正在发送…', larkTestFail: '发送失败',
   setEmail: '邮件通知', setEmailD: '每日审计摘要邮件', setPush: '拦截即时通知', setPushD: '命令被拦截时实时通知发起人',

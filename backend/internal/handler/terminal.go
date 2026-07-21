@@ -406,7 +406,7 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 	}
 	// The WS route bypasses MenuGuard, so enforce the terminal menu here — a role
 	// without terminal access must not execute via this channel (R4).
-	if menus, _ := h.Repo.MenusForRole(u.RoleID); !menus["terminal"] {
+	if menus, _ := h.Repo.MenusForRoles(h.Repo.EffectiveRoleIDs(u)); !menus["terminal"] {
 		c.JSON(http.StatusForbidden, gin.H{"error": "no terminal menu"})
 		return
 	}
@@ -440,7 +440,7 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		// Re-check the terminal menu too: revoking a role's terminal access does NOT
 		// bump the token version, so without this an open socket would keep executing
 		// after its access was pulled (B9).
-		if menus, _ := h.Repo.MenusForRole(fresh.RoleID); !menus["terminal"] {
+		if menus, _ := h.Repo.MenusForRoles(h.Repo.EffectiveRoleIDs(fresh)); !menus["terminal"] {
 			conn.WriteJSON(gin.H{"type": "session_revoked", "message": "终端访问权限已被回收，请重新登录"})
 			return
 		}

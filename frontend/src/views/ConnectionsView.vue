@@ -12,7 +12,7 @@ import type { Connection } from '@/types'
 
 const auth = useAuthStore()
 // Instance configuration is platform-admin only (backend enforces it too).
-const isAdmin = computed(() => auth.me?.roleCode === 'admin')
+const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
 
 const { t } = useI18n()
 const ui = useUIStore()

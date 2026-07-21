@@ -180,11 +180,15 @@ func seedFreshData(repo *repository.Repo, cfg *Config) error {
 		userID[s.name] = u.ID
 	}
 
-	// ---- Role membership (many-to-many, as shown in the prototype) ----
+	// ---- Role membership (many-to-many) ----
+	// Membership now GRANTS permissions (a user's effective rights are the union
+	// across every role they belong to), so the seed keeps each user in exactly
+	// their primary role — no decorative cross-role rows that would silently
+	// escalate. Multi-role is a deliberate admin action via the perms page.
 	membership := map[string][]string{
-		"admin": {"Lin Wei", "Chen Hao", "Wang Min"},
+		"admin": {"Lin Wei", "Wang Min"},
 		"owner": {"Zhang Wei", "Li Na"},
-		"l2":    {"Lin Wei", "Chen Hao", "Sun Qi"},
+		"l2":    {"Chen Hao", "Sun Qi"},
 		"ro":    {"Zhao Lei", "Qian Yi"},
 		"audit": {"Hu Jun", "Audit Bot"},
 	}

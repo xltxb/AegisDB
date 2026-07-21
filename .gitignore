@@ -11,6 +11,7 @@ vela-gateway.db
 
 # ---- Packaged build output (build.sh) ----
 /dist/
+/vela-gateway-*.tar.gz
 
 # ---- Frontend (Node) ----
 /frontend/node_modules/

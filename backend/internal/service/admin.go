@@ -49,8 +49,8 @@ func (s *Services) AccessibleConnections(u *model.User) ([]model.Connection, err
 	if u == nil {
 		return all, nil
 	}
-	allow := s.Repo.TagsForRole(u.RoleID)
-	if len(allow) == 0 {
+	allow, unrestricted := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	if unrestricted {
 		return all, nil
 	}
 	allowSet := map[string]bool{}
@@ -74,9 +74,9 @@ func (s *Services) canAccessConn(u *model.User, conn *model.Connection) bool {
 	if u == nil || conn == nil {
 		return false
 	}
-	allow := s.Repo.TagsForRole(u.RoleID)
-	if len(allow) == 0 {
-		return true // unrestricted
+	allow, unrestricted := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	if unrestricted {
+		return true
 	}
 	allowSet := map[string]bool{}
 	for _, t := range allow {
@@ -176,9 +176,11 @@ func (s *Services) UsersView() ([]dto.UserView, error) {
 	out := []dto.UserView{}
 	for _, u := range users {
 		roles, _ := s.Repo.RolesOfUser(u.ID)
+		ids := s.Repo.EffectiveRoleIDs(&u)
 		out = append(out, dto.UserView{
 			ID: u.ID, Name: u.Name, Email: u.Email, Initials: u.Initials, Dept: u.Dept,
-			Roles: roles, Status: u.Status, MFAEnabled: u.MFAEnabled && u.MFASecret != "", LastActive: u.LastActive,
+			Roles: roles, RoleIDs: ids, PrimaryRoleID: u.RoleID,
+			Status: u.Status, MFAEnabled: u.MFAEnabled && u.MFASecret != "", LastActive: u.LastActive,
 		})
 	}
 	return out, nil
@@ -205,7 +207,80 @@ func (s *Services) PatchUser(id int64, req dto.UserPatchReq) error {
 	if req.RoleID != nil {
 		fields["role_id"] = *req.RoleID
 	}
-	return s.Repo.UpdateUserFields(id, fields)
+	if len(fields) > 0 {
+		if err := s.Repo.UpdateUserFields(id, fields); err != nil {
+			return err
+		}
+	}
+	// A full multi-role assignment replaces the membership set and repoints the
+	// primary role to the first id (union permissions follow from the set).
+	if req.RoleIDs != nil {
+		if len(req.RoleIDs) == 0 {
+			return ErrBadRequest // a user must keep at least one role
+		}
+		if err := s.validateRoleIDs(req.RoleIDs); err != nil {
+			return err
+		}
+		return s.Repo.SetUserRoles(id, req.RoleIDs)
+	}
+	// Keep membership in sync when only the single primary role changed, so the
+	// role view and union permissions reflect the new role.
+	if req.RoleID != nil {
+		_ = s.Repo.AddMember(*req.RoleID, id)
+	}
+	return nil
+}
+
+// validateRoleIDs ensures every id refers to an existing role.
+func (s *Services) validateRoleIDs(ids []int64) error {
+	for _, id := range ids {
+		if _, err := s.Repo.GetRole(id); err != nil {
+			return ErrBadRequest
+		}
+	}
+	return nil
+}
+
+// CreateUser provisions an account directly from the admin console: it sets an
+// initial password and marks the account active so the user can sign in
+// immediately (distinct from Invite, which leaves a passwordless "invited" row).
+// The user may be granted several roles at once; the first is the primary role.
+func (s *Services) CreateUser(req dto.UserCreateReq) (*model.User, error) {
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		return nil, ErrBadRequest
+	}
+	if len(req.Password) < 8 { // keep in sync with AdminSetPassword / frontend
+		return nil, ErrBadRequest
+	}
+	if len(req.RoleIDs) == 0 {
+		return nil, ErrBadRequest
+	}
+	if err := s.validateRoleIDs(req.RoleIDs); err != nil {
+		return nil, err
+	}
+	if _, err := s.Repo.GetUserByEmail(email); err == nil {
+		return nil, ErrBadRequest // email already exists
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		name = email[:strings.Index(email, "@")]
+	}
+	hash, err := crypto.HashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
+	u := &model.User{
+		Name: name, Email: email, RoleID: req.RoleIDs[0], Status: "active",
+		PasswordHash: hash, Initials: initials(name), Dept: "—", LastActive: "—",
+	}
+	if err := s.Repo.CreateUser(u); err != nil {
+		return nil, err
+	}
+	if err := s.Repo.SetUserRoles(u.ID, req.RoleIDs); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 func (s *Services) Invite(req dto.InviteReq) (*model.User, error) {
@@ -243,13 +318,12 @@ func (s *Services) canSeeAllActivity(u *model.User) bool {
 	if u == nil {
 		return false
 	}
-	role, err := s.Repo.GetRole(u.RoleID)
-	if err != nil || role == nil {
-		return false
-	}
-	switch role.Code {
-	case "admin", "owner", "audit":
-		return true
+	// Any of the user's roles granting oversight is enough (union semantics).
+	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(u)) {
+		switch code {
+		case "admin", "owner", "audit":
+			return true
+		}
 	}
 	return false
 }

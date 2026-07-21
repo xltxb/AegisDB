@@ -21,7 +21,8 @@ const ui = useUIStore()
 const auth = useAuthStore()
 // Role/permission + user-credential edits are platform-admin only (backend
 // enforces this too); non-admins see the page read-only.
-const isAdmin = computed(() => auth.me?.roleCode === 'admin')
+// Admin if ANY held role is admin (union), falling back to the primary role code.
+const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
 function publishSub() { ui.pageSub = t('subPerms', { r: roles.value.length, u: users.value.length }) }
 const view = ref<'roles' | 'users'>('roles')
 const roles = ref<RoleBrief[]>([])
@@ -206,6 +207,59 @@ function openUser(u: UserView) {
   if (!isAdmin.value) return
   userModal.value = u
   newPw.value = ''; pwMsg.value = ''; otpMsg.value = ''; otpBind.value = null; otpQr.value = ''
+  roleSel.value = [...(u.roleIds || [])]; roleMsg.value = ''
+}
+
+// ---- per-user role assignment (a user may hold several roles; permissions
+// compose as the union across them). The first selected role is the primary. ----
+const roleSel = ref<number[]>([])
+const roleMsg = ref('')
+function toggleUserRole(id: number) {
+  const i = roleSel.value.indexOf(id)
+  if (i >= 0) roleSel.value.splice(i, 1)
+  else roleSel.value.push(id)
+}
+async function saveRoles() {
+  if (!userModal.value || !roleSel.value.length) { roleMsg.value = t('urNeedOne'); return }
+  try {
+    await api.setUserRoles(userModal.value.id, roleSel.value)
+    roleMsg.value = t('urSaved')
+    await loadUsers(); syncModal()
+    if (userModal.value) roleSel.value = [...(userModal.value.roleIds || [])]
+  } catch { roleMsg.value = t('urFailed') }
+}
+
+// ---- admin: create an account directly (initial password + roles), an
+// alternative to invite-only onboarding. The account is active immediately. ----
+const createForm = ref(false)
+const createEmail = ref('')
+const createName = ref('')
+const createPw = ref('')
+const createRoleIds = ref<number[]>([])
+const createMsg = ref('')
+function openCreate() {
+  createEmail.value = ''; createName.value = ''; createPw.value = ''; createMsg.value = ''
+  const def = roles.value.find((r) => r.code === 'ro') || roles.value[0]
+  createRoleIds.value = def ? [def.id] : []
+  createForm.value = true
+}
+function toggleCreateRole(id: number) {
+  const i = createRoleIds.value.indexOf(id)
+  if (i >= 0) createRoleIds.value.splice(i, 1)
+  else createRoleIds.value.push(id)
+}
+async function doCreate() {
+  if (!createEmail.value.trim() || createPw.value.length < 8 || !createRoleIds.value.length) {
+    createMsg.value = t('cuInvalid'); return
+  }
+  try {
+    await api.createUser({
+      email: createEmail.value.trim(), name: createName.value.trim(),
+      password: createPw.value, roleIds: createRoleIds.value,
+    })
+    createForm.value = false
+    await loadUsers()
+  } catch (e) { ui.notifyError(e, t('cuFailed')) }
 }
 function syncModal() {
   if (userModal.value) userModal.value = users.value.find((x) => x.id === userModal.value!.id) || userModal.value
@@ -312,7 +366,10 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
           <div class="utitle">{{ $t('usersTitle') }} · {{ users.length }} {{ $t('people') }}</div>
           <div class="usub">{{ $t('usersSub') }}</div>
         </div>
-        <VButton v-if="isAdmin" variant="primary" @click="openInvite">{{ $t('invite') }}</VButton>
+        <div v-if="isAdmin" class="uacts">
+          <VButton variant="secondary" @click="openInvite">{{ $t('invite') }}</VButton>
+          <VButton variant="primary" @click="openCreate"><UserPlus :size="15" />{{ $t('addAccount') }}</VButton>
+        </div>
       </div>
       <div class="utable">
         <div class="uth"><span>{{ $t('colUser') }}</span><span>{{ $t('colAcct') }}</span><span>{{ $t('colRoles') }}</span><span>{{ $t('colActive') }}</span><span class="r">{{ $t('colStatus') }}</span></div>
@@ -372,6 +429,20 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
           <div v-if="pwMsg" class="umsg">{{ pwMsg }}</div>
         </div>
         <div class="usec">
+          <div class="uslbl"><UsersRound :size="14" />{{ $t('urTitle') }}
+            <span class="urhint">{{ $t('urHint') }}</span>
+          </div>
+          <div class="rolepick">
+            <button v-for="r in roles" :key="r.id" type="button" class="rchip" :class="{ on: roleSel.includes(r.id) }" @click="toggleUserRole(r.id)">
+              <Check v-if="roleSel.includes(r.id)" :size="13" /><component v-else :is="roleIcon[r.icon] || Shield" :size="13" />{{ r.name }}
+            </button>
+          </div>
+          <div class="urrow">
+            <VButton variant="secondary" height="38px" :disabled="!roleSel.length" @click="saveRoles">{{ $t('urSave') }}</VButton>
+            <span v-if="roleMsg" class="umsg inline">{{ roleMsg }}</span>
+          </div>
+        </div>
+        <div class="usec">
           <div class="uslbl"><ShieldCheck :size="14" />{{ $t('otpBinding') }}
             <span class="otpstate" :class="{ on: userModal.mfaEnabled }">{{ userModal.mfaEnabled ? $t('otpBound') : $t('otpUnboundState') }}</span>
           </div>
@@ -402,6 +473,30 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
           <div class="inote"><ShieldCheck :size="15" color="#2dcde6" /><div>{{ $t('ivNote') }}</div></div>
         </div>
         <div class="ifoot"><VButton variant="secondary" @click="inviteForm = false">{{ $t('cancel') }}</VButton><VButton variant="primary" :disabled="!inviteEmail.trim()" @click="doInvite">{{ $t('ivSend') }}</VButton></div>
+      </div>
+    </div>
+
+    <!-- create account (admin: initial password + one or more roles) -->
+    <div v-if="createForm" class="overlay">
+      <div class="mask" @click="createForm = false" />
+      <div class="imodal">
+        <div class="ihead"><div class="iic"><UserPlus :size="19" color="var(--accent-text)" /></div><div><div class="it">{{ $t('cuTitle') }}</div><div class="is">{{ $t('cuSub') }}</div></div><X :size="18" class="ix" @click="createForm = false" /></div>
+        <div class="ibody">
+          <div><div class="fl">{{ $t('ivEmail') }}</div><input v-model="createEmail" placeholder="name@vela.io" type="email" /></div>
+          <div><div class="fl">{{ $t('cuName') }}</div><input v-model="createName" :placeholder="$t('cuNamePh')" type="text" /></div>
+          <div><div class="fl">{{ $t('cuPw') }}</div><input v-model="createPw" :placeholder="$t('cuPwPh')" type="password" /></div>
+          <div>
+            <div class="fl">{{ $t('cuRoles') }}</div>
+            <div class="rolepick">
+              <button v-for="r in roles" :key="r.id" type="button" class="rchip" :class="{ on: createRoleIds.includes(r.id) }" @click="toggleCreateRole(r.id)">
+                <Check v-if="createRoleIds.includes(r.id)" :size="13" /><component v-else :is="roleIcon[r.icon] || Shield" :size="13" />{{ r.name }}
+              </button>
+            </div>
+          </div>
+          <div class="inote"><ShieldCheck :size="15" color="#2dcde6" /><div>{{ $t('cuNote') }}</div></div>
+          <div v-if="createMsg" class="umsg">{{ createMsg }}</div>
+        </div>
+        <div class="ifoot"><VButton variant="secondary" @click="createForm = false">{{ $t('cancel') }}</VButton><VButton variant="primary" :disabled="!createEmail.trim() || createPw.length < 8 || !createRoleIds.length" @click="doCreate">{{ $t('cuCreate') }}</VButton></div>
       </div>
     </div>
 
@@ -488,6 +583,8 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .utitle { font: 700 16px var(--font-display); color: var(--text-strong); }
 .usub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
 .uhead :deep(.vbtn) { margin-left: auto; }
+.uacts { margin-left: auto; display: flex; gap: 10px; }
+.uacts :deep(.vbtn) { margin-left: 0; }
 .utable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
 .uth, .utr { display: grid; grid-template-columns: 1.5fr 1.6fr 2fr 1fr 1fr; gap: 12px; }
 .uth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
@@ -516,6 +613,14 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .pwrow input { flex: 1; height: 40px; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-strong); outline: none; }
 .pwrow input:focus { border-color: var(--accent-text); }
 .umsg { margin-top: 8px; font: 600 11.5px var(--font-mono); color: var(--accent-text); }
+.umsg.inline { margin-top: 0; }
+/* multi-role picker (user modal + create modal) */
+.urhint { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
+.rolepick { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+.rchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; transition: color .12s, border-color .12s, background .12s; }
+.rchip:hover { color: var(--text-body); border-color: var(--border-strong); }
+.rchip.on { border-color: var(--accent-subtle-border); background: var(--accent-subtle); color: var(--accent-text); }
+.urrow { margin-top: 11px; display: flex; align-items: center; gap: 12px; }
 .otprow { margin-top: 10px; display: flex; gap: 9px; }
 .otpstate { margin-left: auto; font: 700 10px var(--font-mono); padding: 2px 8px; border-radius: 999px; background: var(--surface-sunken); color: var(--text-faint); }
 .otpstate.on { background: var(--success-subtle); color: var(--success-text); }

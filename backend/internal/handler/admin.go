@@ -380,6 +380,22 @@ func (h *Handler) PatchUser(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true})
 }
 
+// CreateUser provisions an active account directly (admin), with an initial
+// password and one or more roles — an alternative to invite-only onboarding.
+func (h *Handler) CreateUser(c *gin.Context) {
+	var req dto.UserCreateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	u, err := h.Svc.CreateUser(req)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "创建失败:邮箱可能已存在,或密码至少 8 位")
+		return
+	}
+	resp.OK(c, u)
+}
+
 func (h *Handler) InviteUser(c *gin.Context) {
 	var req dto.InviteReq
 	if err := c.ShouldBindJSON(&req); err != nil {

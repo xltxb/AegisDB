@@ -20,10 +20,13 @@ type MeResp struct {
 	Name         string                       `json:"name"`
 	Email        string                       `json:"email"`
 	Initials     string                       `json:"initials"`
-	RoleID       int64                        `json:"roleId"`
+	RoleID       int64                        `json:"roleId"`   // primary role (display/JWT)
 	RoleCode     string                       `json:"roleCode"`
 	RoleName     string                       `json:"roleName"`
 	Layer        string                       `json:"layer"`
+	RoleIDs      []int64                      `json:"roleIds"`   // every role held (union permissions)
+	RoleNames    []string                     `json:"roleNames"`
+	RoleCodes    []string                     `json:"roleCodes"` // codes of all held roles (e.g. contains "admin")
 	CanApprove   bool                         `json:"canApprove"`
 	MfaEnabled   bool                         `json:"mfaEnabled"`
 	Menus        map[string]bool              `json:"menus"`
@@ -214,13 +217,23 @@ type ApprovalActionReq struct {
 // ---- Users ----
 
 type UserPatchReq struct {
-	Status string `json:"status"`
-	RoleID *int64 `json:"roleId"`
+	Status  string  `json:"status"`
+	RoleID  *int64  `json:"roleId"`  // set the single primary role (kept for compatibility)
+	RoleIDs []int64 `json:"roleIds"` // replace the full role set (multi-role); first is primary
 }
 
 type InviteReq struct {
 	Email  string `json:"email" binding:"required"`
 	RoleID int64  `json:"roleId" binding:"required"`
+}
+
+// UserCreateReq provisions an active account from the admin console with an
+// initial password and one or more roles (first is the primary role).
+type UserCreateReq struct {
+	Email    string  `json:"email" binding:"required"`
+	Name     string  `json:"name"`
+	Password string  `json:"password" binding:"required"`
+	RoleIDs  []int64 `json:"roleIds" binding:"required"`
 }
 
 // AdminPasswordReq carries a new password for an admin-driven reset.
@@ -242,15 +255,17 @@ type RoleBrief struct {
 }
 
 type UserView struct {
-	ID         int64    `json:"id"`
-	Name       string   `json:"name"`
-	Email      string   `json:"email"`
-	Initials   string   `json:"initials"`
-	Dept       string   `json:"dept"`
-	Roles      []string `json:"roles"`
-	Status     string   `json:"status"`
-	MFAEnabled bool     `json:"mfaEnabled"`
-	LastActive string   `json:"lastActive"`
+	ID            int64    `json:"id"`
+	Name          string   `json:"name"`
+	Email         string   `json:"email"`
+	Initials      string   `json:"initials"`
+	Dept          string   `json:"dept"`
+	Roles         []string `json:"roles"`
+	RoleIDs       []int64  `json:"roleIds"`       // every role held (for the multi-role editor)
+	PrimaryRoleID int64    `json:"primaryRoleId"`
+	Status        string   `json:"status"`
+	MFAEnabled    bool     `json:"mfaEnabled"`
+	LastActive    string   `json:"lastActive"`
 }
 
 type RiskCommandView struct {

@@ -267,6 +267,24 @@ func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
 	}
 }
 
+// capabilityLevelUnion returns the most permissive capability level across the
+// user's roles (allow ≺ approve ≺ deny). No rows / unknown role default to allow
+// via the store, so a single permissive role is enough to grant the capability.
+func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, env string) string {
+	best := model.LevelDeny
+	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
+	if len(roleIDs) == 0 {
+		return model.LevelAllow
+	}
+	for _, id := range roleIDs {
+		lvl := e.store.CapabilityLevel(id, cap, env)
+		if rank[lvl] < rank[best] {
+			best = lvl
+		}
+	}
+	return best
+}
+
 // Evaluate runs the three-layer judgement (menu guard is enforced by middleware):
 //
 //	① capability matrix (role × capability × env)
@@ -275,9 +293,17 @@ func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
 //
 // The strictest level wins.
 func (e *RiskEngine) Evaluate(roleID int64, env, sql string) Verdict {
+	return e.EvaluateRoles([]int64{roleID}, env, sql)
+}
+
+// EvaluateRoles is Evaluate for a user holding multiple roles: the capability
+// level (layer ①) is the MOST permissive across all the user's roles, so roles
+// compose as a union. Layers ② (risk dictionary) and ③ (strict mode) are
+// role-independent and unchanged.
+func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
 	verb := ParseVerb(sql)
 	cap := MapVerbToCapability(verb)
-	capLevel := e.store.CapabilityLevel(roleID, cap, env)
+	capLevel := e.capabilityLevelUnion(roleIDs, cap, env)
 	if capLevel == model.LevelDeny {
 		return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
 	}
