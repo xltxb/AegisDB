@@ -16,18 +16,18 @@ const whEnabled = ref(true)
 const whEndpoint = ref('')
 const whSecret = ref('')
 const whHasSecret = ref(false)
-const whEvents = ref<string[]>(['intercept', 'approve', 'exec'])
+const whEvents = ref<string[]>(['exec', 'login'])
 const whMessage = ref('')
 const showLog = ref(false)
 const deliveries = ref<WebhookDelivery[]>([])
 const lastDelivery = computed(() => deliveries.value[0] || null)
 
+// Webhook只转发审计日志类事件(命令执行 / 登录);命令拦截与审批流转不推送。
 const EVENT_DEFS = [
-  { key: 'intercept', label: 'evIntercept', cls: 'danger' },
-  { key: 'approve', label: 'evApprove', cls: 'warn' },
   { key: 'exec', label: 'evExec', cls: 'accent' },
   { key: 'login', label: 'evLogin', cls: 'off' },
 ]
+const KNOWN_EVENTS = EVENT_DEFS.map(e => e.key)
 
 const retryText = computed(() => {
   const n = webhook.value?.retryMax ?? 5
@@ -90,7 +90,9 @@ onMounted(async () => {
       whEndpoint.value = s.webhook.endpoint
       whSecret.value = '' // secret is never returned; blank means "keep unchanged" on save
       whHasSecret.value = !!s.webhookHasSecret
-      whEvents.value = (s.webhook.events || '').split(',').filter(Boolean)
+      // Drop retired events (intercept/approve) so re-saving persists only the
+      // audit-log events this webhook still forwards.
+      whEvents.value = (s.webhook.events || '').split(',').filter(Boolean).filter(k => KNOWN_EVENTS.includes(k))
     }
     await loadDeliveries()
   } catch { /* ignore */ }

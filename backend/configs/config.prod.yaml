@@ -34,7 +34,7 @@ gateway:
 webhook:
   endpoint: ""
   secret: ""
-  events: "intercept,approve,exec"
+  events: "exec,login"
   retry_max: 5
   enabled: false
   # Relax the outbound SSRF guard to allow loopback/private/link-local webhook

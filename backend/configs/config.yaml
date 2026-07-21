@@ -37,6 +37,6 @@ webhook:
   # Configure at runtime via /settings/webhook (endpoint + bearer token).
   endpoint: ""
   secret: ""
-  events: "intercept,approve,exec,login"
+  events: "exec,login"
   retry_max: 5
   enabled: false

@@ -121,7 +121,7 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	// ---- Webhook + settings ----
 	create(&model.WebhookConfig{
 		Endpoint: cfg.Webhook.Endpoint, Secret: cfg.Webhook.Secret,
-		Events: "intercept,approve,exec", RetryMax: cfg.Webhook.RetryMax, Enabled: cfg.Webhook.Enabled,
+		Events: "exec,login", RetryMax: cfg.Webhook.RetryMax, Enabled: cfg.Webhook.Enabled,
 	})
 	settings := map[string]any{
 		"gateway.defaultPolicy":   cfg.Gateway.DefaultPolicy,
