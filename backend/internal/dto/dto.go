@@ -83,6 +83,7 @@ type ExportReq struct {
 	ConnectionID int64  `json:"connectionId" binding:"required"`
 	SQL          string `json:"sql" binding:"required"`
 	Name         string `json:"name"`
+	Database     string `json:"database"` // target database within the instance (optional)
 }
 
 // ExportResp describes an encrypted+compressed export archived on the server.

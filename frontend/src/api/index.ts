@@ -37,8 +37,8 @@ export const api = {
   exportConfig: () =>
     http.get<any, Envelope<{ enabled: boolean; savePath: string }>>('/export/config').then(ok),
   // raw envelope so callers can detect 42601 (path unset); returns the new job.
-  exportData: (connectionId: number, sql: string, name = '') =>
-    http.post<any, Envelope<ExportJob>>('/export', { connectionId, sql, name }),
+  exportData: (connectionId: number, sql: string, name = '', database = '') =>
+    http.post<any, Envelope<ExportJob>>('/export', { connectionId, sql, name, database }),
   exportJobs: () => http.get<any, Envelope<ExportJob[]>>('/export/jobs').then(ok),
   exportDownload: (file: string) =>
     http.get<any, Blob>(`/export/download?file=${encodeURIComponent(file)}`, { responseType: 'blob' }),

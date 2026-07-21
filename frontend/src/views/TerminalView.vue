@@ -70,6 +70,12 @@ function setWs(id: number, v: WsStatus) {
   const tb = tabs.value.find((t) => t.id === id)
   if (tb) tb.wsStatus = v
 }
+// A `use <db>` in the terminal switches its target database — mirror it onto the
+// tab so the tree highlights the new database.
+function setDb(id: number, db: string) {
+  const tb = tabs.value.find((t) => t.id === id)
+  if (tb) tb.db = db
+}
 
 onMounted(async () => {
   // Fetch independently: a failure of one (e.g. a non-admin lacking access to
@@ -107,6 +113,7 @@ onMounted(async () => {
         :conn="tab.conn" :active="tab.id === activeId" :db="tab.db"
         :conns="conns" :chain="chain" :script-enabled="scriptEnabled" :script-save-path="scriptSavePath"
         @update:risk="(v) => setRisk(tab.id, v)" @update:ws-status="(v) => setWs(tab.id, v)"
+        @update:db="(v) => setDb(tab.id, v)"
       />
     </div>
 

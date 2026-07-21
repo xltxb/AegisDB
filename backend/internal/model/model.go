@@ -140,6 +140,7 @@ type ExportJob struct {
 	UserID       int64      `gorm:"index:idx_export_user;not null" json:"userId"`
 	ConnectionID int64      `json:"connectionId"`
 	Instance     string     `gorm:"size:96" json:"instance"`
+	Database     string     `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
 	SQL          string     `gorm:"type:text" json:"sql"`
 	Name         string     `gorm:"size:128" json:"name"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed

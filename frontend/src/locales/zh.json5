@@ -147,7 +147,7 @@
   setScriptPath: '上传脚本保存路径', setScriptPathD: '上传的脚本将归档到该服务器目录；留空则禁用上传', setScriptPathPlaceholder: '例如 /var/vela/scripts',
   setExportPath: '数据导出保存路径', setExportPathD: '导出的加密压缩文件归档到该服务器目录；留空则禁用导出', setExportPathPlaceholder: '例如 /var/vela/exports',
   exportData: '导出数据', exportTitle: 'SQL 数据导出', exportSub: '执行 SQL 导出结果，压缩加密后存到服务器,可下载',
-  exportConn: '数据库实例', exportPwWarn: '密码仅此一次展示,请立即妥善保存',
+  exportConn: '数据库实例', exportDb: '目标数据库', exportDbDefault: '连接默认库', exportPwWarn: '密码仅此一次展示,请立即妥善保存',
   exportSql: '导出 SQL(SELECT)', exportName: '文件名(可选)', exportNamePh: '默认 export',
   exportRun: '导出', exportRunning: '提交中…', exportDownload: '下载文件', exportSubmit: '提交导出任务',
   exportTasks: '导出任务', exportTasksSub: '任务后台并行执行;结果按每 100MB 切分为 CSV 分片,完成后可下载', exportNoTasks: '暂无导出任务', exportParts: '个文件',

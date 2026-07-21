@@ -78,7 +78,7 @@ func (s *Services) UserExportDir(u *model.User) string {
 // EnqueueExport creates an asynchronous export job and returns immediately. The
 // job is processed by the worker pool (see service.New) so multiple exports run
 // in parallel; poll ListExportJobs for status and the finished download.
-func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name string) (*model.ExportJob, error) {
+func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, database string) (*model.ExportJob, error) {
 	if s.ExportSavePath() == "" {
 		return nil, ErrExportPathUnset
 	}
@@ -91,7 +91,8 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name string) 
 	}
 	job := &model.ExportJob{
 		UserID: u.ID, ConnectionID: connID, Instance: conn.Env + "-" + conn.Name,
-		SQL: sql, Name: strings.TrimSpace(name), Status: model.ExportPending,
+		Database: strings.TrimSpace(database),
+		SQL:      sql, Name: strings.TrimSpace(name), Status: model.ExportPending,
 	}
 	if err := s.Repo.CreateExportJob(job); err != nil {
 		return nil, err
@@ -143,6 +144,11 @@ func (s *Services) runExportJob(id int64) {
 	if err != nil {
 		s.failExport(id, "连接不存在")
 		return
+	}
+	// Target the database chosen at submit time (the job persists it so the async
+	// worker runs against the same schema the user selected).
+	if job.Database != "" {
+		conn.Database = job.Database
 	}
 	u, err := s.Repo.GetUserByID(job.UserID)
 	if err != nil {

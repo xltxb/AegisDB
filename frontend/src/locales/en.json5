@@ -131,7 +131,7 @@
   setScriptPath: 'Upload script save path', setScriptPathD: 'Uploaded scripts are archived to this server directory; empty disables upload', setScriptPathPlaceholder: 'e.g. /var/vela/scripts',
   setExportPath: 'Data export save path', setExportPathD: 'Encrypted+compressed exports are archived here; empty disables export', setExportPathPlaceholder: 'e.g. /var/vela/exports',
   exportData: 'Export', exportTitle: 'SQL data export', exportSub: 'Run SQL, archive the result compressed+encrypted on the server, then download',
-  exportConn: 'Database instance', exportPwWarn: 'Shown once — save it now',
+  exportConn: 'Database instance', exportDb: 'Target database', exportDbDefault: 'Connection default', exportPwWarn: 'Shown once — save it now',
   exportSql: 'Export SQL (SELECT)', exportName: 'File name (optional)', exportNamePh: 'default: export',
   exportRun: 'Export', exportRunning: 'Submitting…', exportDownload: 'Download', exportSubmit: 'Submit export',
   exportTasks: 'Export tasks', exportTasksSub: 'Parallel background jobs; results split into ~100MB CSV parts, download when done', exportNoTasks: 'No export tasks yet', exportParts: 'files',

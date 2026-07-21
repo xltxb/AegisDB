@@ -29,7 +29,7 @@ const props = defineProps<{
   scriptSavePath: string
   db?: string // target database chosen in the tree (defaults to the connection's)
 }>()
-const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus] }>()
+const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string] }>()
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -237,10 +237,35 @@ onUnmounted(() => {
 })
 
 // ---- command dispatch ----
+// parseUseDb recognises a `USE <db>` statement (optionally quoted) and returns the
+// database name, or null. Backend execution targets the database per-command via
+// the DSN, so a server-side USE would not persist across the pool — instead we
+// switch the terminal's target database client-side (updating the prompt and every
+// subsequent command).
+function parseUseDb(sql: string): string | null {
+  const m = /^\s*use\s+[`"']?([A-Za-z0-9_$-]+)[`"']?\s*$/i.exec(sql)
+  return m ? m[1] : null
+}
+
+function switchDb(db: string) {
+  const canon = dbOptions.value.find((d) => d.toLowerCase() === db.toLowerCase())
+  if (dbOptions.value.length && !canon) {
+    out(c(ANSI.yellow, `· 未知数据库「${db}」— 不在当前实例的库列表中`))
+    risk.value = 'safe'
+    return
+  }
+  targetDb.value = canon || db
+  emit('update:db', targetDb.value) // mirror onto the tab so the tree highlights it
+  out(c(ANSI.green, `✓ 已切换到数据库 ${targetDb.value}`))
+  risk.value = 'safe'
+}
+
 async function handleSubmit(stmt: string) {
   const raw = stmt.trim().replace(/;+\s*$/, '')
   if (raw.startsWith('\\')) { metaCommand(raw); editor.resume(); return }
   if (!raw) { editor.resume(); return }
+  const useDb = parseUseDb(raw)
+  if (useDb) { switchDb(useDb); editor.resume(); return }
   try {
     const r = await api.riskCheck(props.conn.id, raw)
     if (r.action === 'deny') {

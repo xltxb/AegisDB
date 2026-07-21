@@ -180,6 +180,7 @@ export interface ExportJob {
   id: number
   connectionId: number
   instance: string
+  database: string
   sql: string
   name: string
   status: 'pending' | 'running' | 'done' | 'failed' | string

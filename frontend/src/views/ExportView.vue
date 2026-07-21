@@ -10,6 +10,8 @@ import type { Connection, ExportJob } from '@/types'
 const router = useRouter()
 const conns = ref<Connection[]>([])
 const connId = ref<number>(0)
+const db = ref('')                       // target database within the instance ('' = connection default)
+const dbOptions = ref<string[]>([])
 const sql = ref('SELECT id, name, status, created_at FROM users')
 const name = ref('')
 const busy = ref(false)
@@ -26,11 +28,26 @@ async function loadJobs() {
   try { jobs.value = await api.exportJobs() } catch { /* ignore */ }
 }
 
+// Load the selectable databases for the chosen instance (same live introspection
+// the terminal uses). Defaults to the connection's own database when it has one.
+async function loadDbs(id: number) {
+  db.value = ''
+  dbOptions.value = []
+  if (!id) return
+  try {
+    const sc = await api.connectionSchema(id)
+    dbOptions.value = sc.databases.map((d) => d.name)
+    const c = conns.value.find((x) => x.id === id)
+    if (c?.database && dbOptions.value.includes(c.database)) db.value = c.database
+  } catch { /* leave on default */ }
+}
+function onConnChange() { loadDbs(connId.value) }
+
 onMounted(async () => {
   try {
     conns.value = await api.connections()
     const first = conns.value.find((c) => c.env === 'prod') ?? conns.value[0]
-    if (first) connId.value = first.id
+    if (first) { connId.value = first.id; await loadDbs(first.id) }
   } catch { /* ignore */ }
   await loadJobs()
   timer = setInterval(() => { if (anyActive.value) loadJobs() }, 2000)
@@ -45,7 +62,7 @@ async function submit() {
   err.value = ''
   needPath.value = false
   try {
-    const env = await api.exportData(connId.value, q, name.value.trim())
+    const env = await api.exportData(connId.value, q, name.value.trim(), db.value)
     if (env.code === CODE_EXPORT_PATH_UNSET) { needPath.value = true; return }
     if (env.code === CODE_OK) { await loadJobs(); return } // job queued
     err.value = env.msg || '提交失败'
@@ -114,15 +131,20 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
           <div class="grid2">
             <div>
               <div class="lbl">{{ $t('exportConn') }}</div>
-              <select v-model.number="connId" class="sel">
+              <select v-model.number="connId" class="sel" @change="onConnChange">
                 <option v-for="c in conns" :key="c.id" :value="c.id">{{ c.env }}-{{ c.name }}</option>
               </select>
             </div>
             <div>
-              <div class="lbl">{{ $t('exportName') }}</div>
-              <input v-model="name" class="nameinput" :placeholder="$t('exportNamePh')" />
+              <div class="lbl">{{ $t('exportDb') }}</div>
+              <select v-model="db" class="sel">
+                <option value="">{{ $t('exportDbDefault') }}</option>
+                <option v-for="d in dbOptions" :key="d" :value="d">{{ d }}</option>
+              </select>
             </div>
           </div>
+          <div class="lbl">{{ $t('exportName') }}</div>
+          <input v-model="name" class="nameinput" :placeholder="$t('exportNamePh')" />
           <div v-if="activeConn?.env === 'prod'" class="prodwarn"><TriangleAlert :size="13" />{{ $t('opWarnPrefix') }} <b>PROD · {{ activeConn.name }}</b> · {{ $t('opWarnCaution') }}</div>
 
           <div class="lbl">{{ $t('exportSql') }}</div>
@@ -147,7 +169,7 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
           <div v-for="j in jobs" :key="j.id" class="job">
             <div class="jmain">
               <div class="jtop">
-                <span class="jinst">{{ j.instance }}</span>
+                <span class="jinst">{{ j.instance }}<span v-if="j.database" class="jdb"> / {{ j.database }}</span></span>
                 <span class="jbadge" :class="meta(j.status).cls"><component :is="meta(j.status).icon" :size="12" :class="{ spin: j.status === 'running' }" />{{ $t(meta(j.status).t) }}</span>
                 <span v-if="j.status === 'done'" class="jmeta">{{ j.rows }} 行 · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
                 <span class="jtime">#{{ j.id }} · {{ j.createdAt?.slice(5, 16) }}</span>
@@ -202,6 +224,7 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .jmain { flex: 1; min-width: 0; }
 .jtop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .jinst { font: 600 13px var(--font-mono); color: var(--text-strong); }
+.jdb { color: var(--text-faint); font-weight: 500; }
 .jbadge { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
 .jbadge.wait { background: var(--surface-sunken); color: var(--text-muted); }
 .jbadge.run { background: var(--accent-subtle); color: var(--accent-text); }
