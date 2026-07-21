@@ -58,7 +58,7 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64) dto.ConnectionS
 	if gateway.RealExecSupported(conn) {
 		groups, err := gateway.RealSchema(conn)
 		if err != nil {
-			out.Error = "加载库表失败: " + err.Error()
+			out.Error = "无法连接目标数据库(检查网络/主机/端口/账号密码): " + err.Error()
 			return out
 		}
 		for _, g := range groups {

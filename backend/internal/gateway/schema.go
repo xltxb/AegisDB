@@ -30,7 +30,16 @@ func RealSchema(conn *model.Connection) ([]SchemaGroup, error) {
 	if query == "" {
 		return nil, fmt.Errorf("引擎 %q 暂不支持库表加载", conn.Engine)
 	}
-	db, release, err := openConn(conn)
+	// For MySQL/TiDB, introspect against the server WITHOUT binding a default
+	// database: information_schema is global, so a missing/empty/nonexistent
+	// conn.Database must not make the connect fail with "Unknown database".
+	target := conn
+	if e := strings.ToLower(conn.Engine); strings.Contains(e, "mysql") || strings.Contains(e, "tidb") || strings.Contains(e, "mariadb") {
+		c := *conn
+		c.Database = ""
+		target = &c
+	}
+	db, release, err := openConn(target)
 	if err != nil {
 		return nil, err
 	}

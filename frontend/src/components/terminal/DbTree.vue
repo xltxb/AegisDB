@@ -69,6 +69,15 @@ const grouped = computed(() => {
 const searching = computed(() => search.value.trim().length > 0)
 function toggle(env: string) { collapsed.value[env] = !collapsed.value[env] }
 function isOpen(env: string) { return searching.value || !collapsed.value[env] }
+
+// Per-instance collapse of its database list. Clicking an instance selects it and
+// expands the list; clicking the already-selected instance collapses/expands it.
+const instCollapsed = ref<Record<number, boolean>>({})
+const instOpen = (id: number) => id === props.selectedId && !instCollapsed.value[id]
+function clickInst(id: number) {
+  if (id === props.selectedId) instCollapsed.value[id] = !instCollapsed.value[id]
+  else { instCollapsed.value[id] = false; emit('select', id) }
+}
 </script>
 
 <template>
@@ -86,12 +95,13 @@ function isOpen(env: string) { return searching.value || !collapsed.value[env] }
         </div>
         <div v-if="isOpen(env)" class="ind">
           <template v-for="c in grouped[env]" :key="c.id">
-            <div class="inst" :class="{ active: c.id === selectedId }" @click="emit('select', c.id)">
+            <div class="inst" :class="{ active: c.id === selectedId }" @click="clickInst(c.id)">
+              <component :is="instOpen(c.id) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" />
               <Database :size="14" />{{ c.name }}
               <span v-if="tag(c)" class="tag" :class="tag(c)!.cls">{{ $t(tag(c)!.text as any) }}</span>
             </div>
-            <!-- live schema (db → tables) for the selected instance -->
-            <div v-if="c.id === selectedId" class="ind2">
+            <!-- live schema (db → tables) for the selected, expanded instance -->
+            <div v-if="instOpen(c.id)" class="ind2">
               <div v-if="schemaLoading" class="shint">{{ $t('schemaLoading') }}</div>
               <div v-else-if="schema && schema.error" class="shint err">{{ schema.error }}</div>
               <div v-else-if="schema && !schema.databases.length" class="shint">{{ $t('schemaEmpty') }}</div>
