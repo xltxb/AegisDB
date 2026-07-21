@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build & package Vela Gateway (frontend + backend) into a self-contained,
+# Build & package DP DB GATEWAY (frontend + backend) into a self-contained,
 # production-deployable bundle under ./dist, plus a versioned tarball.
 #
 # Usage:
@@ -40,7 +40,7 @@ if [ -z "${VERSION:-}" ]; then
 fi
 VERSION="${VERSION:-0.0.0}"
 
-echo "==> Vela Gateway build  (version=$VERSION, target=$GOOS_/$GOARCH_)"
+echo "==> DP DB GATEWAY build  (version=$VERSION, target=$GOOS_/$GOARCH_)"
 
 echo "==> Clean dist/"
 rm -rf "$DIST"
@@ -73,7 +73,7 @@ cp "$ROOT/deploy/vela.env.example" "$DIST/vela.env.example" 2>/dev/null || true
 
 echo "==> Write README-DEPLOY.md"
 cat > "$DIST/README-DEPLOY.md" <<EOF
-# Vela Gateway — 部署包 ($VERSION, $GOOS_/$GOARCH_)
+# DP DB GATEWAY — 部署包 ($VERSION, $GOOS_/$GOARCH_)
 
 单二进制同时提供 API 与前端 SPA。默认读取 \`configs/config.yaml\`(profile=prod → MySQL)。
 敏感配置一律走环境变量,不要写进 config.yaml。

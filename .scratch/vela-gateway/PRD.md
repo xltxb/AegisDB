@@ -1,4 +1,4 @@
-# PRD · Vela 数据库管理网关（Vela Gateway）
+# PRD · Vela 数据库管理网关（DP DB GATEWAY）
 
 Status: ready-for-agent
 

@@ -49,7 +49,7 @@ async function submit() {
       <div class="brand">
         <div class="logo"><Sailboat :size="22" color="#fff" /></div>
         <div>
-          <div class="bn">Vela Gateway</div>
+          <div class="bn">DP DB GATEWAY</div>
           <div class="bs">数据库管理网关</div>
         </div>
       </div>

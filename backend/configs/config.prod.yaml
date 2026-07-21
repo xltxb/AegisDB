@@ -1,4 +1,4 @@
-# Vela Gateway — PRODUCTION configuration (MySQL).
+# DP DB GATEWAY — PRODUCTION configuration (MySQL).
 # Initialize once, then run:
 #   VELA_MYSQL_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
 #   VELA_MYSQL_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml
@@ -37,3 +37,8 @@ webhook:
   events: "intercept,approve,exec"
   retry_max: 5
   enabled: false
+  # Relax the outbound SSRF guard to allow loopback/private/link-local webhook
+  # targets (e.g. an on-host or same-VPC receiver). Off by default in prod.
+  # Only enable for a TRUSTED internal target — it re-opens SSRF to internal
+  # services and the cloud metadata endpoint. Overridable via VELA_WEBHOOK_ALLOW_PRIVATE.
+  allow_private: false

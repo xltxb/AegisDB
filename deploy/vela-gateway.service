@@ -1,4 +1,4 @@
-# systemd unit for Vela Gateway (single-binary: API + SPA).
+# systemd unit for DP DB GATEWAY (single-binary: API + SPA).
 # Prereqs (run once as root):
 #   sudo useradd --system --home /opt/vela-gateway --shell /usr/sbin/nologin vela
 #   sudo mkdir -p /opt/vela-gateway && sudo tar -xzf vela-gateway-*.tar.gz -C /opt/vela-gateway

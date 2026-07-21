@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: Vela Gateway API
+  title: DP DB GATEWAY API
   version: "1.0"
   description: >
     数据库管理网关 REST/WS 接口。统一前缀 /api/v1，Bearer Token 鉴权，

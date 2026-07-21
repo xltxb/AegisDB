@@ -50,7 +50,7 @@
 
 <div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
   <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
-  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">Vela Gateway</span>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
   <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Backend Engineering</span>
 </div>
 
@@ -378,7 +378,7 @@ req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
 <span class="k">func</span> (h *TerminalHandler) RiskCheck(c *gin.Context) { <span class="c">/* ... */</span> }</code></pre>
 <p style="font:600 13px var(--font-mono); color:var(--text-strong); margin:14px 0 4px">docs/swagger.yaml(节选)</p>
 <pre><code><span class="k">openapi</span>: 3.0.3
-<span class="k">info</span>: { <span class="k">title</span>: Vela Gateway API, <span class="k">version</span>: <span class="s">"1.0"</span> }
+<span class="k">info</span>: { <span class="k">title</span>: DP DB GATEWAY API, <span class="k">version</span>: <span class="s">"1.0"</span> }
 <span class="k">servers</span>: [{ <span class="k">url</span>: /api/v1 }]
 <span class="k">components</span>:
   <span class="k">securitySchemes</span>:
@@ -502,7 +502,7 @@ req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
 </div>
 <p style="font:400 12px/1.5 var(--font-body); color:var(--text-faint); margin:10px 0 0">实线层为同步主链路;虚线框为外部集成。网关无状态,字典/矩阵经 Redis 缓存热生效;审计异步落库不阻塞执行。</p>
 
-<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>Vela Gateway · 后端开发文档 (Go · Gin · MySQL)</span><span style="margin-left:auto">机密 · 内部</span></div>
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>DP DB GATEWAY · 后端开发文档 (Go · Gin · MySQL)</span><span style="margin-left:auto">机密 · 内部</span></div>
 
 </td></tr></tbody>
 <tfoot><tr><td class="ftr-space"></td></tr></tfoot>

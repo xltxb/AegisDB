@@ -706,7 +706,7 @@ func (s *Services) MFASetup(u *model.User) (*dto.MFASetupResp, error) {
 	if err := s.Repo.UpdateUserMFA(u.ID, false, secret); err != nil {
 		return nil, err
 	}
-	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "Vela Gateway")}, nil
+	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "DP DB GATEWAY")}, nil
 }
 
 // MFAEnable verifies the first code against the pending secret and turns MFA on.
@@ -787,7 +787,7 @@ func (s *Services) AdminBindMFA(id int64) (*dto.MFASetupResp, error) {
 	if err := s.Repo.UpdateUserMFA(u.ID, true, secret); err != nil {
 		return nil, err
 	}
-	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "Vela Gateway")}, nil
+	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "DP DB GATEWAY")}, nil
 }
 
 // settingInt reads an int setting (JSON-encoded), falling back to def.

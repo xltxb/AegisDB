@@ -75,6 +75,13 @@ type Config struct {
 		Events   string `yaml:"events"`
 		RetryMax int    `yaml:"retry_max"`
 		Enabled  bool   `yaml:"enabled"`
+		// AllowPrivate relaxes the outbound SSRF guard so webhook/Lark targets may
+		// resolve to loopback/private/link-local addresses. Dev allows this by
+		// default; prod keeps it off unless explicitly enabled here (or via
+		// VELA_WEBHOOK_ALLOW_PRIVATE) — e.g. to reach an on-host/internal receiver.
+		// Only enable it when the target network is trusted: it re-opens SSRF to
+		// internal services and the cloud metadata endpoint.
+		AllowPrivate bool `yaml:"allow_private"`
 	} `yaml:"webhook"`
 }
 
@@ -109,6 +116,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if v := os.Getenv("VELA_SECRET_KEY"); v != "" { // A2: dedicated at-rest encryption key
 		cfg.SecretKey = v
+	}
+	if v := os.Getenv("VELA_WEBHOOK_ALLOW_PRIVATE"); v != "" { // relax SSRF guard for internal receivers
+		cfg.Webhook.AllowPrivate = isTruthy(v)
 	}
 
 	// Resolve the deployment profile and, from it, the database driver.
@@ -226,6 +236,16 @@ func normalizeEnv(s string) string {
 	default:
 		return "dev"
 	}
+}
+
+// isTruthy interprets a boolean-ish env var. Anything in the affirmative set is
+// true; everything else (incl. "0"/"false"/"") is false.
+func isTruthy(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "1", "true", "yes", "on":
+		return true
+	}
+	return false
 }
 
 func firstNonEmpty(vals ...string) string {

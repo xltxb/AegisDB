@@ -1,4 +1,4 @@
-# Vela Gateway — backend configuration
+# DP DB GATEWAY — backend configuration
 
 # Deployment profile: dev | prod
 #   dev  → SQLite (zero-dependency local run, writes ./vela-gateway.db)

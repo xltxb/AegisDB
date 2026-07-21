@@ -1,4 +1,4 @@
--- Vela Gateway — canonical schema (MySQL 8 / InnoDB / utf8mb4).
+-- DP DB GATEWAY — canonical schema (MySQL 8 / InnoDB / utf8mb4).
 -- Naming: tbl_ prefix, pk_ primary keys, idx_ indexes. No physical FKs —
 -- relational integrity is maintained at the application layer (backend doc §9).
 -- This is the AUTHORITATIVE production schema, applied via `vela-gateway migrate`

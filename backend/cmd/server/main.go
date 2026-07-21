@@ -1,4 +1,4 @@
-// Command server boots the Vela Gateway backend.
+// Command server boots the DP DB GATEWAY backend.
 package main
 
 import (
@@ -77,9 +77,13 @@ func main() {
 		slog.Warn("VELA_SECRET_KEY 未设置，回落使用 JWT 密钥派生连接口令加密密钥；轮换 VELA_JWT_SECRET 将导致已存储的连接口令无法解密。建议设置独立的 VELA_SECRET_KEY。")
 	}
 	crypto.SetSecretKey(secretKey)
-	// Only prod enforces the webhook SSRF guard against private/loopback targets;
-	// dev commonly points webhooks at on-host receivers.
-	service.AllowPrivateWebhookTargets = cfg.Env != "prod"
+	// The webhook SSRF guard blocks private/loopback targets. Dev relaxes it by
+	// default (on-host receivers); prod keeps it on unless webhook.allow_private
+	// (or VELA_WEBHOOK_ALLOW_PRIVATE) explicitly opts in for a trusted internal target.
+	service.AllowPrivateWebhookTargets = cfg.Env != "prod" || cfg.Webhook.AllowPrivate
+	if cfg.Env == "prod" && cfg.Webhook.AllowPrivate {
+		slog.Warn("webhook.allow_private 已开启：出站 Webhook/飞书 SSRF 防护对内网/环回地址放行，请确认目标网络可信")
+	}
 
 	engine := gateway.NewRiskEngine(repo, cfg.Gateway.StrictMode)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
@@ -101,7 +105,7 @@ func main() {
 	}()
 
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
-	slog.Info("Vela Gateway listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
+	slog.Info("DP DB GATEWAY listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
 	if cfg.Env == "prod" && !tls {
 		slog.Warn("生产环境未启用 TLS:请配置 server.tls_cert/tls_key,或在前置反向代理终止 TLS,避免凭据 / JWT 明文传输")
 	}
