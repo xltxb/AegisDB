@@ -98,7 +98,7 @@ function fmtTime(s: string) { return new Date(s).toLocaleTimeString('en-GB') }
       <div v-for="r in rows" :key="r.id" class="tr">
         <span class="mono mute">{{ fmtTime(r.occurredAt) }}</span>
         <span class="who">{{ r.actor }}</span>
-        <span class="mono mute">{{ r.instance }}</span>
+        <span class="mono mute">{{ r.instance }}<span v-if="r.database" class="dbtag"> / {{ r.database }}</span></span>
         <span class="mono cmd"><span :style="{ color: kwColor(r.risk) }">{{ kw(r.command) }}</span>{{ rest(r.command) }}</span>
         <span><span class="rbadge" :style="{ background: riskMeta(r.risk).bg, color: riskMeta(r.risk).c }">{{ riskMeta(r.risk).t }}</span></span>
         <span class="res" :style="{ color: resMeta(r.result).c }"><component :is="resMeta(r.result).icon" :size="12" />{{ resMeta(r.result).t }}</span>
@@ -119,6 +119,7 @@ function fmtTime(s: string) { return new Date(s).toLocaleTimeString('en-GB') }
 .ctl { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; font: 500 12px var(--font-mono); cursor: pointer; color: var(--text-muted); }
 .mono { font: 500 13px var(--font-mono); }
 .mute { color: var(--text-muted); }
+.dbtag { color: var(--text-faint); }
 /* table */
 .table { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
 .th, .tr { display: grid; grid-template-columns: 0.9fr 1fr 1.1fr 2.2fr 0.8fr 1fr 0.9fr; gap: 12px; }

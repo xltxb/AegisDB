@@ -133,8 +133,16 @@ watch(() => ui.theme, () => {
   }
 })
 
-function promptText() { return c(ANSI.blue, props.conn.name) + ' ' + c(ANSI.cyan, '❯') + ' ' }
-function promptLen() { return props.conn.name.length + 3 }
+// The prompt shows the current database (instance/db ❯) so every command in the
+// scrollback records which database it ran against.
+function promptText() {
+  const db = targetDb.value
+  const head = db
+    ? c(ANSI.blue, props.conn.name) + c(ANSI.gray, '/') + c(ANSI.cyan, db)
+    : c(ANSI.blue, props.conn.name)
+  return head + ' ' + c(ANSI.cyan, '❯') + ' '
+}
+function promptLen() { return props.conn.name.length + (targetDb.value ? targetDb.value.length + 1 : 0) + 3 }
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
 
 // A prominent, env-coloured "you are operating on X" caution printed into the

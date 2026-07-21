@@ -88,7 +88,7 @@ function chainText(a: Approval) {
           <div class="cmd">{{ a.command }}</div>
           <div class="meta">
             <div><span class="ml">{{ $t('apInitiator') }}</span><div class="who"><div class="ava">{{ a.initiator.slice(0, 2).toUpperCase() }}</div>{{ a.initiator }}</div></div>
-            <div><span class="ml">{{ $t('apTarget') }}</span><div class="tgt">{{ a.env.toUpperCase() }} · {{ a.instance }}</div></div>
+            <div><span class="ml">{{ $t('apTarget') }}</span><div class="tgt">{{ a.env.toUpperCase() }} · {{ a.instance }}<template v-if="a.database"> · {{ a.database }}</template></div></div>
           </div>
           <div class="reason"><span class="ml">{{ $t('apReason') }}</span><div class="rt">{{ a.reason || '—' }}</div></div>
           <div v-if="a.status === 'approved' && a.result" class="result">

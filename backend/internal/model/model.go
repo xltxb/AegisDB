@@ -233,6 +233,7 @@ type AuditLog struct {
 	ActorName    string    `gorm:"size:64" json:"actor"`
 	ConnectionID int64     `json:"connectionId"`
 	Instance     string    `gorm:"size:64" json:"instance"`
+	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
 	Command      string    `gorm:"type:text;not null" json:"command"`
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
 	Result       string    `gorm:"size:16;not null" json:"result"`                       // executed|pending|rejected|warn

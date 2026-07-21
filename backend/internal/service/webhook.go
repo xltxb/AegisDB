@@ -420,6 +420,14 @@ func larkSafe(s string) string {
 	return strings.ReplaceAll(s, "`", "ˋ")
 }
 
+// dbOrDefault labels an empty target database as the instance default.
+func dbOrDefault(db string) string {
+	if strings.TrimSpace(db) == "" {
+		return "默认"
+	}
+	return db
+}
+
 func larkApprovalCard(ap *model.Approval, consoleURL string) map[string]any {
 	tmpl, riskLabel := "orange", "🟠 中危"
 	if ap.RiskLevel == "high" {
@@ -431,6 +439,7 @@ func larkApprovalCard(ap *model.Approval, consoleURL string) map[string]any {
 	elements := []any{
 		map[string]any{"tag": "div", "fields": []any{
 			shortField("实例", ap.Instance),
+			shortField("数据库", dbOrDefault(ap.Database)),
 			shortField("环境", strings.ToUpper(ap.Env)),
 			shortField("风险", riskLabel),
 			shortField("发起人", ap.Initiator),

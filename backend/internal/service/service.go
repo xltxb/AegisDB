@@ -131,10 +131,11 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 		if conn != nil {
 			a.ConnectionID = conn.ID
 			a.Instance = conn.Name
+			a.Database = conn.Database
 		}
 		payload, _ := json.Marshal(map[string]any{
 			"time": now.Format(time.RFC3339), "actor": actor.Name, "instance": a.Instance,
-			"command": command, "risk": risk, "result": result, "ap": apNo,
+			"database": a.Database, "command": command, "risk": risk, "result": result, "ap": apNo,
 		})
 		a.Hash = crypto.ChainHash(prev, payload)
 		if err = s.Repo.InsertAudit(a); err == nil {

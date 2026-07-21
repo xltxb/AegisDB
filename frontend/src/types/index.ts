@@ -129,6 +129,7 @@ export interface Approval {
   connectionId: number
   env: string
   instance: string
+  database: string
   command: string
   keyword: string
   initiatorId: number
@@ -149,6 +150,7 @@ export interface AuditRow {
   occurredAt: string
   actor: string
   instance: string
+  database: string
   command: string
   risk: string
   result: string
