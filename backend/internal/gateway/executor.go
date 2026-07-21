@@ -33,13 +33,13 @@ type Executor struct{}
 
 func NewExecutor() *Executor { return &Executor{} }
 
-// Run executes sql against conn. When the connection is configured for real
-// execution (credentials present, supported engine) it opens the target DB and
-// runs the statement; otherwise it returns a simulated result (demo instances
-// are unreachable in dev).
-func (x *Executor) Run(conn *model.Connection, sql string) ExecResult {
+// Run executes sql against conn within the given execution timeout. When the
+// connection is configured for real execution (credentials present, supported
+// engine) it opens the target DB and runs the statement; otherwise it returns a
+// simulated result (demo instances are unreachable in dev; timeout is ignored).
+func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration) ExecResult {
 	if RealExecSupported(conn) {
-		res, err := RealRun(conn, sql)
+		res, err := RealRun(conn, sql, timeout)
 		if err != nil {
 			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err}
 		}

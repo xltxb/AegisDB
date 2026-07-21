@@ -19,6 +19,7 @@ import (
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/pkg/sqlutil"
 )
 
 // AllowPrivateWebhookTargets permits loopback/private webhook destinations.
@@ -444,7 +445,7 @@ func larkApprovalCard(ap *model.Approval, consoleURL string) map[string]any {
 			shortField("风险", riskLabel),
 			shortField("发起人", ap.Initiator),
 		}},
-		map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**命令**\n```sql\n" + larkSafe(clip(ap.Command, 400)) + "\n```"}},
+		map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**命令**\n```sql\n" + larkSafe(clip(sqlutil.RedactSecrets(ap.Command), 400)) + "\n```"}},
 	}
 	if strings.TrimSpace(ap.Reason) != "" {
 		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**原因**\n" + larkSafe(ap.Reason)}})

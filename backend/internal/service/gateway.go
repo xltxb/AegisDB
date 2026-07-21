@@ -153,7 +153,7 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 		return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: v.Risk, Rule: v.Rule}, nil
 
 	default: // allow
-		res := s.Executor.Run(conn, sql)
+		res := s.Executor.Run(conn, sql, s.execTimeout())
 		s.recordAudit(u, conn, sql, v.Risk, execResultStatus(res), "", "exec")
 		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
@@ -341,7 +341,7 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		var res gateway.ExecResult
 		result, title := model.ResultExecuted, "审批已通过并执行"
 		if conn != nil {
-			res = s.Executor.Run(conn, ap.Command) // gateway runs it on behalf of the initiator
+			res = s.Executor.Run(conn, ap.Command, s.execTimeout()) // gateway runs it on behalf of the initiator
 			result = execResultStatus(res)
 		} else {
 			// The target connection was deleted/unavailable — nothing ran. Report
@@ -830,6 +830,19 @@ func (s *Services) settingInt(key string, def int) int {
 		return n
 	}
 	return def
+}
+
+// execTimeout is the per-command execution timeout, configurable at runtime via
+// the gateway.execTimeout setting (seconds). Bounded to [1s, 3600s]; default 30s.
+func (s *Services) execTimeout() time.Duration {
+	sec := s.settingInt("gateway.execTimeout", 30)
+	if sec < 1 {
+		sec = 1
+	}
+	if sec > 3600 {
+		sec = 3600
+	}
+	return time.Duration(sec) * time.Second
 }
 
 var wsRe = regexp.MustCompile(`\s+`)

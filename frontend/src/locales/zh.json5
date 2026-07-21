@@ -26,7 +26,7 @@
   // terminal
   treeTitle: '数据库分层', search: '搜索实例 / 库 / 表',
   schemaLoading: '加载库表中…', schemaEmpty: '— 无可显示的数据库 —',
-  prodEnv: '生产环境 · PROD', stagingEnv: '预发 · STAGING', devEnv: '测试 · DEV',
+  prodEnv: '生产环境 · PROD', stagingEnv: '演练UAT · STAGING', devEnv: '测试 · DEV',
   highTag: '高危', limitedTag: '受限', treeFooter: '3 环境 · 9 实例 · 已接入网关',
   interceptTitle: '命令已被网关拦截 · 禁止直接执行',
   hitRule: '命中规则', apGen: '已生成审批单', pendBadge: '待审批',
@@ -50,7 +50,7 @@
   // db config
   connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
-  prodRow: '生产环境 · PROD · 默认拦截高危命令', stgRow: '预发 · STAGING · 高危命令仅需一级审批', devRow: '测试 · DEV · 自由执行，仅审计',
+  prodRow: '生产环境 · PROD · 默认拦截高危命令', stgRow: '演练UAT · STAGING · 高危命令仅需一级审批', devRow: '测试 · DEV · 自由执行，仅审计',
   online: '在线', maint: '维护',
   formNewConn: '新建连接', formNewConnSub: '接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。',
   fName: '实例名称', fEngine: '引擎', fEnv: '分层环境', fAddr: '地址 : 端口', fPolicy: '网关策略', fSave: '测试连接并保存', connSaved: '✓ 已保存并接入网关',
@@ -129,7 +129,7 @@
   urNeedOne: '至少保留一个角色', urSaved: '✓ 角色已更新', urFailed: '保存失败',
   // settings
   setGw: '网关策略', setGwSub: '全局命令代理与拦截策略', setDefPolicy: '默认网关策略', setDefPolicyD: '新接入实例的默认策略',
-  setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断并回滚',
+  setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断(单位秒,1–3600)',
   setAppr: '审批', setApprSub: '审批流转与超时策略', setApprTimeout: '审批超时处理', setApprTimeoutD: '超时未审批的处理方式',
   setDefApprovers: '默认审批人', setDefApproversD: "审批链 = 「DBA 负责人」角色成员(无则回落管理员),在权限页管理", setApproversEmpty: '未设置审批人', setApproversManage: '前往权限管理', setEscalate: '升级到负责人', setEscalateD: '组长超时后升级终审', setSelfApprove: '允许自审', setSelfApproveD: '允许发起人审批自己的单子(默认关,关闭时强制双人制)',
   setSec: '会话与安全', setSecSub: '登录会话与访问控制', setTtl: '会话有效期', setTtlD: '超过后需重新登录',

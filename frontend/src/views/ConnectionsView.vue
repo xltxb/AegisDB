@@ -37,7 +37,7 @@ async function saveTags(tags: string[]) {
 
 const envOpts = [
   { label: 'PROD · L1 核心', env: 'prod' },
-  { label: 'STAGING · L3 预发', env: 'staging' },
+  { label: 'STAGING · L3 演练UAT', env: 'staging' },
   { label: 'DEV · L4 沙盒', env: 'dev' },
 ]
 const engineOpts = ['MySQL 8.0', 'TiDB', 'GaussDB (DWS)', 'Oracle', 'PostgreSQL 15', 'ClickHouse', 'Redis 7']

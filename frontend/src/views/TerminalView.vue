@@ -36,8 +36,12 @@ function syncPageSub() {
   ui.pageSub = tb ? `${tb.conn.env}-${tb.conn.name} · ${tb.conn.defaultRole}` : ''
 }
 watch(activeTab, syncPageSub)
-// AppLayout clears pageSub on every route change; restore it when re-entering.
-onActivated(syncPageSub)
+// Refresh the instance list whenever the (kept-alive) view is re-shown, so a
+// connection added on the Connections page appears without a full reload.
+async function loadConns() {
+  try { conns.value = await api.connections() } catch { /* ignore */ }
+}
+onActivated(() => { syncPageSub(); loadConns() })
 
 // Open (or focus) a tab for a connection. One tab per connection.
 function openConn(id: number, db = '') {
@@ -80,7 +84,7 @@ function setDb(id: number, db: string) {
 onMounted(async () => {
   // Fetch independently: a failure of one (e.g. a non-admin lacking access to
   // the risk dictionary) must NOT prevent the connection list from loading.
-  try { conns.value = await api.connections() } catch { /* ignore */ }
+  await loadConns()
   try { riskCommands.value = await api.riskCommands() } catch { /* optional reference data */ }
   try { chain.value = (await api.approvalChain()).chain } catch { /* ignore */ }
   try { const sc = await api.scriptConfig(); scriptEnabled.value = sc.enabled; scriptSavePath.value = sc.savePath } catch { /* ignore */ }

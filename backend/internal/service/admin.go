@@ -17,7 +17,7 @@ import (
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
 	host, port := splitHostPort(req.Host)
 	env := strings.ToLower(req.Env)
-	layer := map[string]string{"prod": "L1 核心 · 写", "staging": "L3 预发", "dev": "L4 沙盒"}[env]
+	layer := map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "dev": "L4 沙盒"}[env]
 	role := "dba_l2"
 	if env == model.EnvDev {
 		role = "developer"

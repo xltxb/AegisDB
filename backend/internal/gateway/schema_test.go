@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"velagateway/internal/model"
 )
@@ -60,7 +61,7 @@ func TestRealRun_SQLiteReturnsResultSet(t *testing.T) {
 	sdb.Close()
 
 	conn := &model.Connection{Engine: "SQLite", Database: dbfile, Name: "t"}
-	res, err := RealRun(conn, "SELECT id, name FROM t ORDER BY id")
+	res, err := RealRun(conn, "SELECT id, name FROM t ORDER BY id", 30*time.Second)
 	if err != nil {
 		t.Fatalf("RealRun: %v", err)
 	}

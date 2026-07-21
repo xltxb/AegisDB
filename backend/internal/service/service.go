@@ -13,6 +13,7 @@ import (
 	"velagateway/internal/repository"
 	"velagateway/pkg/crypto"
 	"velagateway/pkg/jwt"
+	"velagateway/pkg/sqlutil"
 )
 
 // Services is the application service container wired in bootstrap.
@@ -111,6 +112,11 @@ func (s *Services) recordAudit(actor *model.User, conn *model.Connection, comman
 // onto the same predecessor first, InsertAudit fails with a duplicate-key error;
 // we re-read the chain tip and retry so the chain stays linear instead of forking.
 func (s *Services) appendAudit(actor *model.User, conn *model.Connection, command, risk, result, apNo string) *model.AuditLog {
+	// Never persist credentials in the clear: mask password literals before the
+	// command enters the (immutable, hash-chained) audit log. The audit row is
+	// never re-executed, so redaction here is safe; it also flows into the webhook
+	// payload, which carries this same audit object.
+	command = sqlutil.RedactSecrets(command)
 	s.auditMu.Lock()
 	defer s.auditMu.Unlock()
 	now := time.Now()

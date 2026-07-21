@@ -155,16 +155,20 @@ func dialPool(driver, dsn string) (*sql.DB, error) {
 // (RealQueryEach) are unbounded — this only applies to the interactive terminal.
 const maxResultRows = 200
 
-// RealRun executes sql against the real target instance. A read returns the actual
-// result set (columns + up to maxResultRows rows, marking Truncated if there are
-// more); a write returns rows-affected.
-func RealRun(conn *model.Connection, query string) (ExecResult, error) {
+// RealRun executes sql against the real target instance within the given timeout
+// (0 falls back to 30s). A read returns the actual result set (columns + up to
+// maxResultRows rows, marking Truncated if there are more); a write returns
+// rows-affected.
+func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecResult, error) {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return ExecResult{}, err
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	if IsRead(query) {
 		rows, err := db.QueryContext(ctx, query)

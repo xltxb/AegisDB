@@ -251,7 +251,7 @@ func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, nam
 		// simulated demo data (no real target): synthesize a result set
 		cols := exportColumns(sql)
 		pw.header = cols
-		n := s.Executor.Run(conn, sql).Rows
+		n := s.Executor.Run(conn, sql, s.execTimeout()).Rows
 		if n <= 0 {
 			n = 200
 		}

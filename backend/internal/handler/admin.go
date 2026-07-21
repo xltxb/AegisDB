@@ -11,6 +11,7 @@ import (
 	"velagateway/internal/model"
 	"velagateway/internal/service"
 	"velagateway/pkg/resp"
+	"velagateway/pkg/sqlutil"
 )
 
 // ---------------------------------------------------------------- Connections
@@ -248,6 +249,9 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	out := []apView{}
 	for _, a := range aps {
 		steps, _ := h.Repo.StepsOf(a.ID)
+		// Mask credentials for display; the real command stays in the DB for
+		// execution after approval (a is a copy, so this doesn't touch storage).
+		a.Command = sqlutil.RedactSecrets(a.Command)
 		out = append(out, apView{Approval: a, Steps: steps})
 	}
 	resp.OK(c, out)
