@@ -275,7 +275,7 @@ type RiskCommandView struct {
 
 type WebhookConfigReq struct {
 	Endpoint string `json:"endpoint"`
-	Secret   string `json:"secret"`
+	Secret   string `json:"secret"` // bearer token sent as `Authorization: Bearer <secret>`; empty keeps the stored one
 	Events   string `json:"events"`
 	RetryMax int    `json:"retryMax"`
 	Enabled  bool   `json:"enabled"`

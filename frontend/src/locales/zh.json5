@@ -78,7 +78,7 @@
   // audit
   auditSub: '每条命令均不可篡改记录 · 含拦截、审批与执行结果', exportCsv: '导出 CSV',
   whTitle: 'Webhook 推送', whSub: '将审计事件实时推送至远端 SIEM / 数据湖 / 告警通道',
-  whEnabled: '已启用', whEndpoint: '推送地址 Endpoint', whSecret: '签名密钥 HMAC-SHA256', whSecretPh: '输入签名密钥(whsec_…)', whEvents: '推送事件',
+  whEnabled: '已启用', whEndpoint: '推送地址 Endpoint', whSecret: 'Bearer Token', whSecretPh: '输入 Token(随请求头 Authorization: Bearer 发送)', whEvents: '推送事件',
   evIntercept: '命令拦截', evApprove: '审批流转', evExec: '高危执行', evLogin: '登录会话',
   whRetry: '重试 & 投递', whRetryDesc1: '最多重试 5 次', whRetryDesc2: '退避 2ⁿ s', whRetryDesc3: '成功率 99.7%',
   whViewLog: '查看投递日志', whSendTest: '发送测试事件',

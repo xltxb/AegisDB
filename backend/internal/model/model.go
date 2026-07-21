@@ -251,7 +251,8 @@ func (AuditLog) TableName() string { return "tbl_audit_log" }
 type WebhookConfig struct {
 	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Endpoint string `gorm:"size:255;not null" json:"endpoint"`
-	Secret   string `gorm:"size:128;not null" json:"secret"`
+	Secret   string `gorm:"size:128;not null" json:"secret"` // bearer token: sent as `Authorization: Bearer <secret>`
+
 	Events   string `gorm:"size:255;not null" json:"events"` // intercept,approve,exec,login
 	RetryMax int    `gorm:"not null;default:5" json:"retryMax"`
 	Enabled  bool   `gorm:"not null;default:true" json:"enabled"`

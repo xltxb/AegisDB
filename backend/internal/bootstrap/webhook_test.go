@@ -1,9 +1,6 @@
 package bootstrap
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -23,20 +20,18 @@ func (a *testApp) configureWebhook(token, endpoint, secret, events string, retry
 	eq(a.t, r.Code, 0, "save webhook response code")
 }
 
-// US#46: every delivery carries X-Vela-Signature = HMAC-SHA256(secret, body).
-// We point the webhook at a capturing stub, fire the synchronous test event, and
-// verify the header is a valid HMAC of the exact bytes the receiver saw.
-func TestWebhook_TestSendCarriesValidHMACSignature(t *testing.T) {
+// US#46: every delivery authenticates with Authorization: Bearer <token>, where
+// the token is the configured webhook secret. We point the webhook at a capturing
+// stub, fire the synchronous test event, and verify the header the receiver saw.
+func TestWebhook_TestSendCarriesBearerToken(t *testing.T) {
 	var mu sync.Mutex
-	var gotSig string
-	var gotBody []byte
+	var gotAuth string
 	received := make(chan struct{}, 1)
 
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
+		_, _ = io.ReadAll(r.Body)
 		mu.Lock()
-		gotSig = r.Header.Get("X-Vela-Signature")
-		gotBody = body
+		gotAuth = r.Header.Get("Authorization")
 		mu.Unlock()
 		select {
 		case received <- struct{}{}:
@@ -62,13 +57,7 @@ func TestWebhook_TestSendCarriesValidHMACSignature(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if gotSig == "" {
-		t.Fatal("delivery missing X-Vela-Signature header")
-	}
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write(gotBody)
-	want := hex.EncodeToString(mac.Sum(nil))
-	eq(t, gotSig, want, "X-Vela-Signature should be HMAC-SHA256(secret, body)")
+	eq(t, gotAuth, "Bearer "+secret, "delivery should carry Authorization: Bearer <token>")
 }
 
 // US#47: a delivery that keeps failing is retried, but no more than retry_max

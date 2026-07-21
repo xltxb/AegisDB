@@ -69,7 +69,7 @@
   m_terminal: 'Web CLI', m_approve: 'Approval inbox', m_db: 'Connections', m_rules: 'Risk policies', m_perms: 'Users & roles', m_audit: 'Audit log', m_settings: 'Settings',
   auditSub: 'Tamper-proof record of every command · intercepts, approvals & results', exportCsv: 'Export CSV',
   whTitle: 'Webhook push', whSub: 'Stream audit events to a remote SIEM / data lake / alert channel',
-  whEnabled: 'Enabled', whEndpoint: 'Endpoint', whSecret: 'Signing secret · HMAC-SHA256', whSecretPh: 'Enter signing secret (whsec_…)', whEvents: 'Events',
+  whEnabled: 'Enabled', whEndpoint: 'Endpoint', whSecret: 'Bearer token', whSecretPh: 'Token sent as Authorization: Bearer …', whEvents: 'Events',
   evIntercept: 'Intercepts', evApprove: 'Approvals', evExec: 'High-risk exec', evLogin: 'Login',
   whRetry: 'Retry & delivery', whRetryDesc1: 'Up to 5 retries', whRetryDesc2: 'Backoff 2ⁿ s', whRetryDesc3: '99.7% success',
   whViewLog: 'Delivery log', whSendTest: 'Send test event',

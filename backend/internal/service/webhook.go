@@ -19,7 +19,6 @@ import (
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
 )
 
 // AllowPrivateWebhookTargets permits loopback/private webhook destinations.
@@ -125,8 +124,9 @@ func newOutboundClient() *http.Client {
 	}
 }
 
-// Dispatcher pushes audit events to the configured webhook with HMAC signing
-// and exponential backoff retries (backend doc §8).
+// Dispatcher pushes audit events to the configured webhook, authenticating with
+// an Authorization: Bearer <token> header (token = the configured webhook secret)
+// and retrying with exponential backoff (backend doc §8).
 type Dispatcher struct {
 	repo   *repository.Repo
 	client *http.Client
@@ -163,7 +163,6 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 	}
 
 	go func() {
-		sig := crypto.HMACSHA256(secret, body)
 		attempts, status := 0, ""
 		// Bound the goroutine's lifetime regardless of the configured retryMax so a
 		// persistently-failing target can't spawn long-lived accumulating goroutines (L9).
@@ -176,7 +175,9 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 				return
 			}
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-Vela-Signature", sig)
+			if secret != "" {
+				req.Header.Set("Authorization", "Bearer "+secret)
+			}
 			req.Header.Set("X-Vela-Event", eventType)
 			resp, err := d.client.Do(req)
 			if err == nil && resp.StatusCode < 300 {
@@ -218,13 +219,14 @@ func (d *Dispatcher) Test() (bool, string) {
 	}
 	evt := Event{Event: "test", Timestamp: time.Now().Format(time.RFC3339), Data: map[string]string{"ping": "vela-gateway"}}
 	body, _ := json.Marshal(evt)
-	sig := crypto.HMACSHA256(cfg.Secret, body)
 	req, err := http.NewRequest(http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
 	if err != nil {
 		return false, err.Error()
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Vela-Signature", sig)
+	if cfg.Secret != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Secret)
+	}
 	start := time.Now()
 	resp, err := d.client.Do(req)
 	if err != nil {
