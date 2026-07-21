@@ -689,16 +689,27 @@ func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) 
 		}
 		return nil // opt-in default
 	}
-	ok, counter := totp.ValidateWithCounter(u.MFASecret, code, time.Now())
-	if !ok {
-		return ErrMFARequired
-	}
-	// Anti-replay: a given code (time-step) may be consumed only once. A captured
-	// / logged code replayed within its ~90s window is rejected (M3).
-	if !s.Repo.ConsumeMFACounter(u.ID, int64(counter)) {
+	if !s.validateTOTP(u, code) {
 		return ErrMFARequired
 	}
 	return nil
+}
+
+// loginTOTPValid checks a TOTP code WITHOUT consuming its counter. Login only
+// verifies the second factor; the PROD step-up (validateTOTP) is what enforces
+// one-time use. Not consuming here avoids a same-window double-consume where a
+// user who just logged in couldn't immediately use the same code for a step-up.
+func loginTOTPValid(secret, code string) bool {
+	return totp.Validate(secret, code, time.Now())
+}
+
+// validateTOTP verifies a TOTP code for an enrolled user and consumes its counter.
+// Anti-replay: a given code (time-step) may be consumed only once, so a captured /
+// logged code replayed within its ~90s window is rejected (M3). Shared by the PROD
+// step-up (checkMFA) and login-time MFA.
+func (s *Services) validateTOTP(u *model.User, code string) bool {
+	ok, counter := totp.ValidateWithCounter(u.MFASecret, code, time.Now())
+	return ok && s.Repo.ConsumeMFACounter(u.ID, int64(counter))
 }
 
 // SessionTTL maps the security.sessionTTL setting ("4h"/"8h"/"24h") to a duration.

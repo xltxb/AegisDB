@@ -157,8 +157,9 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 // compare does the full work rather than returning early on a malformed hash.
 var dummyPasswordHash, _ = crypto.HashPassword("vela-login-timing-equalizer")
 
-// Login verifies credentials and issues a JWT.
-func (s *Services) Login(email, password string) (string, time.Time, *model.User, error) {
+// Login verifies credentials (and, for an MFA-enrolled user, a TOTP code) and
+// issues a JWT.
+func (s *Services) Login(email, password, mfaCode string) (string, time.Time, *model.User, error) {
 	u, err := s.Repo.GetUserByEmail(email)
 	if err != nil {
 		crypto.CheckPassword(dummyPasswordHash, password) // equalize timing vs. a real bcrypt compare
@@ -176,6 +177,17 @@ func (s *Services) Login(email, password string) (string, time.Time, *model.User
 	if !crypto.CheckPassword(u.PasswordHash, password) {
 		s.auditLoginFail(email)
 		return "", time.Time{}, nil, ErrInvalidCredentials
+	}
+	// Two-step login: an MFA-enrolled user must present a valid TOTP code. Users
+	// who never enrolled (no secret) log in with the password alone (opt-in MFA).
+	if u.MFAEnabled && u.MFASecret != "" {
+		if mfaCode == "" {
+			return "", time.Time{}, nil, ErrMFARequired // password OK, prompt for the code
+		}
+		if !loginTOTPValid(u.MFASecret, mfaCode) {
+			s.auditLoginFail(email)
+			return "", time.Time{}, nil, ErrMFAInvalid
+		}
 	}
 	role, _ := s.Repo.GetRole(u.RoleID)
 	roleCode := ""
@@ -205,6 +217,7 @@ var (
 	ErrNotFound           = fmt.Errorf("not found")
 	ErrForbidden          = fmt.Errorf("forbidden")
 	ErrMFARequired        = fmt.Errorf("mfa required")
+	ErrMFAInvalid         = fmt.Errorf("mfa code invalid")
 	ErrBadRequest         = fmt.Errorf("bad request")
 	ErrScriptPathUnset    = fmt.Errorf("script save path not configured")
 	ErrExportPathUnset    = fmt.Errorf("export save path not configured")

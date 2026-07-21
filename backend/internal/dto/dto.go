@@ -6,6 +6,7 @@ package dto
 type LoginReq struct {
 	Email    string `json:"email" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	MfaCode  string `json:"mfaCode"` // TOTP code for an MFA-enrolled user (second step)
 }
 
 type LoginResp struct {

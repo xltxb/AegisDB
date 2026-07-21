@@ -7,8 +7,8 @@ import type {
 
 export const api = {
   // ---- auth ----
-  login: (email: string, password: string) =>
-    http.post<any, Envelope<LoginResp>>('/auth/login', { email, password }).then(ok),
+  login: (email: string, password: string, mfaCode = '') =>
+    http.post<any, Envelope<LoginResp>>('/auth/login', { email, password, mfaCode }).then(ok),
   me: () => http.get<any, Envelope<Me>>('/auth/me').then(ok),
   // Carry the token explicitly: the caller clears it from localStorage right
   // after, so the request interceptor can't attach it in time (R6).

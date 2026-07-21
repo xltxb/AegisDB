@@ -19,6 +19,7 @@
   subDb: '{n} instances · 3 tiers', subPerms: '{r} roles · {u} users', subRules: '{n} risk commands · live matching',
   loginTitle: 'Database Gateway', loginSub: 'Sign in to the console', loginEmail: 'Work email', loginPassword: 'Password',
   loginBtn: 'Sign in', loginHint: "Demo: linwei{'@'}vela.io · password vela123", loginError: 'Wrong email or password',
+  loginMfaLabel: 'MFA code', loginMfaPh: 'Enter the 6-digit code', loginMfaError: 'Invalid MFA code',
   treeTitle: 'Database tiers', search: 'Search instance / db / table',
   schemaLoading: 'Loading schema…', schemaEmpty: '— No databases —',
   prodEnv: 'Production · PROD', stagingEnv: 'Staging · STAGING', devEnv: 'Dev · DEV',

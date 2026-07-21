@@ -17,7 +17,7 @@ func TestLogin_ConstantTimeForUnknownUser(t *testing.T) {
 		best := time.Hour
 		for i := 0; i < 5; i++ {
 			start := time.Now()
-			_, _, _, _ = app.svc.Login(email, pw)
+			_, _, _, _ = app.svc.Login(email, pw, "")
 			if d := time.Since(start); d < best {
 				best = d
 			}

@@ -387,11 +387,11 @@ onUnmounted(() => {
   flex-shrink: 0;
   padding: 0 22px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(20, 24, 38, 0.55);
+  background: var(--topbar-bg);
   backdrop-filter: blur(8px);
 }
 .tb-title { font: 700 16px var(--font-display); color: var(--text-strong); letter-spacing: -0.01em; }
-.tb-sub { font: 500 12px var(--font-mono); color: var(--text-faint); }
+.tb-sub { font: 500 12px var(--font-mono); color: var(--text-muted); }
 .tb-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .pill {
   display: inline-flex;

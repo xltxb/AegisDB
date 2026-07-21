@@ -2,9 +2,10 @@
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Sailboat, Mail, Lock, Languages } from 'lucide-vue-next'
+import { Sailboat, Mail, Lock, Languages, ShieldCheck } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
+import { CODE_MFA_REQUIRED } from '@/api/http'
 import VButton from '@/components/common/VButton.vue'
 
 const router = useRouter()
@@ -13,11 +14,16 @@ const auth = useAuthStore()
 const ui = useUIStore()
 const { t } = useI18n()
 
-// Prefill the demo credentials only in a dev build — never ship them in a
-// production bundle (L5).
-const email = ref(import.meta.env.DEV ? 'linwei@vela.io' : '')
-const password = ref(import.meta.env.DEV ? 'vela123' : '')
+// Prefill AND advertise the demo credentials only in a dev build — never ship
+// them in a production bundle (L5).
+const isDev = import.meta.env.DEV
+const email = ref(isDev ? 'linwei@vela.io' : '')
+const password = ref(isDev ? 'vela123' : '')
 const loading = ref(false)
+// Two-step login: once the password is accepted for an MFA-enrolled user, the
+// backend answers CODE_MFA_REQUIRED and we reveal the TOTP field.
+const mfaRequired = ref(false)
+const mfaCode = ref('')
 // Surface the idle-lock notice when redirected here by the auto-lock.
 const error = ref(route.query.locked ? t('mfaLocked') : '')
 
@@ -25,7 +31,7 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    await auth.login(email.value.trim(), password.value)
+    await auth.login(email.value.trim(), password.value, mfaCode.value.trim())
     const dest = auth.firstVisibleRoute
     if (!dest) {
       // Logged in but the role has no visible menu — don't push('') (which would
@@ -34,7 +40,14 @@ async function submit() {
       return
     }
     router.push(dest)
-  } catch {
+  } catch (e: any) {
+    if (e?.code === CODE_MFA_REQUIRED) {
+      // A submitted-but-wrong code carries a message; the first prompt does not.
+      mfaRequired.value = true
+      error.value = mfaCode.value ? (e.message || t('loginMfaError')) : ''
+      mfaCode.value = ''
+      return
+    }
     error.value = t('loginError')
   } finally {
     loading.value = false
@@ -62,12 +75,17 @@ async function submit() {
       <label class="lbl">{{ $t('loginPassword') }}</label>
       <div class="field"><Lock :size="15" color="var(--text-faint)" /><input v-model="password" type="password" autocomplete="current-password" @keyup.enter="submit" /></div>
 
+      <template v-if="mfaRequired">
+        <label class="lbl">{{ $t('loginMfaLabel') }}</label>
+        <div class="field"><ShieldCheck :size="15" color="var(--text-faint)" /><input v-model="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :placeholder="$t('loginMfaPh')" @keyup.enter="submit" /></div>
+      </template>
+
       <div v-if="error" class="err">{{ error }}</div>
 
       <VButton variant="primary" :full-width="true" :disabled="loading" @click="submit">
         {{ loading ? '…' : $t('loginBtn') }}
       </VButton>
-      <div class="hint">{{ $t('loginHint') }}</div>
+      <div v-if="isDev" class="hint">{{ $t('loginHint') }}</div>
     </div>
   </div>
 </template>

@@ -32,7 +32,17 @@ func (h *Handler) Login(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	token, exp, u, err := h.Svc.Login(req.Email, req.Password)
+	token, exp, u, err := h.Svc.Login(req.Email, req.Password, req.MfaCode)
+	if err == service.ErrMFARequired {
+		// Password verified; prompt for the second factor without counting a fail.
+		resp.Fail(c, resp.CodeMFARequired, "请输入 MFA 验证码")
+		return
+	}
+	if err == service.ErrMFAInvalid {
+		h.loginLim.fail(ip, time.Now())
+		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
+		return
+	}
 	if err != nil {
 		h.loginLim.fail(ip, time.Now())
 		resp.Fail(c, resp.CodeUnauthorized, "邮箱或密码错误")

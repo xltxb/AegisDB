@@ -113,11 +113,14 @@ func (a *testApp) do(method, path, token string, body any) apiResp {
 }
 
 // login authenticates and returns the bearer token, failing the test on error.
-func (a *testApp) login(email, password string) string {
+// An MFA-enrolled account must pass its current TOTP code as the optional arg.
+func (a *testApp) login(email, password string, mfaCode ...string) string {
 	a.t.Helper()
-	r := a.do(http.MethodPost, "/api/v1/auth/login", "", map[string]string{
-		"email": email, "password": password,
-	})
+	body := map[string]string{"email": email, "password": password}
+	if len(mfaCode) > 0 {
+		body["mfaCode"] = mfaCode[0]
+	}
+	r := a.do(http.MethodPost, "/api/v1/auth/login", "", body)
 	if r.Code != 0 {
 		a.t.Fatalf("login %s: code=%d msg=%s", email, r.Code, r.Msg)
 	}

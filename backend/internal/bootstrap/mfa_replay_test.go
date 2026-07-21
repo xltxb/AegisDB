@@ -28,9 +28,11 @@ func TestMFA_StepUpCodeCannotAlsoDisableMFA(t *testing.T) {
 		t.Fatal("expected a bound secret")
 	}
 
-	token := app.login("chenhao@vela.io", "vela123")
-	prod := app.connIDByEnv(token, "prod")
+	// chenhao is now MFA-enrolled, so login itself needs the code (login validates
+	// but does NOT consume it, so the same code still works for the step-up below).
 	code := totp.Code(b.Secret, time.Now())
+	token := app.login("chenhao@vela.io", "vela123", code)
+	prod := app.connIDByEnv(token, "prod")
 
 	// use the code for a PROD step-up (passes MFA → intercepted), consuming it
 	up := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{

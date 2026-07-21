@@ -79,6 +79,7 @@
   --surface-raised:  var(--slate-0);
   --surface-inverse: var(--slate-900);
   --surface-overlay: rgba(12, 14, 23, 0.45);
+  --topbar-bg:       rgba(255, 255, 255, 0.72); /* light glass — dark topbar text stays legible */
 
   --border-subtle:   var(--slate-200);
   --border-default:  var(--slate-300);
@@ -125,6 +126,7 @@
   --surface-raised:  #1b2030;
   --surface-inverse: var(--slate-50);
   --surface-overlay: rgba(4, 6, 12, 0.66);
+  --topbar-bg:       rgba(20, 24, 38, 0.55); /* dark glass */
 
   --border-subtle:   rgba(255, 255, 255, 0.07);
   --border-default:  rgba(255, 255, 255, 0.13);
