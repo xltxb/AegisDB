@@ -38,7 +38,11 @@ async function loadDbs(id: number) {
     const sc = await api.connectionSchema(id)
     dbOptions.value = sc.databases.map((d) => d.name)
     const c = conns.value.find((x) => x.id === id)
+    // Pre-select a real database so an export isn't submitted with no schema (which
+    // fails on the target with "No database selected"): the connection's own
+    // database if it has one, else the first introspected database.
     if (c?.database && dbOptions.value.includes(c.database)) db.value = c.database
+    else if (dbOptions.value.length) db.value = dbOptions.value[0]
   } catch { /* leave on default */ }
 }
 function onConnChange() { loadDbs(connId.value) }

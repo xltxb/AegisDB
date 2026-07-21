@@ -209,4 +209,5 @@ var (
 	ErrScriptPathUnset    = fmt.Errorf("script save path not configured")
 	ErrExportPathUnset    = fmt.Errorf("export save path not configured")
 	ErrAlreadyDecided     = fmt.Errorf("approval already decided") // lost the decide race / not pending
+	ErrNoDatabase         = fmt.Errorf("no target database selected")
 )

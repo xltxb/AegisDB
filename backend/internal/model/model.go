@@ -148,7 +148,7 @@ type ExportJob struct {
 	Bytes        int64      `json:"bytes"`                              // total encrypted size across parts
 	Parts        int        `json:"parts"`                             // number of ~100MB CSV files
 	Files        string     `gorm:"type:text" json:"files"`            // newline-joined part paths
-	Password     string     `gorm:"size:64" json:"password"`
+	Password     string     `gorm:"size:128" json:"password"`          // holds the AES-encrypted archive password (~68 chars)
 	Error        string     `gorm:"size:255" json:"error"`
 	CreatedAt    time.Time  `json:"createdAt"`
 	FinishedAt   *time.Time `json:"finishedAt"`

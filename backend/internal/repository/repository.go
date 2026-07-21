@@ -767,6 +767,17 @@ func (r *Repo) UpdateExportJob(id int64, fields map[string]any) error {
 	return r.db.Model(&model.ExportJob{}).Where("id = ?", id).Updates(fields).Error
 }
 
+// ClaimExportJob atomically transitions a job from pending → running, returning
+// whether this caller won the claim. A job that is not pending (already failed,
+// done, or claimed by another worker) is left untouched and reports false, so a
+// failed/reconciled job is never re-scheduled and two workers never run the same job.
+func (r *Repo) ClaimExportJob(id int64) (bool, error) {
+	res := r.db.Model(&model.ExportJob{}).
+		Where("id = ? AND status = ?", id, model.ExportPending).
+		Updates(map[string]any{"status": model.ExportRunning})
+	return res.RowsAffected == 1, res.Error
+}
+
 // FailStuckExportJobs marks jobs left pending/running by a previous process (the
 // in-memory queue doesn't survive a restart) as failed, so they don't hang in the
 // UI forever. Returns the number reconciled (R24).

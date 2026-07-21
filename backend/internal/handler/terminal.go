@@ -317,6 +317,10 @@ func (h *Handler) ExportData(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
+	if err == service.ErrNoDatabase {
+		resp.Fail(c, resp.CodeBadRequest, "请选择目标数据库(该连接未配置默认库)")
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "提交失败:"+err.Error())
 		return

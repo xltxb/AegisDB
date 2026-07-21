@@ -30,3 +30,19 @@ func TestGzipEncryptRoundTrip(t *testing.T) {
 		t.Error("decrypt with wrong password should fail")
 	}
 }
+
+// The at-rest-encrypted export password must fit tbl_export_job.password. A 20-char
+// password encrypts to ~71 chars, which overflowed the original VARCHAR(64) and
+// left MySQL exports stuck "running" (the failed UPDATE was swallowed). Guard the
+// column-width assumption so it can't silently regress again.
+func TestEncryptSecret_FitsExportPasswordColumn(t *testing.T) {
+	const exportPasswordColumn = 128
+	SetSecretKey("test-secret-key-for-export-password")
+	enc, err := EncryptSecret(GenPassword(20))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if len(enc) > exportPasswordColumn {
+		t.Errorf("encrypted export password is %d chars, exceeds the %d-char column", len(enc), exportPasswordColumn)
+	}
+}

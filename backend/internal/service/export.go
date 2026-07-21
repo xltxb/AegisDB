@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -89,9 +90,17 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// Fail fast with a clear message when neither a target database was chosen nor
+	// the connection carries a default one — otherwise an unqualified query fails
+	// async with a cryptic driver error ("No database selected"). Real execution
+	// only; a simulated (credential-less) connection doesn't touch a real schema.
+	db := strings.TrimSpace(database)
+	if db == "" && strings.TrimSpace(conn.Database) == "" && gateway.RealExecSupported(conn) {
+		return nil, ErrNoDatabase
+	}
 	job := &model.ExportJob{
 		UserID: u.ID, ConnectionID: connID, Instance: conn.Env + "-" + conn.Name,
-		Database: strings.TrimSpace(database),
+		Database: db,
 		SQL:      sql, Name: strings.TrimSpace(name), Status: model.ExportPending,
 	}
 	if err := s.Repo.CreateExportJob(job); err != nil {
@@ -135,11 +144,16 @@ func (s *Services) ListExportJobs(u *model.User, limit int) []model.ExportJob {
 
 // runExportJob performs one export (invoked by a worker goroutine).
 func (s *Services) runExportJob(id int64) {
+	// Only run a still-pending job. A job that was already failed/done/cancelled —
+	// e.g. reconciled after a restart, or double-enqueued — must NOT be scheduled
+	// again; the atomic claim also stops two workers running the same job.
+	if claimed, err := s.Repo.ClaimExportJob(id); err != nil || !claimed {
+		return
+	}
 	job, err := s.Repo.GetExportJob(id)
 	if err != nil {
 		return
 	}
-	_ = s.Repo.UpdateExportJob(id, map[string]any{"status": model.ExportRunning})
 	conn, err := s.Repo.GetConnection(job.ConnectionID)
 	if err != nil {
 		s.failExport(id, "连接不存在")
@@ -170,16 +184,29 @@ func (s *Services) runExportJob(id int64) {
 		s.failExport(id, "加密导出口令失败: "+encErr.Error())
 		return
 	}
-	_ = s.Repo.UpdateExportJob(id, map[string]any{
+	// Don't swallow the completion write: if it fails (e.g. a too-narrow column on
+	// MySQL), the job would otherwise be stuck "running" forever. Surface it as a
+	// failed job with the reason instead.
+	if uerr := s.Repo.UpdateExportJob(id, map[string]any{
 		"status": model.ExportDone, "files": strings.Join(files, "\n"), "parts": len(files),
 		"password": encPw, "rows": rows, "bytes": size, "finished_at": now,
-	})
+	}); uerr != nil {
+		slog.Error("export job completed but marking it done failed", "id", id, "err", uerr)
+		s.failExport(id, "导出已生成但写回状态失败: "+uerr.Error())
+		return
+	}
 	s.recordAudit(u, conn, "EXPORT "+clip(job.SQL, 80), model.RiskMid, model.ResultExecuted, "", "exec")
 }
 
 func (s *Services) failExport(id int64, msg string) {
 	now := time.Now()
-	_ = s.Repo.UpdateExportJob(id, map[string]any{"status": model.ExportFailed, "error": msg, "finished_at": now})
+	// The error column is VARCHAR(255); clip so marking the job failed can't itself
+	// fail (which would leave it stuck "running").
+	if uerr := s.Repo.UpdateExportJob(id, map[string]any{
+		"status": model.ExportFailed, "error": clip(msg, 250), "finished_at": now,
+	}); uerr != nil {
+		slog.Error("failed to mark export job failed", "id", id, "err", uerr)
+	}
 }
 
 // produceExport streams the result set into rolling ~100MB CSV parts, each
