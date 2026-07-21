@@ -31,8 +31,19 @@ func TestSeed_BackfillsSchemaOnExistingDB(t *testing.T) {
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+
+	// The product seed ships no demo connections, so there's no schema tree yet.
+	// Add a connection (as an admin would) whose name the schema seeder knows, then
+	// re-seed: the schema tree must be backfilled for it.
+	conn := model.Connection{Name: "order-cluster", Layer: "L1", Engine: "MySQL 8.0", Host: "10.20.3.11", Port: 3306, Env: "prod", Policy: "strict", DefaultRole: "dba_l2", Status: "online"}
+	if err := repo.DB().Create(&conn).Error; err != nil {
+		t.Fatalf("create connection: %v", err)
+	}
+	if err := Seed(repo, cfg); err != nil {
+		t.Fatalf("re-seed for schema: %v", err)
+	}
 	if repo.Count(&model.SchemaObject{}) == 0 {
-		t.Fatal("fresh seed should create schema objects")
+		t.Fatal("schema should be backfilled for an existing connection")
 	}
 
 	// Simulate a DB created BEFORE schema seeding existed: drop schema rows while

@@ -76,7 +76,7 @@ const badge = () => (props.risk === 'high'
           <div class="gl">{{ $t('mReason') }} <span class="req">*</span></div>
           <textarea v-model="reason" :placeholder="$t('mReasonPh')" />
         </div>
-        <div class="lark"><Radio :size="14" color="#2dcde6" />{{ $t('mLarkNote1') }} <span class="azure">Lark · #dba-oncall</span> {{ $t('mLarkNote2') }}</div>
+        <div class="lark"><Radio :size="14" color="#2dcde6" />{{ $t('mLarkNote1') }} <span class="azure">Lark</span> {{ $t('mLarkNote2') }}</div>
       </div>
       <div class="footer">
         <div class="aud">{{ $t('auditId') }} · {{ auditId }}</div>

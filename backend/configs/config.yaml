@@ -34,9 +34,9 @@ gateway:
   exec_timeout_seconds: 30
 
 webhook:
-  # Default audit webhook (can be edited at runtime via /settings/webhook)
-  endpoint: "https://siem.internal/api/v1/db-gateway/audit"
-  secret: "whsec_dev_change_me_3a9f"
+  # Configure at runtime via /settings/webhook (endpoint + bearer token).
+  endpoint: ""
+  secret: ""
   events: "intercept,approve,exec,login"
   retry_max: 5
-  enabled: true
+  enabled: false

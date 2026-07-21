@@ -73,7 +73,7 @@ async function testLark() {
 }
 const saved = ref(false)
 const approvers = ref<Member[]>([])
-const ipAllow = ref('10.20.0.0/16')
+const ipAllow = ref('')
 const execTimeout = ref('30s')
 const scriptPath = ref('')
 const exportPath = ref('')
@@ -110,7 +110,7 @@ onMounted(async () => {
     apprTimeout.value = onTimeout === 'auto-reject' ? t('autoReject') : onTimeout === 'keep-waiting' ? t('keepWaiting') : t('autoEscalate')
     const ttlKey = parse<string>(g['security.sessionTTL'], '8h')
     ttl.value = ttlKey === '4h' ? t('ttl4') : ttlKey === '24h' ? t('ttl24') : t('ttl8')
-    ipAllow.value = parse<string>(g['security.ipAllowlist'], '10.20.0.0/16')
+    ipAllow.value = parse<string>(g['security.ipAllowlist'], '')
     ipAllowEnabled.value = parse<boolean>(g['security.ipAllowEnabled'], false)
     scriptPath.value = parse<string>(g['script.savePath'], '')
     exportPath.value = parse<string>(g['export.savePath'], '')

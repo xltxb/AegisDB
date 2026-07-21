@@ -136,11 +136,58 @@ func NewDispatcher(repo *repository.Repo) *Dispatcher {
 	return &Dispatcher{repo: repo, client: newOutboundClient()}
 }
 
-// Event is the webhook payload envelope.
-type Event struct {
-	Event     string `json:"event"` // intercept|approve|exec|login
-	Timestamp string `json:"timestamp"`
-	Data      any    `json:"data"`
+// platformTimeLayout is the timestamp format the Event Center ingest API expects
+// (e.g. "2026-05-06 14:42:00"). See docs/事件中心平台接入文档.md.
+const platformTimeLayout = "2006-01-02 15:04:05"
+
+// eventAction maps a SQL/audit command to the Event Center `action` enum
+// (create|read|update|delete) by its leading verb. Anything non-mutating or
+// unrecognized (login, EXPORT, \i script, SELECT, …) falls back to "read".
+func eventAction(command string) string {
+	fields := strings.Fields(strings.TrimSpace(command))
+	if len(fields) == 0 {
+		return "read"
+	}
+	switch strings.ToUpper(fields[0]) {
+	case "INSERT", "CREATE":
+		return "create"
+	case "UPDATE", "ALTER", "REPLACE", "GRANT", "REVOKE":
+		return "update"
+	case "DELETE", "DROP", "TRUNCATE":
+		return "delete"
+	default:
+		return "read"
+	}
+}
+
+// buildPlatformEvent maps an internal audit event onto the Event Center ingest
+// schema (docs/事件中心平台接入文档.md): source_system / occurred_at / action /
+// resource / operator / summary / raw_payload. The original audit row travels
+// verbatim in raw_payload so no detail is lost.
+func buildPlatformEvent(eventType string, data any) map[string]any {
+	ev := map[string]any{
+		"source_system": "DP DB GATEWAY",
+		"occurred_at":   time.Now().Format(platformTimeLayout),
+		"action":        "read",
+		"resource":      eventType,
+		"operator":      "system",
+		"summary":       eventType,
+		"raw_payload":   data,
+	}
+	if a, ok := data.(*model.AuditLog); ok && a != nil {
+		if !a.OccurredAt.IsZero() {
+			ev["occurred_at"] = a.OccurredAt.Format(platformTimeLayout)
+		}
+		ev["action"] = eventAction(a.Command)
+		if a.Instance != "" {
+			ev["resource"] = a.Instance
+		}
+		if a.ActorName != "" {
+			ev["operator"] = a.ActorName
+		}
+		ev["summary"] = fmt.Sprintf("[%s] %s风险 · %s · %s", eventType, a.Risk, a.Result, clip(a.Command, 120))
+	}
+	return ev
 }
 
 // Dispatch sends an event if the webhook is enabled and subscribes to it.
@@ -153,8 +200,7 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 	if !strings.Contains(","+cfg.Events+",", ","+eventType+",") {
 		return
 	}
-	evt := Event{Event: eventType, Timestamp: time.Now().Format(time.RFC3339), Data: data}
-	body, _ := json.Marshal(evt)
+	body, _ := json.Marshal(buildPlatformEvent(eventType, data))
 	endpoint, secret, retryMax := cfg.Endpoint, cfg.Secret, cfg.RetryMax
 
 	if err := validateOutboundURL(endpoint); err != nil {
@@ -217,8 +263,15 @@ func (d *Dispatcher) Test() (bool, string) {
 	if err := validateOutboundURL(cfg.Endpoint); err != nil {
 		return false, err.Error()
 	}
-	evt := Event{Event: "test", Timestamp: time.Now().Format(time.RFC3339), Data: map[string]string{"ping": "vela-gateway"}}
-	body, _ := json.Marshal(evt)
+	body, _ := json.Marshal(map[string]any{
+		"source_system": "DP DB GATEWAY",
+		"occurred_at":   time.Now().Format(platformTimeLayout),
+		"action":        "read",
+		"resource":      "webhook/test",
+		"operator":      "system",
+		"summary":       "DP DB GATEWAY Webhook 连通性测试",
+		"raw_payload":   map[string]any{"event": "test", "ping": "dp-db-gateway"},
+	})
 	req, err := http.NewRequest(http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
 	if err != nil {
 		return false, err.Error()

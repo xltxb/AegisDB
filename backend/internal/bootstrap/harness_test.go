@@ -61,6 +61,7 @@ func newTestApp(t *testing.T) *testApp {
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
+	seedTestFixtures(t, repo) // demo users/connections/approvals/audit the suite asserts on
 	crypto.SetSecretKey(cfg.JWT.Secret)
 	service.AllowPrivateWebhookTargets = true // stub webhook/Lark servers run on loopback
 	engine := gateway.NewRiskEngine(repo, cfg.Gateway.StrictMode)
