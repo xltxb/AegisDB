@@ -1,0 +1,250 @@
+openapi: 3.0.3
+info:
+  title: DP DB GATEWAY API
+  version: "1.0"
+  description: >
+    数据库管理网关 REST/WS 接口。统一前缀 /api/v1，Bearer Token 鉴权，
+    响应包 { code, msg, data }（code=0 成功，42200 命令被拦截需审批，返回 ap_no）。
+servers:
+  - url: /api/v1
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    R:
+      type: object
+      properties:
+        code: { type: integer, example: 0 }
+        msg: { type: string }
+        data: {}
+    LoginReq:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string }
+        password: { type: string }
+    RiskCheckReq:
+      type: object
+      required: [connectionId, sql]
+      properties:
+        connectionId: { type: integer, format: int64 }
+        sql: { type: string }
+    RiskCheckResp:
+      type: object
+      properties:
+        risk: { type: string, enum: [high, mid, low] }
+        action: { type: string, enum: [allow, approve, deny] }
+        requiresApproval: { type: boolean }
+        matchedRule: { type: string }
+        command: { type: string }
+    ExecReq:
+      type: object
+      required: [connectionId, sql]
+      properties:
+        connectionId: { type: integer, format: int64 }
+        sql: { type: string }
+        reason: { type: string }
+    ScriptScanReq:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        filename: { type: string }
+        connectionId: { type: integer, format: int64 }
+    ConnectionCreateReq:
+      type: object
+      required: [name, engine, host, env, policy]
+      properties:
+        name: { type: string }
+        engine: { type: string }
+        host: { type: string, description: "host:port" }
+        env: { type: string, enum: [prod, staging, dev] }
+        policy: { type: string, enum: [strict, approve-1, audit-only] }
+    RiskCommandUpsertReq:
+      type: object
+      required: [command, env]
+      properties:
+        command: { type: string }
+        env:
+          type: object
+          additionalProperties: { type: string, enum: [high, mid, off] }
+    WebhookConfigReq:
+      type: object
+      properties:
+        endpoint: { type: string }
+        secret: { type: string }
+        events: { type: string, description: "comma-separated: intercept,approve,exec,login" }
+        retryMax: { type: integer }
+        enabled: { type: boolean }
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags: [auth]
+      security: []
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginReq' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/R' } } } }
+  /auth/logout:
+    post: { tags: [auth], responses: { '200': { description: OK } } }
+  /auth/me:
+    get: { tags: [auth], summary: 当前用户 + menus + capabilities, responses: { '200': { description: OK } } }
+  /risk/check:
+    post:
+      tags: [terminal]
+      summary: 命令风险预检（三层判定）
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckReq' } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckResp' } } } }
+  /terminal/exec:
+    post:
+      tags: [terminal]
+      summary: 命令执行（WS 不可用时的 REST 回退）
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ExecReq' } } }
+      responses:
+        '200': { description: OK / 42200 命令被拦截需审批（返回 ap_no） }
+  /terminal/ws:
+    get:
+      tags: [terminal]
+      summary: 终端流式执行（WebSocket，token 经 ?token= 鉴权）
+      security: []
+      responses: { '101': { description: Switching Protocols } }
+  /scripts/scan:
+    post:
+      tags: [terminal]
+      summary: SQL 脚本扫描（multipart 文件或 JSON content）
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ScriptScanReq' } } }
+      responses: { '200': { description: OK } }
+  /scripts/execute:
+    post:
+      tags: [terminal]
+      summary: 脚本执行（检出高危则整脚本转审批）
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ScriptScanReq' } } }
+      responses: { '200': { description: OK / 42200 } }
+  /connections:
+    get: { tags: [connections], responses: { '200': { description: OK } } }
+    post:
+      tags: [connections]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ConnectionCreateReq' } } }
+      responses: { '200': { description: OK } }
+  /connections/{id}:
+    patch:
+      tags: [connections]
+      summary: 状态切换（online/maint）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /connections/{id}/test:
+    post:
+      tags: [connections]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /roles:
+    get: { tags: [roles], responses: { '200': { description: OK } } }
+  /roles/{id}:
+    get:
+      tags: [roles]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 角色详情（矩阵+菜单+成员） } }
+    patch:
+      tags: [roles]
+      summary: 更新角色（名称/描述/默认连接角色/可审批）
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /roles/{id}/menus:
+    put:
+      tags: [roles]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /roles/{id}/capabilities:
+    put:
+      tags: [roles]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /roles/{id}/members:
+    post:
+      tags: [roles]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /roles/{id}/members/{userId}:
+    delete:
+      tags: [roles]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /users:
+    get: { tags: [users], responses: { '200': { description: OK } } }
+  /users/invite:
+    post: { tags: [users], summary: 邀请用户（预分配角色）, responses: { '200': { description: OK } } }
+  /users/{id}:
+    patch:
+      tags: [users]
+      summary: 启用/停用、改角色
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /risk-commands:
+    get: { tags: [rules], responses: { '200': { description: OK } } }
+    post:
+      tags: [rules]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskCommandUpsertReq' } } }
+      responses: { '200': { description: OK } }
+  /risk-commands/{name}:
+    patch:
+      tags: [rules]
+      summary: 按环境切换命令等级
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [rules]
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /approvals:
+    get:
+      tags: [approval]
+      parameters: [{ name: scope, in: query, schema: { type: string, enum: [mine, all] } }]
+      responses: { '200': { description: OK } }
+  /approvals/{id}/approve:
+    post:
+      tags: [approval]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /approvals/{id}/reject:
+    post:
+      tags: [approval]
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: OK } }
+  /audit:
+    get:
+      tags: [audit]
+      parameters:
+        - { name: risk, in: query, schema: { type: string, enum: [all, high, mid, low] } }
+        - { name: range, in: query, schema: { type: string, enum: [24h, 7d, 30d] } }
+        - { name: limit, in: query, schema: { type: integer } }
+      responses: { '200': { description: OK } }
+  /audit/export:
+    get:
+      tags: [audit]
+      summary: 导出 CSV（含完整命令与哈希链）
+      parameters:
+        - { name: risk, in: query, schema: { type: string } }
+        - { name: range, in: query, schema: { type: string } }
+      responses: { '200': { description: text/csv } }
+  /settings:
+    get: { tags: [settings], responses: { '200': { description: OK } } }
+    put: { tags: [settings], responses: { '200': { description: OK } } }
+  /settings/webhook:
+    put:
+      tags: [settings]
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/WebhookConfigReq' } } }
+      responses: { '200': { description: OK } }
+  /settings/webhook/test:
+    post: { tags: [settings], summary: 发送测试事件, responses: { '200': { description: OK } } }

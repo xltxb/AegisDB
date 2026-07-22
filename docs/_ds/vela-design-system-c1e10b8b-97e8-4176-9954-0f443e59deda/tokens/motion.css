@@ -1,0 +1,35 @@
+/* ============================================================
+   Vela — Motion tokens
+   House feel: quick, confident, no bounce on UI. Easing favors
+   a smooth decel (out-expo-ish). Reserve spring for playful
+   accents (toasts, badges).
+   ============================================================ */
+
+:root {
+  --dur-instant: 80ms;  /* @kind other */
+  --dur-fast:    140ms; /* @kind other */
+  --dur-base:    220ms; /* @kind other */
+  --dur-slow:    340ms; /* @kind other */
+  --dur-slower:  520ms; /* @kind other */
+
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);    /* @kind other */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);   /* @kind other */
+  --ease-in:     cubic-bezier(0.5, 0, 0.75, 0);    /* @kind other */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* @kind other */
+
+  --transition-colors: color var(--dur-fast) var(--ease-out),
+                       background-color var(--dur-fast) var(--ease-out),
+                       border-color var(--dur-fast) var(--ease-out),
+                       box-shadow var(--dur-fast) var(--ease-out); /* @kind other */
+  --transition-transform: transform var(--dur-base) var(--ease-out); /* @kind other */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms; /* @kind other */
+    --dur-fast: 0ms; /* @kind other */
+    --dur-base: 0ms; /* @kind other */
+    --dur-slow: 0ms; /* @kind other */
+    --dur-slower: 0ms; /* @kind other */
+  }
+}

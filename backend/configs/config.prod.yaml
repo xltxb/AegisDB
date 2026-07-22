@@ -1,0 +1,44 @@
+# DP DB GATEWAY — PRODUCTION configuration (MySQL).
+# Initialize once, then run:
+#   VELA_MYSQL_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
+#   VELA_MYSQL_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml
+# Secrets should come from the environment (VELA_MYSQL_DSN / VELA_JWT_SECRET),
+# not this file.
+
+env: "prod"                 # → MySQL
+
+server:
+  addr: ":8080"
+  mode: "release"
+  cors_origins: []          # SPA is served same-origin from web_dir; no CORS needed
+  web_dir: "web"            # built frontend (dist) served by the backend
+
+database:
+  # Prefer the VELA_MYSQL_DSN env var; this is only a fallback default.
+  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
+  sqlite_path: "vela-gateway.db"
+  auto_migrate: false        # do NOT alter schema on every boot; `vela-gateway init` migrates explicitly
+  seed: false                # NO demo data in production — use `vela-gateway init`
+
+jwt:
+  # REQUIRED: set a strong (≥32 char) secret via VELA_JWT_SECRET. The server
+  # refuses to start in prod with an empty/placeholder value.
+  secret: ""
+  ttl_hours: 8
+
+gateway:
+  default_policy: "strict"
+  strict_mode: true
+  exec_timeout_seconds: 30
+
+webhook:
+  endpoint: ""
+  secret: ""
+  events: "exec,login"
+  retry_max: 5
+  enabled: false
+  # Relax the outbound SSRF guard to allow loopback/private/link-local webhook
+  # targets (e.g. an on-host or same-VPC receiver). Off by default in prod.
+  # Only enable for a TRUSTED internal target — it re-opens SSRF to internal
+  # services and the cloud metadata endpoint. Overridable via VELA_WEBHOOK_ALLOW_PRIVATE.
+  allow_private: false

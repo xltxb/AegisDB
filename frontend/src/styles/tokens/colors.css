@@ -1,0 +1,163 @@
+/* ============================================================
+   Vela — Color tokens
+   Base palettes (raw) + semantic aliases for Light & Dark.
+   Use SEMANTIC tokens in components; raw ramps for data-viz
+   and one-off accents only.
+   ============================================================ */
+
+:root {
+  /* ---- Brand: Azure (primary) ---- */
+  --azure-50:  #eef3ff;
+  --azure-100: #dce6ff;
+  --azure-200: #b9cdff;
+  --azure-300: #8facff;
+  --azure-400: #5e83fb;
+  --azure-500: #3b6ef6; /* brand primary */
+  --azure-600: #2553e0;
+  --azure-700: #1c41b8;
+  --azure-800: #1a3691;
+  --azure-900: #1b3173;
+  --azure-950: #131f45;
+
+  /* ---- Accent: Cyan (neon glow / data highlight) ---- */
+  --cyan-50:  #e7fcff;
+  --cyan-100: #c4f6ff;
+  --cyan-200: #93edfb;
+  --cyan-300: #5fe1f3;
+  --cyan-400: #2dcde6; /* neon accent */
+  --cyan-500: #12b2cf;
+  --cyan-600: #0c8da8;
+  --cyan-700: #106f86;
+  --cyan-800: #155a6d;
+  --cyan-900: #164a5c;
+
+  /* ---- Tertiary pop: Violet (sparingly; chips, gradients-to-cyan only) ---- */
+  --violet-300: #c4b6ff;
+  --violet-400: #9f86fc;
+  --violet-500: #7c5cfc;
+  --violet-600: #6438f0;
+
+  /* ---- Neutral: cool Slate ---- */
+  --slate-0:   #ffffff;
+  --slate-50:  #f6f8fb;
+  --slate-100: #edf1f7;
+  --slate-200: #dde3ec;
+  --slate-300: #c4ccda;
+  --slate-400: #97a1b5;
+  --slate-500: #69748b;
+  --slate-600: #4b5468;
+  --slate-700: #353c4d;
+  --slate-800: #232838;
+  --slate-900: #161a27;
+  --slate-950: #0c0e17;
+
+  /* ---- Semantic hues (ramps) ---- */
+  --success-50:  #e7f9f0;
+  --success-100: #c2f0d9;
+  --success-500: #18b368;
+  --success-600: #0f9355;
+  --success-700: #0c7344;
+
+  --warning-50:  #fff5e3;
+  --warning-100: #ffe6bb;
+  --warning-500: #f5a524;
+  --warning-600: #d8860c;
+  --warning-700: #a96606;
+
+  --danger-50:  #fdecec;
+  --danger-100: #fbd0ce;
+  --danger-500: #f0473e;
+  --danger-600: #d42a21;
+  --danger-700: #ac1f18;
+
+  /* ============================================================
+     SEMANTIC — Light (default)
+     ============================================================ */
+  --surface-page:    var(--slate-50);
+  --surface-card:    var(--slate-0);
+  --surface-sunken:  var(--slate-100);
+  --surface-raised:  var(--slate-0);
+  --surface-inverse: var(--slate-900);
+  --surface-overlay: rgba(12, 14, 23, 0.45);
+  --topbar-bg:       rgba(255, 255, 255, 0.72); /* light glass — dark topbar text stays legible */
+
+  --border-subtle:   var(--slate-200);
+  --border-default:  var(--slate-300);
+  --border-strong:   var(--slate-400);
+
+  --text-strong:     var(--slate-900);
+  --text-body:       var(--slate-800);
+  --text-muted:      var(--slate-600); /* raised from slate-500 for legibility (AA) */
+  --text-faint:      var(--slate-500); /* raised from slate-400 — slate-400 failed contrast on white */
+  --text-on-accent:  #ffffff;
+  --text-inverse:    var(--slate-50);
+
+  --accent:          var(--azure-500);
+  --accent-hover:    var(--azure-600);
+  --accent-pressed:  var(--azure-700);
+  --accent-subtle:   var(--azure-50);
+  --accent-subtle-border: var(--azure-200);
+  --accent-text:     var(--azure-600);
+
+  --glow-accent:     var(--cyan-400);
+
+  --success:         var(--success-500);
+  --success-text:    var(--success-700);
+  --success-subtle:  var(--success-50);
+  --warning:         var(--warning-500);
+  --warning-text:    var(--warning-700);
+  --warning-subtle:  var(--warning-50);
+  --danger:          var(--danger-500);
+  --danger-text:     var(--danger-700);
+  --danger-subtle:   var(--danger-50);
+
+  --focus-ring:      color-mix(in oklch, var(--azure-500) 45%, transparent);
+  --selection-bg:    var(--azure-100);
+}
+
+/* ============================================================
+   SEMANTIC — Dark (deep blue-black + neon glow)
+   Apply via <html data-theme="dark"> or [data-theme="dark"] scope.
+   ============================================================ */
+[data-theme="dark"] {
+  --surface-page:    #0a0c14;
+  --surface-card:    #141826;
+  --surface-sunken:  #0c0e17;
+  --surface-raised:  #1b2030;
+  --surface-inverse: var(--slate-50);
+  --surface-overlay: rgba(4, 6, 12, 0.66);
+  --topbar-bg:       rgba(20, 24, 38, 0.55); /* dark glass */
+
+  --border-subtle:   rgba(255, 255, 255, 0.07);
+  --border-default:  rgba(255, 255, 255, 0.13);
+  --border-strong:   rgba(255, 255, 255, 0.22);
+
+  --text-strong:     #f4f7fc;
+  --text-body:       #c4ccda;
+  --text-muted:      #8893a8;
+  --text-faint:      #5b6478;
+  --text-on-accent:  #ffffff;
+  --text-inverse:    var(--slate-900);
+
+  --accent:          var(--azure-400);
+  --accent-hover:    var(--azure-300);
+  --accent-pressed:  var(--azure-500);
+  --accent-subtle:   rgba(59, 110, 246, 0.16);
+  --accent-subtle-border: rgba(94, 131, 251, 0.36);
+  --accent-text:     var(--azure-300);
+
+  --glow-accent:     var(--cyan-400);
+
+  --success:         #2ad07e;
+  --success-text:    #7be8b3;
+  --success-subtle:  rgba(24, 179, 104, 0.16);
+  --warning:         #ffb648;
+  --warning-text:    #ffd391;
+  --warning-subtle:  rgba(245, 165, 36, 0.16);
+  --danger:          #ff6259;
+  --danger-text:     #ff9d97;
+  --danger-subtle:   rgba(240, 71, 62, 0.18);
+
+  --focus-ring:      color-mix(in oklch, var(--azure-400) 60%, transparent);
+  --selection-bg:    rgba(59, 110, 246, 0.34);
+}

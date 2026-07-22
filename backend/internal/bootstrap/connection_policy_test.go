@@ -1,0 +1,49 @@
+package bootstrap
+
+import (
+	"encoding/json"
+	"net/http"
+	"testing"
+)
+
+// An admin can change an existing instance's gateway policy via PATCH, without the
+// patch accidentally toggling the connection's status. Invalid policies are
+// rejected and non-admins are blocked.
+func TestConnection_AdminSetsGatewayPolicy(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+
+	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
+		"name": "polconn", "engine": "MySQL 8.0", "host": "10.0.0.1:3306",
+		"env": "staging", "policy": "strict",
+	})
+	eq(t, cr.Code, 0, "create connection")
+	var conn struct {
+		ID     int64  `json:"id"`
+		Policy string `json:"policy"`
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(cr.Data, &conn)
+	eq(t, conn.Policy, "strict", "initial policy")
+
+	// Change the policy → updated, and status must stay unchanged.
+	pr := app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn.ID), admin, map[string]any{"policy": "audit-only"})
+	eq(t, pr.Code, 0, "patch policy code")
+	var updated struct {
+		Policy string `json:"policy"`
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(pr.Data, &updated)
+	eq(t, updated.Policy, "audit-only", "policy updated")
+	eq(t, updated.Status, conn.Status, "status must not be toggled by a policy patch")
+
+	// An unknown policy is rejected.
+	if bad := app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn.ID), admin, map[string]any{"policy": "bogus"}); bad.Code == 0 {
+		t.Error("an invalid gateway policy must be rejected")
+	}
+
+	// A non-admin cannot change instance config.
+	owner := app.login("zhangwei@vela.io", "vela123")
+	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn.ID), owner, map[string]any{"policy": "strict"}).Code, 40300,
+		"non-admin must be blocked from changing the policy")
+}

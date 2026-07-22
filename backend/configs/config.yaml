@@ -1,0 +1,42 @@
+# DP DB GATEWAY — backend configuration
+
+# Deployment profile: dev | prod
+#   dev  → SQLite (zero-dependency local run, writes ./vela-gateway.db)
+#   prod → MySQL  (see docker-compose.yml / mysql_dsn below)
+# Overridable at startup via APP_ENV (or VELA_ENV): `APP_ENV=prod ./server`
+# flips the whole app to MySQL. VELA_DB_DRIVER=mysql|sqlite forces a driver.
+env: "dev"
+
+server:
+  addr: ":8080"
+  mode: "debug"          # debug | release
+  cors_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+
+# Storage — the active driver is chosen by `env` above (dev→sqlite, prod→mysql),
+# not set here directly. Both endpoints stay configured so either profile works.
+database:
+  # MySQL DSN (used when env=prod; matches docker-compose.yml credentials)
+  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
+  # SQLite file (used when env=dev)
+  sqlite_path: "vela-gateway.db"
+  auto_migrate: true     # GORM AutoMigrate on boot
+  seed: true             # insert demo data (mirrors the prototype) when tables are empty
+
+jwt:
+  secret: "change-me-vela-gateway-dev-secret"
+  ttl_hours: 8
+
+gateway:
+  default_policy: "strict"   # strict | approve-1 | audit-only
+  strict_mode: true          # block DELETE/UPDATE without WHERE
+  exec_timeout_seconds: 30
+
+webhook:
+  # Configure at runtime via /settings/webhook (endpoint + bearer token).
+  endpoint: ""
+  secret: ""
+  events: "exec,login"
+  retry_max: 5
+  enabled: false

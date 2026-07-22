@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<style>
+  body { margin:0; background:#fff; color:var(--text-body); }
+  .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
+  .doc-frame { width:100%; table-layout:fixed; border-collapse:collapse; }
+  .doc-frame td { padding:0; }
+  .hdr-space, .ftr-space { display:none; }
+  h1,h2,h3 { text-wrap:balance; }
+  p,li { text-wrap:pretty; }
+  .t { width:100%; border-collapse:collapse; margin:14px 0 4px; }
+  .t th { text-align:left; font:600 10.5px/1.4 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); background:var(--surface-sunken); border:1px solid var(--border-subtle); padding:8px 11px; }
+  .t td { font:400 13px/1.5 var(--font-body); color:var(--text-body); border:1px solid var(--border-subtle); padding:9px 11px; vertical-align:top; }
+  .t td.id { font:600 11.5px/1.5 var(--font-mono); color:var(--accent-text); white-space:nowrap; }
+  pre { background:#0e1422; border:1px solid var(--border-default); border-radius:10px; padding:14px 16px; overflow-x:auto; font:500 11.5px/1.62 var(--font-mono); color:#c9d4ea; margin:12px 0; }
+  pre .k { color:#7aa2ff; } pre .s { color:#5fd0a8; } pre .c { color:#5b6479; } pre .a { color:#2dcde6; } pre .t2 { color:#ffb648; }
+  code.inl { font:600 12px var(--font-mono); color:var(--accent-text); background:var(--accent-subtle); padding:1px 5px; border-radius:4px; }
+  .mp { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:5px; font:600 10px var(--font-mono); }
+  @page { size:A4; margin:0; }
+  @media print {
+    html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html, body { margin:0; padding:0; }
+    .doc { max-width:none !important; margin:0 !important; padding:0 0.7in !important; box-shadow:none !important; }
+    .hdr-space, .ftr-space { display:table-cell; height:0.7in; }
+    h1,h2,h3,h4 { break-after:avoid; }
+    figure, pre, blockquote, table, tr, .keep { break-inside:avoid; }
+    p, li { orphans:3; widows:3; }
+  }
+</style>
+</helmet>
+
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+<div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
+  <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
+  <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Backend Engineering</span>
+</div>
+
+<div style="font:600 12px var(--font-mono); letter-spacing:.18em; color:var(--accent-text); text-transform:uppercase">后端开发文档 · BACKEND</div>
+<h1 style="font:700 33px/1.15 var(--font-display); color:var(--text-strong); letter-spacing:-.025em; margin:10px 0 12px">数据库管理网关<br>后端开发文档(Go · Gin · MySQL)</h1>
+<p style="font:400 15px/1.6 var(--font-body); color:var(--text-muted); margin:0 0 22px; max-width:62ch">本文面向后端工程师,约定 Go + Gin 技术栈、分层架构、风险判定与网关代执行引擎、REST/WS 接口、鉴权与三层权限、审批与 Lark 集成、审计与 Webhook 外推,以及完整的 MySQL 库表设计(DDL)。配套:《前端开发文档 (Vue3)》、《PRD》。</p>
+
+<table class="t keep"><tbody>
+  <tr><td class="id" style="width:22%">语言/框架</td><td>Go 1.22 · Gin · GORM</td><td class="id" style="width:18%">存储</td><td>MySQL 8 · Redis</td></tr>
+  <tr><td class="id">鉴权</td><td>JWT · RBAC 三层</td><td class="id">更新</td><td>2026-06-25</td></tr>
+</tbody></table>
+
+<!-- 1 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">01</span> 技术栈</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Stack</div>
+<table class="t">
+  <thead><tr><th style="width:26%">类别</th><th style="width:28%">选型</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>Web 框架</td><td>Gin</td><td>路由、中间件、参数绑定。</td></tr>
+    <tr><td>ORM</td><td>GORM</td><td>MySQL 访问、迁移、关联。</td></tr>
+    <tr><td>主存储</td><td>MySQL 8.0</td><td>业务数据 + 审计(append-only)。</td></tr>
+    <tr><td>缓存/会话</td><td>Redis</td><td>会话、风险字典缓存、Webhook 重试队列。</td></tr>
+    <tr><td>鉴权</td><td>JWT (golang-jwt)</td><td>访问令牌;中间件解析与校验。</td></tr>
+    <tr><td>数据库驱动</td><td>database/sql + 引擎驱动</td><td>网关代执行;MVP 仅 MySQL,后续扩展 PG/TiDB 等。</td></tr>
+    <tr><td>WebSocket</td><td>gorilla/websocket</td><td>终端流式执行。</td></tr>
+    <tr><td>日志</td><td>zap</td><td>结构化日志。</td></tr>
+    <tr><td>配置</td><td>viper</td><td>多环境配置。</td></tr>
+  </tbody>
+</table>
+
+<!-- 2 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">02</span> 工程结构(分层)</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Layout</div>
+<pre><code>cmd/server/main.go            <span class="c"># 启动、依赖装配</span>
+internal/
+├─ handler/      <span class="c"># Gin handler:参数绑定、调 service、返回</span>
+├─ service/      <span class="c"># 业务:risk / approval / terminal / audit / webhook</span>
+├─ repository/   <span class="c"># GORM 仓储</span>
+├─ model/        <span class="c"># 数据模型(GORM struct)</span>
+├─ middleware/   <span class="c"># jwt / rbac / audit / recovery / cors</span>
+├─ gateway/      <span class="c"># 引擎驱动 + 代执行器</span>
+└─ dto/          <span class="c"># 请求/响应结构</span>
+pkg/  jwt/  crypto/(hmac)  resp/  logger/
+configs/  config.yaml
+migrations/  *.sql
+</code></pre>
+
+<!-- 3 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">03</span> 核心架构:网关代执行</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Gateway Proxy</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">所有命令不直连数据库,统一经网关:<strong>鉴权 → 风险判定 → (放行执行 / 拦截审批) → 审计留痕 → Webhook 外推</strong>。审批通过后由网关用实例的服务账号代执行。</p>
+<pre><code><span class="k">func</span> (g *Gateway) Execute(ctx, req ExecReq) (*ExecResult, error) {
+  conn := g.conns.Get(req.ConnectionID)
+  verdict := g.risk.Evaluate(ctx.User, conn, req.SQL)   <span class="c">// 三层判定</span>
+  <span class="k">switch</span> verdict.Action {
+  <span class="k">case</span> ActionDeny:
+     g.audit.Record(ctx, req, RiskHigh, ResultRejected); <span class="k">return nil</span>, ErrForbidden
+  <span class="k">case</span> ActionApprove:
+     ap := g.approval.Create(ctx, conn, req.SQL, verdict)  <span class="c">// 生成审批单 + Lark + 告警</span>
+     g.audit.Record(ctx, req, verdict.Risk, ResultPending)
+     <span class="k">return</span> &amp;ExecResult{Intercepted: <span class="k">true</span>, ApprovalNo: ap.No}, <span class="k">nil</span>
+  <span class="k">default</span>: <span class="c">// ActionAllow</span>
+     res := g.driver(conn.Engine).Run(ctx, conn, req.SQL)  <span class="c">// 代执行</span>
+     g.audit.Record(ctx, req, verdict.Risk, ResultExecuted)
+     <span class="k">return</span> res, <span class="k">nil</span>
+  }
+}</code></pre>
+
+<!-- 4 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">04</span> 风险判定引擎(三层)</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Risk Engine</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">判定顺序:<strong>① 菜单权限 → ② 能力矩阵(角色 × 能力 × 环境) → ③ 高危命令字典(环境 × 命令)</strong>,叠加严格模式(无 WHERE 的 DELETE/UPDATE)。取最严档位。</p>
+<pre><code><span class="k">func</span> (e *RiskEngine) Evaluate(u User, c Conn, sql <span class="a">string</span>) Verdict {
+  verb := parseVerb(sql)                          <span class="c">// DROP / SELECT / ...</span>
+  cap  := mapVerbToCapability(verb)               <span class="c">// 能力维度</span>
+  <span class="k">if</span> e.matrix.Level(u.RoleID, cap, c.Env) == Deny { <span class="k">return</span> Verdict{Action: ActionDeny} }
+  lvl := e.dict.Level(verb, c.Env)                <span class="c">// high / mid / off</span>
+  <span class="k">if</span> e.strict &amp;&amp; noWhere(sql, verb) { lvl = LevelHigh }
+  <span class="k">switch</span> lvl {
+    <span class="k">case</span> LevelHigh: <span class="k">return</span> Verdict{Action: ActionApprove, Risk: RiskHigh, Rule: <span class="s">"高危DDL"</span>}
+    <span class="k">case</span> LevelMid:  <span class="k">return</span> Verdict{Action: ActionApprove, Risk: RiskMid}
+    <span class="k">default</span>:      <span class="k">return</span> Verdict{Action: ActionAllow, Risk: RiskLow}
+  }
+}</code></pre>
+
+<!-- 5 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">05</span> 鉴权与中间件</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Auth &amp; Middleware</div>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><code class="inl">JWTAuth</code> — 解析 Bearer Token,注入 <code class="inl">ctx.User</code>。</li>
+  <li><code class="inl">MenuGuard(key)</code> — 校验角色菜单权限,无则 403。</li>
+  <li><code class="inl">AuditMW</code> — 记录请求级访问日志。</li>
+  <li>会话有效期 / 空闲锁定 / 强制 MFA / IP 允许列表 在登录与中间件层落地。</li>
+</ul>
+
+<!-- 6 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">06</span> API 设计</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">REST &amp; WS</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">前缀 <code class="inl">/api/v1</code>,统一响应 <code class="inl">{ code, msg, data }</code>(code=0 成功)。</p>
+<table class="t">
+  <thead><tr><th style="width:14%">方法</th><th style="width:40%">路径</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/auth/login · /auth/logout</td><td>登录(JWT)/ 登出</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span></td><td class="id">/auth/me</td><td>当前用户 + menus + capabilities</td></tr>
+    <tr><td><span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/risk/check</td><td>命令风险预检(三层)</td></tr>
+    <tr><td><span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">WS</span></td><td class="id">/terminal/ws</td><td>终端流式执行</td></tr>
+    <tr><td><span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/scripts/scan · /scripts/execute</td><td>脚本扫描 / 执行</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span> <span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/connections · /connections/:id/test</td><td>连接列表/新建/测试</td></tr>
+    <tr><td><span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">PATCH</span></td><td class="id">/connections/:id</td><td>状态切换(在线/维护)</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span></td><td class="id">/roles · /roles/:id</td><td>角色列表/详情(矩阵+菜单+成员)</td></tr>
+    <tr><td><span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">PUT</span></td><td class="id">/roles/:id/menus · /capabilities</td><td>保存菜单权限 / 能力矩阵</td></tr>
+    <tr><td><span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span> <span class="mp" style="background:var(--danger-subtle);color:var(--danger-text)">DEL</span></td><td class="id">/roles/:id/members[/:userId]</td><td>添加 / 移除成员</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span> <span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/users · /users/invite</td><td>用户列表 / 邀请</td></tr>
+    <tr><td><span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">PATCH</span></td><td class="id">/users/:id</td><td>启用/停用、改角色</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span> <span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span> <span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">PATCH</span> <span class="mp" style="background:var(--danger-subtle);color:var(--danger-text)">DEL</span></td><td class="id">/risk-commands[/:name]</td><td>高危字典增删改查(按环境三态)</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span></td><td class="id">/approvals?scope=mine|all</td><td>审批待办</td></tr>
+    <tr><td><span class="mp" style="background:var(--success-subtle);color:var(--success-text)">POST</span></td><td class="id">/approvals/:id/approve · /reject</td><td>审批通过 / 拒绝</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span></td><td class="id">/audit · /audit/export</td><td>审计查询 / CSV 导出</td></tr>
+    <tr><td><span class="mp" style="background:var(--accent-subtle);color:var(--accent-text)">GET</span> <span class="mp" style="background:var(--warning-subtle);color:var(--warning-text)">PUT</span></td><td class="id">/settings · /settings/webhook · /webhook/test</td><td>设置 / Webhook 配置 / 测试</td></tr>
+  </tbody>
+</table>
+
+<!-- 7 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">07</span> 审批、Lark 集成与告警</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Approval &amp; Lark</div>
+<ul style="margin:0; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li>创建审批单生成 <code class="inl">ap_no</code> 与审批步骤(按角色默认审批链),并落 <code class="inl">audit_id</code>。</li>
+  <li>调用飞书开放平台审批/消息卡片 API,继承审批卡格式;同步告警至 <code class="inl">#dba-oncall</code> 与值班人。</li>
+  <li>审批超时按设置:自动驳回 / 自动升级 / 保持等待(定时任务扫描 <code class="inl">tbl_approval_step</code>)。</li>
+  <li>全部通过后回调网关代执行;任一拒绝即终止并审计。</li>
+</ul>
+
+<!-- 8 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 审计与 Webhook 外推</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Audit &amp; Webhook</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">审计 <strong>append-only</strong>,每条记录 <code class="inl">hash = SHA256(prev_hash + payload)</code> 形成哈希链,防篡改。Webhook 推送以 <code class="inl">HMAC-SHA256</code> 签名,失败按指数退避重试。</p>
+<pre><code>sig := hmacSHA256(cfg.Secret, body)            <span class="c">// X-Vela-Signature</span>
+req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
+<span class="k">for</span> i := <span class="a">0</span>; i &lt; cfg.RetryMax; i++ {
+   <span class="k">if</span> ok := post(cfg.Endpoint, body); ok { <span class="k">break</span> }
+   time.Sleep(backoff(i))                       <span class="c">// 2^i 秒</span>
+}</code></pre>
+
+<!-- 9 MySQL -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> MySQL 数据库设计</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Schema (DDL)</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 10px">命名规范:表名 <code class="inl">tbl_</code> 前缀、主键约束 <code class="inl">pk_</code> 前缀、索引 <code class="inl">idx_</code> 前缀;<strong>不使用物理外键</strong>,关联约束由应用层(service/repository)维护。字符集 <code class="inl">utf8mb4</code> / <code class="inl">InnoDB</code>,时间统一 <code class="inl">DATETIME(3)</code>,枚举用 <code class="inl">ENUM</code>。</p>
+
+<h3 style="font:600 15px var(--font-mono); color:var(--text-strong); margin:16px 0 4px">用户与角色</h3>
+<pre><code><span class="k">CREATE TABLE</span> tbl_role (
+  id           <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  code         <span class="t2">VARCHAR</span>(64)  <span class="k">NOT NULL</span>,               <span class="c">-- admin/owner/l2/ro/audit</span>
+  name         <span class="t2">VARCHAR</span>(64)  <span class="k">NOT NULL</span>,
+  layer        <span class="t2">VARCHAR</span>(32)  <span class="k">NOT NULL</span>,               <span class="c">-- L0/L1/L2/L3</span>
+  description  <span class="t2">VARCHAR</span>(255),
+  default_conn_role <span class="t2">VARCHAR</span>(64),
+  created_at   <span class="t2">DATETIME</span>(3) <span class="k">NOT NULL DEFAULT</span> CURRENT_TIMESTAMP(3),
+  <span class="k">CONSTRAINT</span> pk_tbl_role <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">UNIQUE KEY</span> idx_role_code (code)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_user (
+  id          <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  name        <span class="t2">VARCHAR</span>(64)  <span class="k">NOT NULL</span>,
+  email       <span class="t2">VARCHAR</span>(128) <span class="k">NOT NULL</span>,
+  role_id     <span class="t2">BIGINT</span>       <span class="k">NOT NULL</span>,               <span class="c">-- 逻辑外键，应用层维护</span>
+  status      <span class="t2">ENUM</span>(<span class="s">'active'</span>,<span class="s">'disabled'</span>,<span class="s">'invited'</span>) <span class="k">NOT NULL DEFAULT</span> <span class="s">'active'</span>,
+  mfa_enabled <span class="t2">TINYINT</span>(1)   <span class="k">NOT NULL DEFAULT</span> 0,
+  created_at  <span class="t2">DATETIME</span>(3) <span class="k">NOT NULL DEFAULT</span> CURRENT_TIMESTAMP(3),
+  <span class="k">CONSTRAINT</span> pk_tbl_user <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">UNIQUE KEY</span> idx_user_email (email),
+  <span class="k">KEY</span> idx_user_role (role_id)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;</code></pre>
+
+<h3 style="font:600 15px var(--font-mono); color:var(--text-strong); margin:16px 0 4px">菜单权限 · 能力矩阵</h3>
+<pre><code><span class="k">CREATE TABLE</span> tbl_role_menu (
+  role_id  <span class="t2">BIGINT</span> <span class="k">NOT NULL</span>,
+  menu_key <span class="t2">VARCHAR</span>(32) <span class="k">NOT NULL</span>,                  <span class="c">-- terminal/approve/db/...</span>
+  enabled  <span class="t2">TINYINT</span>(1) <span class="k">NOT NULL DEFAULT</span> 0,
+  <span class="k">CONSTRAINT</span> pk_tbl_role_menu <span class="k">PRIMARY KEY</span> (role_id, menu_key)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_role_capability (
+  role_id    <span class="t2">BIGINT</span> <span class="k">NOT NULL</span>,
+  capability <span class="t2">VARCHAR</span>(32) <span class="k">NOT NULL</span>,                <span class="c">-- select/write/ddl/grant/...</span>
+  env        <span class="t2">ENUM</span>(<span class="s">'prod'</span>,<span class="s">'staging'</span>,<span class="s">'dev'</span>) <span class="k">NOT NULL</span>,
+  level      <span class="t2">ENUM</span>(<span class="s">'allow'</span>,<span class="s">'approve'</span>,<span class="s">'deny'</span>) <span class="k">NOT NULL</span>,
+  <span class="k">CONSTRAINT</span> pk_tbl_role_capability <span class="k">PRIMARY KEY</span> (role_id, capability, env)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;</code></pre>
+
+<h3 style="font:600 15px var(--font-mono); color:var(--text-strong); margin:16px 0 4px">连接 · 高危字典</h3>
+<pre><code><span class="k">CREATE TABLE</span> tbl_connection (
+  id           <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  name         <span class="t2">VARCHAR</span>(64)  <span class="k">NOT NULL</span>,
+  engine       <span class="t2">VARCHAR</span>(32)  <span class="k">NOT NULL</span>,               <span class="c">-- mysql/postgres/clickhouse/redis/tidb</span>
+  host         <span class="t2">VARCHAR</span>(128) <span class="k">NOT NULL</span>,
+  port         <span class="t2">INT</span>          <span class="k">NOT NULL</span>,
+  env          <span class="t2">ENUM</span>(<span class="s">'prod'</span>,<span class="s">'staging'</span>,<span class="s">'dev'</span>) <span class="k">NOT NULL</span>,
+  policy       <span class="t2">VARCHAR</span>(32)  <span class="k">NOT NULL</span>,               <span class="c">-- strict/approve-1/audit-only</span>
+  default_role <span class="t2">VARCHAR</span>(64),
+  status       <span class="t2">ENUM</span>(<span class="s">'online'</span>,<span class="s">'maint'</span>) <span class="k">NOT NULL DEFAULT</span> <span class="s">'online'</span>,
+  created_at   <span class="t2">DATETIME</span>(3) <span class="k">NOT NULL DEFAULT</span> CURRENT_TIMESTAMP(3),
+  <span class="k">CONSTRAINT</span> pk_tbl_connection <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">UNIQUE KEY</span> idx_connection_name (name),
+  <span class="k">KEY</span> idx_connection_env (env)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_risk_command (
+  command  <span class="t2">VARCHAR</span>(32) <span class="k">NOT NULL</span>,                    <span class="c">-- DROP/TRUNCATE/...</span>
+  env      <span class="t2">ENUM</span>(<span class="s">'prod'</span>,<span class="s">'staging'</span>,<span class="s">'dev'</span>) <span class="k">NOT NULL</span>,
+  level    <span class="t2">ENUM</span>(<span class="s">'high'</span>,<span class="s">'mid'</span>,<span class="s">'off'</span>) <span class="k">NOT NULL DEFAULT</span> <span class="s">'high'</span>,
+  <span class="k">CONSTRAINT</span> pk_tbl_risk_command <span class="k">PRIMARY KEY</span> (command, env)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;</code></pre>
+
+<h3 style="font:600 15px var(--font-mono); color:var(--text-strong); margin:16px 0 4px">审批 · 审批步骤</h3>
+<pre><code><span class="k">CREATE TABLE</span> tbl_approval (
+  id           <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  ap_no        <span class="t2">VARCHAR</span>(32)  <span class="k">NOT NULL</span>,               <span class="c">-- AP-2294</span>
+  connection_id <span class="t2">BIGINT</span>      <span class="k">NOT NULL</span>,               <span class="c">-- 逻辑外键</span>
+  env          <span class="t2">VARCHAR</span>(16)  <span class="k">NOT NULL</span>,
+  instance     <span class="t2">VARCHAR</span>(64)  <span class="k">NOT NULL</span>,
+  command      <span class="t2">TEXT</span>         <span class="k">NOT NULL</span>,
+  initiator_id <span class="t2">BIGINT</span>       <span class="k">NOT NULL</span>,
+  reason       <span class="t2">VARCHAR</span>(512),
+  risk_level   <span class="t2">ENUM</span>(<span class="s">'high'</span>,<span class="s">'mid'</span>,<span class="s">'low'</span>) <span class="k">NOT NULL</span>,
+  status       <span class="t2">ENUM</span>(<span class="s">'pending'</span>,<span class="s">'approved'</span>,<span class="s">'rejected'</span>,<span class="s">'expired'</span>) <span class="k">NOT NULL DEFAULT</span> <span class="s">'pending'</span>,
+  audit_id     <span class="t2">VARCHAR</span>(32),
+  created_at   <span class="t2">DATETIME</span>(3) <span class="k">NOT NULL DEFAULT</span> CURRENT_TIMESTAMP(3),
+  <span class="k">CONSTRAINT</span> pk_tbl_approval <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">UNIQUE KEY</span> idx_approval_apno (ap_no),
+  <span class="k">KEY</span> idx_approval_status (status),
+  <span class="k">KEY</span> idx_approval_initiator (initiator_id)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_approval_step (
+  id          <span class="t2">BIGINT</span> <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  approval_id <span class="t2">BIGINT</span> <span class="k">NOT NULL</span>,                       <span class="c">-- 逻辑外键</span>
+  step_order  <span class="t2">INT</span>    <span class="k">NOT NULL</span>,
+  approver_id <span class="t2">BIGINT</span> <span class="k">NOT NULL</span>,
+  status      <span class="t2">ENUM</span>(<span class="s">'waiting'</span>,<span class="s">'active'</span>,<span class="s">'approved'</span>,<span class="s">'rejected'</span>) <span class="k">NOT NULL DEFAULT</span> <span class="s">'waiting'</span>,
+  acted_at    <span class="t2">DATETIME</span>(3),
+  <span class="k">CONSTRAINT</span> pk_tbl_approval_step <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">KEY</span> idx_step_approval (approval_id)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;</code></pre>
+
+<h3 style="font:600 15px var(--font-mono); color:var(--text-strong); margin:16px 0 4px">审计(防篡改) · Webhook</h3>
+<pre><code><span class="k">CREATE TABLE</span> tbl_audit_log (
+  id           <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  occurred_at  <span class="t2">DATETIME</span>(3) <span class="k">NOT NULL DEFAULT</span> CURRENT_TIMESTAMP(3),
+  actor_id     <span class="t2">BIGINT</span>       <span class="k">NOT NULL</span>,
+  connection_id <span class="t2">BIGINT</span>,
+  instance     <span class="t2">VARCHAR</span>(64),
+  command      <span class="t2">TEXT</span>         <span class="k">NOT NULL</span>,
+  risk         <span class="t2">ENUM</span>(<span class="s">'high'</span>,<span class="s">'mid'</span>,<span class="s">'low'</span>) <span class="k">NOT NULL</span>,
+  result       <span class="t2">ENUM</span>(<span class="s">'executed'</span>,<span class="s">'pending'</span>,<span class="s">'rejected'</span>,<span class="s">'warn'</span>) <span class="k">NOT NULL</span>,
+  approval_no  <span class="t2">VARCHAR</span>(32),
+  prev_hash    <span class="t2">CHAR</span>(64),
+  hash         <span class="t2">CHAR</span>(64)     <span class="k">NOT NULL</span>,                <span class="c">-- SHA256(prev_hash+payload) 哈希链</span>
+  <span class="k">CONSTRAINT</span> pk_tbl_audit_log <span class="k">PRIMARY KEY</span> (id),
+  <span class="k">KEY</span> idx_audit_time (occurred_at),
+  <span class="k">KEY</span> idx_audit_actor (actor_id),
+  <span class="k">KEY</span> idx_audit_risk (risk)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_webhook_config (
+  id         <span class="t2">BIGINT</span>       <span class="k">NOT NULL AUTO_INCREMENT</span>,
+  endpoint   <span class="t2">VARCHAR</span>(255) <span class="k">NOT NULL</span>,
+  secret     <span class="t2">VARCHAR</span>(128) <span class="k">NOT NULL</span>,                <span class="c">-- HMAC-SHA256</span>
+  events     <span class="t2">VARCHAR</span>(255) <span class="k">NOT NULL</span>,                <span class="c">-- intercept,approve,exec,login</span>
+  retry_max  <span class="t2">INT</span>          <span class="k">NOT NULL DEFAULT</span> 5,
+  enabled    <span class="t2">TINYINT</span>(1)   <span class="k">NOT NULL DEFAULT</span> 1,
+  <span class="k">CONSTRAINT</span> pk_tbl_webhook_config <span class="k">PRIMARY KEY</span> (id)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;
+
+<span class="k">CREATE TABLE</span> tbl_setting (
+  k <span class="t2">VARCHAR</span>(64) <span class="k">NOT NULL</span>, v <span class="t2">JSON</span> <span class="k">NOT NULL</span>,
+  <span class="k">CONSTRAINT</span> pk_tbl_setting <span class="k">PRIMARY KEY</span> (k)
+) ENGINE=InnoDB <span class="k">DEFAULT CHARSET</span>=utf8mb4;</code></pre>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">9.1 表关系总览</h3>
+<table class="t">
+  <thead><tr><th style="width:30%">关系</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td class="id">tbl_user.role_id → tbl_role</td><td>多对一(逻辑外键),用户归属角色。</td></tr>
+    <tr><td class="id">tbl_role → tbl_role_menu / tbl_role_capability</td><td>一对多,角色的菜单与能力授权。</td></tr>
+    <tr><td class="id">tbl_approval → tbl_approval_step</td><td>一对多,审批单的多级审批步骤。</td></tr>
+    <tr><td class="id">tbl_approval → tbl_connection / tbl_user</td><td>多对一,关联目标实例与发起人。</td></tr>
+    <tr><td class="id">tbl_audit_log (hash chain)</td><td>append-only,前后哈希链接,防篡改。</td></tr>
+  </tbody>
+</table>
+
+<!-- 10 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">10</span> 非功能与错误码</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">NFR &amp; Error Codes</div>
+<ul style="margin:0 0 10px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>性能:</strong>风险判定走内存/Redis 缓存的字典与矩阵,目标 &lt; 20ms;审计异步落库不阻塞执行。</li>
+  <li><strong>安全:</strong>JWT + MFA + IP 允许列表;连接凭据加密存储;Webhook 签名校验。</li>
+  <li><strong>可用性:</strong>网关无状态多副本;字典/矩阵变更经缓存失效热生效。</li>
+  <li><strong>部署:</strong>Docker 镜像 + 配置中心;migrations 管理 schema。</li>
+</ul>
+<table class="t">
+  <thead><tr><th style="width:18%">code</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td class="id">0</td><td>成功</td></tr>
+    <tr><td class="id">40001</td><td>参数错误</td></tr>
+    <tr><td class="id">40100</td><td>未登录 / Token 失效</td></tr>
+    <tr><td class="id">40300</td><td>无菜单/能力权限</td></tr>
+    <tr><td class="id">42200</td><td>命令被拦截,需审批(返回 ap_no)</td></tr>
+    <tr><td class="id">50000</td><td>服务器内部错误</td></tr>
+  </tbody>
+</table>
+
+<!-- 11 OpenAPI -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">11</span> OpenAPI / Swagger</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">API Spec</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">采用 <code class="inl">swaggo/swag</code> 从 handler 注释生成 OpenAPI 3.0,<code class="inl">gin-swagger</code> 暴露交互式文档:开发态 <code class="inl">GET /swagger/index.html</code>,产物 <code class="inl">docs/swagger.yaml</code> 作为前后端契约源。</p>
+<pre><code><span class="c">// handler 注释 → swag 生成</span>
+<span class="c">// @Summary  命令风险预检</span>
+<span class="c">// @Tags     terminal</span>
+<span class="c">// @Accept   json</span>
+<span class="c">// @Produce  json</span>
+<span class="c">// @Param    body  body  dto.RiskCheckReq  true  <span class="s">"命令"</span></span>
+<span class="c">// @Success  200   {object}  resp.R{data=dto.RiskCheckResp}</span>
+<span class="c">// @Router   /risk/check [post]</span>
+<span class="k">func</span> (h *TerminalHandler) RiskCheck(c *gin.Context) { <span class="c">/* ... */</span> }</code></pre>
+<p style="font:600 13px var(--font-mono); color:var(--text-strong); margin:14px 0 4px">docs/swagger.yaml(节选)</p>
+<pre><code><span class="k">openapi</span>: 3.0.3
+<span class="k">info</span>: { <span class="k">title</span>: DP DB GATEWAY API, <span class="k">version</span>: <span class="s">"1.0"</span> }
+<span class="k">servers</span>: [{ <span class="k">url</span>: /api/v1 }]
+<span class="k">components</span>:
+  <span class="k">securitySchemes</span>:
+    <span class="k">bearerAuth</span>: { <span class="k">type</span>: http, <span class="k">scheme</span>: bearer, <span class="k">bearerFormat</span>: JWT }
+  <span class="k">schemas</span>:
+    <span class="k">RiskCheckReq</span>:
+      <span class="k">type</span>: object
+      <span class="k">required</span>: [connectionId, sql]
+      <span class="k">properties</span>:
+        <span class="k">connectionId</span>: { <span class="k">type</span>: integer, <span class="k">format</span>: int64 }
+        <span class="k">sql</span>:          { <span class="k">type</span>: string }
+    <span class="k">RiskCheckResp</span>:
+      <span class="k">type</span>: object
+      <span class="k">properties</span>:
+        <span class="k">risk</span>:             { <span class="k">type</span>: string, <span class="k">enum</span>: [high, mid, low] }
+        <span class="k">action</span>:           { <span class="k">type</span>: string, <span class="k">enum</span>: [allow, approve, deny] }
+        <span class="k">requiresApproval</span>: { <span class="k">type</span>: boolean }
+        <span class="k">matchedRule</span>:      { <span class="k">type</span>: string }
+<span class="k">security</span>: [{ <span class="k">bearerAuth</span>: [] }]
+<span class="k">paths</span>:
+  <span class="k">/risk/check</span>:
+    <span class="k">post</span>:
+      <span class="k">tags</span>: [terminal]
+      <span class="k">requestBody</span>:
+        <span class="k">content</span>: { application/json: { <span class="k">schema</span>: { $ref: <span class="s">'#/components/schemas/RiskCheckReq'</span> } } }
+      <span class="k">responses</span>:
+        <span class="s">'200'</span>: { <span class="k">description</span>: OK, <span class="k">content</span>: { application/json: { <span class="k">schema</span>: { $ref: <span class="s">'#/components/schemas/RiskCheckResp'</span> } } } }
+        <span class="s">'422'</span>: { <span class="k">description</span>: 命令被拦截,需审批(返回 ap_no) }
+  <span class="k">/approvals/{id}/approve</span>:
+    <span class="k">post</span>: { <span class="k">tags</span>: [approval], <span class="k">parameters</span>: [{ <span class="k">name</span>: id, <span class="k">in</span>: path, <span class="k">required</span>: true, <span class="k">schema</span>: { <span class="k">type</span>: integer } }], <span class="k">responses</span>: { <span class="s">'200'</span>: { <span class="k">description</span>: OK } } }</code></pre>
+
+<!-- 12 Sequence -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">12</span> 时序图:高危命令拦截</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Sequence · Interception</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 12px">实线为调用、虚线为返回。审批通过后由网关代执行,全程审计。</p>
+<div class="keep" style="overflow-x:auto">
+<div data-om-raster="1" style="position:relative; width:640px; height:420px; margin:0 auto; font-family:var(--font-mono)">
+  <!-- participant headers -->
+  <div style="position:absolute; top:0; left:0; width:128px; text-align:center"><div style="display:inline-block; padding:6px 0; width:118px; border:1px solid var(--border-default); border-radius:8px; background:var(--accent-subtle); font:600 10.5px var(--font-mono); color:var(--accent-text)">用户 / CLI</div></div>
+  <div style="position:absolute; top:0; left:128px; width:128px; text-align:center"><div style="display:inline-block; padding:6px 0; width:118px; border:1px solid var(--border-default); border-radius:8px; background:var(--accent-subtle); font:600 10.5px var(--font-mono); color:var(--accent-text)">网关 Gateway</div></div>
+  <div style="position:absolute; top:0; left:256px; width:128px; text-align:center"><div style="display:inline-block; padding:6px 0; width:118px; border:1px solid var(--border-default); border-radius:8px; background:var(--surface-sunken); font:600 10.5px var(--font-mono); color:var(--text-body)">风险引擎</div></div>
+  <div style="position:absolute; top:0; left:384px; width:128px; text-align:center"><div style="display:inline-block; padding:6px 0; width:118px; border:1px solid var(--border-default); border-radius:8px; background:var(--surface-sunken); font:600 10.5px var(--font-mono); color:var(--text-body)">审批服务</div></div>
+  <div style="position:absolute; top:0; left:512px; width:128px; text-align:center"><div style="display:inline-block; padding:6px 0; width:118px; border:1px solid var(--border-default); border-radius:8px; background:var(--surface-sunken); font:600 10.5px var(--font-mono); color:var(--text-body)">目标数据库</div></div>
+  <!-- lifelines -->
+  <div style="position:absolute; top:34px; bottom:8px; left:64px; border-left:1px dashed var(--border-default)"></div>
+  <div style="position:absolute; top:34px; bottom:8px; left:192px; border-left:1px dashed var(--border-default)"></div>
+  <div style="position:absolute; top:34px; bottom:8px; left:320px; border-left:1px dashed var(--border-default)"></div>
+  <div style="position:absolute; top:34px; bottom:8px; left:448px; border-left:1px dashed var(--border-default)"></div>
+  <div style="position:absolute; top:34px; bottom:8px; left:576px; border-left:1px dashed var(--border-default)"></div>
+  <!-- messages -->
+  <!-- 1 用户→网关 -->
+  <div style="position:absolute; top:64px; left:64px; width:128px; height:0; border-top:2px solid var(--accent)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-muted)">exec(sql)</span><span style="position:absolute; top:-4px; right:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid var(--accent)"></span></div>
+  <!-- 2 网关→风险引擎 -->
+  <div style="position:absolute; top:108px; left:192px; width:128px; height:0; border-top:2px solid var(--accent)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-muted)">evaluate()</span><span style="position:absolute; top:-4px; right:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid var(--accent)"></span></div>
+  <!-- 3 风险引擎→网关 return -->
+  <div style="position:absolute; top:152px; left:192px; width:128px; height:0; border-top:2px dashed var(--text-faint)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-faint)">verdict=approve</span><span style="position:absolute; top:-4px; left:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:7px solid var(--text-faint)"></span></div>
+  <!-- 4 网关→审批服务 -->
+  <div style="position:absolute; top:196px; left:192px; width:256px; height:0; border-top:2px solid var(--danger)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--danger-text)">createApproval + Lark 通知/告警</span><span style="position:absolute; top:-4px; right:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid var(--danger)"></span></div>
+  <!-- 5 审批服务→网关 approved -->
+  <div style="position:absolute; top:248px; left:192px; width:256px; height:0; border-top:2px dashed var(--text-faint)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-faint)">approved(审批人通过)</span><span style="position:absolute; top:-4px; left:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:7px solid var(--text-faint)"></span></div>
+  <!-- 6 网关→数据库 -->
+  <div style="position:absolute; top:300px; left:192px; width:384px; height:0; border-top:2px solid var(--accent)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-muted)">代执行 SQL</span><span style="position:absolute; top:-4px; right:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-left:7px solid var(--accent)"></span></div>
+  <!-- 7 数据库→网关 result -->
+  <div style="position:absolute; top:344px; left:192px; width:384px; height:0; border-top:2px dashed var(--text-faint)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--text-faint)">result</span><span style="position:absolute; top:-4px; left:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:7px solid var(--text-faint)"></span></div>
+  <!-- 8 网关→用户 -->
+  <div style="position:absolute; top:388px; left:64px; width:128px; height:0; border-top:2px dashed var(--success)"><span style="position:absolute; top:-15px; left:0; width:100%; text-align:center; font:600 9.5px var(--font-mono); color:var(--success-text)">回显结果</span><span style="position:absolute; top:-4px; left:-1px; width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent;border-right:7px solid var(--success)"></span></div>
+</div>
+</div>
+<p style="font:400 12px/1.5 var(--font-body); color:var(--text-faint); margin:10px 0 0">若风险判定为 <code class="inl">deny</code>(能力矩阵禁止),网关在第 3 步后直接拒绝并审计,不进入审批与执行。</p>
+
+<!-- 13 Deployment -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">13</span> 部署架构</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Deployment Architecture</div>
+<div class="keep" data-om-raster="1" style="border:1px solid var(--border-subtle); border-radius:14px; padding:20px; background:var(--surface-card)">
+
+  <!-- tier: client -->
+  <div style="display:flex; align-items:center; gap:14px">
+    <div style="width:84px; flex-shrink:0; font:600 10px var(--font-mono); letter-spacing:.1em; color:var(--text-faint); text-transform:uppercase">客户端</div>
+    <div style="display:flex; gap:12px; flex:1">
+      <div style="flex:1; border:1px solid var(--border-default); border-radius:10px; padding:11px 14px; background:var(--surface-sunken)"><div style="display:flex;align-items:center;gap:7px;font:600 13px var(--font-body);color:var(--text-strong)"><i data-lucide="monitor" style="width:15px;height:15px;color:var(--accent-text)"></i>Vue 3 SPA</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:3px">控制台 · Web 命令行(xterm)</div></div>
+    </div>
+  </div>
+  <div style="text-align:center; font:600 13px var(--font-mono); color:var(--border-strong); margin:4px 0">↓ HTTPS / WSS</div>
+
+  <!-- tier: edge -->
+  <div style="display:flex; align-items:center; gap:14px">
+    <div style="width:84px; flex-shrink:0; font:600 10px var(--font-mono); letter-spacing:.1em; color:var(--text-faint); text-transform:uppercase">接入层</div>
+    <div style="display:flex; gap:12px; flex:1">
+      <div style="flex:1; border:1px solid var(--border-default); border-radius:10px; padding:11px 14px; background:var(--surface-sunken)"><div style="display:flex;align-items:center;gap:7px;font:600 13px var(--font-body);color:var(--text-strong)"><i data-lucide="shield" style="width:15px;height:15px;color:var(--accent-text)"></i>Nginx / LB</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:3px">TLS 终止 · IP 允许列表 · 限流</div></div>
+    </div>
+  </div>
+  <div style="text-align:center; font:600 13px var(--font-mono); color:var(--border-strong); margin:4px 0">↓</div>
+
+  <!-- tier: app -->
+  <div style="display:flex; align-items:flex-start; gap:14px">
+    <div style="width:84px; flex-shrink:0; padding-top:12px; font:600 10px var(--font-mono); letter-spacing:.1em; color:var(--text-faint); text-transform:uppercase">应用层</div>
+    <div style="flex:1; border:1.5px solid var(--accent-subtle-border); border-radius:12px; padding:14px; background:var(--accent-subtle)">
+      <div style="font:600 12px var(--font-mono); color:var(--accent-text); margin-bottom:10px">Gateway 服务(无状态 · 多副本)</div>
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:9px">
+        <div style="border:1px solid var(--border-default); border-radius:9px; padding:9px 10px; background:var(--surface-card); text-align:center; font:600 11px var(--font-mono); color:var(--text-body)">风险引擎</div>
+        <div style="border:1px solid var(--border-default); border-radius:9px; padding:9px 10px; background:var(--surface-card); text-align:center; font:600 11px var(--font-mono); color:var(--text-body)">审批服务</div>
+        <div style="border:1px solid var(--border-default); border-radius:9px; padding:9px 10px; background:var(--surface-card); text-align:center; font:600 11px var(--font-mono); color:var(--text-body)">审计服务</div>
+        <div style="border:1px solid var(--border-default); border-radius:9px; padding:9px 10px; background:var(--surface-card); text-align:center; font:600 11px var(--font-mono); color:var(--text-body)">代执行器</div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex; gap:14px"><div style="width:84px;flex-shrink:0"></div><div style="flex:1; text-align:center; font:600 13px var(--font-mono); color:var(--border-strong); margin:4px 0">↓</div></div>
+
+  <!-- tier: data + external -->
+  <div style="display:flex; align-items:stretch; gap:14px">
+    <div style="width:84px; flex-shrink:0; padding-top:12px; font:600 10px var(--font-mono); letter-spacing:.1em; color:var(--text-faint); text-transform:uppercase">数据 / 集成</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:12px; flex:1">
+      <div style="border:1px solid var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-sunken)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="database" style="width:14px;height:14px;color:#2dcde6"></i>MySQL 8(主从)</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">业务 + 审计哈希链</div></div>
+      <div style="border:1px solid var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-sunken)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="zap" style="width:14px;height:14px;color:#2dcde6"></i>Redis</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">会话 · 字典缓存 · 重试队列</div></div>
+      <div style="border:1px solid var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-sunken)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="server" style="width:14px;height:14px;color:#2dcde6"></i>目标实例池</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">MySQL/PG/CK/TiDB…</div></div>
+      <div style="border:1px dashed var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-card)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="bell" style="width:14px;height:14px;color:var(--warning-text)"></i>飞书 Lark</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">审批卡 · 告警</div></div>
+      <div style="border:1px dashed var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-card)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="radio" style="width:14px;height:14px;color:var(--warning-text)"></i>SIEM / 数据湖</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">Webhook 外推(HMAC)</div></div>
+      <div style="border:1px dashed var(--border-default); border-radius:10px; padding:11px 13px; background:var(--surface-card)"><div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="key-round" style="width:14px;height:14px;color:var(--text-muted)"></i>配置 / 密钥</div><div style="font:500 10.5px var(--font-mono);color:var(--text-muted);margin-top:3px">viper · 凭据加密</div></div>
+    </div>
+  </div>
+</div>
+<p style="font:400 12px/1.5 var(--font-body); color:var(--text-faint); margin:10px 0 0">实线层为同步主链路;虚线框为外部集成。网关无状态,字典/矩阵经 Redis 缓存热生效;审计异步落库不阻塞执行。</p>
+
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>DP DB GATEWAY · 后端开发文档 (Go · Gin · MySQL)</span><span style="margin-left:auto">机密 · 内部</span></div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch(e){} };
+    if (!window.lucide) { const s=document.createElement('script'); s.src='https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'; s.onload=draw; document.head.appendChild(s); } else draw();
+    setTimeout(draw, 400);
+  }
+}
+</script>
+</body>
+</html>
