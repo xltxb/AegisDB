@@ -9,11 +9,19 @@ import (
 	"velagateway/internal/model"
 )
 
-// SchemaGroup is one database/schema and its tables, introspected from a live
-// target instance.
+// SchemaGroup is one database and its contents, introspected from a live target.
+// Engines with a schema layer (PostgreSQL/GaussDB) populate Schemas; flat engines
+// (MySQL/SQLite/Oracle-by-owner) populate Tables directly.
 type SchemaGroup struct {
 	Database string
-	Tables   []string
+	Schemas  []SchemaEntry // database → schema → tables (PostgreSQL)
+	Tables   []string      // database → tables (flat engines)
+}
+
+// SchemaEntry is a schema within a database and its tables.
+type SchemaEntry struct {
+	Name   string
+	Tables []string
 }
 
 // maxSchemaRows bounds a single introspection so a huge instance can't build an
@@ -128,9 +136,8 @@ func pgListDatabases(conn *model.Connection) ([]SchemaGroup, error) {
 	return out, rows.Err()
 }
 
-// pgListTables lists the tables of the connected PostgreSQL/GaussDB database
-// (schema-qualified for non-public schemas), grouped under the database name so the
-// tree shows database → tables.
+// pgListTables lists the connected PostgreSQL/GaussDB database's tables grouped by
+// schema, so the tree shows database → schema → tables.
 func pgListTables(conn *model.Connection) ([]SchemaGroup, error) {
 	db, release, err := openConn(conn) // conn.Database is set
 	if err != nil {
@@ -148,24 +155,30 @@ func pgListTables(conn *model.Connection) ([]SchemaGroup, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	tables := []string{}
+	order := []string{}
+	bySchema := map[string][]string{}
+	n := 0
 	for rows.Next() {
 		var schema, tbl string
 		if err := rows.Scan(&schema, &tbl); err != nil {
 			return nil, err
 		}
-		if schema != "" && schema != "public" {
-			tbl = schema + "." + tbl // qualify tables outside the default public schema
+		if _, seen := bySchema[schema]; !seen {
+			order = append(order, schema)
 		}
-		tables = append(tables, tbl)
-		if len(tables) >= maxSchemaRows {
+		bySchema[schema] = append(bySchema[schema], tbl)
+		if n++; n >= maxSchemaRows {
 			break
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return []SchemaGroup{{Database: conn.Database, Tables: tables}}, nil
+	schemas := make([]SchemaEntry, 0, len(order))
+	for _, s := range order {
+		schemas = append(schemas, SchemaEntry{Name: s, Tables: bySchema[s]})
+	}
+	return []SchemaGroup{{Database: conn.Database, Schemas: schemas}}, nil
 }
 
 // schemaIntrospectQuery returns the engine-appropriate introspection SQL and

@@ -44,6 +44,14 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 // the seeded (simulated) tree. Live-introspection failures are reported in the
 // response's Error field (not as a transport error) so the UI can show why the tree
 // is empty. Access is tag-gated just like execution.
+func tableDTOs(names []string) []dto.SchemaTableDTO {
+	out := make([]dto.SchemaTableDTO, 0, len(names))
+	for _, n := range names {
+		out = append(out, dto.SchemaTableDTO{Name: n})
+	}
+	return out
+}
+
 func (s *Services) ConnectionSchema(u *model.User, connID int64, database string) dto.ConnectionSchemaResp {
 	out := dto.ConnectionSchemaResp{ConnectionID: connID, Databases: []dto.SchemaDBDTO{}}
 	conn, err := s.Repo.GetConnection(connID)
@@ -67,11 +75,11 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 			return out
 		}
 		for _, g := range groups {
-			tables := make([]dto.SchemaTableDTO, 0, len(g.Tables))
-			for _, t := range g.Tables {
-				tables = append(tables, dto.SchemaTableDTO{Name: t})
+			db := dto.SchemaDBDTO{Name: g.Database, Tables: tableDTOs(g.Tables)}
+			for _, sc := range g.Schemas {
+				db.Schemas = append(db.Schemas, dto.SchemaSchemaDTO{Name: sc.Name, Tables: tableDTOs(sc.Tables)})
 			}
-			out.Databases = append(out.Databases, dto.SchemaDBDTO{Name: g.Database, Tables: tables})
+			out.Databases = append(out.Databases, db)
 		}
 		return out
 	}

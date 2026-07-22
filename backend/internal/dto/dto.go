@@ -159,6 +159,13 @@ type ConnectionSchemaResp struct {
 }
 
 type SchemaDBDTO struct {
+	Name    string             `json:"name"`
+	Schemas []SchemaSchemaDTO  `json:"schemas,omitempty"` // database → schema → tables (PostgreSQL)
+	Tables  []SchemaTableDTO   `json:"tables"`            // database → tables (flat engines)
+}
+
+// SchemaSchemaDTO is a schema within a database and its tables.
+type SchemaSchemaDTO struct {
 	Name   string           `json:"name"`
 	Tables []SchemaTableDTO `json:"tables"`
 }

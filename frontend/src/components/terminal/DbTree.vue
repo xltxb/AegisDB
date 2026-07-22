@@ -45,18 +45,33 @@ function selectDb(cid: number, name: string) {
   emit('selectDb', cid, name)
 }
 
-// Lazily load a database's tables on first expand. Needed for PostgreSQL, where the
-// top level lists databases (no tables) and each database is introspected on demand;
-// a database that already has tables (MySQL) is skipped.
+// Schema-level (database → schema → tables) collapse, for engines with schemas
+// (PostgreSQL). Keyed by connection:database:schema.
+const schemaOpen = ref<Record<string, boolean>>({})
+const schemaKey = (cid: number, db: string, sc: string) => `${cid}:${db}:${sc}`
+const isSchemaOpen = (cid: number, db: string, sc: string) => !!schemaOpen.value[schemaKey(cid, db, sc)]
+function toggleSchema(cid: number, db: string, sc: string) {
+  const k = schemaKey(cid, db, sc)
+  schemaOpen.value[k] = !schemaOpen.value[k]
+}
+
+// Lazily load a database's contents on first expand. Needed for PostgreSQL, where
+// the top level lists databases (no tables/schemas) introspected on demand; a
+// database already populated (MySQL, or a loaded PG db) is skipped.
 const dbLoading = ref<Record<string, boolean>>({})
 async function loadDbTables(cid: number, name: string) {
   const d = schema.value?.databases.find((x) => x.name === name)
-  if (!d || d.tables.length || dbLoading.value[dbKey(cid, name)]) return
+  if (!d || d.tables.length || d.schemas?.length || dbLoading.value[dbKey(cid, name)]) return
   dbLoading.value[dbKey(cid, name)] = true
   try {
     const sc = await api.connectionSchema(cid, name)
     const loaded = sc.databases.find((x) => x.name === name) || sc.databases[0]
-    if (loaded) d.tables = loaded.tables
+    if (loaded) {
+      d.tables = loaded.tables
+      d.schemas = loaded.schemas
+      // Auto-expand the sole schema (usually "public") so its tables are visible.
+      if (loaded.schemas?.length === 1) schemaOpen.value[schemaKey(cid, name, loaded.schemas[0].name)] = true
+    }
   } catch { /* leave empty on failure */ }
   finally { dbLoading.value[dbKey(cid, name)] = false }
 }
@@ -130,9 +145,23 @@ function clickInst(id: number) {
                   <span v-if="d.tables.length" class="tcnt">{{ d.tables.length }}</span>
                 </div>
                 <div v-if="isDbOpen(c.id, d.name)" class="ind3">
-                  <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                   <div v-if="dbLoading[dbKey(c.id, d.name)]" class="tbl empty">加载中…</div>
-                  <div v-else-if="!d.tables.length" class="tbl empty">— 空库 —</div>
+                  <!-- database → schema → tables (PostgreSQL) -->
+                  <template v-else-if="d.schemas && d.schemas.length" v-for="sc in d.schemas" :key="sc.name">
+                    <div class="sch" @click.stop="toggleSchema(c.id, d.name, sc.name)">
+                      <component :is="isSchemaOpen(c.id, d.name, sc.name) ? ChevronDown : ChevronRight" :size="11" color="var(--text-faint)" />
+                      <FolderOpen :size="12" />{{ sc.name }}<span class="tcnt">{{ sc.tables.length }}</span>
+                    </div>
+                    <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
+                      <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                      <div v-if="!sc.tables.length" class="tbl empty">— 空 schema —</div>
+                    </div>
+                  </template>
+                  <!-- database → tables (MySQL / SQLite) -->
+                  <template v-else>
+                    <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                    <div v-if="!d.tables.length" class="tbl empty">— 空库 —</div>
+                  </template>
                 </div>
               </template>
             </div>
@@ -180,6 +209,9 @@ function clickInst(id: number) {
 .db:hover { color: var(--text-body); background: rgba(255, 255, 255, 0.03); }
 .db.sel { background: var(--accent-subtle); color: var(--accent-text); font-weight: 600; }
 .ind3 { padding-left: 16px; }
+.sch { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 7px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.sch:hover { color: var(--text-body); background: rgba(255, 255, 255, 0.03); }
+.ind4 { padding-left: 16px; }
 .tbl { display: flex; align-items: center; gap: 7px; padding: 4px 8px; font: 400 12px var(--font-mono); color: var(--text-muted); }
 .tbl.sel { border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: var(--text-strong); }
 .empty { padding: 6px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
