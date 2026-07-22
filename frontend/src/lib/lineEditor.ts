@@ -117,7 +117,9 @@ export class LineEditor {
       if (this.history[this.history.length - 1] !== entry) this.history.push(entry)
     }
 
-    const complete = full.startsWith('\\') || full.endsWith(';')
+    // A statement completes on ';', a leading backslash meta-command, or a MySQL
+    // display terminator \g (horizontal) / \G (vertical).
+    const complete = full.startsWith('\\') || full.endsWith(';') || /\\[gG]$/.test(full)
     if (complete) {
       const stmt = this.pending
       this.busy = true
