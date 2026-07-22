@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2 } from 'lucide-vue-next'
+import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose } from 'lucide-vue-next'
 import api from '@/api'
 import type { Connection, ConnectionSchema } from '@/types'
 
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
-const emit = defineEmits<{ select: [number]; selectDb: [number, string] }>()
+const emit = defineEmits<{ select: [number]; selectDb: [number, string]; collapse: [] }>()
 
 // Schema (db → tables) for the selected instance, introspected live from the
 // gateway. Real introspection can take a moment and may fail (bad creds / network),
@@ -116,7 +116,7 @@ function clickInst(id: number) {
 <template>
   <div class="tree">
     <div class="head">
-      <div class="eyebrow">{{ $t('treeTitle') }}</div>
+      <div class="eyebrow">{{ $t('treeTitle') }}<PanelLeftClose class="collapse" :size="15" :title="$t('treeCollapse')" @click="emit('collapse')" /></div>
       <div class="searchbox"><Search :size="14" color="var(--text-faint)" /><input v-model="search" :placeholder="$t('search')" /></div>
     </div>
     <div class="scy body">
@@ -183,7 +183,9 @@ function clickInst(id: number) {
    actually scroll (a grid item defaults to min-height:auto = content height). */
 .tree { min-height: 0; overflow: hidden; border-right: 1px solid var(--border-subtle); display: flex; flex-direction: column; background: var(--surface-sunken); }
 .head { padding: 16px 14px 10px; }
-.eyebrow { font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 10px; }
+.eyebrow { display: flex; align-items: center; font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 10px; }
+.collapse { margin-left: auto; color: var(--text-faint); cursor: pointer; }
+.collapse:hover { color: var(--accent-text); }
 .searchbox {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 11px;
   background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 10px;

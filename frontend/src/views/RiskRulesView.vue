@@ -78,8 +78,21 @@ async function load() {
   try {
     strictMode.value = (await api.settings()).strictMode
   } catch { /* keep default */ }
+  try {
+    hits.value = (await api.gatewayStats()).intercepts || 0
+  } catch { /* keep 0 */ }
 }
 onMounted(load)
+
+// Real rule-hit count (PROD interceptions), from the gateway — no demo number.
+const hits = ref(0)
+// PROD policy coverage: share of dictionary commands actively gated (not "off").
+const coverage = computed(() => {
+  const total = cmds.value.length
+  if (!total) return 0
+  const gated = cmds.value.filter((c) => c.env.prod !== 'off').length
+  return Math.round((gated / total) * 1000) / 10
+})
 
 async function toggleStrict() {
   if (!isAdmin.value) return
@@ -210,8 +223,8 @@ const policies = computed(() => {
     <div class="stats">
       <div class="stat"><div class="n danger">{{ cmds.filter((c) => c.env.prod === 'high').length }}</div><div class="l">{{ $t('statBlock') }}</div></div>
       <div class="stat"><div class="n warn">{{ cmds.filter((c) => c.env.prod === 'mid').length }}</div><div class="l">{{ $t('statAlert') }}</div></div>
-      <div class="stat"><div class="n grad">128</div><div class="l">{{ $t('statHits') }}</div></div>
-      <div class="stat"><div class="n">99.9%</div><div class="l">{{ $t('statCover') }}</div></div>
+      <div class="stat"><div class="n grad">{{ hits }}</div><div class="l">{{ $t('statHits') }}</div></div>
+      <div class="stat"><div class="n">{{ coverage }}%</div><div class="l">{{ $t('statCover') }}</div></div>
     </div>
 
     <!-- policies (derived from the live dictionary + strict mode) -->

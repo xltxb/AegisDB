@@ -56,15 +56,15 @@ const policyOpts = ['strict', 'approve-1', 'audit-only']
 
 const blankDraft = () => ({ name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' })
 const draft = ref(blankDraft())
-// null = create mode; a connection id = editing that instance in the same form.
-const editingId = ref<number | null>(null)
 
-// Load an existing instance into the form for editing (address / engine / env /
-// policy / credentials / database). Password is left blank = keep the stored one.
+// Edit an existing instance in a modal (separate from the create form). Password is
+// left blank = keep the stored one.
+const editModal = ref<{ open: boolean; id: number }>({ open: false, id: 0 })
+const editDraft = ref(blankDraft())
+const editBusy = ref(false)
 function openEdit(c: Connection) {
   if (!isAdmin.value) return
-  editingId.value = c.id
-  draft.value = {
+  editDraft.value = {
     name: c.name,
     host: `${c.host}:${c.port}`,
     engine: c.engine,
@@ -74,11 +74,27 @@ function openEdit(c: Connection) {
     password: '',
     database: c.database || '',
   }
-  if (typeof window !== 'undefined') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+  editModal.value = { open: true, id: c.id }
 }
-function cancelEdit() {
-  editingId.value = null
-  draft.value = blankDraft()
+async function saveEdit() {
+  if (!editDraft.value.name.trim() || !editDraft.value.host.trim()) return
+  const env = envOpts.find((o) => o.label === editDraft.value.envLabel)?.env || 'prod'
+  editBusy.value = true
+  try {
+    // Update, then test-attach to the gateway (best-effort).
+    const updated = await api.updateConnection(editModal.value.id, {
+      name: editDraft.value.name.trim(), engine: editDraft.value.engine,
+      host: editDraft.value.host.trim(), env: env as any, policy: editDraft.value.policy,
+      username: editDraft.value.username.trim(), password: editDraft.value.password, database: editDraft.value.database.trim(),
+    })
+    try { await api.testConnection(updated.id) } catch { /* best-effort */ }
+    editModal.value = { open: false, id: 0 }
+    await load()
+  } catch (e) {
+    ui.notifyError(e, '更新失败')
+  } finally {
+    editBusy.value = false
+  }
 }
 
 const prod = computed(() => conns.value.filter((c) => c.env === 'prod'))
@@ -129,15 +145,9 @@ async function add() {
   }
   // M14: 失败以 toast 呈现
   try {
-    if (editingId.value != null) {
-      const updated = await api.updateConnection(editingId.value, body)
-      try { await api.testConnection(updated.id) } catch { /* best-effort */ }
-      editingId.value = null
-    } else {
-      // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
-      const created = await api.createConnection(body)
-      try { await api.testConnection(created.id) } catch { /* best-effort */ }
-    }
+    // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
+    const created = await api.createConnection(body)
+    try { await api.testConnection(created.id) } catch { /* best-effort */ }
     draft.value = blankDraft()
     saved.value = true
     setTimeout(() => (saved.value = false), 2600)
@@ -180,7 +190,6 @@ async function add() {
               <span class="rbadge" :class="c.username ? 'real' : 'sim'">{{ c.username ? $t('connReal') : $t('connSim') }}</span>
               <span v-for="tg in tagArr(c.tags)" :key="tg" class="tchip">{{ tg }}</span>
               <span v-if="isAdmin" class="tedit" @click="openTagEdit(c)"><Tag :size="10" />{{ tagArr(c.tags).length ? $t('edit') : $t('tagAdd') }}</span>
-              <span v-if="isAdmin" class="tedit" @click="openEdit(c)"><Pencil :size="10" />{{ $t('connEdit') }}</span>
             </div>
           </div>
           <div class="mono">{{ c.engine }}</div>
@@ -192,18 +201,19 @@ async function add() {
             </select>
             <span v-else class="pill" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }">{{ c.policy }}</span>
           </div>
-          <div>
+          <div class="statuscell">
             <span class="pill" :class="{ click: isAdmin }" :style="{ background: stMeta(c.status).bg, color: stMeta(c.status).c }" :title="isAdmin ? '切换状态' : ''" @click="toggle(c)">
               <span class="dotc" />{{ c.status === 'online' ? $t('online') : $t('maint') }}
             </span>
+            <button v-if="isAdmin" class="editbtn" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
           </div>
         </div>
       </template>
     </div>
 
     <div v-if="isAdmin" class="form">
-      <div class="ftitle">{{ editingId != null ? $t('formEditConn') : $t('formNewConn') }}<span v-if="editingId != null" class="edittag">#{{ editingId }} {{ draft.name }}</span><span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
-      <div class="fsub">{{ editingId != null ? $t('formEditConnSub') : $t('formNewConnSub') }}</div>
+      <div class="ftitle">{{ $t('formNewConn') }}<span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
+      <div class="fsub">{{ $t('formNewConnSub') }}</div>
       <div class="fgrid">
         <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
         <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
@@ -212,13 +222,10 @@ async function add() {
         <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
         <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" placeholder="orders_db" /></div>
         <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
-        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" :placeholder="editingId != null ? $t('fPasswordKeep') : '••••••'" /></div>
+        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
       </div>
       <div class="credhint">{{ $t('connCredHint') }}</div>
-      <div class="fsaverow">
-        <VButton v-if="editingId != null" variant="secondary" @click="cancelEdit">{{ $t('mCancel') }}</VButton>
-        <VButton variant="primary" @click="add">{{ editingId != null ? $t('fSaveEdit') : $t('fSave') }}</VButton>
-      </div>
+      <div class="fsaverow"><VButton variant="primary" @click="add">{{ $t('fSave') }}</VButton></div>
     </div>
 
     <TagEditModal
@@ -226,6 +233,32 @@ async function add() {
       :tags="tagArr(tagModal.conn?.tags || '')" :suggestions="allTags"
       @close="tagModal.open = false" @save="saveTags"
     />
+
+    <!-- Edit-instance modal -->
+    <Teleport to="body">
+      <div v-if="editModal.open" class="ce-mask" @click.self="editModal.open = false">
+        <div class="ce-card">
+          <div class="ce-head"><div class="ce-title">{{ $t('formEditConn') }}</div><div class="ce-sub">{{ $t('formEditConnSub') }}</div></div>
+          <div class="ce-body">
+            <div class="fgrid">
+              <div><div class="fl">{{ $t('fName') }}</div><input v-model="editDraft.name" placeholder="order-cluster-2" /></div>
+              <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="editDraft.engine" :options="engineOpts" /></div>
+              <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="editDraft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
+              <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="editDraft.host" placeholder="10.20.3.12:3306" /></div>
+              <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="editDraft.policy" :options="policyOpts" /></div>
+              <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="editDraft.database" placeholder="orders_db" /></div>
+              <div><div class="fl">{{ $t('fUser') }}</div><input v-model="editDraft.username" placeholder="app_ro" /></div>
+              <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="editDraft.password" type="password" :placeholder="$t('fPasswordKeep')" /></div>
+            </div>
+            <div class="credhint">{{ $t('connCredHint') }}</div>
+          </div>
+          <div class="ce-foot">
+            <VButton variant="secondary" @click="editModal.open = false">{{ $t('mCancel') }}</VButton>
+            <VButton variant="primary" :disabled="editBusy" @click="saveEdit">{{ editBusy ? $t('connTestSaving') : $t('connTestSave') }}</VButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -265,7 +298,17 @@ async function add() {
 .form { margin-top: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 20px 22px; }
 .ftitle { font: 600 14px var(--font-display); color: var(--text-strong); display: flex; align-items: center; gap: 10px; }
 .savetag { font: 600 12px var(--font-mono); color: var(--success-text); }
-.edittag { font: 600 12px var(--font-mono); color: var(--accent-text); }
+.statuscell { display: flex; align-items: center; gap: 10px; }
+.editbtn { width: 28px; height: 26px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.editbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+/* edit-instance modal */
+.ce-mask { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: var(--surface-overlay); backdrop-filter: blur(3px); padding: 24px; }
+.ce-card { width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border-default); border-radius: 16px; background: var(--surface-card); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.ce-head { padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); }
+.ce-title { font: 700 15px var(--font-display); color: var(--text-strong); }
+.ce-sub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
+.ce-body { padding: 18px 22px; }
+.ce-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); border-radius: 0 0 16px 16px; }
 .fsub { font: 500 12px var(--font-body); color: var(--text-muted); margin: 4px 0 16px; }
 .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }

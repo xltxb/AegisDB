@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, UsersRound,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
-  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, PanelLeft,
+  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
@@ -131,13 +131,6 @@ function lockSession() {
   router.push({ path: '/login', query: { locked: '1' } })
 }
 
-// ---- collapsible sidebar ----
-const railCollapsed = ref(localStorage.getItem('vela_rail_collapsed') === '1')
-function toggleRail() {
-  railCollapsed.value = !railCollapsed.value
-  localStorage.setItem('vela_rail_collapsed', railCollapsed.value ? '1' : '0')
-}
-
 // ---- user menu / manual logout ----
 const userMenuOpen = ref(false)
 function logout() {
@@ -169,7 +162,7 @@ onUnmounted(() => {
 <template>
   <div class="shell">
     <!-- LEFT RAIL -->
-    <aside class="rail" :class="{ collapsed: railCollapsed }">
+    <aside class="rail">
       <div class="logo"><Sailboat :size="20" color="#fff" /></div>
       <nav class="rail-nav">
         <div
@@ -207,7 +200,6 @@ onUnmounted(() => {
     <!-- MAIN -->
     <div class="main">
       <header class="topbar">
-        <button class="railtoggle" :class="{ on: railCollapsed }" :title="$t('toggleSidebar')" @click="toggleRail"><PanelLeft :size="18" /></button>
         <div class="tb-title">{{ pageTitle }}</div>
         <div class="tb-sub">{{ pageSub }}</div>
         <div class="tb-right">
@@ -279,14 +271,6 @@ onUnmounted(() => {
   overflow: hidden;
   transition: width var(--dur-med, 0.2s) var(--ease-out, ease), padding var(--dur-med, 0.2s) var(--ease-out, ease);
 }
-.rail.collapsed { width: 0; padding: 14px 0; border-right: none; }
-.railtoggle {
-  width: 32px; height: 32px; flex-shrink: 0; border-radius: 9px; border: 1px solid var(--border-subtle);
-  background: transparent; color: var(--text-muted); cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-.railtoggle:hover { background: var(--surface-sunken); color: var(--text-body); }
-.railtoggle.on { color: var(--accent-text); border-color: var(--accent-subtle-border); background: var(--accent-subtle); }
 .logo {
   width: 36px;
   height: 36px;

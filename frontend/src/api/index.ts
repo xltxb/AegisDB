@@ -29,7 +29,7 @@ export const api = {
   exec: (connectionId: number, sql: string, reason = '', mfaCode = '', database = '') =>
     http.post<any, Envelope<ExecResp>>('/terminal/exec', { connectionId, sql, reason, mfaCode, database }),
   gatewayStats: () =>
-    http.get<any, Envelope<{ online: boolean; p50Ms: number; p95Ms: number; samples: number }>>('/gateway/stats').then(ok),
+    http.get<any, Envelope<{ online: boolean; p50Ms: number; p95Ms: number; samples: number; intercepts: number }>>('/gateway/stats').then(ok),
   scriptConfig: () =>
     http.get<any, Envelope<{ enabled: boolean; savePath: string }>>('/scripts/config').then(ok),
 

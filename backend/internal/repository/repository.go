@@ -850,3 +850,15 @@ func (r *Repo) Count(m any) int64 {
 	r.db.Model(m).Count(&n)
 	return n
 }
+
+// CountProdInterceptions counts real risk-rule hits on PROD instances: audit rows
+// that were blocked (rejected) or gated to approval (pending). Backs the rules
+// page's "hits" stat with live data instead of a demo number.
+func (r *Repo) CountProdInterceptions() (int64, error) {
+	var n int64
+	err := r.db.Model(&model.AuditLog{}).
+		Joins("JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
+		Where("tbl_connection.env = ? AND tbl_audit_log.result IN ?", "prod", []string{"rejected", "pending"}).
+		Count(&n).Error
+	return n, err
+}

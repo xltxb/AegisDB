@@ -7,7 +7,7 @@ export default { name: 'TerminalView' }
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { useUIStore } from '@/stores/ui'
-import { X } from 'lucide-vue-next'
+import { X, PanelLeftOpen } from 'lucide-vue-next'
 import DbTree from '@/components/terminal/DbTree.vue'
 import RiskInspector from '@/components/terminal/RiskInspector.vue'
 import TerminalSession from '@/components/terminal/TerminalSession.vue'
@@ -27,6 +27,7 @@ const scriptSavePath = ref('')
 // One tab per open connection; each renders an isolated <TerminalSession>.
 interface Tab { id: number; conn: Connection; db: string; risk: 'idle' | 'safe' | 'high'; wsStatus: WsStatus }
 const tabs = ref<Tab[]>([])
+const treeCollapsed = ref(false) // collapse the left database-tree panel
 const activeId = ref(0)
 let seq = 0
 
@@ -94,8 +95,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid">
-    <DbTree :connections="conns" :selected-id="activeTab?.conn.id || 0" :selected-db="activeTab?.db" @select="openConn" @select-db="openDb" />
+  <div class="grid" :style="{ gridTemplateColumns: treeCollapsed ? '30px 1fr 340px' : '268px 1fr 340px' }">
+    <div v-if="treeCollapsed" class="treerail" :title="$t('treeExpand')" @click="treeCollapsed = false"><PanelLeftOpen :size="16" /></div>
+    <DbTree v-else :connections="conns" :selected-id="activeTab?.conn.id || 0" :selected-db="activeTab?.db" @select="openConn" @select-db="openDb" @collapse="treeCollapsed = true" />
 
     <div class="term">
       <!-- tab strip: one chip per open database, isolated sessions behind each -->
@@ -129,6 +131,8 @@ onMounted(async () => {
 /* minmax(0,1fr) row caps every cell to the grid height so inner panels scroll
    instead of stretching the row to their content. */
 .grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 268px 1fr 340px; grid-template-rows: minmax(0, 1fr); }
+.treerail { display: flex; justify-content: center; padding-top: 14px; border-right: 1px solid var(--border-subtle); background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
+.treerail:hover { color: var(--accent-text); }
 .term { display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
 .tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
 .tab {

@@ -137,11 +137,13 @@ func (h *Handler) ScriptConfig(c *gin.Context) {
 // measured by the latency middleware — no hard-coded numbers.
 func (h *Handler) GatewayStats(c *gin.Context) {
 	round := func(v float64) float64 { return math.Round(v*10) / 10 }
+	intercepts, _ := h.Repo.CountProdInterceptions() // real PROD rule hits (0 on error)
 	resp.OK(c, gin.H{
-		"online":  true,
-		"p50Ms":   round(metrics.Default.P50()),
-		"p95Ms":   round(metrics.Default.P95()),
-		"samples": metrics.Default.Samples(),
+		"online":     true,
+		"p50Ms":      round(metrics.Default.P50()),
+		"p95Ms":      round(metrics.Default.P95()),
+		"samples":    metrics.Default.Samples(),
+		"intercepts": intercepts,
 	})
 }
 
