@@ -14,7 +14,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
-import { ANSI, c, isSelect, synthTable, buildTable, renderTable } from '@/lib/sqlResult'
+import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
 // One fully-isolated terminal session bound to a single connection. Each tab
@@ -77,6 +77,7 @@ let editor: LineEditor
 let ws: WsTerminal
 let ro: ResizeObserver | null = null
 const pendingSql = ref('')
+const pendingVertical = ref(false) // render the pending command's result MySQL \G-style
 
 // MFA step-up
 const mfaOpen = ref(false)
@@ -272,9 +273,54 @@ function switchDb(db: string) {
   risk.value = 'safe'
 }
 
+// translateMetaSql maps a psql-style DB meta-command to a SQL query the driver can
+// run (the target DB doesn't understand backslash commands). Returns null for
+// commands handled locally (\?, \l, \c). ident chars are sanitised so a name can't
+// break the literal — and the user could run any SQL directly anyway.
+function translateMetaSql(cmd: string, engine: string): string | null {
+  const m = cmd.trim().match(/^\\([a-z]+)\+?\s*(.*)$/i)
+  if (!m) return null
+  const verb = m[1].toLowerCase()
+  const arg = m[2].trim().replace(/;$/, '')
+  const ident = (s: string) => s.replace(/["'`]/g, '').replace(/[^A-Za-z0-9_$.]/g, '')
+  const isPG = /postgre|dws|gauss/i.test(engine)
+  if (isPG) {
+    if (verb === 'dt') return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema, table_name`
+    if (verb === 'dv') return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.views WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2`
+    if (verb === 'dn') return `SELECT schema_name AS "Name" FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog','information_schema') ORDER BY 1`
+    if (verb === 'd') {
+      if (!arg) return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2`
+      const parts = ident(arg).split('.')
+      const tbl = parts.pop() || ''
+      const schCond = parts.length ? ` AND table_schema='${parts[0]}'` : ''
+      return `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", column_default AS "Default" FROM information_schema.columns WHERE table_name='${tbl}'${schCond} ORDER BY ordinal_position`
+    }
+    return null
+  }
+  // MySQL/TiDB
+  if (verb === 'dt') return 'SHOW TABLES'
+  if (verb === 'd') return arg ? `SHOW COLUMNS FROM \`${ident(arg)}\`` : 'SHOW TABLES'
+  return null
+}
+
 async function handleSubmit(stmt: string) {
-  const raw = stmt.trim().replace(/;+\s*$/, '')
-  if (raw.startsWith('\\')) { metaCommand(raw); editor.resume(); return }
+  // \G (vertical) / \g (horizontal) are MySQL client display terminators, not SQL —
+  // strip them before sending and remember whether to render the result vertically.
+  const trimmed = stmt.trim()
+  pendingVertical.value = /\\G\s*$/.test(trimmed)
+  const raw = trimmed.replace(/\\[gG]\s*$/, '').replace(/;+\s*$/, '').trim()
+  if (raw.startsWith('\\')) {
+    // psql-style DB meta-commands (\dt, \d, \dn) translate to a query the driver
+    // understands; the rest are local terminal meta-commands.
+    const sql = translateMetaSql(raw, props.conn.engine)
+    if (sql) {
+      if (sendExec(sql, '') === 'ws') return
+      try { handleExecEnv(await api.exec(props.conn.id, sql, '', '', targetDb.value), sql, '') }
+      catch { out(c(ANSI.red, '· 执行失败')); editor.resume() }
+      return
+    }
+    metaCommand(raw); editor.resume(); return
+  }
   if (!raw) { editor.resume(); return }
   const useDb = parseUseDb(raw)
   if (useDb) { switchDb(useDb); editor.resume(); return }
@@ -314,7 +360,10 @@ function metaCommand(raw: string) {
       '  \\?            显示帮助',
       '  \\l            列出可用连接',
       '  \\c / \\clear   清屏',
-      c(ANSI.gray, ' SQL 语句请以分号 ; 结束后回车执行'),
+      '  \\dt           列出当前库的表',
+      '  \\dn           列出 schema (PostgreSQL/DWS)',
+      '  \\d <表>       查看表结构',
+      c(ANSI.gray, ' SQL 语句以 ; 结束回车执行 · 末尾 \\G 竖排显示'),
     ])
   } else if (cmd === 'l' || cmd === 'list') {
     outLines(props.conns.map((cn) => `  ${String(cn.id).padStart(3)}  ${cn.env}-${cn.name}  ${c(ANSI.gray, cn.defaultRole)}`))
@@ -379,11 +428,12 @@ function onWsMessage(m: any) {
 function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: string[]; data?: string[][]; truncated?: boolean }) {
   const rows = m.rows || 0
   if (m.columns && m.columns.length) {
-    // Real result set returned by the target DB.
-    const tb = buildTable(m.columns, m.data || [])
-    outLines(renderTable(tb))
-    const more = m.truncated ? ` · 已截断,显示前 ${tb.rows.length}` : ''
-    out(c(ANSI.gray, `(${tb.rows.length} 行${more} · ${m.ms ?? 0}ms)`))
+    // Real result set returned by the target DB — vertical (\G) or table.
+    const data = m.data || []
+    if (pendingVertical.value) outLines(renderVertical(m.columns, data))
+    else outLines(renderTable(buildTable(m.columns, data)))
+    const more = m.truncated ? ` · 已截断,显示前 ${data.length}` : ''
+    out(c(ANSI.gray, `(${data.length} 行${more} · ${m.ms ?? 0}ms)`))
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)

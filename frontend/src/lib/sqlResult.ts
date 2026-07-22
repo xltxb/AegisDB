@@ -146,6 +146,24 @@ export function buildTable(columns: string[], rows: string[][]): SynthTable {
 const pad = (s: string, w: number, right: boolean) =>
   right ? ' '.repeat(Math.max(0, w - s.length)) + s : s + ' '.repeat(Math.max(0, w - s.length))
 
+// renderVertical produces MySQL `\G`-style vertical output: one "column: value"
+// pair per line, grouped per row. Ideal for wide/long values (e.g. SHOW CREATE
+// TABLE) whose multi-line content would break a horizontal table.
+export function renderVertical(columns: string[], rows: string[][]): string[] {
+  const w = columns.reduce((m, col) => Math.max(m, col.length), 0)
+  const out: string[] = []
+  rows.forEach((row, i) => {
+    out.push(c(ANSI.gray, `*************************** ${i + 1}. row ***************************`))
+    columns.forEach((col, j) => {
+      const label = ' '.repeat(Math.max(0, w - col.length)) + col
+      // Keep embedded newlines readable in xterm (carriage-return each line).
+      const val = (row[j] ?? '').replace(/\r?\n/g, '\r\n')
+      out.push(c(ANSI.bold, label) + c(ANSI.gray, ': ') + val)
+    })
+  })
+  return out
+}
+
 // renderTable produces psql-style aligned, ANSI-coloured lines (no trailing \n).
 export function renderTable(t: SynthTable): string[] {
   const widths = t.columns.map((col, i) => {
