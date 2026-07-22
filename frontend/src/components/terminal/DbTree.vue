@@ -146,16 +146,20 @@ function clickInst(id: number) {
                 </div>
                 <div v-if="isDbOpen(c.id, d.name)" class="ind3">
                   <div v-if="dbLoading[dbKey(c.id, d.name)]" class="tbl empty">加载中…</div>
-                  <!-- database → schema → tables (PostgreSQL) -->
-                  <template v-else-if="d.schemas && d.schemas.length" v-for="sc in d.schemas" :key="sc.name">
-                    <div class="sch" @click.stop="toggleSchema(c.id, d.name, sc.name)">
-                      <component :is="isSchemaOpen(c.id, d.name, sc.name) ? ChevronDown : ChevronRight" :size="11" color="var(--text-faint)" />
-                      <FolderOpen :size="12" />{{ sc.name }}<span class="tcnt">{{ sc.tables.length }}</span>
-                    </div>
-                    <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
-                      <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
-                      <div v-if="!sc.tables.length" class="tbl empty">— 空 schema —</div>
-                    </div>
+                  <!-- database → schema → tables (PostgreSQL). Keep the condition and
+                       the loop on SEPARATE templates — v-else-if + v-for on one node
+                       breaks the if/else chain in Vue 3. -->
+                  <template v-else-if="d.schemas && d.schemas.length">
+                    <template v-for="sc in d.schemas" :key="sc.name">
+                      <div class="sch" @click.stop="toggleSchema(c.id, d.name, sc.name)">
+                        <component :is="isSchemaOpen(c.id, d.name, sc.name) ? ChevronDown : ChevronRight" :size="11" color="var(--text-faint)" />
+                        <FolderOpen :size="12" />{{ sc.name }}<span class="tcnt">{{ sc.tables.length }}</span>
+                      </div>
+                      <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
+                        <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                        <div v-if="!sc.tables.length" class="tbl empty">— 空 schema —</div>
+                      </div>
+                    </template>
                   </template>
                   <!-- database → tables (MySQL / SQLite) -->
                   <template v-else>
