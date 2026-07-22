@@ -67,6 +67,8 @@ export const api = {
   connections: () => http.get<any, Envelope<Connection[]>>('/connections').then(ok),
   createConnection: (body: Partial<Connection>) =>
     http.post<any, Envelope<Connection>>('/connections', body).then(ok),
+  updateConnection: (id: number, body: Partial<Connection>) =>
+    http.put<any, Envelope<Connection>>(`/connections/${id}`, body).then(ok),
   toggleConnection: (id: number, status?: string) =>
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { status }).then(ok),
   setConnectionTags: (id: number, tags: string) =>

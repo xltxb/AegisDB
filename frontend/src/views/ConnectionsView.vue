@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Tag } from 'lucide-vue-next'
+import { Tag, Pencil } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
@@ -54,7 +54,32 @@ const envOpts = [
 const engineOpts = ['MySQL 8.0', 'TiDB', 'GaussDB (DWS)', 'Oracle', 'PostgreSQL 15', 'ClickHouse', 'Redis 7']
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
-const draft = ref({ name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' })
+const blankDraft = () => ({ name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' })
+const draft = ref(blankDraft())
+// null = create mode; a connection id = editing that instance in the same form.
+const editingId = ref<number | null>(null)
+
+// Load an existing instance into the form for editing (address / engine / env /
+// policy / credentials / database). Password is left blank = keep the stored one.
+function openEdit(c: Connection) {
+  if (!isAdmin.value) return
+  editingId.value = c.id
+  draft.value = {
+    name: c.name,
+    host: `${c.host}:${c.port}`,
+    engine: c.engine,
+    envLabel: envOpts.find((o) => o.env === c.env)?.label || envOpts[0].label,
+    policy: c.policy,
+    username: c.username || '',
+    password: '',
+    database: c.database || '',
+  }
+  if (typeof window !== 'undefined') window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+}
+function cancelEdit() {
+  editingId.value = null
+  draft.value = blankDraft()
+}
 
 const prod = computed(() => conns.value.filter((c) => c.env === 'prod'))
 const staging = computed(() => conns.value.filter((c) => c.env === 'staging'))
@@ -97,16 +122,23 @@ async function toggle(c: Connection) {
 async function add() {
   if (!draft.value.name.trim() || !draft.value.host.trim()) return
   const env = envOpts.find((o) => o.label === draft.value.envLabel)?.env || 'prod'
-  // M14: 创建连接失败以 toast 呈现
+  const body = {
+    name: draft.value.name.trim(), engine: draft.value.engine,
+    host: draft.value.host.trim(), env: env as any, policy: draft.value.policy,
+    username: draft.value.username.trim(), password: draft.value.password, database: draft.value.database.trim(),
+  }
+  // M14: 失败以 toast 呈现
   try {
-    // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
-    const created = await api.createConnection({
-      name: draft.value.name.trim(), engine: draft.value.engine,
-      host: draft.value.host.trim(), env: env as any, policy: draft.value.policy,
-      username: draft.value.username.trim(), password: draft.value.password, database: draft.value.database.trim(),
-    })
-    try { await api.testConnection(created.id) } catch { /* test is best-effort */ }
-    draft.value = { name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' }
+    if (editingId.value != null) {
+      const updated = await api.updateConnection(editingId.value, body)
+      try { await api.testConnection(updated.id) } catch { /* best-effort */ }
+      editingId.value = null
+    } else {
+      // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
+      const created = await api.createConnection(body)
+      try { await api.testConnection(created.id) } catch { /* best-effort */ }
+    }
+    draft.value = blankDraft()
     saved.value = true
     setTimeout(() => (saved.value = false), 2600)
     await load()
@@ -148,6 +180,7 @@ async function add() {
               <span class="rbadge" :class="c.username ? 'real' : 'sim'">{{ c.username ? $t('connReal') : $t('connSim') }}</span>
               <span v-for="tg in tagArr(c.tags)" :key="tg" class="tchip">{{ tg }}</span>
               <span v-if="isAdmin" class="tedit" @click="openTagEdit(c)"><Tag :size="10" />{{ tagArr(c.tags).length ? $t('edit') : $t('tagAdd') }}</span>
+              <span v-if="isAdmin" class="tedit" @click="openEdit(c)"><Pencil :size="10" />{{ $t('connEdit') }}</span>
             </div>
           </div>
           <div class="mono">{{ c.engine }}</div>
@@ -169,8 +202,8 @@ async function add() {
     </div>
 
     <div v-if="isAdmin" class="form">
-      <div class="ftitle">{{ $t('formNewConn') }}<span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
-      <div class="fsub">{{ $t('formNewConnSub') }}</div>
+      <div class="ftitle">{{ editingId != null ? $t('formEditConn') : $t('formNewConn') }}<span v-if="editingId != null" class="edittag">#{{ editingId }} {{ draft.name }}</span><span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
+      <div class="fsub">{{ editingId != null ? $t('formEditConnSub') : $t('formNewConnSub') }}</div>
       <div class="fgrid">
         <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
         <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
@@ -179,10 +212,13 @@ async function add() {
         <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
         <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" placeholder="orders_db" /></div>
         <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
-        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
+        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" :placeholder="editingId != null ? $t('fPasswordKeep') : '••••••'" /></div>
       </div>
       <div class="credhint">{{ $t('connCredHint') }}</div>
-      <div class="fsaverow"><VButton variant="primary" @click="add">{{ $t('fSave') }}</VButton></div>
+      <div class="fsaverow">
+        <VButton v-if="editingId != null" variant="secondary" @click="cancelEdit">{{ $t('mCancel') }}</VButton>
+        <VButton variant="primary" @click="add">{{ editingId != null ? $t('fSaveEdit') : $t('fSave') }}</VButton>
+      </div>
     </div>
 
     <TagEditModal
@@ -229,11 +265,12 @@ async function add() {
 .form { margin-top: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 20px 22px; }
 .ftitle { font: 600 14px var(--font-display); color: var(--text-strong); display: flex; align-items: center; gap: 10px; }
 .savetag { font: 600 12px var(--font-mono); color: var(--success-text); }
+.edittag { font: 600 12px var(--font-mono); color: var(--accent-text); }
 .fsub { font: 500 12px var(--font-body); color: var(--text-muted); margin: 4px 0 16px; }
 .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
 .fgrid input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-body); outline: none; }
 .fgrid input:focus { border-color: var(--accent-text); }
 .credhint { margin-top: 14px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
-.fsaverow { margin-top: 14px; display: flex; justify-content: flex-end; }
+.fsaverow { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
 </style>

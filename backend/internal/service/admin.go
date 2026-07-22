@@ -14,14 +14,20 @@ import (
 
 // ---------------------------------------------------------------- Connections
 
-func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
-	host, port := splitHostPort(req.Host)
-	env := strings.ToLower(req.Env)
-	layer := map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "dev": "L4 沙盒"}[env]
-	role := "dba_l2"
+// connEnvMeta maps an env to its display layer and default connection role.
+func connEnvMeta(env string) (layer, role string) {
+	layer = map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "dev": "L4 沙盒"}[env]
+	role = "dba_l2"
 	if env == model.EnvDev {
 		role = "developer"
 	}
+	return
+}
+
+func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
+	host, port := splitHostPort(req.Host)
+	env := strings.ToLower(req.Env)
+	layer, role := connEnvMeta(env)
 	// Encrypt the DB password at rest (AES-256-GCM). It must stay reversible
 	// because the gateway needs it to open the real connection.
 	encPw, err := crypto.EncryptSecret(req.Password)
@@ -34,6 +40,40 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 		Username: strings.TrimSpace(req.Username), Password: encPw, Database: strings.TrimSpace(req.Database),
 	}
 	if err := s.Repo.CreateConnection(c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// UpdateConnection edits an existing instance's config (address, engine, env,
+// policy, credentials, database). An empty password keeps the stored one so the
+// admin needn't re-enter it on every edit.
+func (s *Services) UpdateConnection(id int64, req dto.ConnectionUpdateReq) (*model.Connection, error) {
+	c, err := s.Repo.GetConnection(id)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	if !validPolicies[req.Policy] {
+		return nil, ErrBadRequest
+	}
+	env := strings.ToLower(strings.TrimSpace(req.Env))
+	layer, role := connEnvMeta(env)
+	c.Name = strings.TrimSpace(req.Name)
+	c.Engine = strings.TrimSpace(req.Engine)
+	c.Host, c.Port = splitHostPort(req.Host)
+	c.Env = env
+	c.Layer, c.DefaultRole = layer, role
+	c.Policy = req.Policy
+	c.Username = strings.TrimSpace(req.Username)
+	c.Database = strings.TrimSpace(req.Database)
+	if strings.TrimSpace(req.Password) != "" { // empty = keep the stored password
+		encPw, encErr := crypto.EncryptSecret(req.Password)
+		if encErr != nil {
+			return nil, encErr
+		}
+		c.Password = encPw
+	}
+	if err := s.Repo.UpdateConnection(c); err != nil {
 		return nil, err
 	}
 	return c, nil

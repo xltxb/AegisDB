@@ -92,6 +92,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/connections", h.ListConnections) // tag-filtered per the caller's role
 		a.GET("/tags", h.ListTags)               // distinct connection tags (for pickers)
 		a.POST("/connections", menu("db"), admin, h.CreateConnection)
+		a.PUT("/connections/:id", menu("db"), admin, h.UpdateConnection)
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)
 		a.PATCH("/connections/:id", menu("db"), admin, h.PatchConnection)
 		a.GET("/connections/:id/schema", menu("terminal"), h.GetConnectionSchema)

@@ -138,6 +138,19 @@ type ConnectionCreateReq struct {
 	Database string `json:"database"` // default schema / sqlite file
 }
 
+// ConnectionUpdateReq edits an existing instance. Name/Engine/Host/Env are required
+// (the edit form pre-fills them); Password empty means "keep the stored password".
+type ConnectionUpdateReq struct {
+	Name     string `json:"name" binding:"required"`
+	Engine   string `json:"engine" binding:"required"`
+	Host     string `json:"host" binding:"required"`
+	Env      string `json:"env" binding:"required"`
+	Policy   string `json:"policy" binding:"required"`
+	Username string `json:"username"`
+	Password string `json:"password"` // empty = keep existing
+	Database string `json:"database"`
+}
+
 type ConnectionStatusReq struct {
 	Status string  `json:"status"`           // online|maint (empty = toggle)
 	Tags   *string `json:"tags,omitempty"`   // when present, replace the connection's tags

@@ -40,6 +40,25 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 	resp.OK(c, conn)
 }
 
+// UpdateConnection edits an existing instance's config (admin only).
+func (h *Handler) UpdateConnection(c *gin.Context) {
+	var req dto.ConnectionUpdateReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	conn, err := h.Svc.UpdateConnection(pathID(c), req)
+	if err == service.ErrNotFound {
+		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "更新失败:"+err.Error())
+		return
+	}
+	resp.OK(c, conn)
+}
+
 func (h *Handler) TestConnection(c *gin.Context) {
 	conn, err := h.Repo.GetConnection(pathID(c))
 	if err != nil {
