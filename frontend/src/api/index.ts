@@ -71,6 +71,8 @@ export const api = {
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { status }).then(ok),
   setConnectionTags: (id: number, tags: string) =>
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { tags }).then(ok),
+  setConnectionPolicy: (id: number, policy: string) =>
+    http.patch<any, Envelope<Connection>>(`/connections/${id}`, { policy }).then(ok),
   tags: () => http.get<any, Envelope<string[]>>('/tags').then(ok),
   testConnection: (id: number) => http.post<any, Envelope<any>>(`/connections/${id}/test`).then(ok),
   connectionSchema: (id: number) =>

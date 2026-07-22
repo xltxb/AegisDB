@@ -35,6 +35,17 @@ async function saveTags(tags: string[]) {
   }
 }
 
+// Admins can change an existing instance's gateway policy inline.
+async function setPolicy(c: Connection, policy: string) {
+  if (!policy || policy === c.policy) return
+  try {
+    await api.setConnectionPolicy(c.id, policy)
+    await load()
+  } catch (e) {
+    ui.notifyError(e, '网关策略更新失败')
+  }
+}
+
 const envOpts = [
   { label: 'PROD · L1 核心', env: 'prod' },
   { label: 'STAGING · L3 演练UAT', env: 'staging' },
@@ -142,7 +153,12 @@ async function add() {
           <div class="mono">{{ c.engine }}</div>
           <div class="mono mute">{{ c.host }}:{{ c.port }}</div>
           <div class="mono" :style="{ color: roleColor(c.defaultRole) }">{{ c.defaultRole }}</div>
-          <div><span class="pill" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }">{{ c.policy }}</span></div>
+          <div>
+            <select v-if="isAdmin" class="polsel" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }" :value="c.policy" title="网关策略" @change="setPolicy(c, ($event.target as HTMLSelectElement).value)">
+              <option v-for="p in policyOpts" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <span v-else class="pill" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }">{{ c.policy }}</span>
+          </div>
           <div>
             <span class="pill" :class="{ click: isAdmin }" :style="{ background: stMeta(c.status).bg, color: stMeta(c.status).c }" :title="isAdmin ? '切换状态' : ''" @click="toggle(c)">
               <span class="dotc" />{{ c.status === 'online' ? $t('online') : $t('maint') }}
@@ -206,6 +222,9 @@ async function add() {
 .mono.mute { color: var(--text-muted); }
 .pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 11px var(--font-mono); }
 .pill.click { cursor: pointer; }
+.polsel { height: 24px; padding: 0 6px; border: 1px solid var(--border-default); border-radius: 999px; font: 600 11px var(--font-mono); cursor: pointer; outline: none; }
+.polsel:focus { border-color: var(--accent-text); }
+.polsel option { background: var(--surface-card); color: var(--text-body); }
 .dotc { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
 .form { margin-top: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 20px 22px; }
 .ftitle { font: 600 14px var(--font-display); color: var(--text-strong); display: flex; align-items: center; gap: 10px; }

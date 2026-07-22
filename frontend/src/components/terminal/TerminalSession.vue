@@ -160,7 +160,7 @@ function banner() {
   const me = auth.me
   out(cautionLine())
   out(c(ANSI.gray, `# 会话已连接 ${cn.env}-${cn.name} · 角色 ${cn.defaultRole} · 网关策略 ${cn.policy} · 操作人 ${me?.name || ''} · 审计 ON`))
-  out(c(ANSI.gray, '# 语句以 ;  结束并执行 · ↑/↓ 历史 · Ctrl+L 清屏 · Ctrl+C 取消 · \\? 帮助'))
+  out(c(ANSI.gray, '# 语句以 ;  结束并执行 · ↑/↓ 历史 · Ctrl+L 清屏 · Ctrl+C 取消 · 选中即复制 · \\? 帮助'))
 }
 
 function fitNow() { try { fit.fit() } catch { /* ignore */ } }
@@ -177,6 +177,18 @@ onMounted(() => {
   fit = new FitAddon()
   term.loadAddon(fit)
   term.open(termEl.value!)
+
+  // Select-to-copy: mirror the terminal selection into the clipboard automatically,
+  // like a native terminal. Mouse/keyboard selection is a user gesture, so
+  // writeText is allowed; silently no-op when the clipboard API is unavailable
+  // (e.g. a non-HTTPS origin). lastCopied avoids redundant writes while dragging.
+  let lastCopied = ''
+  term.onSelectionChange(() => {
+    const sel = term.getSelection()
+    if (!sel || sel === lastCopied) return
+    lastCopied = sel
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(sel).catch(() => {})
+  })
 
   editor = new LineEditor(term, {
     prompt: promptText,

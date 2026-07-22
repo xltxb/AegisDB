@@ -149,6 +149,23 @@ func (s *Services) SetRoleTags(id int64, tags []string) error { return s.Repo.Se
 // AllTags lists every distinct connection tag (for pickers).
 func (s *Services) AllTags() []string { return s.Repo.AllConnectionTags() }
 
+// validPolicies are the gateway policies a connection may carry.
+var validPolicies = map[string]bool{"strict": true, "approve-1": true, "audit-only": true}
+
+// SetConnectionPolicy updates a connection's gateway policy (strict | approve-1 |
+// audit-only), rejecting an unknown value.
+func (s *Services) SetConnectionPolicy(id int64, policy string) error {
+	if !validPolicies[policy] {
+		return ErrBadRequest
+	}
+	c, err := s.Repo.GetConnection(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	c.Policy = policy
+	return s.Repo.UpdateConnection(c)
+}
+
 func (s *Services) ToggleConnection(id int64, status string) error {
 	c, err := s.Repo.GetConnection(id)
 	if err != nil {

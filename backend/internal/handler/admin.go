@@ -54,14 +54,18 @@ func (h *Handler) PatchConnection(c *gin.Context) {
 	var req dto.ConnectionStatusReq
 	_ = c.ShouldBindJSON(&req)
 	id := pathID(c)
-	if req.Tags != nil { // tag update
+	switch {
+	case req.Tags != nil: // replace tags
 		if err := h.Svc.SetConnectionTags(id, *req.Tags); err != nil {
 			resp.Fail(c, resp.CodeInternalError, "保存标签失败")
 			return
 		}
-	}
-	// toggle/set status for an explicit status change or a bare status patch
-	if req.Status != "" || req.Tags == nil {
+	case req.Policy != nil: // set gateway policy
+		if err := h.Svc.SetConnectionPolicy(id, *req.Policy); err != nil {
+			resp.Fail(c, resp.CodeBadRequest, "网关策略无效")
+			return
+		}
+	default: // status toggle / explicit set
 		if err := h.Svc.ToggleConnection(id, req.Status); err != nil {
 			resp.Fail(c, resp.CodeBadRequest, "切换失败")
 			return

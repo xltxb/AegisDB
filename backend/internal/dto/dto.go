@@ -139,8 +139,9 @@ type ConnectionCreateReq struct {
 }
 
 type ConnectionStatusReq struct {
-	Status string  `json:"status"`         // online|maint (empty = toggle)
-	Tags   *string `json:"tags,omitempty"` // when present, replace the connection's tags
+	Status string  `json:"status"`           // online|maint (empty = toggle)
+	Tags   *string `json:"tags,omitempty"`   // when present, replace the connection's tags
+	Policy *string `json:"policy,omitempty"` // when present, set the gateway policy
 }
 
 // RoleTagsReq assigns the DB tags a role (user group) may access.
