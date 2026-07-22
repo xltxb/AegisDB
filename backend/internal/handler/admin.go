@@ -79,7 +79,7 @@ func (h *Handler) PatchConnection(c *gin.Context) {
 // live from the target when the connection has real credentials, otherwise the
 // seeded (simulated) tree. See Services.ConnectionSchema.
 func (h *Handler) GetConnectionSchema(c *gin.Context) {
-	resp.OK(c, h.Svc.ConnectionSchema(middleware.CurrentUser(c), pathID(c)))
+	resp.OK(c, h.Svc.ConnectionSchema(middleware.CurrentUser(c), pathID(c), c.Query("database")))
 }
 
 // ---------------------------------------------------------------- Roles

@@ -44,7 +44,7 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 // the seeded (simulated) tree. Live-introspection failures are reported in the
 // response's Error field (not as a transport error) so the UI can show why the tree
 // is empty. Access is tag-gated just like execution.
-func (s *Services) ConnectionSchema(u *model.User, connID int64) dto.ConnectionSchemaResp {
+func (s *Services) ConnectionSchema(u *model.User, connID int64, database string) dto.ConnectionSchemaResp {
 	out := dto.ConnectionSchemaResp{ConnectionID: connID, Databases: []dto.SchemaDBDTO{}}
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
@@ -54,6 +54,11 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64) dto.ConnectionS
 	if !s.canAccessConn(u, conn) {
 		out.Error = "无权访问该连接"
 		return out
+	}
+	// A caller may target a specific database (e.g. a PostgreSQL database picked
+	// from the list) to load that database's tables.
+	if database = strings.TrimSpace(database); database != "" {
+		conn.Database = database
 	}
 	if gateway.RealExecSupported(conn) {
 		groups, err := gateway.RealSchema(conn)

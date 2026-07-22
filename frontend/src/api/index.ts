@@ -75,8 +75,10 @@ export const api = {
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { policy }).then(ok),
   tags: () => http.get<any, Envelope<string[]>>('/tags').then(ok),
   testConnection: (id: number) => http.post<any, Envelope<any>>(`/connections/${id}/test`).then(ok),
-  connectionSchema: (id: number) =>
-    http.get<any, Envelope<ConnectionSchema>>(`/connections/${id}/schema`).then(ok),
+  connectionSchema: (id: number, database = '') =>
+    http.get<any, Envelope<ConnectionSchema>>(
+      `/connections/${id}/schema${database ? `?database=${encodeURIComponent(database)}` : ''}`,
+    ).then(ok),
 
   // ---- roles ----
   roles: () => http.get<any, Envelope<RoleBrief[]>>('/roles').then(ok),

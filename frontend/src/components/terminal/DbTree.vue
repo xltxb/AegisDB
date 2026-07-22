@@ -36,11 +36,29 @@ const isDbOpen = (cid: number, name: string) => !!dbOpen.value[dbKey(cid, name)]
 function toggleDb(cid: number, name: string) {
   const k = dbKey(cid, name)
   dbOpen.value[k] = !dbOpen.value[k]
+  if (dbOpen.value[k]) loadDbTables(cid, name)
 }
 // Clicking a database selects it as the target and expands it to reveal its tables.
 function selectDb(cid: number, name: string) {
   dbOpen.value[dbKey(cid, name)] = true
+  loadDbTables(cid, name)
   emit('selectDb', cid, name)
+}
+
+// Lazily load a database's tables on first expand. Needed for PostgreSQL, where the
+// top level lists databases (no tables) and each database is introspected on demand;
+// a database that already has tables (MySQL) is skipped.
+const dbLoading = ref<Record<string, boolean>>({})
+async function loadDbTables(cid: number, name: string) {
+  const d = schema.value?.databases.find((x) => x.name === name)
+  if (!d || d.tables.length || dbLoading.value[dbKey(cid, name)]) return
+  dbLoading.value[dbKey(cid, name)] = true
+  try {
+    const sc = await api.connectionSchema(cid, name)
+    const loaded = sc.databases.find((x) => x.name === name) || sc.databases[0]
+    if (loaded) d.tables = loaded.tables
+  } catch { /* leave empty on failure */ }
+  finally { dbLoading.value[dbKey(cid, name)] = false }
 }
 
 const envMeta: Record<string, { label: string; dot: string }> = {
@@ -109,11 +127,12 @@ function clickInst(id: number) {
                 <div class="db" :class="{ sel: d.name === selectedDb }" @click.stop="selectDb(c.id, d.name)">
                   <component :is="isDbOpen(c.id, d.name) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" @click.stop="toggleDb(c.id, d.name)" />
                   <FolderOpen :size="13" />{{ d.name }}
-                  <span class="tcnt">{{ d.tables.length }}</span>
+                  <span v-if="d.tables.length" class="tcnt">{{ d.tables.length }}</span>
                 </div>
                 <div v-if="isDbOpen(c.id, d.name)" class="ind3">
                   <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
-                  <div v-if="!d.tables.length" class="tbl empty">— 空库 —</div>
+                  <div v-if="dbLoading[dbKey(c.id, d.name)]" class="tbl empty">加载中…</div>
+                  <div v-else-if="!d.tables.length" class="tbl empty">— 空库 —</div>
                 </div>
               </template>
             </div>
