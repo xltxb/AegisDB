@@ -61,3 +61,19 @@ func TestIsPgNoSSL(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// A PostgreSQL connection with no configured database must default to "postgres",
+// not fall through to libpq's user-name default ("database <user> does not exist").
+func TestEngineDriver_PostgresDefaultsDatabase(t *testing.T) {
+	conn := &model.Connection{Engine: "PostgreSQL 15", Host: "pg.internal", Port: 5432, Username: "dbadmin", Password: "p"} // no Database
+	_, dsn, ok := engineDriver(conn)
+	if !ok {
+		t.Fatal("expected real-exec support with credentials")
+	}
+	if !strings.Contains(dsn, "dbname='postgres'") {
+		t.Errorf("empty database should default to postgres, got dsn=%q", dsn)
+	}
+	if strings.Contains(dsn, "dbname='dbadmin'") {
+		t.Errorf("must not fall back to the username as the database, got dsn=%q", dsn)
+	}
+}

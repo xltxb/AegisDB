@@ -67,11 +67,19 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 		cfg.TLSConfig = "preferred"
 		return "mysql", cfg.FormatDSN(), conn.Username != ""
 	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
+		// PostgreSQL must connect to a specific database. When none is configured,
+		// default to "postgres" (the maintenance DB that almost always exists) —
+		// otherwise libpq defaults dbname to the USER, which usually doesn't exist
+		// ("database <user> does not exist").
+		dbName := strings.TrimSpace(conn.Database)
+		if dbName == "" {
+			dbName = "postgres"
+		}
 		// lib/pq does NOT support sslmode=prefer (a libpq/pgx feature), so start
 		// with require (TLS) and let dialPool fall back to disable when the server
 		// has no SSL — emulating "prefer": TLS if available, else plaintext.
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require connect_timeout=8",
-			pqEscape(conn.Host), conn.Port, pqEscape(conn.Username), pqEscape(pw), pqEscape(conn.Database))
+			pqEscape(conn.Host), conn.Port, pqEscape(conn.Username), pqEscape(pw), pqEscape(dbName))
 		return "postgres", dsn, conn.Username != ""
 	case strings.Contains(e, "oracle"):
 		return "oracle", goora.BuildUrl(conn.Host, conn.Port, conn.Database, conn.Username, pw, nil), conn.Username != ""
