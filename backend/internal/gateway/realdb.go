@@ -67,8 +67,10 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 		cfg.TLSConfig = "preferred"
 		return "mysql", cfg.FormatDSN(), conn.Username != ""
 	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
-		// sslmode=prefer: use TLS if the server offers it, else plaintext.
-		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=prefer connect_timeout=8",
+		// lib/pq does NOT support sslmode=prefer (a libpq/pgx feature), so start
+		// with require (TLS) and let dialPool fall back to disable when the server
+		// has no SSL — emulating "prefer": TLS if available, else plaintext.
+		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require connect_timeout=8",
 			pqEscape(conn.Host), conn.Port, pqEscape(conn.Username), pqEscape(pw), pqEscape(conn.Database))
 		return "postgres", dsn, conn.Username != ""
 	case strings.Contains(e, "oracle"):
@@ -132,8 +134,19 @@ func openConn(conn *model.Connection) (*sql.DB, func(), error) {
 	return db, func() {}, nil
 }
 
-// dialPool opens, configures and verifies a connection pool.
+// dialPool opens, configures and verifies a connection pool. For PostgreSQL it
+// emulates sslmode=prefer: if the initial TLS (sslmode=require) ping fails because
+// the server has no SSL, it retries once with sslmode=disable (plaintext).
 func dialPool(driver, dsn string) (*sql.DB, error) {
+	db, err := openAndPing(driver, dsn)
+	if err != nil && driver == "postgres" && strings.Contains(dsn, "sslmode=require") && isPgNoSSL(err) {
+		db, err = openAndPing(driver, strings.Replace(dsn, "sslmode=require", "sslmode=disable", 1))
+	}
+	return db, err
+}
+
+// openAndPing opens a pool, applies limits, and verifies connectivity.
+func openAndPing(driver, dsn string) (*sql.DB, error) {
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
 		return nil, err
@@ -148,6 +161,12 @@ func dialPool(driver, dsn string) (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+// isPgNoSSL reports whether a Postgres connect error is "the server has no SSL",
+// so a TLS attempt can safely retry in plaintext.
+func isPgNoSSL(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), "ssl is not enabled on the server")
 }
 
 // maxResultRows caps how many result rows a terminal read returns for display, so
