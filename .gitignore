@@ -28,10 +28,11 @@ backend/configs/config.local.yaml
 # ---- Editor / OS ----
 .idea/
 .vscode/
+.agents/
 .DS_Store
 Thumbs.db
 
 # ---- Local tooling / test artifacts ----
-.claude/settings.local.json
+.claude/
 /frontend/test-results/
 /frontend/playwright-report/
