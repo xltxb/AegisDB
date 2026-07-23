@@ -146,7 +146,7 @@ function clickInst(id: number) {
                   <span v-if="d.tables.length" class="tcnt">{{ d.tables.length }}</span>
                 </div>
                 <div v-if="isDbOpen(c.id, d.name)" class="ind3">
-                  <div v-if="dbLoading[dbKey(c.id, d.name)]" class="tbl empty">加载中…</div>
+                  <div v-if="dbLoading[dbKey(c.id, d.name)]" class="tbl empty">{{ $t('treeLoading') }}</div>
                   <!-- database → schema → tables (PostgreSQL). Keep the condition and
                        the loop on SEPARATE templates — v-else-if + v-for on one node
                        breaks the if/else chain in Vue 3. -->
@@ -158,20 +158,20 @@ function clickInst(id: number) {
                       </div>
                       <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
                         <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
-                        <div v-if="!sc.tables.length" class="tbl empty">— 空 schema —</div>
+                        <div v-if="!sc.tables.length" class="tbl empty">{{ $t('treeEmptySchema') }}</div>
                       </div>
                     </template>
                   </template>
                   <!-- database → tables (MySQL / SQLite) -->
                   <template v-else>
                     <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
-                    <div v-if="!d.tables.length" class="tbl empty">— 空库 —</div>
+                    <div v-if="!d.tables.length" class="tbl empty">{{ $t('treeEmptyDb') }}</div>
                   </template>
                 </div>
               </template>
             </div>
           </template>
-          <div v-if="!grouped[env].length" class="empty">— 无匹配实例 —</div>
+          <div v-if="!grouped[env].length" class="empty">{{ $t('treeNoMatch') }}</div>
         </div>
       </template>
     </div>
