@@ -6,7 +6,8 @@ import { i18n } from '@/locales'
 export const useUIStore = defineStore('ui', () => {
   const lang = ref<'zh' | 'en'>((localStorage.getItem('vela_lang') as 'zh' | 'en') || 'zh')
   type Theme = 'dark' | 'light' | 'system'
-  const theme = ref<Theme>((localStorage.getItem('vela_theme') as Theme) || 'dark')
+  // Per-user preference (stored in this browser). Defaults to light.
+  const theme = ref<Theme>((localStorage.getItem('vela_theme') as Theme) || 'light')
   // Per-view dynamic topbar subtitle; empty = use the route's i18n default.
   const pageSub = ref('')
 
@@ -65,8 +66,14 @@ export const useUIStore = defineStore('ui', () => {
     applyTheme()
   }
 
+  // Quick toggle for the topbar: flip to the opposite of what's currently shown
+  // (works whether the current preference is explicit or "system").
+  function toggleTheme() {
+    setTheme(resolvedTheme() === 'dark' ? 'light' : 'dark')
+  }
+
   return {
-    lang, theme, pageSub, toasts, setLang, toggleLang, setTheme, applyTheme, resolvedTheme,
+    lang, theme, pageSub, toasts, setLang, toggleLang, setTheme, toggleTheme, applyTheme, resolvedTheme,
     notify, notifyError, dismissToast,
   }
 })

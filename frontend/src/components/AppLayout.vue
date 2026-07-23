@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, UsersRound,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
-  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut,
+  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
@@ -37,6 +37,7 @@ const activeKey = computed(() => (route.meta.menuKey as string) || '')
 const pageTitle = computed(() => t(`t_${route.name as string}` as any))
 // Views may publish a data-driven subtitle via ui.pageSub; otherwise fall back to i18n default.
 const pageSub = computed(() => ui.pageSub || t(`t_${route.name as string}Sub` as any))
+const isDark = computed(() => ui.resolvedTheme() === 'dark')
 
 // Reset the override on navigation so each view starts from its default.
 watch(() => route.name, () => { ui.pageSub = '' })
@@ -210,6 +211,9 @@ onUnmounted(() => {
           <div class="pill warn"><Hourglass :size="13" />{{ $t('pending') }} {{ auth.pendingCount }}</div>
           <div class="pill click" :title="'中 / EN'" @click="ui.toggleLang()">
             <Languages :size="14" />{{ $t('langLabel') }}
+          </div>
+          <div class="pill click" :title="$t('themeToggle')" @click="ui.toggleTheme()">
+            <component :is="isDark ? Sun : Moon" :size="14" />{{ isDark ? $t('themeLight') : $t('themeDark') }}
           </div>
           <div class="notif">
             <button class="bell" :class="{ active: notifOpen }" :title="$t('notifTitle')" @click="toggleNotif">
