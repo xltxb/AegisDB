@@ -48,6 +48,7 @@ async function setPolicy(c: Connection, policy: string) {
 
 const envOpts = [
   { label: 'PROD · L1 核心', env: 'prod' },
+  { label: 'GLI · L2 灰度', env: 'gli' },
   { label: 'STAGING · L3 演练UAT', env: 'staging' },
   { label: 'DEV · L4 沙盒', env: 'dev' },
 ]
@@ -98,6 +99,7 @@ async function saveEdit() {
 }
 
 const prod = computed(() => conns.value.filter((c) => c.env === 'prod'))
+const gli = computed(() => conns.value.filter((c) => c.env === 'gli'))
 const staging = computed(() => conns.value.filter((c) => c.env === 'staging'))
 const dev = computed(() => conns.value.filter((c) => c.env === 'dev'))
 
@@ -180,7 +182,7 @@ async function add() {
         <span>{{ $t('colRole') }}</span><span>{{ $t('colPolicy') }}</span><span>{{ $t('colStatus') }}</span>
       </div>
 
-      <template v-for="(group, gi) in [{ rows: prod, cls: 'danger', label: 'prodRow' }, { rows: staging, cls: 'warn', label: 'stgRow' }, { rows: dev, cls: 'success', label: 'devRow' }]" :key="gi">
+      <template v-for="(group, gi) in [{ rows: prod, cls: 'danger', label: 'prodRow' }, { rows: gli, cls: 'info', label: 'gliRow' }, { rows: staging, cls: 'warn', label: 'stgRow' }, { rows: dev, cls: 'success', label: 'devRow' }]" :key="gi">
         <div class="grouprow" :class="group.cls"><span class="d" />{{ $t(group.label as any) }}</div>
         <div v-for="c in group.rows" :key="c.id" class="trow">
           <div>
@@ -275,6 +277,7 @@ async function add() {
 .trow { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
 .grouprow { padding: 9px 18px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); }
 .grouprow.danger { background: rgba(240, 71, 62, 0.06); color: var(--danger-text); }
+.grouprow.info { background: rgba(59, 130, 246, 0.07); color: var(--info-text, #2563eb); }
 .grouprow.warn { background: rgba(245, 165, 36, 0.06); color: var(--warning-text); }
 .grouprow.success { background: rgba(24, 179, 104, 0.06); color: var(--success-text); }
 .grouprow .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }

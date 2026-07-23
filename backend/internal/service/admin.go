@@ -16,7 +16,7 @@ import (
 
 // connEnvMeta maps an env to its display layer and default connection role.
 func connEnvMeta(env string) (layer, role string) {
-	layer = map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "dev": "L4 沙盒"}[env]
+	layer = map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "gli": "L2 灰度", "dev": "L4 沙盒"}[env]
 	role = "dba_l2"
 	if env == model.EnvDev {
 		role = "developer"

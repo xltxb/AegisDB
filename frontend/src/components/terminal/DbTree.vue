@@ -26,7 +26,7 @@ watch(() => props.selectedId, async (id) => {
 }, { immediate: true })
 
 const search = ref('')
-const collapsed = ref<Record<string, boolean>>({ staging: true, dev: true })
+const collapsed = ref<Record<string, boolean>>({ gli: true, staging: true, dev: true })
 
 // Per-database expand state (collapsed by default so a cluster with many databases
 // stays scannable). Keyed by connection:database so switching instances resets it.
@@ -78,6 +78,7 @@ async function loadDbTables(cid: number, name: string) {
 
 const envMeta: Record<string, { label: string; dot: string }> = {
   prod: { label: 'prodEnv', dot: 'danger' },
+  gli: { label: 'gliEnv', dot: 'info' },
   staging: { label: 'stagingEnv', dot: 'warning' },
   dev: { label: 'devEnv', dot: 'success' },
 }
@@ -91,7 +92,7 @@ function tag(c: Connection) {
 
 const grouped = computed(() => {
   const q = search.value.trim().toLowerCase()
-  const byEnv: Record<string, Connection[]> = { prod: [], staging: [], dev: [] }
+  const byEnv: Record<string, Connection[]> = { prod: [], gli: [], staging: [], dev: [] }
   for (const c of props.connections) {
     if (q && !c.name.toLowerCase().includes(q)) continue
     if (byEnv[c.env]) byEnv[c.env].push(c)
@@ -120,7 +121,7 @@ function clickInst(id: number) {
       <div class="searchbox"><Search :size="14" color="var(--text-faint)" /><input v-model="search" :placeholder="$t('search')" /></div>
     </div>
     <div class="scy body">
-      <template v-for="env in ['prod', 'staging', 'dev']" :key="env">
+      <template v-for="env in ['prod', 'gli', 'staging', 'dev']" :key="env">
         <div class="env" :class="{ muted: env !== 'prod' }" @click="toggle(env)">
           <component :is="isOpen(env) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
           <span class="d" :class="envMeta[env].dot" />{{ $t(envMeta[env].label as any) }}
@@ -197,6 +198,7 @@ function clickInst(id: number) {
 .cnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
 .d { width: 7px; height: 7px; border-radius: 50%; }
 .d.danger { background: var(--danger); }
+.d.info { background: #3b82f6; }
 .d.warning { background: var(--warning); }
 .d.success { background: var(--success); }
 .ind { padding-left: 14px; }

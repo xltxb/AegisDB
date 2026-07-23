@@ -8,6 +8,7 @@ import "time"
 const (
 	EnvProd    = "prod"
 	EnvStaging = "staging"
+	EnvGli     = "gli" // 灰度 — mirrors staging's risk/capability tier
 	EnvDev     = "dev"
 )
 
