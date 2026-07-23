@@ -18,12 +18,8 @@ type chainRow struct {
 // auditChain fetches GET /audit and returns rows in insertion order (id asc).
 func (a *testApp) auditChain(token string) []chainRow {
 	a.t.Helper()
-	r := a.do(http.MethodGet, "/api/v1/audit", token, nil)
-	if r.Code != 0 {
-		a.t.Fatalf("list audit: code=%d msg=%s", r.Code, r.Msg)
-	}
 	var rows []chainRow
-	if err := json.Unmarshal(r.Data, &rows); err != nil {
+	if err := json.Unmarshal(a.auditItemsRaw(token, ""), &rows); err != nil {
 		a.t.Fatalf("audit decode: %v", err)
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })

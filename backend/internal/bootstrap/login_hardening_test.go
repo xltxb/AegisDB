@@ -22,9 +22,8 @@ func TestLogin_FailureIsAudited(t *testing.T) {
 
 	// admin can see a rejected 'login failed' audit row for that email
 	admin := app.login("linwei@vela.io", "vela123")
-	r := app.do(http.MethodGet, "/api/v1/audit", admin, nil)
 	var rows []auditCmdRow
-	_ = json.Unmarshal(r.Data, &rows)
+	_ = json.Unmarshal(app.auditItemsRaw(admin, ""), &rows)
 	found := false
 	for _, row := range rows {
 		if strings.Contains(row.Command, "login failed") && row.Result == "rejected" && row.Actor == "chenhao@vela.io" {

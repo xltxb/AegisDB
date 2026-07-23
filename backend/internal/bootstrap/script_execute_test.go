@@ -16,12 +16,8 @@ type auditRow struct {
 // auditRows fetches GET /audit (all risk, default range).
 func (a *testApp) auditRows(token string) []auditRow {
 	a.t.Helper()
-	r := a.do(http.MethodGet, "/api/v1/audit", token, nil)
-	if r.Code != 0 {
-		a.t.Fatalf("list audit: code=%d msg=%s", r.Code, r.Msg)
-	}
 	var rows []auditRow
-	if err := json.Unmarshal(r.Data, &rows); err != nil {
+	if err := json.Unmarshal(a.auditItemsRaw(token, ""), &rows); err != nil {
 		a.t.Fatalf("audit decode: %v", err)
 	}
 	return rows

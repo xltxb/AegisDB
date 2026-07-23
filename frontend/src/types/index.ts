@@ -158,6 +158,25 @@ export interface AuditRow {
   hash: string
 }
 
+// AuditPage is one page of audit rows plus the total matching the filters.
+export interface AuditPage {
+  items: AuditRow[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+// AuditQuery captures the audit filters: risk, a relative range OR an absolute
+// from/to window, and pagination.
+export interface AuditQuery {
+  risk: string
+  range?: string
+  from?: string
+  to?: string
+  page?: number
+  pageSize?: number
+}
+
 export interface ScannedStmt {
   index: number
   sql: string

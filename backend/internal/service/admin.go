@@ -452,8 +452,32 @@ func (s *Services) auditActor(u *model.User) int64 {
 	return u.ID
 }
 
-func (s *Services) ListAudit(u *model.User, risk string, since time.Time, limit int) ([]model.AuditLog, error) {
-	return s.Repo.ListAudit(s.auditActor(u), risk, since, limit)
+func (s *Services) ListAudit(u *model.User, risk string, since, until time.Time, limit int) ([]model.AuditLog, error) {
+	return s.Repo.ListAudit(s.auditActor(u), risk, since, until, limit)
+}
+
+// AuditPage is one page of audit rows plus the total matching the filters.
+type AuditPage struct {
+	Items    []model.AuditLog `json:"items"`
+	Total    int64            `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"pageSize"`
+}
+
+// ListAuditPaged returns page `page` (1-based) of `pageSize` audit rows matching
+// the risk + time filters, scoped to the caller's visibility.
+func (s *Services) ListAuditPaged(u *model.User, risk string, since, until time.Time, page, pageSize int) (AuditPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 100
+	}
+	rows, total, err := s.Repo.ListAuditPaged(s.auditActor(u), risk, since, until, (page-1)*pageSize, pageSize)
+	if rows == nil {
+		rows = []model.AuditLog{}
+	}
+	return AuditPage{Items: rows, Total: total, Page: page, PageSize: pageSize}, err
 }
 
 // RangeSince maps a range key (24h|7d|30d) to a cutoff time (zero = all-time).
@@ -470,10 +494,40 @@ func RangeSince(key string) time.Time {
 	}
 }
 
+// AuditWindow resolves the audit time filter into a [since, until] window. An
+// explicit absolute `from`/`to` (accepted as RFC3339, "2006-01-02T15:04[:05]"
+// or "2006-01-02", interpreted in server-local time) takes precedence for the
+// lower bound; otherwise the relative `rangeKey` (24h|7d|30d) sets `since`. `to`
+// sets the upper bound when present. A zero time means "unbounded" on that side.
+func AuditWindow(rangeKey, from, to string) (since, until time.Time) {
+	if t, ok := parseAuditTime(from); ok {
+		since = t
+	} else {
+		since = RangeSince(rangeKey)
+	}
+	if t, ok := parseAuditTime(to); ok {
+		until = t
+	}
+	return
+}
+
+func parseAuditTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	for _, layout := range []string{time.RFC3339, "2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.ParseInLocation(layout, s, time.Local); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // ExportCSV renders the audit rows as CSV (scoped to the user's own commands
 // unless they hold an oversight role).
-func (s *Services) ExportCSV(u *model.User, risk string, since time.Time) (string, error) {
-	rows, err := s.Repo.ListAudit(s.auditActor(u), risk, since, 0)
+func (s *Services) ExportCSV(u *model.User, risk string, since, until time.Time) (string, error) {
+	rows, err := s.Repo.ListAudit(s.auditActor(u), risk, since, until, 0)
 	if err != nil {
 		return "", err
 	}

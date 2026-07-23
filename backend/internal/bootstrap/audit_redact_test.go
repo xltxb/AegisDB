@@ -20,12 +20,10 @@ func TestAudit_RedactsPasswordLiterals(t *testing.T) {
 	})
 	eq(t, r.Code, 0, "create user executes on dev")
 
-	rows := app.do(http.MethodGet, "/api/v1/audit", token, nil)
-	eq(t, rows.Code, 0, "audit list code")
 	var audit []struct {
 		Command string `json:"command"`
 	}
-	if err := json.Unmarshal(rows.Data, &audit); err != nil {
+	if err := json.Unmarshal(app.auditItemsRaw(token, ""), &audit); err != nil {
 		t.Fatalf("decode audit: %v", err)
 	}
 

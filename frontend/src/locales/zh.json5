@@ -90,7 +90,8 @@
   auditFootHint: '点击「全部风险」可按 高危 / 中 / 低 过滤 · 导出含完整命令与审批链',
   allRisk: '全部风险', med: '中', low: '低',
   rExecuted: '已执行', rPending: '审批中', rRejected: '已拒绝', rWarn: '已告警',
-  t24h: '近 24h', t7d: '近 7 天', t30d: '近 30 天',
+  t24h: '近 24h', t7d: '近 7 天', t30d: '近 30 天', tAll: '全部时间',
+  auditFrom: '起始', auditTo: '结束', auditClearRange: '清除时间', auditTotal: '共 {n} 条', auditPageOf: '第 {p} / {n} 页',
   // approval inbox
   apprSubTail: '· 通过后由网关代执行，全程写入审计', mineAppr: '待我审批', allAppr: '全部',
   apprCardTail: '· 高危命令审批', apInitiator: '发起人', apTarget: '目标', apReason: '操作原因', apResult: '执行结果', apWaitChain: '等待审批链成员处理',

@@ -29,14 +29,12 @@ func TestExec_TargetDatabaseRecordedOnAudit(t *testing.T) {
 	})
 	eq(t, ir.Code, resp.CodeIntercepted, "DROP intercepted code")
 
-	rows := app.do(http.MethodGet, "/api/v1/audit", token, nil)
-	eq(t, rows.Code, 0, "audit list code")
 	var audit []struct {
 		Command  string `json:"command"`
 		Database string `json:"database"`
 		Result   string `json:"result"`
 	}
-	if err := json.Unmarshal(rows.Data, &audit); err != nil {
+	if err := json.Unmarshal(app.auditItemsRaw(token, ""), &audit); err != nil {
 		t.Fatalf("decode audit: %v", err)
 	}
 

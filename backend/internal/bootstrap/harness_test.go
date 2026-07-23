@@ -136,6 +136,25 @@ func (a *testApp) login(email, password string, mfaCode ...string) string {
 	return data.Token
 }
 
+// auditItemsRaw fetches GET /audit (optionally with a query string like
+// "?risk=high&page=2") and returns the raw JSON array of items, unwrapping the
+// paginated envelope {items,total,page,pageSize} so callers can decode into
+// their own row type.
+func (a *testApp) auditItemsRaw(token, query string) json.RawMessage {
+	a.t.Helper()
+	r := a.do(http.MethodGet, "/api/v1/audit"+query, token, nil)
+	if r.Code != 0 {
+		a.t.Fatalf("audit list: code=%d msg=%s", r.Code, r.Msg)
+	}
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil {
+		a.t.Fatalf("audit envelope decode: %v", err)
+	}
+	return page.Items
+}
+
 // connIDByEnv returns the id of the first seeded connection in the given env.
 func (a *testApp) connIDByEnv(token, env string) int64 {
 	a.t.Helper()
