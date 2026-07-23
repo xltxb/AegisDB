@@ -125,6 +125,53 @@ func newOutboundClient() *http.Client {
 	}
 }
 
+// SendExternalApproval posts a high-risk ticket to审批魔方's create-approval API
+// (POST {baseURL}/api/v1/approvals, Bearer auth) and returns the vendor task_id.
+// Reuses the SSRF-guarded outbound client. See ADR-0003 for the field mapping.
+func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, userAccount string, ap *model.Approval) (string, error) {
+	endpoint := baseURL + "/api/v1/approvals"
+	if err := validateOutboundURL(endpoint); err != nil {
+		return "", err
+	}
+	summary := fmt.Sprintf("%s/%s/%s 高危命令待审批:%s · 原因:%s · 风险:%s",
+		ap.Env, ap.Instance, ap.Database, clip(ap.Command, 200), ap.Reason, ap.RiskLevel)
+	body := map[string]any{
+		"user":             userAccount,   // 发起人网关账户
+		"message_id":       "gw-" + ap.ApNo, // 网关生成的确定性ID(幂等)
+		"external_task_id": ap.ApNo,        // 回调关联主键(原样带回)
+		"request_id":       ap.ApNo,        // 备用关联键
+		"ai_group":         aiGroup,
+		"callback_url":     callbackURL,
+		"messages":         []map[string]string{{"role": "user", "content": summary}},
+		"payload": map[string]any{
+			"env": ap.Env, "instance": ap.Instance, "database": ap.Database,
+			"command": ap.Command, "risk": ap.RiskLevel, "initiator": ap.Initiator,
+			"reason": ap.Reason, "apNo": ap.ApNo,
+		},
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("审批魔方返回 %d: %s", resp.StatusCode, clip(string(respBody), 200))
+	}
+	var out struct {
+		TaskID string `json:"task_id"`
+	}
+	_ = json.Unmarshal(respBody, &out)
+	return out.TaskID, nil
+}
+
 // Dispatcher pushes audit events to the configured webhook, authenticating with
 // an Authorization: Bearer <token> header (token = the configured webhook secret)
 // and retrying with exponential backoff (backend doc §8).

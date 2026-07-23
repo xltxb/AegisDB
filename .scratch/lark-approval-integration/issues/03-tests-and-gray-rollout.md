@@ -1,6 +1,6 @@
 # 03 · httptest 回归 + 灰度开关
 
-Status: ready-for-agent
+Status: ready-for-human
 
 ## What to build
 
@@ -30,3 +30,7 @@ Status: ready-for-agent
 02(回调端点)
 
 ## Comments
+
+- 已实现:`external_approval_test.go` 4 个 httptest(出站 stub + 回调 approve/reject/鉴权/未知/幂等/禁自审);
+  功能开关默认关,灰度顺序见 PRD;全量 `go test ./...` 通过。
+- 待办(非阻塞):前端设置面板暴露 `approval.external.*`(目前经 PUT /settings 配置);部署文档补配置项说明。

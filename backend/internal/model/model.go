@@ -205,6 +205,12 @@ type Approval struct {
 	RiskLevel    string    `gorm:"size:16;not null" json:"riskLevel"` // high|mid|low
 	Status       string     `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
 	AuditID      string     `gorm:"size:32" json:"auditId"`
+	// External (审批魔方) integration: ExternalTaskID is the vendor's task_id (used
+	// by the Phase-2 PATCH write-back); LarkMessageID is the real Lark message id
+	// (om_...) returned on callback, kept for the Phase-2 /reply回帖. Callback
+	// correlation uses our ApNo (echoed back as external_task_id), not these.
+	ExternalTaskID string   `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
+	LarkMessageID  string   `gorm:"size:128" json:"larkMessageId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
 	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)

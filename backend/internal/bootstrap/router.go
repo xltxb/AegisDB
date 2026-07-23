@@ -48,6 +48,11 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// are enforced inside the handler.
 	v1.GET("/terminal/ws", middleware.IPAllowlist(repo), h.TerminalWS)
 
+	// 审批魔方 approval-result callback: authenticated by X-Callback-Secret (+ its
+	// own optional source-IP allowlist) inside the handler, NOT by the user JWT /
+	// user IP allowlist — the caller is the approval service, not a console user.
+	v1.POST("/approvals/lark/callback", h.LarkApprovalCallback)
+
 	// ---- authenticated ----
 	// IPAllowlist runs after auth so the source IP is enforced on every data API
 	// (Session & Security · IP allowlist); loopback is always permitted.

@@ -10,9 +10,18 @@ import (
 	"velagateway/internal/middleware"
 	"velagateway/internal/model"
 	"velagateway/internal/service"
+	"velagateway/pkg/crypto"
 	"velagateway/pkg/resp"
 	"velagateway/pkg/sqlutil"
 )
+
+// encryptedSettingKeys hold high-impact secrets encrypted at rest (a DB dump must
+// not hand over a usable token / callback secret that could forge approvals →
+// trigger production execution). Encrypted on save, decrypted where read.
+var encryptedSettingKeys = map[string]bool{
+	"approval.external.token":          true,
+	"approval.external.callbackSecret": true,
+}
 
 // ---------------------------------------------------------------- Connections
 
@@ -314,6 +323,32 @@ func (h *Handler) RejectApproval(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true, "status": "rejected"})
 }
 
+// LarkApprovalCallback receives审批魔方's approval-result callback (public route,
+// no user JWT). It is authenticated by the X-Callback-Secret header (+ optional
+// source-IP allowlist), correlated to our ticket by ApNo, idempotent, and — since
+// it can trigger a production execution — fails closed on any auth error.
+func (h *Handler) LarkApprovalCallback(c *gin.Context) {
+	if err := h.Svc.VerifyExternalCallback(c.GetHeader("X-Callback-Secret"), c.ClientIP()); err != nil {
+		resp.Fail(c, resp.CodeForbidden, "回调鉴权失败")
+		return
+	}
+	var req dto.LarkApprovalCallbackReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	status, err := h.Svc.DecideApprovalExternal(req)
+	if err == service.ErrNotFound {
+		resp.Fail(c, resp.CodeBadRequest, "审批单不存在")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeInternalError, "回调处理失败")
+		return
+	}
+	resp.OK(c, gin.H{"status": status})
+}
+
 // ---------------------------------------------------------------- Notifications
 
 func (h *Handler) ListNotifications(c *gin.Context) {
@@ -539,6 +574,14 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		if isSecretKey(k) {
 			if sv, ok := v.(string); ok && strings.TrimSpace(sv) == "" {
 				continue
+			}
+		}
+		// Encrypt high-impact secrets at rest (token / callback secret).
+		if encryptedSettingKeys[k] {
+			if sv, ok := v.(string); ok && sv != "" {
+				if enc, err := crypto.EncryptSecret(sv); err == nil {
+					v = enc
+				}
 			}
 		}
 		s := toJSON(v)

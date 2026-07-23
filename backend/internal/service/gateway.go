@@ -246,7 +246,8 @@ func (s *Services) createApproval(u *model.User, conn *model.Connection, sql str
 		slog.Error("create approval failed", "apNo", apNo, "err", err)
 		return nil, "", err
 	}
-	s.Webhook.SendLarkApproval(ap) // push an interactive Lark card to the approvers
+	s.Webhook.SendLarkApproval(ap)     // push an interactive Lark card to the approvers
+	s.dispatchExternalApproval(u, ap)  // (审批魔方) best-effort external interactive approval
 	return ap, auditID, nil
 }
 
@@ -317,27 +318,40 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 	if !s.isChainMember(id, actor) {
 		return nil, ErrForbidden
 	}
+	return s.finalizeApproval(ap, approve, actor.Name)
+}
+
+// finalizeApproval is the shared decision core: atomically claim pending →
+// approved/rejected, then (approve) execute the fixed ap.Command on behalf of the
+// initiator + audit + notify, or (reject) record the rejection. It is reused by
+// the in-app decision path (DecideApproval) and the external审批魔方 callback
+// (DecideApprovalExternal); authorization is the caller's responsibility — this
+// function assumes the decision is already authorized. operatorName is who acted
+// (shown in the initiator's notification); the audit is attributed to the
+// initiator since the command runs on their behalf.
+func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string) (*dto.ExecResp, error) {
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	if conn != nil && ap.Database != "" {
 		conn.Database = ap.Database // execute against the selected target database
 	}
 	initiator, _ := s.Repo.GetUserByID(ap.InitiatorID)
 	if initiator == nil {
-		initiator = actor
+		// The initiator user was removed — keep audit attribution via the stored name.
+		initiator = &model.User{ID: ap.InitiatorID, Name: ap.Initiator}
 	}
 	now := time.Now()
 	if approve {
 		// Atomically claim the pending → approved transition. If we lose the race
 		// (already decided/rejected/expired by a concurrent caller or the timeout
 		// sweep), stop here so the command is never executed twice.
-		claimed, cerr := s.Repo.ClaimApproval(id, model.StatusPending, model.StatusApproved)
+		claimed, cerr := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusApproved)
 		if cerr != nil {
 			return nil, cerr
 		}
 		if !claimed {
 			return nil, ErrAlreadyDecided // someone else already decided/expired it
 		}
-		_ = s.Repo.DecideActiveStep(id, model.StatusApproved, now)
+		_ = s.Repo.DecideActiveStep(ap.ID, model.StatusApproved, now)
 		var res gateway.ExecResult
 		result, title := model.ResultExecuted, "审批已通过并执行"
 		if conn != nil {
@@ -349,26 +363,26 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 			res.Output = "· 目标连接已不存在,命令未执行"
 			result, title = model.ResultWarn, "审批已通过但目标连接不存在,未执行"
 		}
-		_ = s.Repo.SetApprovalResult(id, res.Output, res.Rows, now)
+		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
 		s.recordAudit(initiator, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
-			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", actor.Name, clip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
+			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", operatorName, clip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
 	// Same atomic guard on the reject path.
-	claimed, cerr := s.Repo.ClaimApproval(id, model.StatusPending, model.StatusRejected)
+	claimed, cerr := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusRejected)
 	if cerr != nil {
 		return nil, cerr
 	}
 	if !claimed {
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
-	_ = s.Repo.DecideActiveStep(id, model.StatusRejected, now)
-	_ = s.Repo.SetApprovalResult(id, "", 0, now)
+	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
+	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
 	s.recordAudit(initiator, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
 	s.notify(ap.InitiatorID, model.NotifApprovalRejected, "审批被拒绝",
-		fmt.Sprintf("%s 驳回了你的命令：%s", actor.Name, clip(ap.Command, 80)), ap.ApNo)
+		fmt.Sprintf("%s 驳回了你的命令：%s", operatorName, clip(ap.Command, 80)), ap.ApNo)
 	return nil, nil
 }
 

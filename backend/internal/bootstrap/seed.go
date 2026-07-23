@@ -186,6 +186,16 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.requireMFA":     true,
 		"security.ipAllowlist":    "",
 		"notify.larkChannel":      "",
+		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/gli 灰度。
+		// token / callbackSecret 为敏感值:保存时加密落库、GetSettings 不回传明文。
+		"approval.external.enabled":         false,
+		"approval.external.baseURL":         "",
+		"approval.external.token":           "",
+		"approval.external.aiGroup":         "",
+		"approval.external.callbackBaseURL": "",
+		"approval.external.callbackSecret":  "",
+		"approval.external.callbackAllowIPs": "",
+		"approval.external.replyResult":     false,
 	}
 	for k, v := range settings {
 		b, _ := json.Marshal(v)

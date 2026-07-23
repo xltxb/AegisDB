@@ -1,6 +1,6 @@
 # 02 · 回调端点 + 外部决策路径(复用执行内核)
 
-Status: ready-for-agent
+Status: ready-for-human
 
 ## What to build
 
@@ -37,3 +37,8 @@ Status: ready-for-agent
 01(模型字段 + 配置)
 
 ## Comments
+
+- 已实现:公开路由 `POST /api/v1/approvals/lark/callback`;`VerifyExternalCallback`
+  (X-Callback-Secret 常量时间比较 + 可选 IP 白名单,fail-closed);`DecideApprovalExternal`
+  按 ApNo(回调 `external_task_id`)关联、幂等、禁自审兜底,复用抽出的 `finalizeApproval` 执行内核。
+- 回归:approve/reject、鉴权 forbidden、未知单 400、幂等、禁自审。

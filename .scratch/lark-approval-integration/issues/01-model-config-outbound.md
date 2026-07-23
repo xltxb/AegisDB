@@ -1,6 +1,6 @@
 # 01 · 模型字段 + 配置项 + 出站发起
 
-Status: ready-for-agent
+Status: ready-for-human
 
 ## What to build
 
@@ -26,3 +26,9 @@ Status: ready-for-agent
 None
 
 ## Comments
+
+- 已实现:`Approval` 加 `ExternalTaskID`/`LarkMessageID`(migration `0006` + AutoMigrate);
+  seed `approval.external.*` 默认(enabled=false);`SendExternalApproval`(Bearer + SSRF 复用)
+  在 `createApproval` 后异步 best-effort 发起,回写 `ExternalTaskID`;token/callbackSecret
+  经 `encryptedSettingKeys` 加密落库、`isSecretKey` 不回传明文。
+- 回归:`TestExternalApproval_OutboundDispatchStoresTaskID`(Bearer + external_task_id=ApNo + task_id 落库)。
