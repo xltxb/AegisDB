@@ -658,9 +658,35 @@ func (r *Repo) LastAuditHash() string {
 func (r *Repo) InsertAudit(a *model.AuditLog) error { return r.db.Create(a).Error }
 
 // ListAudit lists audit rows; actorID > 0 restricts to that actor's own commands.
-func (r *Repo) ListAudit(actorID int64, risk string, since time.Time, limit int) ([]model.AuditLog, error) {
+func (r *Repo) ListAudit(actorID int64, risk string, since, until time.Time, limit int) ([]model.AuditLog, error) {
 	var rows []model.AuditLog
-	q := r.db.Order("occurred_at desc, id desc")
+	q := r.auditQuery(actorID, risk, since, until).Order("occurred_at desc, id desc")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	err := q.Find(&rows).Error
+	return rows, err
+}
+
+// ListAuditPaged returns one page of audit rows (newest first) plus the total
+// row count matching the same filters, for paginated display.
+func (r *Repo) ListAuditPaged(actorID int64, risk string, since, until time.Time, offset, limit int) ([]model.AuditLog, int64, error) {
+	var total int64
+	if err := r.auditQuery(actorID, risk, since, until).Model(&model.AuditLog{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []model.AuditLog
+	q := r.auditQuery(actorID, risk, since, until).Order("occurred_at desc, id desc")
+	if limit > 0 {
+		q = q.Limit(limit).Offset(offset)
+	}
+	err := q.Find(&rows).Error
+	return rows, total, err
+}
+
+// auditQuery builds the shared WHERE clause for audit listing/counting.
+func (r *Repo) auditQuery(actorID int64, risk string, since, until time.Time) *gorm.DB {
+	q := r.db.Model(&model.AuditLog{})
 	if actorID > 0 {
 		q = q.Where("actor_id = ?", actorID)
 	}
@@ -670,11 +696,10 @@ func (r *Repo) ListAudit(actorID int64, risk string, since time.Time, limit int)
 	if !since.IsZero() {
 		q = q.Where("occurred_at >= ?", since)
 	}
-	if limit > 0 {
-		q = q.Limit(limit)
+	if !until.IsZero() {
+		q = q.Where("occurred_at <= ?", until)
 	}
-	err := q.Find(&rows).Error
-	return rows, err
+	return q
 }
 
 // ListPendingApprovalsOlderThan returns pending approvals created before cutoff (timeout sweep).

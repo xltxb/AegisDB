@@ -13,12 +13,8 @@ type auditActorRow struct {
 
 func (a *testApp) auditActorRows(token string) []auditActorRow {
 	a.t.Helper()
-	r := a.do(http.MethodGet, "/api/v1/audit", token, nil)
-	if r.Code != 0 {
-		a.t.Fatalf("list audit: code=%d msg=%s", r.Code, r.Msg)
-	}
 	var rows []auditActorRow
-	_ = json.Unmarshal(r.Data, &rows)
+	_ = json.Unmarshal(a.auditItemsRaw(token, ""), &rows)
 	return rows
 }
 

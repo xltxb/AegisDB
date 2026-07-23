@@ -147,21 +147,21 @@ function promptLen() { return props.conn.name.length + (targetDb.value ? targetD
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
 
 // A prominent, env-coloured "you are operating on X" caution printed into the
-// terminal itself (bold; red for PROD with an explicit 请谨慎操作).
+// terminal itself (bold; red for PROD with an explicit "proceed with caution").
 function cautionLine() {
   const cn = props.conn
   const env = cn.env.toUpperCase()
-  if (cn.env === 'prod') return ANSI.bold + ANSI.red + `⚠ 正在操作 ${env} · ${cn.name} · 请谨慎操作` + ANSI.reset
-  if (cn.env === 'staging') return ANSI.bold + ANSI.yellow + `⚠ 正在操作 ${env} · ${cn.name}` + ANSI.reset
-  return ANSI.bold + ANSI.green + `● 正在操作 ${env} · ${cn.name}` + ANSI.reset
+  if (cn.env === 'prod') return ANSI.bold + ANSI.red + t('termCautionProd', { env, name: cn.name }) + ANSI.reset
+  if (cn.env === 'staging') return ANSI.bold + ANSI.yellow + t('termCautionStaging', { env, name: cn.name }) + ANSI.reset
+  return ANSI.bold + ANSI.green + t('termCautionOther', { env, name: cn.name }) + ANSI.reset
 }
 
 function banner() {
   const cn = props.conn
   const me = auth.me
   out(cautionLine())
-  out(c(ANSI.gray, `# 会话已连接 ${cn.env}-${cn.name} · 角色 ${cn.defaultRole} · 网关策略 ${cn.policy} · 操作人 ${me?.name || ''} · 审计 ON`))
-  out(c(ANSI.gray, '# 语句以 ;  结束并执行 · ↑/↓ 历史 · Ctrl+L 清屏 · Ctrl+C 取消 · 选中即复制 · \\? 帮助'))
+  out(c(ANSI.gray, t('termConnected', { conn: `${cn.env}-${cn.name}`, role: cn.defaultRole, policy: cn.policy, user: me?.name || '' })))
+  out(c(ANSI.gray, t('termHelpLine', { bs: '\\' })))
 }
 
 function fitNow() { try { fit.fit() } catch { /* ignore */ } }
@@ -263,13 +263,13 @@ function parseUseDb(sql: string): string | null {
 function switchDb(db: string) {
   const canon = dbOptions.value.find((d) => d.toLowerCase() === db.toLowerCase())
   if (dbOptions.value.length && !canon) {
-    out(c(ANSI.yellow, `· 未知数据库「${db}」— 不在当前实例的库列表中`))
+    out(c(ANSI.yellow, t('termUnknownDb', { db })))
     risk.value = 'safe'
     return
   }
   targetDb.value = canon || db
   emit('update:db', targetDb.value) // mirror onto the tab so the tree highlights it
-  out(c(ANSI.green, `✓ 已切换到数据库 ${targetDb.value}`))
+  out(c(ANSI.green, t('termSwitchedDb', { db: targetDb.value })))
   risk.value = 'safe'
 }
 
@@ -316,7 +316,7 @@ async function handleSubmit(stmt: string) {
     if (sql) {
       if (sendExec(sql, '') === 'ws') return
       try { handleExecEnv(await api.exec(props.conn.id, sql, '', '', targetDb.value), sql, '') }
-      catch { out(c(ANSI.red, '· 执行失败')); editor.resume() }
+      catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
       return
     }
     metaCommand(raw); editor.resume(); return
@@ -327,7 +327,7 @@ async function handleSubmit(stmt: string) {
   try {
     const r = await api.riskCheck(props.conn.id, raw)
     if (r.action === 'deny') {
-      out(c(ANSI.red, '· 命令被拒绝:能力矩阵在该环境禁止此操作'))
+      out(c(ANSI.red, t('termDeniedCap')))
       risk.value = 'safe'
       editor.resume()
       return
@@ -339,7 +339,7 @@ async function handleSubmit(stmt: string) {
       apRule.value = r.matchedRule || ''
       apAuditId.value = t('auditPending')
       apOpen.value = true
-      out(c(ANSI.yellow, `· 命中高危规则「${r.matchedRule || '-'}」,请在弹窗中提交审批`))
+      out(c(ANSI.yellow, t('termHitRule', { rule: r.matchedRule || '-' })))
       return
     }
     risk.value = 'safe'
@@ -347,7 +347,7 @@ async function handleSubmit(stmt: string) {
     const env = await api.exec(props.conn.id, raw)
     handleExecEnv(env, raw, '')
   } catch {
-    out(c(ANSI.red, '· 执行失败'))
+    out(c(ANSI.red, t('termExecFail')))
     editor.resume()
   }
 }
@@ -355,22 +355,23 @@ async function handleSubmit(stmt: string) {
 function metaCommand(raw: string) {
   const cmd = raw.slice(1).trim().split(/\s+/)[0]
   if (cmd === '?' || cmd === 'h' || cmd === 'help') {
+    const bs = { bs: '\\' }
     outLines([
-      c(ANSI.bold, ' 元命令'),
-      '  \\?            显示帮助',
-      '  \\l            列出可用连接',
-      '  \\c / \\clear   清屏',
-      '  \\dt           列出当前库的表',
-      '  \\dn           列出 schema (PostgreSQL/DWS)',
-      '  \\d <表>       查看表结构',
-      c(ANSI.gray, ' SQL 语句以 ; 结束回车执行 · 末尾 \\G 竖排显示'),
+      c(ANSI.bold, t('termMetaTitle')),
+      t('termMetaHelp', bs),
+      t('termMetaList', bs),
+      t('termMetaClear', bs),
+      t('termMetaDt', bs),
+      t('termMetaDn', bs),
+      t('termMetaD', bs),
+      c(ANSI.gray, t('termMetaSql', bs)),
     ])
   } else if (cmd === 'l' || cmd === 'list') {
     outLines(props.conns.map((cn) => `  ${String(cn.id).padStart(3)}  ${cn.env}-${cn.name}  ${c(ANSI.gray, cn.defaultRole)}`))
   } else if (cmd === 'c' || cmd === 'clear') {
     term.clear()
   } else {
-    out(c(ANSI.gray, `· 未知命令 \\${cmd},输入 \\? 查看帮助`))
+    out(c(ANSI.gray, t('termUnknownCmd', { bs: '\\', cmd })))
   }
 }
 
@@ -405,14 +406,14 @@ async function submitMfa() {
     const env = await api.exec(props.conn.id, sql, reason, code, targetDb.value)
     if (env.code === CODE_MFA_REQUIRED) { requestMfa(sql, reason); mfaErr.value = t('mfaBadCode'); return }
     renderExecEnvelope(env)
-  } catch { out(c(ANSI.red, '· 执行失败')) }
+  } catch { out(c(ANSI.red, t('termExecFail'))) }
   editor.resume()
 }
 
 function cancelMfa() {
   mfaOpen.value = false
   pendingMfa = null
-  out(c(ANSI.gray, '· 已取消,未执行'))
+  out(c(ANSI.gray, t('termCancelled')))
   editor.resume()
 }
 
@@ -420,7 +421,7 @@ function onWsMessage(m: any) {
   if (m.type === 'output') renderOutput(m)
   else if (m.type === 'intercept') { renderIntercept(m); auth.pendingCount++ }
   else if (m.type === 'mfa_required') { requestMfa(lastExec.sql, lastExec.reason); return }
-  else if (m.type === 'error') out(c(ANSI.red, '· ' + (m.message || '执行失败')))
+  else if (m.type === 'error') out(c(ANSI.red, '· ' + (m.message || t('termExecFail'))))
   else return
   editor.resume()
 }
@@ -432,28 +433,28 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     const data = m.data || []
     if (pendingVertical.value) outLines(renderVertical(m.columns, data))
     else outLines(renderTable(buildTable(m.columns, data)))
-    const more = m.truncated ? ` · 已截断,显示前 ${data.length}` : ''
-    out(c(ANSI.gray, `(${data.length} 行${more} · ${m.ms ?? 0}ms)`))
+    const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
+    out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: m.ms ?? 0 })))
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)
     outLines(renderTable(tb))
     const shown = tb.rows.length
-    const more = shown < rows ? ` · 显示前 ${shown}` : ''
-    out(c(ANSI.gray, `(${rows} 行${more} · ${m.ms ?? 0}ms)`))
+    const more = shown < rows ? t('termShownFirst', { n: shown }) : ''
+    out(c(ANSI.gray, t('termRows', { n: rows, more, ms: m.ms ?? 0 })))
   } else if (m.text) {
     const notice = m.text.trimStart().startsWith('·')
     out(notice ? c(ANSI.yellow, m.text) : c(ANSI.green, '✓ ' + m.text))
   } else {
-    out(c(ANSI.green, '✓ 执行成功'))
+    out(c(ANSI.green, t('termExecOk')))
   }
   risk.value = 'safe'
 }
 
 function renderIntercept(m: { rule?: string; approvalNo?: string }) {
-  out(c(ANSI.red, '⚠ 命令被拦截,需审批'))
-  out(c(ANSI.gray, `  命中规则  ${m.rule || apRule.value || '-'}`))
-  out(c(ANSI.gray, `  审批单    #${m.approvalNo || '-'}  · 待审批`))
+  out(c(ANSI.red, t('termIntercepted')))
+  out(c(ANSI.gray, t('termHitRuleLine', { rule: m.rule || apRule.value || '-' })))
+  out(c(ANSI.gray, t('termApprovalLine', { no: m.approvalNo || '-' })))
 }
 
 function renderExecEnvelope(env: { code: number; data?: any }) {
@@ -482,12 +483,12 @@ async function submitApproval(reason: string) {
 
 function cancelApproval() {
   apOpen.value = false
-  out(c(ANSI.gray, '· 已取消提交,命令未执行'))
+  out(c(ANSI.gray, t('termCancelSubmit')))
   editor.resume()
 }
 
 function refreshSession() {
-  editor.printAbove([cautionLine(), c(ANSI.gray, '· 正在重连网关会话…')])
+  editor.printAbove([cautionLine(), c(ANSI.gray, t('termReconnecting'))])
   ws.reconnect()
 }
 
@@ -516,7 +517,7 @@ async function scanScript(text: string, filename: string, uploadId = 0) {
     scOpen.value = true
   } catch (e: any) {
     if (e?.code === CODE_SCRIPT_PATH_UNSET) { enabled.value = false; pathPromptOpen.value = true }
-    else editor.printAbove([c(ANSI.red, '· 脚本扫描失败')])
+    else editor.printAbove([c(ANSI.red, t('termScanFail'))])
   }
 }
 
@@ -546,7 +547,7 @@ async function runUploaded(u: ScriptUpload) {
   try {
     const { content, filename } = await api.scriptUploadContent(u.id)
     await scanScript(content, filename, u.id) // already uploaded → don't re-save on execute
-  } catch { editor.printAbove([c(ANSI.red, '· 已上传脚本加载失败')]) }
+  } catch { editor.printAbove([c(ANSI.red, t('termUploadLoadFail'))]) }
 }
 
 async function loadSample() {
@@ -571,7 +572,7 @@ async function runScript() {
     if (env.code === CODE_INTERCEPTED || env.data?.exec?.intercepted) {
       scSubmitted.value = true
       auth.pendingCount++
-      if (env.data?.savedPath) editor.printAbove([c(ANSI.gray, '· 脚本已保存至 ' + env.data.savedPath)])
+      if (env.data?.savedPath) editor.printAbove([c(ANSI.gray, t('termScriptSaved', { path: env.data.savedPath }))])
       return
     }
     if (env.code === CODE_OK) {
@@ -579,17 +580,17 @@ async function runScript() {
       const saved = env.data?.savedPath || ''
       editor.printAbove([
         c(ANSI.cyan, '\\i ' + scScan.value.filename),
-        c(ANSI.green, `✓ 脚本执行成功 · ${n} 条语句`),
-        ...(saved ? [c(ANSI.gray, '  已保存至 ' + saved)] : []),
+        c(ANSI.green, t('termScriptOk', { n })),
+        ...(saved ? [c(ANSI.gray, t('termSavedTo', { path: saved }))] : []),
       ])
       scOpen.value = false
       return
     }
     scOpen.value = false
-    editor.printAbove([c(ANSI.red, '· 脚本执行失败: ' + (env.msg || ''))])
+    editor.printAbove([c(ANSI.red, t('termScriptFailMsg', { msg: env.msg || '' }))])
   } catch {
     scOpen.value = false
-    editor.printAbove([c(ANSI.red, '· 脚本执行失败')])
+    editor.printAbove([c(ANSI.red, t('termScriptFail'))])
   }
 }
 </script>
@@ -623,7 +624,7 @@ async function runScript() {
 
     <div class="statusbar">
       <span class="ok" :class="{ warn: wsStatus !== 'open' }">
-        {{ wsStatus === 'open' ? $t('connected') : wsStatus === 'connecting' ? '连接中…' : '已断开·重连中' }}
+        {{ wsStatus === 'open' ? $t('connected') : wsStatus === 'connecting' ? $t('wsConnecting') : $t('wsDisconnected') }}
       </span>
       <span>{{ conn.defaultRole }}</span><span>{{ conn.policy }}</span>
       <span>{{ $t('tryHint') }} <span class="hl">DROP TABLE orders_2024_q3;</span></span>

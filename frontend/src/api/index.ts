@@ -1,9 +1,22 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  Approval, AuditRow, Connection, ConnectionSchema, ExecResp, ExportJob, LoginResp, Me, Member,
+  Approval, AuditPage, AuditQuery, Connection, ConnectionSchema, ExecResp, ExportJob, LoginResp, Me, Member,
   Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp, ScriptUpload,
   SettingsResp, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
+
+// auditQS builds the audit query string, omitting empty filters. An absolute
+// from/to window takes precedence over the relative range on the backend.
+function auditQS(q: AuditQuery): string {
+  const p = new URLSearchParams()
+  p.set('risk', q.risk || 'all')
+  if (q.from) p.set('from', q.from)
+  if (q.to) p.set('to', q.to)
+  if (!q.from && q.range) p.set('range', q.range)
+  if (q.page) p.set('page', String(q.page))
+  if (q.pageSize) p.set('pageSize', String(q.pageSize))
+  return p.toString()
+}
 
 export const api = {
   // ---- auth ----
@@ -129,8 +142,8 @@ export const api = {
   reject: (id: number) => http.post(`/approvals/${id}/reject`),
 
   // ---- audit ----
-  audit: (risk: string, range = '') => http.get<any, Envelope<AuditRow[]>>(`/audit?risk=${risk}&range=${range}`).then(ok),
-  auditExportUrl: (risk: string, range = '') => `${import.meta.env.VITE_API_BASE || '/api/v1'}/audit/export?risk=${risk}&range=${range}`,
+  audit: (q: AuditQuery) => http.get<any, Envelope<AuditPage>>(`/audit?${auditQS(q)}`).then(ok),
+  auditExportUrl: (q: AuditQuery) => `${import.meta.env.VITE_API_BASE || '/api/v1'}/audit/export?${auditQS(q)}`,
 
   // ---- settings ----
   settings: () => http.get<any, Envelope<SettingsResp>>('/settings').then(ok),

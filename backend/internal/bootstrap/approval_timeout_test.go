@@ -13,9 +13,8 @@ type auditResultRow struct {
 
 func (a *testApp) countEscalations(token, apNo string) int {
 	a.t.Helper()
-	r := a.do(http.MethodGet, "/api/v1/audit", token, nil)
 	var rows []auditResultRow
-	_ = json.Unmarshal(r.Data, &rows)
+	_ = json.Unmarshal(a.auditItemsRaw(token, ""), &rows)
 	n := 0
 	for _, row := range rows {
 		if row.ApprovalNo == apNo && row.Result == "warn" {

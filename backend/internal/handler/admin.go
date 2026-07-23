@@ -462,16 +462,20 @@ func (h *Handler) BindUserMFA(c *gin.Context) {
 
 func (h *Handler) ListAudit(c *gin.Context) {
 	risk := c.DefaultQuery("risk", "all")
-	since := service.RangeSince(c.Query("range"))
-	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "200"))
-	rows, _ := h.Svc.ListAudit(middleware.CurrentUser(c), risk, since, limit)
-	resp.OK(c, rows)
+	since, until := service.AuditWindow(c.Query("range"), c.Query("from"), c.Query("to"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "100"))
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 100
+	}
+	res, _ := h.Svc.ListAuditPaged(middleware.CurrentUser(c), risk, since, until, page, pageSize)
+	resp.OK(c, res)
 }
 
 func (h *Handler) ExportAudit(c *gin.Context) {
 	risk := c.DefaultQuery("risk", "all")
-	since := service.RangeSince(c.Query("range"))
-	csv, _ := h.Svc.ExportCSV(middleware.CurrentUser(c), risk, since)
+	since, until := service.AuditWindow(c.Query("range"), c.Query("from"), c.Query("to"))
+	csv, _ := h.Svc.ExportCSV(middleware.CurrentUser(c), risk, since, until)
 	c.Header("Content-Disposition", "attachment; filename=audit_export.csv")
 	// Prepend a UTF-8 BOM so Excel renders CJK correctly.
 	c.Data(200, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, []byte(csv)...))

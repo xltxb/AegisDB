@@ -64,6 +64,62 @@ func (e errString) Error() string { return string(e) }
 
 // A PostgreSQL connection with no configured database must default to "postgres",
 // not fall through to libpq's user-name default ("database <user> does not exist").
+// oracleTarget maps the "数据库名" field to a service name by default, or to a
+// SID when prefixed with "sid/" | "sid:". Empty/unsafe input yields no target so
+// go-ora reports the missing service/SID (translated by oracleHint).
+func TestOracleTarget(t *testing.T) {
+	cases := []struct {
+		in      string
+		service string
+		sid     string
+	}{
+		{"ORCLPDB1", "ORCLPDB1", ""},
+		{"  svc.example  ", "svc.example", ""},
+		{"sid/ORCL", "", "ORCL"},
+		{"SID:PROD1", "", "PROD1"},
+		{"", "", ""},
+		{"bad name", "", ""}, // space is not a safe identifier char
+		{"sid/", "", ""},     // empty SID after prefix
+	}
+	for _, c := range cases {
+		svc, opts := oracleTarget(c.in)
+		if svc != c.service {
+			t.Errorf("oracleTarget(%q) service = %q, want %q", c.in, svc, c.service)
+		}
+		if opts["SID"] != c.sid {
+			t.Errorf("oracleTarget(%q) SID = %q, want %q", c.in, opts["SID"], c.sid)
+		}
+	}
+}
+
+// A service-name Oracle target must build a URL carrying that service; a SID
+// target must instead pass it as a SID parameter.
+func TestEngineDriver_OracleServiceAndSID(t *testing.T) {
+	svcConn := &model.Connection{Engine: "Oracle", Host: "ora.internal", Port: 1521, Username: "u", Password: "p", Database: "ORCLPDB1"}
+	if driver, dsn, ok := engineDriver(svcConn); !ok || driver != "oracle" || !strings.Contains(dsn, "ORCLPDB1") {
+		t.Errorf("oracle service DSN should contain the service name, got driver=%q dsn=%q ok=%v", driver, dsn, ok)
+	}
+	sidConn := &model.Connection{Engine: "Oracle", Host: "ora.internal", Port: 1521, Username: "u", Password: "p", Database: "sid/ORCL"}
+	if _, dsn, ok := engineDriver(sidConn); !ok || !strings.Contains(strings.ToUpper(dsn), "SID=ORCL") {
+		t.Errorf("oracle SID DSN should carry SID=ORCL, got dsn=%q ok=%v", dsn, ok)
+	}
+}
+
+// oracleHint turns go-ora's cryptic empty-target error into an actionable hint,
+// and leaves unrelated errors untouched.
+func TestOracleHint(t *testing.T) {
+	got := oracleHint(errString("empty SID and service name")).Error()
+	if !strings.Contains(got, "服务名") {
+		t.Errorf("expected an actionable Oracle hint, got %q", got)
+	}
+	if oracleHint(errString("ORA-01017: invalid credential")).Error() != "ORA-01017: invalid credential" {
+		t.Error("unrelated errors must pass through unchanged")
+	}
+	if oracleHint(nil) != nil {
+		t.Error("nil must stay nil")
+	}
+}
+
 func TestEngineDriver_PostgresDefaultsDatabase(t *testing.T) {
 	conn := &model.Connection{Engine: "PostgreSQL 15", Host: "pg.internal", Port: 5432, Username: "dbadmin", Password: "p"} // no Database
 	_, dsn, ok := engineDriver(conn)
