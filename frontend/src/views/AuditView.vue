@@ -5,6 +5,7 @@ import {
   Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, ChevronLeft, ChevronRight, X,
 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
+import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import type { AuditRow, AuditQuery } from '@/types'
@@ -48,14 +49,28 @@ onMounted(load)
 // Any filter change resets to the first page before reloading.
 async function reload() { page.value = 1; await load() }
 
-async function cycleFilter() {
-  filter.value = filterCycle[(filterCycle.indexOf(filter.value) + 1) % filterCycle.length]
-  await reload()
-}
-async function cycleTime() {
-  timeIdx.value = (timeIdx.value + 1) % timeOpts.length
-  await reload()
-}
+// Risk-type filter as a dropdown: VSelect works on display labels, so map the
+// selected label back to its internal risk value (index-aligned with filterCycle).
+const riskLabelOpts = computed(() => [t('allRisk'), t('highTag'), t('med'), t('low')])
+const riskLabel = computed<string>({
+  get: () => riskLabelOpts.value[filterCycle.indexOf(filter.value)] ?? riskLabelOpts.value[0],
+  set: (l) => {
+    const i = riskLabelOpts.value.indexOf(l)
+    if (i >= 0) { filter.value = filterCycle[i]; reload() }
+  },
+})
+
+// Relative time range as a dropdown. Picking a preset clears any absolute window
+// so the preset actually takes effect (absolute from/to otherwise wins server-side).
+const timeLabelOpts = computed(() => timeOpts.map((k) => t(k as any)))
+const timeLabel = computed<string>({
+  get: () => timeLabelOpts.value[timeIdx.value] ?? timeLabelOpts.value[0],
+  set: (l) => {
+    const i = timeLabelOpts.value.indexOf(l)
+    if (i >= 0) { timeIdx.value = i; from.value = ''; to.value = ''; reload() }
+  },
+})
+
 async function clearAbsolute() { from.value = ''; to.value = ''; await reload() }
 async function goto(p: number) {
   const np = Math.min(pages.value, Math.max(1, p))
@@ -63,8 +78,6 @@ async function goto(p: number) {
   page.value = np
   await load()
 }
-
-const filterLabel = computed(() => ({ all: t('allRisk'), high: t('highTag'), mid: t('med'), low: t('low') }[filter.value]))
 
 async function doExport() {
   // M14: 导出失败以 toast 呈现
@@ -116,8 +129,10 @@ function fmtTime(s: string) {
       </div>
       <div class="acts">
         <span v-if="exported" class="exp">{{ exported }}</span>
-        <div class="ctl" :style="{ color: filter === 'all' ? 'var(--text-muted)' : 'var(--accent-text)' }" @click="cycleFilter"><Filter :size="14" />{{ filterLabel }}</div>
-        <div class="ctl" :class="{ off: useAbsolute }" :title="useAbsolute ? $t('auditClearRange') : ''" @click="cycleTime"><Calendar :size="14" />{{ $t(timeOpts[timeIdx] as any) }}</div>
+        <!-- risk-type filter (dropdown) -->
+        <div class="fsel"><Filter :size="14" /><VSelect v-model="riskLabel" :options="riskLabelOpts" /></div>
+        <!-- time-range preset (dropdown) -->
+        <div class="fsel" :class="{ off: useAbsolute }"><Calendar :size="14" /><VSelect v-model="timeLabel" :options="timeLabelOpts" /></div>
         <!-- absolute time window (takes precedence over the relative preset) -->
         <div class="ctl range">
           <input type="datetime-local" v-model="from" :aria-label="$t('auditFrom')" @change="reload" />
@@ -163,6 +178,12 @@ function fmtTime(s: string) {
 .exp { font: 600 12px var(--font-mono); color: var(--success-text); }
 .ctl { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; font: 500 12px var(--font-mono); cursor: pointer; color: var(--text-muted); }
 .ctl.off { opacity: 0.45; }
+/* dropdown filter (risk type / time range) */
+.fsel { display: flex; align-items: center; gap: 7px; color: var(--text-muted); }
+.fsel > svg { flex: none; }
+.fsel.off { opacity: 0.5; }
+.fsel :deep(.vsel) { min-width: 122px; }
+.fsel :deep(.control) { height: 36px; border-radius: 10px; }
 .ctl.range { cursor: default; gap: 6px; }
 .ctl.range input { background: transparent; border: none; outline: none; color: var(--text-body); font: 500 12px var(--font-mono); color-scheme: dark; cursor: pointer; padding: 0; }
 .ctl.range .dash { color: var(--text-faint); }
