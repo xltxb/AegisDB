@@ -16,7 +16,21 @@ import (
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
 	"velagateway/pkg/crypto"
+	"velagateway/pkg/sqlutil"
 )
+
+// exportSQLReadOnly reports whether an export query is a single read-only
+// (SELECT-class) statement. It is the gateway-bypass guard for exports: the
+// worker executes this SQL against the target DB, so anything that could mutate
+// data — a write/DDL/GRANT verb, or a stacked second statement — must be rejected
+// so exports cannot be used to run privileged SQL the risk engine would gate.
+func exportSQLReadOnly(sql string) bool {
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) != 1 {
+		return false // empty, or stacked queries (e.g. "SELECT 1; DROP TABLE x")
+	}
+	return gateway.MapVerbToCapability(gateway.ParseVerb(stmts[0])) == "select"
+}
 
 // exportPartSize is the (uncompressed) CSV size at which the export rolls over
 // to a new part file. There is no row limit — large results split into parts.
@@ -89,6 +103,14 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	}
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
+	}
+	// SECURITY (gateway bypass): the export worker runs this SQL against the target
+	// DB via a query path that still EXECUTES mutations. Without this guard a
+	// terminal user (even a read-only role) could smuggle DELETE/UPDATE/DROP/… past
+	// the capability matrix and risk dictionary by submitting it as an "export".
+	// Exports are data reads by definition, so require a single read-only statement.
+	if !exportSQLReadOnly(sql) {
+		return nil, ErrExportNotReadOnly
 	}
 	// Fail fast with a clear message when neither a target database was chosen nor
 	// the connection carries a default one — otherwise an unqualified query fails
@@ -167,6 +189,12 @@ func (s *Services) runExportJob(id int64) {
 	u, err := s.Repo.GetUserByID(job.UserID)
 	if err != nil {
 		s.failExport(id, "用户不存在")
+		return
+	}
+	// Defense in depth: never run a non read-only export, even if the row was
+	// crafted to skip the enqueue-time guard.
+	if !exportSQLReadOnly(job.SQL) {
+		s.failExport(id, "导出仅允许单条只读查询语句")
 		return
 	}
 	// simulate real export latency so parallel jobs are observable in the UI

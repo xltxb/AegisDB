@@ -229,4 +229,5 @@ var (
 	ErrExportPathUnset    = fmt.Errorf("export save path not configured")
 	ErrAlreadyDecided     = fmt.Errorf("approval already decided") // lost the decide race / not pending
 	ErrNoDatabase         = fmt.Errorf("no target database selected")
+	ErrExportNotReadOnly  = fmt.Errorf("export query must be a single read-only statement")
 )
