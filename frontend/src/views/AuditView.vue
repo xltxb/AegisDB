@@ -185,7 +185,7 @@ function fmtTime(s: string) {
 .fsel :deep(.vsel) { min-width: 122px; }
 .fsel :deep(.control) { height: 36px; border-radius: 10px; }
 .ctl.range { cursor: default; gap: 6px; }
-.ctl.range input { background: transparent; border: none; outline: none; color: var(--text-body); font: 500 12px var(--font-mono); color-scheme: dark; cursor: pointer; padding: 0; }
+.ctl.range input { background: transparent; border: none; outline: none; color: var(--text-body); font: 500 12px var(--font-mono); cursor: pointer; padding: 0; }
 .ctl.range .dash { color: var(--text-faint); }
 .ctl.range .clr { color: var(--text-faint); cursor: pointer; }
 .ctl.range .clr:hover { color: var(--danger-text); }
