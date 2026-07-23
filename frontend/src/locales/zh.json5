@@ -26,7 +26,7 @@
   // terminal
   treeTitle: '数据库分层', search: '搜索实例 / 库 / 表',
   schemaLoading: '加载库表中…', schemaEmpty: '— 无可显示的数据库 —', treeCollapse: '收起数据库分层', treeExpand: '展开数据库分层',
-  prodEnv: '生产环境 · PROD', stagingEnv: '演练UAT · STAGING', devEnv: '测试 · DEV',
+  prodEnv: '生产环境 · PROD', gliEnv: '灰度 · GLI', stagingEnv: '演练UAT · STAGING', devEnv: '测试 · DEV',
   highTag: '高危', limitedTag: '受限', treeFooter: '3 环境 · 9 实例 · 已接入网关',
   interceptTitle: '命令已被网关拦截 · 禁止直接执行',
   hitRule: '命中规则', apGen: '已生成审批单', pendBadge: '待审批',
@@ -50,7 +50,7 @@
   // db config
   connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
-  prodRow: '生产环境 · PROD · 默认拦截高危命令', stgRow: '演练UAT · STAGING · 高危命令仅需一级审批', devRow: '测试 · DEV · 自由执行，仅审计',
+  prodRow: '生产环境 · PROD · 默认拦截高危命令', gliRow: '灰度 · GLI · 高危命令仅需一级审批', stgRow: '演练UAT · STAGING · 高危命令仅需一级审批', devRow: '测试 · DEV · 自由执行，仅审计',
   online: '在线', maint: '维护',
   formNewConn: '新建连接', formNewConnSub: '接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。',
   connEdit: '编辑', formEditConn: '编辑连接', formEditConnSub: '修改地址 / 引擎 / 环境 / 网关策略 / 凭据，保存后自动重新测试连接。', fPasswordKeep: '留空保持不变', fSaveEdit: '保存修改', connTestSave: '测试保存', connTestSaving: '测试保存中…',

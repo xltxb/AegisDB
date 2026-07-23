@@ -16,7 +16,7 @@ const auth = useAuthStore()
 // Rule configuration is platform-admin only (backend enforces it too).
 const isAdmin = computed(() => auth.me?.roleCode === 'admin')
 const cmds = ref<RiskCommandView[]>([])
-const env = ref<'prod' | 'staging' | 'dev'>('prod')
+const env = ref<'prod' | 'gli' | 'staging' | 'dev'>('prod')
 const draft = ref('')
 const ruleForm = ref(false)
 const strictMode = ref(false)
@@ -28,7 +28,7 @@ const rfTriggers = ref([
   { name: 'DELETE', on: false }, { name: 'GRANT', on: false },
 ])
 const rfTrigDraft = ref('')
-const rfEnv = ref<'prod' | 'staging' | 'dev'>('prod')
+const rfEnv = ref<'prod' | 'gli' | 'staging' | 'dev'>('prod')
 const rfAction = ref<'block' | 'approve' | 'alert'>('block')
 
 function openRule() {
@@ -173,7 +173,7 @@ const policies = computed(() => {
   })
 
   const midAny = cmds.value
-    .filter((c) => ['prod', 'staging', 'dev'].some((e) => c.env[e] === 'mid'))
+    .filter((c) => ['prod', 'gli', 'staging', 'dev'].some((e) => c.env[e] === 'mid'))
     .map((c) => c.command)
   if (midAny.length) {
     cards.push({
@@ -203,7 +203,7 @@ const policies = computed(() => {
         <div class="dic"><ListX :size="17" color="var(--danger)" /></div>
         <div class="grow"><div class="dt">{{ $t('dictTitle') }}</div><div class="ds">{{ $t('dictSub') }}</div></div>
         <div class="envtabs">
-          <div v-for="e in (['prod', 'staging', 'dev'] as const)" :key="e" class="et" :class="{ active: env === e }" @click="env = e">{{ e.toUpperCase() }}</div>
+          <div v-for="e in (['prod', 'gli', 'staging', 'dev'] as const)" :key="e" class="et" :class="{ active: env === e }" @click="env = e">{{ e.toUpperCase() }}</div>
         </div>
       </div>
       <div class="chips">
@@ -269,7 +269,7 @@ const policies = computed(() => {
             <div>
               <div class="fl">{{ $t('rfEnv') }}</div>
               <div class="seg">
-                <div v-for="e in (['prod', 'staging', 'dev'] as const)" :key="e" class="si" :class="{ active: rfEnv === e }" @click="rfEnv = e">{{ e.toUpperCase() }}</div>
+                <div v-for="e in (['prod', 'gli', 'staging', 'dev'] as const)" :key="e" class="si" :class="{ active: rfEnv === e }" @click="rfEnv = e">{{ e.toUpperCase() }}</div>
               </div>
             </div>
             <div>

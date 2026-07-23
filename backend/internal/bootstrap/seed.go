@@ -20,7 +20,56 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 			return err
 		}
 	}
+	if err := seedGliEnv(repo); err != nil {
+		return err
+	}
 	return seedSchema(repo)
+}
+
+// seedGliEnv backfills the GLI (灰度) connection environment. GLI is a later
+// addition; its capability-matrix and risk-dictionary rows mirror staging
+// (演练UAT tier) so grey-release instances are gated coherently from day one.
+// Idempotent: clones every staging row to a gli counterpart only when absent,
+// so DBs seeded before GLI existed self-heal on boot (like seedSchema).
+func seedGliEnv(repo *repository.Repo) error {
+	db := repo.DB()
+
+	// Capability matrix: mirror each staging (role × capability) level to gli.
+	var caps []model.RoleCapability
+	if err := db.Where("env = ?", model.EnvStaging).Find(&caps).Error; err != nil {
+		return err
+	}
+	for _, row := range caps {
+		var n int64
+		db.Model(&model.RoleCapability{}).
+			Where("role_id = ? AND capability = ? AND env = ?", row.RoleID, row.Capability, model.EnvGli).
+			Count(&n)
+		if n == 0 {
+			if err := db.Create(&model.RoleCapability{
+				RoleID: row.RoleID, Capability: row.Capability, Env: model.EnvGli, Level: row.Level,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	// Risk dictionary: mirror each staging command level to gli.
+	var cmds []model.RiskCommand
+	if err := db.Where("env = ?", model.EnvStaging).Find(&cmds).Error; err != nil {
+		return err
+	}
+	for _, r := range cmds {
+		var n int64
+		db.Model(&model.RiskCommand{}).
+			Where("command = ? AND env = ?", r.Command, model.EnvGli).
+			Count(&n)
+		if n == 0 {
+			if err := db.Create(&model.RiskCommand{Command: r.Command, Env: model.EnvGli, Level: r.Level}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // seedReference inserts the reference data every deployment needs: roles, menus,

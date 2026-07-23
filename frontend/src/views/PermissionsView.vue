@@ -81,7 +81,7 @@ async function doInvite() {
 const roleIcon: Record<string, any> = { crown: Crown, shield: Shield, 'user-cog': UserCog, code: Code, eye: Eye }
 const capKeys = ['select', 'write', 'ddl', 'grant', 'conn', 'approve']
 const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove']
-const envCols = ['prod', 'staging', 'dev']
+const envCols = ['prod', 'gli', 'staging', 'dev']
 const menuDefs = [
   { key: 'terminal', icon: SquareTerminal, label: 'm_terminal' },
   { key: 'approve', icon: ClipboardCheck, label: 'm_approve' },
@@ -320,7 +320,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
         <div class="mhint">{{ detail.layer }} · {{ detail.members.length }} {{ $t('membersTitle') }} · {{ $t('matrixHint') }}</div>
 
         <div class="mtable">
-          <div class="mth"><span>{{ $t('colCap') }}</span><span class="ctr">PROD</span><span class="ctr">STAGING</span><span class="ctr">DEV</span></div>
+          <div class="mth"><span>{{ $t('colCap') }}</span><span class="ctr">PROD</span><span class="ctr">GLI</span><span class="ctr">STAGING</span><span class="ctr">DEV</span></div>
           <div v-for="(cap, i) in capKeys" :key="cap" class="mtr">
             <span class="cap">{{ $t(capLabels[i] as any) }}</span>
             <div v-for="env in envCols" :key="env" class="cellwrap">
@@ -550,7 +550,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .roflag { margin-left: auto; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
 .mhint { font: 500 12px var(--font-body); color: var(--text-muted); margin-bottom: 18px; }
 .mtable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
-.mth, .mtr { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; }
+.mth, .mtr { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px; }
 .mth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; }
 .ctr { text-align: center; }
 .mtr { padding: 9px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }

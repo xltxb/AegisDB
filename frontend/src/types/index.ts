@@ -1,6 +1,6 @@
 // Front/back contract types (mirror backend dto package).
 
-export type Env = 'prod' | 'staging' | 'dev'
+export type Env = 'prod' | 'gli' | 'staging' | 'dev'
 export type CapLevel = 'allow' | 'approve' | 'deny'
 export type RiskLevel = 'high' | 'mid' | 'off' | 'low'
 export type MenuKey = 'terminal' | 'approve' | 'db' | 'rules' | 'perms' | 'audit' | 'settings'
