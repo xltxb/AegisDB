@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -101,6 +102,60 @@ func TestWebhookDelivery_AsyncSuccessRecorded(t *testing.T) {
 		t.Error("delivery to a 200 stub should be recorded as success=true")
 	}
 	eq(t, rec.Attempts, 1, "successful delivery should record a single attempt")
+}
+
+// Webhook delivery is filtered by event type: an audit event whose type is NOT
+// in the subscription list is never delivered. Subscribing to "exec" only means
+// command-execution events fire the webhook while login events are dropped —
+// exactly the "login events don't need to be forwarded" requirement.
+func TestWebhookDelivery_TypeFilterExcludesLogin(t *testing.T) {
+	var mu sync.Mutex
+	got := map[string]int{}
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		got[r.Header.Get("X-Vela-Event")]++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer stub.Close()
+
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	// Subscribe to command-execution events only; login must be filtered out.
+	app.configureWebhook(token, stub.URL, "secret", "exec", 3)
+
+	// A fresh login records a 'login' audit → dispatch, which the filter must drop.
+	app.login("linwei@vela.io", "vela123")
+
+	// A low-risk command on a dev connection records an 'exec' audit → must deliver.
+	dev := app.connIDByEnv(token, "dev")
+	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
+		"connectionId": dev, "sql": "SELECT 1;", "reason": "filter test",
+	})
+	eq(t, r.Code, 0, "dev SELECT executes")
+
+	// Wait for the subscribed exec delivery to land.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := got["exec"]
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if got["exec"] == 0 {
+		t.Error("subscribed 'exec' event should have been delivered")
+	}
+	// login dispatch is filtered synchronously (before any network attempt), so a
+	// non-zero count here is a hard filtering failure, not a timing artefact.
+	if got["login"] != 0 {
+		t.Errorf("unsubscribed 'login' event must NOT be delivered, got %d", got["login"])
+	}
 }
 
 // A failing delivery is recorded as unsuccessful with the attempt count it

@@ -547,6 +547,28 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true})
 }
 
+// webhookEventTypes is the set of audit event types the gateway can forward. The
+// dispatcher only ever emits these (see service.recordAudit call sites); anything
+// else in a saved subscription would be dead weight, so it is filtered out.
+var webhookEventTypes = map[string]bool{"exec": true, "login": true, "intercept": true, "approve": true}
+
+// normalizeEvents cleans a comma-separated subscription list: trims/lowercases
+// each entry, drops blanks/unknowns and de-duplicates, preserving order. This
+// keeps the stored list tidy so the delivery-time type filter stays predictable.
+func normalizeEvents(raw string) string {
+	seen := map[string]bool{}
+	out := make([]string, 0, 4)
+	for _, part := range strings.Split(raw, ",") {
+		e := strings.ToLower(strings.TrimSpace(part))
+		if e == "" || !webhookEventTypes[e] || seen[e] {
+			continue
+		}
+		seen[e] = true
+		out = append(out, e)
+	}
+	return strings.Join(out, ",")
+}
+
 func (h *Handler) SaveWebhook(c *gin.Context) {
 	var req dto.WebhookConfigReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -563,8 +585,11 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 	if req.Secret != "" {
 		wh.Secret = req.Secret // empty = keep the existing secret (never returned to the client, R3)
 	}
-	if req.Events != "" {
-		wh.Events = req.Events
+	if req.Events != nil {
+		// Authoritative subscription list — honour it verbatim, including an empty
+		// list (deliver nothing) and removals like turning off login events. Only a
+		// fully omitted field keeps the stored list.
+		wh.Events = normalizeEvents(*req.Events)
 	}
 	if req.RetryMax > 0 {
 		wh.RetryMax = req.RetryMax

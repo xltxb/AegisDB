@@ -308,9 +308,12 @@ type RiskCommandView struct {
 type WebhookConfigReq struct {
 	Endpoint string `json:"endpoint"`
 	Secret   string `json:"secret"` // bearer token sent as `Authorization: Bearer <secret>`; empty keeps the stored one
-	Events   string `json:"events"`
-	RetryMax int    `json:"retryMax"`
-	Enabled  bool   `json:"enabled"`
+	// Events is the authoritative subscribed-event-type list (comma-separated, e.g.
+	// "exec,login"). A pointer so an explicit empty list ("subscribe to nothing")
+	// is distinguishable from the field being omitted (keep the stored list).
+	Events   *string `json:"events"`
+	RetryMax int     `json:"retryMax"`
+	Enabled  bool    `json:"enabled"`
 }
 
 // ---- MFA (TOTP) ----
