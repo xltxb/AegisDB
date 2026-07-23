@@ -41,8 +41,9 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 	if err != nil {
 		return "", "", false
 	}
-	// Reject a malformed database name for the networked engines (not SQLite).
-	if !strings.Contains(e, "sqlite") && !dbNameRe.MatchString(conn.Database) {
+	// Reject a malformed database name for the networked engines (not SQLite, and
+	// not Oracle whose field may carry a "sid/…" prefix — validated in its branch).
+	if !strings.Contains(e, "sqlite") && !strings.Contains(e, "oracle") && !dbNameRe.MatchString(conn.Database) {
 		return "", "", false
 	}
 	switch {
@@ -82,9 +83,36 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 			pqEscape(conn.Host), conn.Port, pqEscape(conn.Username), pqEscape(pw), pqEscape(dbName))
 		return "postgres", dsn, conn.Username != ""
 	case strings.Contains(e, "oracle"):
-		return "oracle", goora.BuildUrl(conn.Host, conn.Port, conn.Database, conn.Username, pw, nil), conn.Username != ""
+		// Oracle identifies the target DB by a SERVICE NAME (go-ora default) or a
+		// SID. The "数据库名" field carries it; prefix "sid/" (or "sid:") to connect
+		// by SID, e.g. "sid/ORCL". An empty/unsafe value yields empty params so
+		// go-ora surfaces a clear error (translated by oracleHint on ping).
+		svc, opts := oracleTarget(conn.Database)
+		return "oracle", goora.BuildUrl(conn.Host, conn.Port, svc, conn.Username, pw, opts), conn.Username != ""
 	}
 	return "", "", false
+}
+
+// oracleTarget parses the Oracle "数据库名" field into go-ora connection params.
+// Default: the whole value is a service name. A leading "sid/" or "sid:"
+// (case-insensitive) selects SID connection instead. Empty or unsafe input
+// yields empty params (go-ora then reports the missing service/SID).
+func oracleTarget(field string) (service string, opts map[string]string) {
+	v := strings.TrimSpace(field)
+	if v == "" {
+		return "", nil
+	}
+	low := strings.ToLower(v)
+	if strings.HasPrefix(low, "sid/") || strings.HasPrefix(low, "sid:") {
+		if sid := v[4:]; sid != "" && dbNameRe.MatchString(sid) {
+			return "", map[string]string{"SID": sid}
+		}
+		return "", nil
+	}
+	if dbNameRe.MatchString(v) {
+		return v, nil
+	}
+	return "", nil
 }
 
 // RealExecSupported reports whether the connection is set up for real execution.
@@ -166,9 +194,19 @@ func openAndPing(driver, dsn string) (*sql.DB, error) {
 	defer cancel()
 	if err := db.PingContext(ctx); err != nil {
 		db.Close()
-		return nil, err
+		return nil, oracleHint(err)
 	}
 	return db, nil
+}
+
+// oracleHint rewrites go-ora's cryptic "empty SID and service name" into an
+// actionable message: the Oracle "数据库名" field must hold the service name
+// (or "sid/你的SID" for a SID connection).
+func oracleHint(err error) error {
+	if err != nil && strings.Contains(err.Error(), "empty SID and service name") {
+		return fmt.Errorf("Oracle 未指定目标库:请在「数据库名」填写服务名 service name(或用 sid/你的SID 指定 SID)")
+	}
+	return err
 }
 
 // isPgNoSSL reports whether a Postgres connect error is "the server has no SSL",

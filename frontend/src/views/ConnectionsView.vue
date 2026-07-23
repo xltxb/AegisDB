@@ -53,6 +53,9 @@ const envOpts = [
   { label: 'DEV · L4 沙盒', env: 'dev' },
 ]
 const engineOpts = ['MySQL 8.0', 'TiDB', 'GaussDB (DWS)', 'Oracle', 'PostgreSQL 15', 'ClickHouse', 'Redis 7']
+// Oracle identifies the target DB by a service name (or a SID via the "sid/" prefix),
+// not a plain schema name — hint that in the 数据库名 field placeholder.
+const dbHint = (engine: string) => (/oracle/i.test(engine) ? 'service name 或 sid/ORCL' : 'orders_db')
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
 const blankDraft = () => ({ name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' })
@@ -222,7 +225,7 @@ async function add() {
         <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="draft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
         <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="draft.host" placeholder="10.20.3.12:3306" /></div>
         <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
-        <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" placeholder="orders_db" /></div>
+        <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" :placeholder="dbHint(draft.engine)" /></div>
         <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
         <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
       </div>
@@ -248,7 +251,7 @@ async function add() {
               <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="editDraft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
               <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="editDraft.host" placeholder="10.20.3.12:3306" /></div>
               <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="editDraft.policy" :options="policyOpts" /></div>
-              <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="editDraft.database" placeholder="orders_db" /></div>
+              <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="editDraft.database" :placeholder="dbHint(editDraft.engine)" /></div>
               <div><div class="fl">{{ $t('fUser') }}</div><input v-model="editDraft.username" placeholder="app_ro" /></div>
               <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="editDraft.password" type="password" :placeholder="$t('fPasswordKeep')" /></div>
             </div>
