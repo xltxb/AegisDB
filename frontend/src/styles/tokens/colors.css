@@ -6,6 +6,9 @@
    ============================================================ */
 
 :root {
+  /* Default light: make native controls (datetime pickers, scrollbars, form
+     widgets) render in light mode so their text/glyphs stay visible. */
+  color-scheme: light;
   /* ---- Brand: Azure (primary) ---- */
   --azure-50:  #eef3ff;
   --azure-100: #dce6ff;
@@ -120,6 +123,7 @@
    Apply via <html data-theme="dark"> or [data-theme="dark"] scope.
    ============================================================ */
 [data-theme="dark"] {
+  color-scheme: dark; /* native controls follow the dark theme */
   --surface-page:    #0a0c14;
   --surface-card:    #141826;
   --surface-sunken:  #0c0e17;
