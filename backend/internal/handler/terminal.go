@@ -333,6 +333,10 @@ func (h *Handler) ExportData(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "请选择目标数据库(该连接未配置默认库)")
 		return
 	}
+	if err == service.ErrExportNotReadOnly {
+		resp.Fail(c, resp.CodeForbidden, "数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流")
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "提交失败:"+err.Error())
 		return

@@ -153,7 +153,7 @@
   setNotify: 'Notifications', setNotifySub: 'Event & on-call alerts', setLark: 'Lark (Feishu) channel', setLarkD: 'Push an approval card to Lark for high-risk commands',
   larkWebhook: 'Webhook URL', larkSecret: 'Sign secret', larkSecretPh: 'Lark bot signature secret (optional)', larkConsole: 'Console URL', larkSendTest: 'Send test card', larkSending: 'Sending…', larkTestFail: 'Send failed',
   setEmail: 'Email notifications', setEmailD: 'Daily audit digest email', setPush: 'Instant intercept push', setPushD: 'Notify requester on interception',
-  setAppearance: 'Appearance & language', setAppearanceSub: 'Theme & display language', setLangRow: 'Language', setThemeRow: 'Theme', themeDark: 'Dark', themeLight: 'Light', themeSystem: 'System',
+  setAppearance: 'Appearance & language', setAppearanceSub: 'Theme & display language', setLangRow: 'Language', setThemeRow: 'Theme', themeDark: 'Dark', themeLight: 'Light', themeSystem: 'System', themeToggle: 'Toggle theme',
   verLabel: 'Version', buildLabel: 'Build', saveSettings: 'Save settings', saved: '✓ Saved',
   autoReject: 'Auto-reject', autoEscalate: 'Auto-escalate', keepWaiting: 'Keep waiting',
   ttl8: '8 hours', ttl4: '4 hours', ttl24: '24 hours',
