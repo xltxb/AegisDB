@@ -133,7 +133,12 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 - **自建飞书交互卡片 + 回调**:需自管飞书机器人权限、卡片协议、验签,工作量与维护成本更高;审批魔方已封装。
 - **仅保留站内审批**:满足不了「飞书卡片上审批」的诉求。
 
-## Open items(实现期确认,非阻塞)
+## Phase 2 范围调整(2026-07-24)
 
-- 撤单/取消是否以 `approved:false` 表达(当前按拒绝处理)。
-- `/reply` 用回传 `om_` message_id 能否命中原卡片(Phase 2 落地时验证)。
+- **功能 A(执行结果 `/reply` 回帖)移除**:`/api/v1/reply` 是审批魔方给 AI-Agent 用的转发接口,非我方所需;执行结果由站内通知告知发起人。`om_` message_id 相关的开放问题全部作废,`Approval.LarkMessageID` 变为未用调试元数据。
+- **关联键统一为对方 `task_id`**(`Approval.ExternalTaskID`,发起响应 + 回调均带回),不依赖 `message_id`。
+- Phase 2 仅保留**功能 B · 超时回写取消**:内部超时 `auto-reject` 时对有 `ExternalTaskID` 的单 best-effort `PATCH /api/v1/approvals/{task_id}/status` `{approval_status:2}` 取消飞书卡片(纯观感收敛;正确性已由回调幂等保证)。已实现,见 `.scratch/lark-approval-integration/issues/04`。
+
+## Open items
+
+- 撤单/取消是否以 `approved:false` 回调(当前按拒绝处理)。

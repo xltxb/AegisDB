@@ -647,6 +647,7 @@ func (s *Services) SweepApprovalTimeouts() {
 			s.recordAudit(initiator, conn, a.Command, a.RiskLevel, model.ResultRejected, a.ApNo, "approve")
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, "审批已超时作废",
 				fmt.Sprintf("超过时限未审批，已自动作废：%s", clip(a.Command, 80)), a.ApNo)
+			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
 		case "auto-escalate":
 			// Keep pending for the final approver (owner) but raise an escalation
 			// alert ONCE — claim the escalation atomically so repeated sweeps don't

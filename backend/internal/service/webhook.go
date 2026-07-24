@@ -172,6 +172,38 @@ func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, 
 	return out.TaskID, nil
 }
 
+// PatchExternalStatus writes a terminal status back to审批魔方 for a ticket the
+// gateway resolved on its own (an internal timeout auto-reject). approval_status
+// 2 = cancel — collapses the still-open飞书 card so the two sides stay in sync.
+// Best-effort; reuses the SSRF-guarded outbound client. See ADR-0003.
+func (d *Dispatcher) PatchExternalStatus(baseURL, token, taskID string) error {
+	endpoint := baseURL + "/api/v1/approvals/" + url.PathEscape(taskID) + "/status"
+	if err := validateOutboundURL(endpoint); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"task_id":         taskID,
+		"approver":        "gateway-timeout",
+		"approval_status": 2, // cancel
+	})
+	req, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("审批魔方 PATCH 返回 %d: %s", resp.StatusCode, clip(string(respBody), 200))
+	}
+	return nil
+}
+
 // Dispatcher pushes audit events to the configured webhook, authenticating with
 // an Authorization: Bearer <token> header (token = the configured webhook secret)
 // and retrying with exponential backoff (backend doc §8).

@@ -1,28 +1,29 @@
-# 04 · Phase 2 · 结果回帖 + 超时回写(可选/后续)
+# 04 · Phase 2 · 超时回写取消
 
-Status: needs-info
+Status: ready-for-human
 
-## What to build
+## 范围决定(2026-07-24)
 
-Phase 1 闭环稳定后再做,非阻塞。
+- **功能 A(执行结果回帖 `/reply`)已移除**:`/api/v1/reply` 是审批魔方给 AI-Agent 用的转发接口,不是我方所需;执行结果由站内通知告知发起人即可。`om_`/`message_id` 相关一并作废(`Approval.LarkMessageID` 变为未用的调试元数据,可保留或后续清理)。
+- **关联键统一为对方 `task_id`**(我方 `Approval.ExternalTaskID`,发起响应带回、回调也带回),不用 `message_id`。
+- Phase 2 因此只剩**功能 B:超时回写取消**。
 
-- **执行结果回帖**:审批通过并执行后,若 `approval.external.replyResult`,调审批魔方 `POST /api/v1/reply`(`{message_id: Approval.LarkMessageID, text: 执行结果摘要}`),把结果回帖到原飞书卡片。
-- **超时回写**:内部 `approval.onTimeout` 触发自动驳回时,best-effort 调 `PATCH /api/v1/approvals/{ExternalTaskID}/status` 回写 cancel,让飞书卡片同步收敛。
+## What was built
 
-## Open questions(需厂商/联调确认 → 故 needs-info)
-
-- `/reply` 用回调回传的 `om_...` message_id 能否命中原卡片?(ADR Open items)
-- 撤单/取消是否以 `approved:false` 回调,还是需要另处理?
-- `PATCH …/status` 的 `approval_status` 取值(旧 schema 为 0/1/2)与出站回调 `approved` 布尔是否一致语义?
+- **超时取消**:`SweepApprovalTimeouts` 的 `auto-reject` 分支,认领 pending→expired 成功后,对有 `ExternalTaskID` 的单 best-effort 异步调 `PATCH {baseURL}/api/v1/approvals/{task_id}/status`,body `{task_id, approver:"gateway-timeout", approval_status:2}`(2=cancel),Bearer;复用加密配置 + SSRF 客户端。失败仅记日志。
+- 正确性说明:即便不做本功能,幂等也已兜底(超时置 expired 后旧卡片被点→回调查到非 pending→不执行);功能 B 仅让飞书卡片同步收敛(观感)。
 
 ## Acceptance criteria
 
-- [ ] `replyResult=true` 时执行后回帖成功(联调验证命中原卡片)
-- [ ] 内部超时驳回时向审批魔方回写 cancel(best-effort,失败仅记日志)
-- [ ] 上述 open questions 有厂商明确答复后再落实现
+- [x] 外部单被内部超时 auto-reject 时,向审批魔方 `PATCH …/{task_id}/status` 回写 cancel(approval_status=2、Bearer)
+- [x] best-effort 异步,失败仅记日志,不影响超时作废本身
+- [x] 未配置外部审批 / 无 `ExternalTaskID` 时不外发
+- [x] 回归 `TestExternalApproval_TimeoutCancelsExternalCard`;全量 `go test ./...` 通过
 
 ## Blocked by
 
-02(回调端点,需 `LarkMessageID`);待厂商确认 open questions
+None(功能 A 已移除,不再有 open questions)
 
 ## Comments
+
+- 已实现并测试通过。`approval.external.replyResult` 配置键成为无用项(功能 A 移除),前端未暴露,保留不影响;后续可清理该键与 `LarkMessageID` 字段。

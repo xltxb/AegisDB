@@ -130,6 +130,71 @@ func TestExternalApproval_SelfApproveBlocked(t *testing.T) {
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "rejected", "self-approval blocked → rejected")
 }
 
+// Phase 2 功能 B: when an externally-dispatched ticket is auto-rejected by the
+// internal timeout sweep, the gateway PATCHes审批魔方 to cancel (approval_status
+// 2) the still-open card — keyed by the vendor task_id, Bearer-authenticated.
+func TestExternalApproval_TimeoutCancelsExternalCard(t *testing.T) {
+	var mu sync.Mutex
+	var patchPath, patchAuth string
+	var patchStatus int
+	patchStatus = -1
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost { // create-approval
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte(`{"code":0,"task_id":"cube-77","status":"PENDING"}`))
+			return
+		}
+		// PATCH /api/v1/approvals/{id}/status
+		body, _ := io.ReadAll(r.Body)
+		var in struct {
+			ApprovalStatus int `json:"approval_status"`
+		}
+		_ = json.Unmarshal(body, &in)
+		mu.Lock()
+		patchPath, patchAuth, patchStatus = r.URL.Path, r.Header.Get("Authorization"), in.ApprovalStatus
+		mu.Unlock()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"code":0,"msg":"success","status":"CANCELLED"}`))
+	}))
+	defer stub.Close()
+
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	app.setSettings(token, map[string]any{
+		"approval.external.enabled":         true,
+		"approval.external.baseURL":         stub.URL,
+		"approval.external.token":           "tok-xyz",
+		"approval.external.callbackBaseURL": "https://gw.example",
+		"approval.onTimeout":                "auto-reject",
+		"approval.timeoutMinutes":           0,
+	})
+	ap := app.submitProdHighRisk(token)
+
+	// wait until the async outbound stored the vendor task_id, then time it out.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && app.approvalRow(token, ap.ApNo).ExternalTaskID == "" {
+		time.Sleep(50 * time.Millisecond)
+	}
+	app.svc.SweepApprovalTimeouts()
+
+	// poll for the PATCH cancel to land (async best-effort).
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		done := patchStatus != -1
+		mu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	eq(t, patchPath, "/api/v1/approvals/cube-77/status", "PATCH keyed by vendor task_id")
+	eq(t, patchStatus, 2, "approval_status 2 = cancel")
+	eq(t, patchAuth, "Bearer tok-xyz", "PATCH uses Bearer token")
+}
+
 // When enabled, building an approval dispatches it to审批魔方 (Bearer auth,
 // external_task_id = ApNo) and stores the returned vendor task_id.
 func TestExternalApproval_OutboundDispatchStoresTaskID(t *testing.T) {

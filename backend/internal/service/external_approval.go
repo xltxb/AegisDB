@@ -81,6 +81,25 @@ func (s *Services) dispatchExternalApproval(u *model.User, ap *model.Approval) {
 	}()
 }
 
+// cancelExternalApproval tells审批魔方 to cancel a ticket the gateway resolved on
+// its own (internal timeout), so the飞书 card doesn't linger as "pending". Takes
+// the approval by value to be goroutine-safe under the sweep loop; no-op unless
+// external approval is configured and this ticket was dispatched externally.
+func (s *Services) cancelExternalApproval(ap model.Approval) {
+	if ap.ExternalTaskID == "" {
+		return
+	}
+	cfg := s.extApprovalConfig()
+	if !cfg.enabled || cfg.baseURL == "" || cfg.token == "" {
+		return
+	}
+	go func() {
+		if err := s.Webhook.PatchExternalStatus(cfg.baseURL, cfg.token, ap.ExternalTaskID); err != nil {
+			slog.Warn("external approval cancel failed", "apNo", ap.ApNo, "taskId", ap.ExternalTaskID, "err", err)
+		}
+	}()
+}
+
 // DecideApprovalExternal applies an审批魔方 callback decision to our approval.
 // Correlates by ApNo (echoed back as external_task_id), is idempotent (a
 // non-pending ticket returns its current status), enforces the禁自审 net locally
