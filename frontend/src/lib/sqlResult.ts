@@ -143,8 +143,45 @@ export function buildTable(columns: string[], rows: string[][]): SynthTable {
 
 // ---- rendering ----------------------------------------------------------
 
-const pad = (s: string, w: number, right: boolean) =>
-  right ? ' '.repeat(Math.max(0, w - s.length)) + s : s + ' '.repeat(Math.max(0, w - s.length))
+// isWideChar reports whether a code point occupies two terminal cells (CJK, kana,
+// fullwidth forms), so alignment holds for mixed ASCII/CJK data.
+function isWideChar(cp: number): boolean {
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) ||
+    (cp >= 0x2e80 && cp <= 0xa4cf) ||
+    (cp >= 0xac00 && cp <= 0xd7a3) ||
+    (cp >= 0xf900 && cp <= 0xfaff) ||
+    (cp >= 0xfe30 && cp <= 0xfe4f) ||
+    (cp >= 0xff00 && cp <= 0xff60) ||
+    (cp >= 0xffe0 && cp <= 0xffe6) ||
+    (cp >= 0x1f300 && cp <= 0x1faff) ||
+    (cp >= 0x20000 && cp <= 0x3fffd)
+  )
+}
+// dispWidth is the on-screen column count of a string (CJK = 2).
+function dispWidth(s: string): number {
+  let w = 0
+  for (const ch of s) w += isWideChar(ch.codePointAt(0) || 0) ? 2 : 1
+  return w
+}
+// truncateDisp cuts a string to a max display width, appending … when clipped.
+function truncateDisp(s: string, max: number): string {
+  if (dispWidth(s) <= max) return s
+  let w = 0
+  let out = ''
+  for (const ch of s) {
+    const cw = isWideChar(ch.codePointAt(0) || 0) ? 2 : 1
+    if (w + cw > max - 1) break // leave a cell for …
+    out += ch
+    w += cw
+  }
+  return out + '…'
+}
+// padDisp pads to a display width (CJK-aware), left or right aligned.
+function padDisp(s: string, w: number, right: boolean): string {
+  const gap = ' '.repeat(Math.max(0, w - dispWidth(s)))
+  return right ? gap + s : s + gap
+}
 
 // renderVertical produces MySQL `\G`-style vertical output: one "column: value"
 // pair per line, grouped per row. Ideal for wide/long values (e.g. SHOW CREATE
@@ -164,22 +201,33 @@ export function renderVertical(columns: string[], rows: string[][]): string[] {
   return out
 }
 
-// renderTable produces psql-style aligned, ANSI-coloured lines (no trailing \n).
+// maxColWidth caps a single column's display width so one huge value (e.g. a long
+// text/JSON cell) can't blow up the layout — use \G / \x for full wide values.
+const maxColWidth = 60
+
+// renderTable produces a fully-boxed, aligned, ANSI-coloured grid (┌┬┐ / ├┼┤ /
+// └┴┘). Widths are measured in display columns (CJK-aware) so mixed ASCII/CJK
+// rows stay aligned; cells are single-lined and truncated at maxColWidth.
 export function renderTable(t: SynthTable): string[] {
-  const widths = t.columns.map((col, i) => {
-    let w = col.length
-    for (const r of t.rows) w = Math.max(w, r[i]?.length ?? 0)
+  const clean = (s: string) => (s ?? '').replace(/[\r\n\t]+/g, ' ')
+  const heads = t.columns.map((h) => truncateDisp(clean(h), maxColWidth))
+  const cells = t.rows.map((r) => t.columns.map((_, i) => truncateDisp(clean(r[i] ?? ''), maxColWidth)))
+  const widths = heads.map((h, i) => {
+    let w = dispWidth(h)
+    for (const r of cells) w = Math.max(w, dispWidth(r[i]))
     return w
   })
-  const vert = c(ANSI.gray, '│')
-  const cell = (s: string, i: number, right: boolean) => ' ' + pad(s, widths[i], right) + ' '
+  const g = (s: string) => c(ANSI.gray, s)
+  const vert = g('│')
+  const bar = (l: string, m: string, r: string) => g(l + widths.map((w) => '─'.repeat(w + 2)).join(m) + r)
+  const rowLine = (vals: string[], head: boolean) =>
+    vert + vals.map((v, i) => {
+      const cell = ' ' + padDisp(v, widths[i], !head && t.numeric[i]) + ' '
+      return (head ? c(ANSI.bold, cell) : t.numeric[i] ? c(ANSI.cyan, cell) : cell) + vert
+    }).join('')
 
-  const header = t.columns.map((col, i) => c(ANSI.bold, cell(col, i, t.numeric[i]))).join(vert)
-  const rule = c(ANSI.gray, widths.map((w) => '─'.repeat(w + 2)).join('┼'))
-  const body = t.rows.map((r) =>
-    r
-      .map((v, i) => (t.numeric[i] ? c(ANSI.cyan, cell(v, i, true)) : cell(v, i, false)))
-      .join(vert),
-  )
-  return [header, rule, ...body]
+  const out = [bar('┌', '┬', '┐'), rowLine(heads, true), bar('├', '┼', '┤')]
+  for (const r of cells) out.push(rowLine(r, false))
+  out.push(bar('└', '┴', '┘'))
+  return out
 }
