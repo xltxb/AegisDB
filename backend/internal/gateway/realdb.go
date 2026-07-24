@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 	_ "github.com/glebarez/go-sqlite" // sqlite (dev / tests)
 	mysqldrv "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"           // postgres / GaussDB(DWS)
+	"github.com/lib/pq"                // postgres / GaussDB(DWS) — named for NoticeHandler
 	goora "github.com/sijms/go-ora/v2" // oracle (pure Go, no instant client)
 
 	"velagateway/internal/model"
@@ -325,6 +326,61 @@ func RealQueryEach(conn *model.Connection, query string, onHeader func([]string)
 		}
 	}
 	return rows.Err()
+}
+
+// RealRunAsync executes a long-running statement on a dedicated connection with a
+// caller-supplied timeout, streaming server NOTICE messages (PostgreSQL/DWS
+// RAISE NOTICE) to onNotice as they arrive — this is how a 30–60min procedure's
+// progress log reaches the async-job viewer. Notices are only captured for the
+// pg-family driver; other engines run without live logs. Returns rows-affected
+// (best-effort; 0 for statements that don't report it).
+func RealRunAsync(conn *model.Connection, query string, timeout time.Duration, onNotice func(string)) (int64, error) {
+	drv, dsn, ok := engineDriver(conn)
+	if !ok {
+		return 0, fmt.Errorf("引擎 %q 未配置真实执行(需填写连接凭据)", conn.Engine)
+	}
+	db, err := dialPool(drv, dsn)
+	if err != nil {
+		return 0, err
+	}
+	if drv == "sqlite" {
+		defer db.Close() // sqlite handles are one-off (not pooled)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	// A dedicated connection so the NOTICE handler is scoped to this run and not
+	// left on a pooled connection for the next caller.
+	sc, err := db.Conn(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer sc.Close()
+	if drv == "postgres" && onNotice != nil {
+		_ = sc.Raw(func(dc any) error {
+			if c, ok := dc.(driver.Conn); ok {
+				pq.SetNoticeHandler(c, func(n *pq.Error) {
+					if n != nil {
+						onNotice(strings.TrimSpace(n.Message))
+					}
+				})
+			}
+			return nil
+		})
+		// Reset the handler before the conn returns to the pool.
+		defer sc.Raw(func(dc any) error {
+			if c, ok := dc.(driver.Conn); ok {
+				pq.SetNoticeHandler(c, nil)
+			}
+			return nil
+		})
+	}
+	res, err := sc.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 func cellString(v any) string {

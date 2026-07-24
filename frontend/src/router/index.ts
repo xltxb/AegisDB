@@ -14,6 +14,7 @@ const router = createRouter({
         // export is a terminal-level data capability; gate on the terminal menu.
         { path: 'export', name: 'export', component: () => import('@/views/ExportView.vue'), meta: { menuKey: 'export', gate: 'terminal' } },
         { path: 'uploads', name: 'uploads', component: () => import('@/views/UploadView.vue'), meta: { menuKey: 'uploads', gate: 'terminal' } },
+        { path: 'async-jobs', name: 'asyncjobs', component: () => import('@/views/AsyncExecView.vue'), meta: { menuKey: 'asyncjobs', gate: 'terminal' } },
         { path: 'approvals', name: 'approvals', component: () => import('@/views/ApprovalsView.vue'), meta: { menuKey: 'approve' } },
         { path: 'connections', name: 'connections', component: () => import('@/views/ConnectionsView.vue'), meta: { menuKey: 'db' } },
         { path: 'risk-rules', name: 'risk-rules', component: () => import('@/views/RiskRulesView.vue'), meta: { menuKey: 'rules' } },

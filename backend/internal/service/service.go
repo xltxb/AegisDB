@@ -29,6 +29,7 @@ type Services struct {
 	auditCounter atomic.Int64
 	auditMu      sync.Mutex // serialize audit-chain writes (prev-read + insert must be atomic)
 	exportQueue  chan int64 // async export-job ids, drained by a worker pool
+	asyncQueue   chan int64 // async SQL-exec-job ids, drained by a worker pool
 }
 
 const exportWorkers = 3 // how many export jobs run in parallel
@@ -66,6 +67,18 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager,
 		go func() {
 			for id := range s.exportQueue {
 				s.runExportJobSafe(id)
+			}
+		}()
+	}
+	// Async SQL-exec workers (long-running background jobs, same isolation).
+	if n, err := repo.FailStuckAsyncJobs(); err == nil && n > 0 {
+		slog.Info("reconciled orphaned async jobs on startup", "failed", n)
+	}
+	s.asyncQueue = make(chan int64, 256)
+	for i := 0; i < asyncWorkers; i++ {
+		go func() {
+			for id := range s.asyncQueue {
+				s.runAsyncJobSafe(id)
 			}
 		}()
 	}

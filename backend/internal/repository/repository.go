@@ -839,6 +839,58 @@ func (r *Repo) ListExportJobs(userID int64, limit int) ([]model.ExportJob, error
 	return js, err
 }
 
+// ----------------------------------------------------------------- Async jobs
+
+func (r *Repo) CreateAsyncJob(j *model.AsyncJob) error { return r.db.Create(j).Error }
+
+func (r *Repo) GetAsyncJob(id int64) (*model.AsyncJob, error) {
+	var j model.AsyncJob
+	if err := r.db.First(&j, id).Error; err != nil {
+		return nil, err
+	}
+	return &j, nil
+}
+
+func (r *Repo) ListAsyncJobs(userID int64, limit int) ([]model.AsyncJob, error) {
+	var js []model.AsyncJob
+	q := r.db.Where("user_id = ?", userID).Order("id desc")
+	if limit > 0 {
+		q = q.Limit(limit)
+	}
+	err := q.Find(&js).Error
+	return js, err
+}
+
+// ClaimAsyncJob atomically transitions a job pending → running, returning true iff
+// this caller won the race (so a restart-reconciled or double-enqueued job runs once).
+func (r *Repo) ClaimAsyncJob(id int64, startedAt time.Time) (bool, error) {
+	res := r.db.Model(&model.AsyncJob{}).
+		Where("id = ? AND status = ?", id, model.AsyncPending).
+		Updates(map[string]any{"status": model.AsyncRunning, "started_at": startedAt})
+	return res.RowsAffected == 1, res.Error
+}
+
+// UpdateAsyncJobLog overwrites the streamed log (the worker keeps the full text
+// in memory and flushes it whole — dialect-safe, avoids per-notice concat).
+func (r *Repo) UpdateAsyncJobLog(id int64, log string) error {
+	return r.db.Model(&model.AsyncJob{}).Where("id = ?", id).Update("log", log).Error
+}
+
+// FinishAsyncJob records the terminal status + final log/rows/error.
+func (r *Repo) FinishAsyncJob(id int64, status, log, errMsg string, rows int, at time.Time) error {
+	return r.db.Model(&model.AsyncJob{}).Where("id = ?", id).Updates(map[string]any{
+		"status": status, "log": log, "error": errMsg, "rows": rows, "finished_at": at,
+	}).Error
+}
+
+// FailStuckAsyncJobs marks jobs orphaned by a previous process as failed on boot.
+func (r *Repo) FailStuckAsyncJobs() (int64, error) {
+	res := r.db.Model(&model.AsyncJob{}).
+		Where("status IN ?", []string{model.AsyncPending, model.AsyncRunning}).
+		Updates(map[string]any{"status": model.AsyncFailed, "error": "服务重启导致任务中断,请重新提交"})
+	return res.RowsAffected, res.Error
+}
+
 // ----------------------------------------------------------------- Script uploads
 
 func (r *Repo) CreateScriptUpload(u *model.ScriptUpload) error { return r.db.Create(u).Error }

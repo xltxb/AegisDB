@@ -23,6 +23,7 @@ const navItems = [
   // export & uploads reuse the terminal permission (`gate`) rather than own menu keys.
   { key: 'export', gate: 'terminal', path: '/export', icon: DatabaseZap, label: 'navExport' },
   { key: 'uploads', gate: 'terminal', path: '/uploads', icon: Upload, label: 'navUploads' },
+  { key: 'asyncjobs', gate: 'terminal', path: '/async-jobs', icon: Clock, label: 'navAsync' },
   { key: 'approve', path: '/approvals', icon: ClipboardCheck, label: 'navAppr', badge: true },
   { key: 'db', path: '/connections', icon: Database, label: 'navDb' },
   { key: 'rules', path: '/risk-rules', icon: ShieldAlert, label: 'navRules' },

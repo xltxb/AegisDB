@@ -1,7 +1,11 @@
 // English locale — ported from the prototype's tr() pairs.
 {
-  navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAppr: 'Appr', navDb: 'DB', navRules: 'Rules', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
+  navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navDb: 'DB', navRules: 'Rules', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
   t_export: 'Data export', t_exportSub: 'SQL export · compressed & encrypted', t_uploads: 'Script upload', t_uploadsSub: 'Upload and manage your script files',
+  t_asyncjobs: 'Background exec', t_asyncjobsSub: 'Long SQL runs async · live log',
+  asyncTitle: 'Background execution (async)', asyncSub: 'Submit long-running SQL (30–60min+); it finishes in the background free of request timeouts, streaming progress (RAISE NOTICE) live',
+  asyncSubmit: 'Run in background', asyncReasonPh: 'Reason (optional)', asyncHint: 'Returns a job id and runs in the background; safe to close the page. High-risk commands go to approval.',
+  asyncJobs: 'Jobs', asyncEmpty: 'No background jobs yet', asyncDone: 'Completed · {n} rows affected', asyncRunning: 'Running…', reason: 'Reason',
   uploadTitle: 'Upload script file', uploadSub: 'Upload .sql scripts to the server — visible & managed only by you',
   uploadDrop: 'Click to choose or drop a file here', uploadHint: '.sql / text files', uploadRunning: 'Uploading…',
   uploadList: 'My uploads', uploadListSub: 'Each user only sees their own uploaded scripts', uploadNone: 'No uploaded files yet',
