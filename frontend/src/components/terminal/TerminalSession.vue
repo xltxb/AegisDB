@@ -273,10 +273,12 @@ function switchDb(db: string) {
   risk.value = 'safe'
 }
 
-// translateMetaSql maps a psql-style DB meta-command to a SQL query the driver can
-// run (the target DB doesn't understand backslash commands). Returns null for
-// commands handled locally (\?, \l, \c). ident chars are sanitised so a name can't
-// break the literal — and the user could run any SQL directly anyway.
+// translateMetaSql maps a client backslash meta-command (psql \dt, MySQL-client
+// \l, etc.) to a SQL query the driver can run — engine-aware for PostgreSQL/DWS,
+// MySQL/TiDB and Oracle so users can keep their familiar client shortcuts. Returns
+// null for commands handled locally (\?, \clear, \c/\u <db>, \conns). ident chars
+// are sanitised so a name can't break the literal (the user could run any SQL
+// directly anyway).
 function translateMetaSql(cmd: string, engine: string): string | null {
   const m = cmd.trim().match(/^\\([a-z]+)\+?\s*(.*)$/i)
   if (!m) return null
@@ -284,22 +286,56 @@ function translateMetaSql(cmd: string, engine: string): string | null {
   const arg = m[2].trim().replace(/;$/, '')
   const ident = (s: string) => s.replace(/["'`]/g, '').replace(/[^A-Za-z0-9_$.]/g, '')
   const isPG = /postgre|dws|gauss/i.test(engine)
+  const isOra = /oracle/i.test(engine)
+
   if (isPG) {
-    if (verb === 'dt') return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema') ORDER BY table_schema, table_name`
-    if (verb === 'dv') return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.views WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2`
-    if (verb === 'dn') return `SELECT schema_name AS "Name" FROM information_schema.schemata WHERE schema_name NOT IN ('pg_catalog','information_schema') ORDER BY 1`
-    if (verb === 'd') {
-      if (!arg) return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2`
-      const parts = ident(arg).split('.')
-      const tbl = parts.pop() || ''
-      const schCond = parts.length ? ` AND table_schema='${parts[0]}'` : ''
-      return `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", column_default AS "Default" FROM information_schema.columns WHERE table_name='${tbl}'${schCond} ORDER BY ordinal_position`
+    const notSys = `NOT IN ('pg_catalog','information_schema')`
+    switch (verb) {
+      case 'l': case 'list': return `SELECT datname AS "Name" FROM pg_database WHERE datistemplate=false ORDER BY 1`
+      case 'dn': return `SELECT schema_name AS "Name" FROM information_schema.schemata WHERE schema_name ${notSys} ORDER BY 1`
+      case 'dt': return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema ${notSys} ORDER BY 1,2`
+      case 'dv': return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.views WHERE table_schema ${notSys} ORDER BY 1,2`
+      case 'di': return `SELECT schemaname AS "Schema", indexname AS "Name", tablename AS "Table" FROM pg_indexes WHERE schemaname ${notSys} ORDER BY 1,2`
+      case 'ds': return `SELECT sequence_schema AS "Schema", sequence_name AS "Name" FROM information_schema.sequences WHERE sequence_schema ${notSys} ORDER BY 1,2`
+      case 'df': return `SELECT routine_schema AS "Schema", routine_name AS "Name", data_type AS "Result" FROM information_schema.routines WHERE routine_schema ${notSys} ORDER BY 1,2`
+      case 'du': case 'dg': return `SELECT rolname AS "Role", rolsuper AS "Super", rolcanlogin AS "Login" FROM pg_roles ORDER BY 1`
+      case 'dp': case 'z': return `SELECT table_schema AS "Schema", table_name AS "Name", grantee AS "Grantee", privilege_type AS "Privilege" FROM information_schema.role_table_grants WHERE table_schema ${notSys} ORDER BY 1,2`
+      case 'conninfo': return `SELECT current_database() AS "Database", current_user AS "User", version() AS "Version"`
+      case 'd':
+        if (!arg) return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_schema ${notSys} ORDER BY 1,2`
+        { const p = ident(arg).split('.'); const tbl = p.pop() || ''; const sch = p.length ? ` AND table_schema='${p[0]}'` : ''
+          return `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", column_default AS "Default" FROM information_schema.columns WHERE table_name='${tbl}'${sch} ORDER BY ordinal_position` }
     }
     return null
   }
-  // MySQL/TiDB
-  if (verb === 'dt') return 'SHOW TABLES'
-  if (verb === 'd') return arg ? `SHOW COLUMNS FROM \`${ident(arg)}\`` : 'SHOW TABLES'
+
+  if (isOra) {
+    const notSys = `NOT IN ('SYS','SYSTEM','OUTLN','XDB','MDSYS','CTXSYS','DBSNMP','WMSYS','APPQOSSYS')`
+    switch (verb) {
+      case 'l': case 'list': case 'dn': return `SELECT username AS "Name" FROM all_users ORDER BY 1`
+      case 'dt': return `SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`
+      case 'dv': return `SELECT owner AS "Owner", view_name AS "Name" FROM all_views WHERE owner ${notSys} ORDER BY 1,2`
+      case 'di': return `SELECT owner AS "Owner", index_name AS "Name", table_name AS "Table" FROM all_indexes WHERE owner ${notSys} ORDER BY 1,2`
+      case 'ds': return `SELECT sequence_owner AS "Owner", sequence_name AS "Name" FROM all_sequences WHERE sequence_owner ${notSys} ORDER BY 1,2`
+      case 'du': return `SELECT username AS "User", account_status AS "Status" FROM all_users ORDER BY 1`
+      case 'conninfo': return `SELECT SYS_CONTEXT('USERENV','DB_NAME') AS "Database", USER AS "User" FROM DUAL`
+      case 'd':
+        if (!arg) return `SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`
+        return `SELECT column_name AS "Column", data_type AS "Type", nullable AS "Nullable" FROM all_tab_columns WHERE table_name=UPPER('${ident(arg)}') ORDER BY column_id`
+    }
+    return null
+  }
+
+  // MySQL / TiDB
+  switch (verb) {
+    case 'l': case 'list': case 'dn': return 'SHOW DATABASES'
+    case 'dt': return `SHOW FULL TABLES WHERE Table_type='BASE TABLE'`
+    case 'dv': return `SHOW FULL TABLES WHERE Table_type='VIEW'`
+    case 'du': case 'dg': return 'SELECT User, Host FROM mysql.user ORDER BY 1,2'
+    case 'conninfo': return 'SELECT DATABASE() AS `Database`, CURRENT_USER() AS `User`, VERSION() AS `Version`'
+    case 'di': return arg ? `SHOW INDEX FROM \`${ident(arg)}\`` : null
+    case 'd': return arg ? `SHOW COLUMNS FROM \`${ident(arg)}\`` : 'SHOW TABLES'
+  }
   return null
 }
 
@@ -353,26 +389,50 @@ async function handleSubmit(stmt: string) {
 }
 
 function metaCommand(raw: string) {
-  const cmd = raw.slice(1).trim().split(/\s+/)[0]
+  const parts = raw.slice(1).trim().split(/\s+/)
+  const cmd = (parts[0] || '').toLowerCase()
+  const arg = parts.slice(1).join(' ').replace(/;$/, '').replace(/["'`]/g, '')
   if (cmd === '?' || cmd === 'h' || cmd === 'help') {
-    const bs = { bs: '\\' }
-    outLines([
-      c(ANSI.bold, t('termMetaTitle')),
-      t('termMetaHelp', bs),
-      t('termMetaList', bs),
-      t('termMetaClear', bs),
-      t('termMetaDt', bs),
-      t('termMetaDn', bs),
-      t('termMetaD', bs),
-      c(ANSI.gray, t('termMetaSql', bs)),
-    ])
-  } else if (cmd === 'l' || cmd === 'list') {
+    printMetaHelp()
+  } else if (cmd === 'conns' || cmd === 'connlist') {
     outLines(props.conns.map((cn) => `  ${String(cn.id).padStart(3)}  ${cn.env}-${cn.name}  ${c(ANSI.gray, cn.defaultRole)}`))
-  } else if (cmd === 'c' || cmd === 'clear') {
+  } else if (cmd === 'clear') {
     term.clear()
+  } else if (cmd === 'c' || cmd === 'connect' || cmd === 'u' || cmd === 'use') {
+    // psql \c <db> / MySQL-client \u <db>: switch the target database; no arg = clear.
+    if (arg) switchDb(arg)
+    else term.clear()
   } else {
     out(c(ANSI.gray, t('termUnknownCmd', { bs: '\\', cmd })))
   }
+}
+
+// printMetaHelp lists the client backslash commands, showing engine-specific ones
+// only for the matching engine. Command tokens are built in JS (real backslashes)
+// so they dodge vue-i18n's message escaping; only the descriptions are translated.
+function printMetaHelp() {
+  const engine = props.conn.engine
+  const isPG = /postgre|dws|gauss/i.test(engine)
+  const isOra = /oracle/i.test(engine)
+  const pad = (s: string) => (s + '            ').slice(0, 12)
+  const line = (token: string, descKey: string) => '  ' + c(ANSI.cyan, pad(token)) + c(ANSI.gray, t(descKey as any))
+  const lines = [c(ANSI.bold, t('termMetaTitle'))]
+  lines.push(line('\\?', 'metaHelpHelp'))
+  lines.push(line('\\conns', 'metaHelpConns'))
+  lines.push(line('\\c <db>', 'metaHelpUse'))
+  lines.push(line('\\clear', 'metaHelpClear'))
+  lines.push(line('\\l', 'metaHelpL'))
+  lines.push(line('\\dt', 'metaHelpDt'))
+  lines.push(line('\\dv', 'metaHelpDv'))
+  lines.push(line('\\dn', 'metaHelpDn'))
+  lines.push(line('\\di', 'metaHelpDi'))
+  if (isPG || isOra) lines.push(line('\\du', 'metaHelpDu'))
+  if (isPG || isOra) lines.push(line('\\ds', 'metaHelpDs'))
+  if (isPG) lines.push(line('\\df', 'metaHelpDf'))
+  lines.push(line('\\d <obj>', 'metaHelpD'))
+  lines.push(line('\\conninfo', 'metaHelpConninfo'))
+  lines.push(c(ANSI.gray, t('termMetaSql', { bs: '\\' })))
+  outLines(lines)
 }
 
 function sendExec(sql: string, reason: string, mfaCode = ''): 'ws' | 'rest' {
