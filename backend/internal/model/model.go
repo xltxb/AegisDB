@@ -157,6 +157,36 @@ type ExportJob struct {
 
 func (ExportJob) TableName() string { return "tbl_export_job" }
 
+// AsyncJob — a long-running SQL execution run in the background (30–60min+),
+// decoupled from the HTTP request so it can't time out. Server progress messages
+// (PostgreSQL/DWS RAISE NOTICE) stream into Log as they arrive; submit → poll.
+type AsyncJob struct {
+	ID           int64      `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID       int64      `gorm:"index:idx_async_user;not null" json:"userId"`
+	ConnectionID int64      `json:"connectionId"`
+	Instance     string     `gorm:"size:96" json:"instance"`
+	Database     string     `gorm:"column:db_name;size:128" json:"database"`
+	SQL          string     `gorm:"type:text" json:"sql"`
+	Reason       string     `gorm:"size:512" json:"reason"`
+	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
+	Log          string     `gorm:"type:mediumtext" json:"log"`                     // streamed NOTICE / progress lines
+	Rows         int        `json:"rows"`
+	Error        string     `gorm:"size:512" json:"error"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	StartedAt    *time.Time `json:"startedAt"`
+	FinishedAt   *time.Time `json:"finishedAt"`
+}
+
+func (AsyncJob) TableName() string { return "tbl_async_job" }
+
+// Async job statuses.
+const (
+	AsyncPending = "pending"
+	AsyncRunning = "running"
+	AsyncDone    = "done"
+	AsyncFailed  = "failed"
+)
+
 // ScriptUpload is one uploaded script file, owned by the uploader. Each user
 // only sees/manages their own uploads.
 type ScriptUpload struct {

@@ -305,6 +305,17 @@ type RiskCommandView struct {
 	Env     map[string]string `json:"env"` // prod/staging/dev -> high|mid|off
 }
 
+// AsyncSubmitResp is the result of submitting a long-running SQL for background
+// execution: a jobId on the allow path, or an approval ticket when the command
+// is gated (same three-layer verdict as a normal exec).
+type AsyncSubmitResp struct {
+	JobID       int64  `json:"jobId,omitempty"`
+	Intercepted bool   `json:"intercepted,omitempty"`
+	ApprovalNo  string `json:"approvalNo,omitempty"`
+	Risk        string `json:"risk,omitempty"`
+	Rule        string `json:"rule,omitempty"`
+}
+
 // LarkApprovalCallbackReq is the payload审批魔方 POSTs to our callback_url when a
 //飞书 approval reaches a terminal state. Correlation uses ExternalTaskID, which
 // echoes back the ApNo we sent. `approved` (bool) is the decision; `approver` is

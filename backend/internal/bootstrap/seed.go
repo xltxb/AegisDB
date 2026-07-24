@@ -178,6 +178,8 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	settings := map[string]any{
 		"gateway.defaultPolicy":   cfg.Gateway.DefaultPolicy,
 		"gateway.execTimeout":     cfg.Gateway.ExecTimeoutSeconds,
+		"gateway.asyncExecTimeout": 5400, // 后台异步执行上限(秒),默认 90min
+
 		"approval.onTimeout":      "auto-escalate",
 		"approval.timeoutMinutes": 720,
 		"security.sessionTTL":     "8h",

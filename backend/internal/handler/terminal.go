@@ -4,6 +4,7 @@ import (
 	"math"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -120,6 +121,59 @@ func (h *Handler) Exec(c *gin.Context) {
 		return
 	}
 	resp.OK(c, r)
+}
+
+// ExecAsync submits a long-running SQL for background execution (30–60min+),
+// decoupled from this request so it can't time out. Returns a jobId to poll, or
+// an approval ticket when the command is gated.
+func (h *Handler) ExecAsync(c *gin.Context) {
+	var req dto.ExecReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	r, err := h.Svc.ExecAsync(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
+		return
+	}
+	if err == service.ErrMFARequired {
+		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
+		return
+	}
+	if err == service.ErrMFAInvalid {
+		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
+		return
+	}
+	if r.Intercepted {
+		resp.FailData(c, resp.CodeIntercepted, "命令被拦截,需审批", r)
+		return
+	}
+	resp.OK(c, r)
+}
+
+// ListAsyncJobs returns the caller's background jobs (newest first).
+func (h *Handler) ListAsyncJobs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	resp.OK(c, h.Svc.ListAsyncJobs(middleware.CurrentUser(c), limit))
+}
+
+// GetAsyncJob returns one background job with its streamed log (poll for progress).
+func (h *Handler) GetAsyncJob(c *gin.Context) {
+	j, err := h.Svc.GetAsyncJob(middleware.CurrentUser(c), pathID(c))
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "无权查看该任务")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "任务不存在")
+		return
+	}
+	resp.OK(c, j)
 }
 
 // ScriptScan godoc

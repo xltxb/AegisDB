@@ -1,6 +1,6 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  Approval, AuditPage, AuditQuery, Connection, ConnectionSchema, ExecResp, ExportJob, LoginResp, Me, Member,
+  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, ExecResp, ExportJob, LoginResp, Me, Member,
   Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp, ScriptUpload,
   SettingsResp, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -41,6 +41,11 @@ export const api = {
   // exec returns the raw envelope so callers can detect 42200 (intercept) / 42800 (MFA).
   exec: (connectionId: number, sql: string, reason = '', mfaCode = '', database = '') =>
     http.post<any, Envelope<ExecResp>>('/terminal/exec', { connectionId, sql, reason, mfaCode, database }),
+  // ---- async (background) long-running SQL exec ----
+  execAsync: (connectionId: number, sql: string, database = '', reason = '') =>
+    http.post<any, Envelope<{ jobId?: number; intercepted?: boolean; approvalNo?: string; risk?: string; rule?: string }>>('/terminal/exec-async', { connectionId, sql, database, reason }),
+  asyncJobs: () => http.get<any, Envelope<AsyncJob[]>>('/async-jobs').then(ok),
+  asyncJob: (id: number) => http.get<any, Envelope<AsyncJob>>(`/async-jobs/${id}`).then(ok),
   gatewayStats: () =>
     http.get<any, Envelope<{ online: boolean; p50Ms: number; p95Ms: number; samples: number; intercepts: number }>>('/gateway/stats').then(ok),
   scriptConfig: () =>

@@ -1,8 +1,12 @@
 // Chinese locale — ported from the prototype's tr() pairs.
 {
   // nav / topbar
-  navTerm: '终端', navExport: '导出', navUploads: '上传', navAppr: '审批', navDb: '配置', navRules: '规则', navPerms: '权限', navAudit: '审计', navSettings: '设置',
+  navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navDb: '配置', navRules: '规则', navPerms: '权限', navAudit: '审计', navSettings: '设置',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
+  t_asyncjobs: '后台执行', t_asyncjobsSub: '长耗时 SQL 异步跑 · 实时日志',
+  asyncTitle: '后台执行(异步)', asyncSub: '提交长耗时 SQL(30–60分钟+),后台跑完不受请求超时影响,过程日志(RAISE NOTICE)实时回显',
+  asyncSubmit: '后台执行', asyncReasonPh: '执行原因(可选)', asyncHint: '提交后会返回任务号,后台执行;关闭页面也不影响。命中高危规则会转审批。',
+  asyncJobs: '任务', asyncEmpty: '暂无后台任务', asyncDone: '执行完成 · 影响 {n} 行', asyncRunning: '执行中…', reason: '原因',
   uploadTitle: '上传脚本文件', uploadSub: '上传 .sql 脚本到服务器,仅你自己可见与管理',
   uploadDrop: '点击选择或拖拽文件到此', uploadHint: '支持 .sql / 文本文件', uploadRunning: '上传中…',
   uploadList: '我的上传文件', uploadListSub: '每个用户只看到自己上传的脚本', uploadNone: '暂无上传文件',

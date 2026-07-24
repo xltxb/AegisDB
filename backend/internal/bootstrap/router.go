@@ -78,6 +78,10 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// terminal
 		a.POST("/risk/check", menu("terminal"), h.RiskCheck)
 		a.POST("/terminal/exec", menu("terminal"), h.Exec)
+		// Async (background) long-running SQL execution — submit → poll job + log.
+		a.POST("/terminal/exec-async", menu("terminal"), h.ExecAsync)
+		a.GET("/async-jobs", menu("terminal"), h.ListAsyncJobs)
+		a.GET("/async-jobs/:id", menu("terminal"), h.GetAsyncJob)
 		a.GET("/scripts/config", menu("terminal"), h.ScriptConfig)
 		a.POST("/scripts/scan", menu("terminal"), h.ScriptScan)
 		a.POST("/scripts/execute", menu("terminal"), h.ScriptExecute)

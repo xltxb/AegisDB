@@ -213,6 +213,23 @@ export interface ExportJob {
   finishedAt: string | null
 }
 
+// AsyncJob — a long-running SQL run in the background, with streamed progress log.
+export interface AsyncJob {
+  id: number
+  connectionId: number
+  instance: string
+  database: string
+  sql: string
+  reason: string
+  status: 'pending' | 'running' | 'done' | 'failed' | string
+  log: string
+  rows: number
+  error: string
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+}
+
 export interface ScriptUpload {
   id: number
   userId: number
