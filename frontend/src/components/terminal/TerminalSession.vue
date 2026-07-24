@@ -78,6 +78,7 @@ let ws: WsTerminal
 let ro: ResizeObserver | null = null
 const pendingSql = ref('')
 const pendingVertical = ref(false) // render the pending command's result MySQL \G-style
+const expandedMode = ref(false)    // psql \x: persistent expanded (vertical) display
 
 // MFA step-up
 const mfaOpen = ref(false)
@@ -402,6 +403,11 @@ function metaCommand(raw: string) {
     // psql \c <db> / MySQL-client \u <db>: switch the target database; no arg = clear.
     if (arg) switchDb(arg)
     else term.clear()
+  } else if (cmd === 'x') {
+    // psql \x: toggle persistent expanded (vertical) display. \x on|off set it.
+    const a = arg.toLowerCase()
+    expandedMode.value = a === 'on' || a === 'auto' ? true : a === 'off' ? false : !expandedMode.value
+    out(c(ANSI.gray, t(expandedMode.value ? 'metaExpandOn' : 'metaExpandOff')))
   } else {
     out(c(ANSI.gray, t('termUnknownCmd', { bs: '\\', cmd })))
   }
@@ -430,6 +436,7 @@ function printMetaHelp() {
   if (isPG || isOra) lines.push(line('\\ds', 'metaHelpDs'))
   if (isPG) lines.push(line('\\df', 'metaHelpDf'))
   lines.push(line('\\d <obj>', 'metaHelpD'))
+  lines.push(line('\\x', 'metaHelpX'))
   lines.push(line('\\conninfo', 'metaHelpConninfo'))
   lines.push(c(ANSI.gray, t('termMetaSql', { bs: '\\' })))
   outLines(lines)
@@ -491,14 +498,15 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
   if (m.columns && m.columns.length) {
     // Real result set returned by the target DB — vertical (\G) or table.
     const data = m.data || []
-    if (pendingVertical.value) outLines(renderVertical(m.columns, data))
+    if (pendingVertical.value || expandedMode.value) outLines(renderVertical(m.columns, data))
     else outLines(renderTable(buildTable(m.columns, data)))
     const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
     out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: m.ms ?? 0 })))
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)
-    outLines(renderTable(tb))
+    if (pendingVertical.value || expandedMode.value) outLines(renderVertical(tb.columns, tb.rows))
+    else outLines(renderTable(tb))
     const shown = tb.rows.length
     const more = shown < rows ? t('termShownFirst', { n: shown }) : ''
     out(c(ANSI.gray, t('termRows', { n: rows, more, ms: m.ms ?? 0 })))

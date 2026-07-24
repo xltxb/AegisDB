@@ -190,6 +190,7 @@
   metaHelpHelp: 'show help', metaHelpConns: 'list gateway connections', metaHelpUse: 'switch database', metaHelpClear: 'clear screen',
   metaHelpL: 'list databases', metaHelpDt: 'list tables', metaHelpDv: 'list views', metaHelpDn: 'list schemas', metaHelpDi: 'list indexes',
   metaHelpDu: 'list users/roles', metaHelpDs: 'list sequences', metaHelpDf: 'list functions', metaHelpD: 'describe object', metaHelpConninfo: 'connection info',
+  metaHelpX: 'toggle expanded display', metaExpandOn: '· Expanded display is on', metaExpandOff: '· Expanded display is off',
   termUnknownCmd: '· Unknown command {bs}{cmd}, type {bs}? for help',
   termCancelled: '· Cancelled, not executed',
   termTruncated: ' · truncated, first {n}',
