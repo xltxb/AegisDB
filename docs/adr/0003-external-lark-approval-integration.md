@@ -25,8 +25,9 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 
 `model.Approval` 新增:
 
-- `ExternalTaskID string`(审批魔方返回的 `task_id`;回调主关联键用我方回传的 `external_task_id`,见下)
-- `LarkMessageID string`(回调带回的真实飞书消息ID `om_...`,供 Phase 2 `/reply` 回帖)
+- `ExternalTaskID string`(审批魔方返回的 `task_id`,供超时 PATCH 回写;回调主关联键用我方回传的 `external_task_id`,见下)
+
+> 注:早期设计曾加 `LarkMessageID`(供 `/reply` 回帖),随 Phase 2 功能 A 移除已一并删除。
 
 ### 出站:发起审批
 
@@ -76,7 +77,7 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 | `request_id` / `task_id` | 备用关联键 |
 | `approver`(**数组**) | 审计「操作人」= `join(approver)` |
 | `reason` | 写入审计 / 审批结果备注 |
-| `message_id`(`om_...`) | 存 `Approval.LarkMessageID`(供 `/reply`) |
+| `message_id`(`om_...`) | 忽略(功能 A 移除后不再存) |
 | `updated_at` | 决策时间 |
 
 端点逻辑:
@@ -135,7 +136,7 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 
 ## Phase 2 范围调整(2026-07-24)
 
-- **功能 A(执行结果 `/reply` 回帖)移除**:`/api/v1/reply` 是审批魔方给 AI-Agent 用的转发接口,非我方所需;执行结果由站内通知告知发起人。`om_` message_id 相关的开放问题全部作废,`Approval.LarkMessageID` 变为未用调试元数据。
+- **功能 A(执行结果 `/reply` 回帖)移除**:`/api/v1/reply` 是审批魔方给 AI-Agent 用的转发接口,非我方所需;执行结果由站内通知告知发起人。`om_` message_id 相关的开放问题全部作废,`Approval.LarkMessageID` 字段与 `approval.external.replyResult` 配置键已删除。
 - **关联键统一为对方 `task_id`**(`Approval.ExternalTaskID`,发起响应 + 回调均带回),不依赖 `message_id`。
 - Phase 2 仅保留**功能 B · 超时回写取消**:内部超时 `auto-reject` 时对有 `ExternalTaskID` 的单 best-effort `PATCH /api/v1/approvals/{task_id}/status` `{approval_status:2}` 取消飞书卡片(纯观感收敛;正确性已由回调幂等保证)。已实现,见 `.scratch/lark-approval-integration/issues/04`。
 

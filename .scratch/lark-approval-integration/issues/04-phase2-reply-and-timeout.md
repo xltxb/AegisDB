@@ -26,4 +26,5 @@ None(功能 A 已移除,不再有 open questions)
 
 ## Comments
 
-- 已实现并测试通过。`approval.external.replyResult` 配置键成为无用项(功能 A 移除),前端未暴露,保留不影响;后续可清理该键与 `LarkMessageID` 字段。
+- 已实现并测试通过。
+- 清理:功能 A 移除后遗留的 `Approval.LarkMessageID` 字段(及 migration 0006 的 `lark_message_id` 列、`SetApprovalLarkMessage`)与 `approval.external.replyResult` 配置键已删除。

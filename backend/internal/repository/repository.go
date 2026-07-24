@@ -599,14 +599,9 @@ func (r *Repo) GetApprovalByApNo(apNo string) (*model.Approval, error) {
 	return &a, nil
 }
 
-// SetApprovalExternalTask stores the vendor's task_id (for the Phase-2 PATCH).
+// SetApprovalExternalTask stores the vendor's task_id (for the timeout PATCH).
 func (r *Repo) SetApprovalExternalTask(id int64, extID string) error {
 	return r.db.Model(&model.Approval{}).Where("id = ?", id).Update("external_task_id", extID).Error
-}
-
-// SetApprovalLarkMessage stores the real Lark message id (for the Phase-2 /reply).
-func (r *Repo) SetApprovalLarkMessage(id int64, msgID string) error {
-	return r.db.Model(&model.Approval{}).Where("id = ?", id).Update("lark_message_id", msgID).Error
 }
 
 func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {

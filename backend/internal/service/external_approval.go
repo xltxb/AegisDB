@@ -21,7 +21,6 @@ type extApprovalConfig struct {
 	callbackURL    string
 	callbackSecret string
 	allowIPs       string
-	replyResult    bool
 }
 
 func (s *Services) extApprovalConfig() extApprovalConfig {
@@ -38,7 +37,6 @@ func (s *Services) extApprovalConfig() extApprovalConfig {
 		callbackURL:    cb,
 		callbackSecret: s.decryptSetting("approval.external.callbackSecret"),
 		allowIPs:       s.settingString("approval.external.callbackAllowIPs", ""),
-		replyResult:    s.settingBool("approval.external.replyResult", false),
 	}
 }
 
@@ -116,10 +114,6 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	ap, err := s.Repo.GetApprovalByApNo(apNo)
 	if err != nil || ap == nil {
 		return "", ErrNotFound
-	}
-	// Persist the real Lark message id for the Phase-2 /reply回帖 (best-effort).
-	if cb.MessageID != "" && ap.LarkMessageID != cb.MessageID {
-		_ = s.Repo.SetApprovalLarkMessage(ap.ID, cb.MessageID)
 	}
 	// Idempotent: an already-decided ticket just echoes its current status.
 	if ap.Status != model.StatusPending {

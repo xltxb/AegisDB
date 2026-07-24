@@ -195,7 +195,6 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"approval.external.callbackBaseURL": "",
 		"approval.external.callbackSecret":  "",
 		"approval.external.callbackAllowIPs": "",
-		"approval.external.replyResult":     false,
 	}
 	for k, v := range settings {
 		b, _ := json.Marshal(v)
