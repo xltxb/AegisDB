@@ -33,6 +33,10 @@ export class LineEditor {
   private history: string[] = []
   private hidx = 0 // == history.length means "editing a fresh draft"
   private draft = ''
+  // When a paste contains several statements, only the first can run immediately;
+  // the rest of that pasted chunk is stashed here and re-fed on resume(), so a
+  // batch of copied SQL executes one statement after another.
+  private queued = ''
 
   constructor(private term: Terminal, private opts: LineEditorOpts) {
     term.onData((d) => this.onData(d))
@@ -43,6 +47,7 @@ export class LineEditor {
     this.busy = false
     this.inCont = false
     this.pending = ''
+    this.queued = ''
     this.reset()
     this.term.write(this.opts.prompt())
   }
@@ -68,6 +73,13 @@ export class LineEditor {
     this.pending = ''
     this.reset()
     this.term.write('\r\n' + this.opts.prompt())
+    // Continue a pasted multi-statement batch: re-feed the stashed remainder,
+    // which echoes + submits the next statement (and re-stashes what's left).
+    if (this.queued) {
+      const rest = this.queued
+      this.queued = ''
+      this.onData(rest)
+    }
   }
 
   private reset() {
@@ -153,7 +165,11 @@ export class LineEditor {
 
   private onData(data: string) {
     if (this.busy) {
-      if (data === '\x03' && this.opts.onInterrupt) this.opts.onInterrupt()
+      // Ctrl+C aborts the running statement and drops any queued paste batch.
+      if (data.indexOf('\x03') >= 0) { this.queued = ''; this.opts.onInterrupt?.(); return }
+      // Otherwise buffer input received while a statement runs (a paste split
+      // across events, or type-ahead) so it isn't lost; resume() replays it.
+      this.queued += data
       return
     }
     for (let i = 0; i < data.length; i++) {
@@ -175,6 +191,13 @@ export class LineEditor {
       if (ch === '\r' || ch === '\n') {
         if (ch === '\r' && data[i + 1] === '\n') i++ // swallow CRLF pair
         this.submitLine()
+        // If that submitted a statement (now busy), the rest of this chunk is a
+        // pasted batch's remaining statements — stash them for resume() to run.
+        if (this.busy) {
+          const rest = data.slice(i + 1)
+          if (rest) this.queued += rest
+          return
+        }
         continue
       }
       if (ch === '\x7f' || ch === '\b') { this.backspace(); continue } // backspace
@@ -216,6 +239,7 @@ export class LineEditor {
     this.term.write('^C\r\n')
     this.inCont = false
     this.pending = ''
+    this.queued = '' // abort any remaining pasted-batch statements
     this.reset()
     this.term.write(this.opts.prompt())
     this.opts.onInterrupt?.()
