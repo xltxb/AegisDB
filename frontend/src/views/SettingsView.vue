@@ -78,6 +78,21 @@ async function testLark() {
     larkTest.value = { state: r.ok ? 'ok' : 'err', msg: r.message }
   } catch { larkTest.value = { state: 'err', msg: t('larkTestFail') } }
 }
+// External 飞书审批(审批魔方)对接配置(ADR-0003)
+const extEnabled = ref(false)
+const extBaseURL = ref('')
+const extToken = ref('')
+const hasExtToken = ref(false)
+const extAiGroup = ref('')
+const extCallbackBaseURL = ref('')
+const extCallbackSecret = ref('')
+const hasExtCallbackSecret = ref(false)
+const extAllowIPs = ref('')
+// The full callback URL the vendor must POST to (assembled from the base URL).
+const extCallbackURL = computed(() => {
+  const b = extCallbackBaseURL.value.trim().replace(/\/+$/, '')
+  return b ? `${b}/api/v1/approvals/lark/callback` : ''
+})
 const saved = ref(false)
 const approvers = ref<Member[]>([])
 const ipAllow = ref('')
@@ -123,6 +138,17 @@ onMounted(async () => {
     scriptPath.value = parse<string>(g['script.savePath'], '')
     exportPath.value = parse<string>(g['export.savePath'], '')
     execTimeout.value = Number(parse(g['gateway.execTimeout'], 30)) || 30
+    // External approval — secrets (token/callbackSecret) are never returned; keep
+    // the fields blank (blank on save == keep unchanged) and just note presence.
+    extEnabled.value = parse(g['approval.external.enabled'], false)
+    extBaseURL.value = parse<string>(g['approval.external.baseURL'], '')
+    extAiGroup.value = parse<string>(g['approval.external.aiGroup'], '')
+    extCallbackBaseURL.value = parse<string>(g['approval.external.callbackBaseURL'], '')
+    extAllowIPs.value = parse<string>(g['approval.external.callbackAllowIPs'], '')
+    extToken.value = ''
+    hasExtToken.value = !!s.secretsSet?.['approval.external.token']
+    extCallbackSecret.value = ''
+    hasExtCallbackSecret.value = !!s.secretsSet?.['approval.external.callbackSecret']
   } catch { /* ignore */ }
   try { approvers.value = (await api.approvalChain()).chain } catch { /* ignore */ }
 })
@@ -164,6 +190,14 @@ async function save() {
       'notify.larkWebhook': larkWebhook.value.trim(),
       'notify.larkSecret': larkSecret.value.trim(),
       'notify.consoleURL': consoleURL.value.trim(),
+      // External 飞书审批(审批魔方) — empty token/secret keeps the stored one.
+      'approval.external.enabled': extEnabled.value,
+      'approval.external.baseURL': extBaseURL.value.trim(),
+      'approval.external.token': extToken.value.trim(),
+      'approval.external.aiGroup': extAiGroup.value.trim(),
+      'approval.external.callbackBaseURL': extCallbackBaseURL.value.trim(),
+      'approval.external.callbackSecret': extCallbackSecret.value.trim(),
+      'approval.external.callbackAllowIPs': extAllowIPs.value.trim(),
     })
     saved.value = true
     setTimeout(() => (saved.value = false), 2200)
@@ -200,7 +234,18 @@ async function save() {
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect v-model="apprTimeout" :options="[$t('autoReject'), $t('autoEscalate'), $t('keepWaiting')]" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span><span v-if="!approvers.length" class="apv-empty">{{ $t('setApproversEmpty') }}</span><a class="apv-manage" @click="goPerms">{{ $t('setApproversManage') }}</a></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setEscalate') }}</div><div class="rd">{{ $t('setEscalateD') }}</div></div><VSwitch v-model="escalate" /></div>
-        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setSelfApprove') }}</div><div class="rd">{{ $t('setSelfApproveD') }}</div></div><VSwitch v-model="allowSelf" /></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setSelfApprove') }}</div><div class="rd">{{ $t('setSelfApproveD') }}</div></div><VSwitch v-model="allowSelf" /></div>
+        <!-- External 飞书审批(审批魔方) -->
+        <div class="srow" :class="{ last: !extEnabled }"><div class="grow"><div class="rt">{{ $t('setExtAppr') }}</div><div class="rd">{{ $t('setExtApprD') }}</div></div><VSwitch v-model="extEnabled" /></div>
+        <div v-if="extEnabled" class="larkcfg">
+          <div class="lkrow"><label class="lkl">{{ $t('extBaseURL') }}</label><input v-model="extBaseURL" class="lkin" placeholder="https://approval.example.com" /></div>
+          <div class="lkrow"><label class="lkl">{{ $t('extToken') }}</label><input v-model="extToken" type="password" class="lkin" :placeholder="hasExtToken ? $t('secretConfigured') : $t('extTokenPh')" /></div>
+          <div class="lkrow"><label class="lkl">{{ $t('extAiGroup') }}</label><input v-model="extAiGroup" class="lkin" placeholder="K8S_AI" /></div>
+          <div class="lkrow"><label class="lkl">{{ $t('extCallbackBase') }}</label><input v-model="extCallbackBaseURL" class="lkin" placeholder="https://gw.corp.io" /></div>
+          <div v-if="extCallbackURL" class="lkhint">{{ $t('extCallbackFull') }}<span class="mono">{{ extCallbackURL }}</span></div>
+          <div class="lkrow"><label class="lkl">{{ $t('extCallbackSecret') }}</label><input v-model="extCallbackSecret" type="password" class="lkin" :placeholder="hasExtCallbackSecret ? $t('secretConfigured') : $t('extCallbackSecretPh')" /></div>
+          <div class="lkrow"><label class="lkl">{{ $t('extAllowIPs') }}</label><input v-model="extAllowIPs" class="lkin" :placeholder="$t('extAllowIPsPh')" /></div>
+        </div>
       </section>
 
       <!-- Security -->
@@ -290,6 +335,8 @@ async function save() {
 .lkl { width: 128px; flex-shrink: 0; font: 500 12px var(--font-body); color: var(--text-muted); }
 .lkin { flex: 1; height: 36px; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); padding: 0 12px; font: 500 12.5px var(--font-mono); color: var(--text-strong); outline: none; }
 .lkin:focus { border-color: var(--accent-text); }
+.lkhint { margin: -4px 0 2px 140px; font: 500 11.5px var(--font-body); color: var(--text-faint); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lkhint .mono { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
 .lkfoot { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
 .lkmsg { flex: 1; font: 600 12px var(--font-mono); color: var(--text-muted); }
 .lkmsg.ok { color: var(--success-text); }

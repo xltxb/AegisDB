@@ -33,4 +33,7 @@ Status: ready-for-human
 
 - 已实现:`external_approval_test.go` 4 个 httptest(出站 stub + 回调 approve/reject/鉴权/未知/幂等/禁自审);
   功能开关默认关,灰度顺序见 PRD;全量 `go test ./...` 通过。
-- 待办(非阻塞):前端设置面板暴露 `approval.external.*`(目前经 PUT /settings 配置);部署文档补配置项说明。
+- 前端设置面板已补:设置 › 审批 tab 下「外部飞书审批」卡片(开关 + baseURL/token/aiGroup/
+  回调根地址/回调密钥/来源IP白名单;token/secret 已配置时占位提示、留空保持不变;
+  实时展示需登记给厂商的完整回调地址)。中英文案齐备。
+- 待办(非阻塞):部署文档补 `approval.external.*` 配置项与灰度说明。
