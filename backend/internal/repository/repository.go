@@ -588,6 +588,22 @@ func (r *Repo) GetApproval(id int64) (*model.Approval, error) {
 	return &a, nil
 }
 
+// GetApprovalByApNo finds an approval by its human ApNo (e.g. "AP-000123"). The
+// external审批魔方 callback echoes our ApNo back as `external_task_id`, so this is
+// the callback correlation key.
+func (r *Repo) GetApprovalByApNo(apNo string) (*model.Approval, error) {
+	var a model.Approval
+	if err := r.db.Where("ap_no = ?", apNo).First(&a).Error; err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// SetApprovalExternalTask stores the vendor's task_id (for the timeout PATCH).
+func (r *Repo) SetApprovalExternalTask(id int64, extID string) error {
+	return r.db.Model(&model.Approval{}).Where("id = ?", id).Update("external_task_id", extID).Error
+}
+
 func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {
 	var ss []model.ApprovalStep
 	err := r.db.Where("approval_id = ?", approvalID).Order("step_order asc").Find(&ss).Error

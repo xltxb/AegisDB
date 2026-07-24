@@ -305,6 +305,24 @@ type RiskCommandView struct {
 	Env     map[string]string `json:"env"` // prod/staging/dev -> high|mid|off
 }
 
+// LarkApprovalCallbackReq is the payload审批魔方 POSTs to our callback_url when a
+//飞书 approval reaches a terminal state. Correlation uses ExternalTaskID, which
+// echoes back the ApNo we sent. `approved` (bool) is the decision; `approver` is
+// the list of飞书 accounts that acted (any one is enough — OR semantics).
+type LarkApprovalCallbackReq struct {
+	TaskID         string   `json:"task_id"`
+	Approved       bool     `json:"approved"`
+	Reason         string   `json:"reason"`
+	MessageID      string   `json:"message_id"` // real Lark message id (om_...)
+	RequestID      string   `json:"request_id"`
+	ExternalTaskID string   `json:"external_task_id"` // == our ApNo (correlation key)
+	Question       string   `json:"question"`
+	User           string   `json:"user"`
+	AiGroup        string   `json:"ai_group"`
+	Approver       []string `json:"approver"`
+	UpdatedAt      string   `json:"updated_at"`
+}
+
 type WebhookConfigReq struct {
 	Endpoint string `json:"endpoint"`
 	Secret   string `json:"secret"` // bearer token sent as `Authorization: Bearer <secret>`; empty keeps the stored one
