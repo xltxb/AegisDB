@@ -106,6 +106,13 @@ set -a; . ./vela.env; set +a
 - 前置反向代理终止 TLS,或配 \`VELA_TLS_CERT\`/\`VELA_TLS_KEY\` 让网关直接跑 HTTPS。
 - 用 systemd 托管:见 \`deploy/vela-gateway.service\`。
 
+## 5. (可选)启用外部飞书审批(审批魔方)
+
+将高危命令审批推送到飞书交互卡片、结果经回调驱动执行。均为**运行时设置**,在
+\`设置 › 审批 › 外部飞书审批\` 里配置(默认关,建议先在 dev/gli 灰度)。回调是能触发
+生产执行的高危入口——务必配回调密钥、优先 HTTPS。完整步骤/配置项/安全说明与排查见
+\`docs/external-approval-setup.md\`(与 \`docs/adr/0003-external-lark-approval-integration.md\`)。
+
 ## 常用命令
 - \`./$BIN$EXT version\`   查看版本
 - \`./$BIN$EXT migrate\`   仅应用待执行的迁移
