@@ -35,15 +35,21 @@ func (a *testApp) approvalRow(token, apNo string) apStatusRow {
 	return apStatusRow{}
 }
 
-// postLarkCallback POSTs the审批魔方 callback with an X-Callback-Secret header and
-// returns the decoded envelope + HTTP status.
+// postLarkCallback POSTs the审批魔方 callback with an Authorization: Bearer secret
+// and returns the decoded envelope + HTTP status.
 func (a *testApp) postLarkCallback(secret string, body any) (apiResp, int) {
+	return a.postLarkCallbackAt(a.srv.URL+"/api/v1/approvals/lark/callback", secret, body)
+}
+
+// postLarkCallbackAt POSTs to an explicit URL (used to test the ?secret= form),
+// sending the secret as Authorization: Bearer only when provided.
+func (a *testApp) postLarkCallbackAt(url, bearerSecret string, body any) (apiResp, int) {
 	a.t.Helper()
 	b, _ := json.Marshal(body)
-	req, _ := http.NewRequest(http.MethodPost, a.srv.URL+"/api/v1/approvals/lark/callback", bytes.NewReader(b))
+	req, _ := http.NewRequest(http.MethodPost, url, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	if secret != "" {
-		req.Header.Set("X-Callback-Secret", secret)
+	if bearerSecret != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerSecret)
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -53,6 +59,29 @@ func (a *testApp) postLarkCallback(secret string, body any) (apiResp, int) {
 	var out apiResp
 	_ = json.NewDecoder(res.Body).Decode(&out)
 	return out, res.StatusCode
+}
+
+// A vendor that can't send custom headers (e.g. 审批魔方) authenticates via the
+// secret embedded in the callback URL (?secret=...); it must be accepted.
+func TestExternalApproval_CallbackSecretViaQueryParam(t *testing.T) {
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	app.setSettings(token, map[string]any{"approval.external.callbackSecret": "s3cr3t"})
+	ap := app.submitProdHighRisk(token)
+
+	url := app.srv.URL + "/api/v1/approvals/lark/callback?secret=s3cr3t"
+	env, _ := app.postLarkCallbackAt(url, "", map[string]any{ // no header, secret in URL
+		"external_task_id": ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
+	})
+	eq(t, env.Code, 0, "query-param secret accepted")
+	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "approved via URL secret")
+
+	// A wrong URL secret is still rejected.
+	ap2 := app.submitProdHighRisk(token)
+	badEnv, _ := app.postLarkCallbackAt(app.srv.URL+"/api/v1/approvals/lark/callback?secret=nope", "",
+		map[string]any{"external_task_id": ap2.ApNo, "approved": true})
+	eq(t, badEnv.Code, resp.CodeForbidden, "wrong URL secret rejected")
+	eq(t, app.approvalRow(token, ap2.ApNo).Status, "pending", "wrong secret leaves ticket pending")
 }
 
 func (a *testApp) setSettings(token string, kv map[string]any) {

@@ -83,7 +83,7 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 端点逻辑:
 
 ```
-1. 校验 X-Callback-Secret(常量时间比较) + 来源 IP 白名单
+1. 校验共享密钥(Authorization: Bearer,或 ?secret= 查询兜底,常量时间比较) + 来源 IP 白名单
 2. 按 external_task_id 查 Approval;非 pending → 200 返回当前 status(幂等)
 3. 【禁自审兜底】approver 全部 ∈ {发起人本人} 时,按 approval.allowSelfApprove 决定:
      false(默认)→ 记 rejected(自审被拒),不执行
@@ -97,7 +97,7 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 ### 安全
 
 - **HTTPS 强制**:出站与回调地址均 https。
-- **鉴权**:出站 Bearer token、回调 `X-Callback-Secret` 均**加密落库**(复用 `crypto.EncryptSecret`);回调再加**来源 IP 白名单**。
+- **鉴权**:出站 Bearer token、回调密钥(对方以 `Authorization: Bearer` 传,或 URL `?secret=` 兜底)均**加密落库**(复用 `crypto.EncryptSecret`);回调再加**来源 IP 白名单**。
 - **幂等/防重放**:`ClaimApproval` 天然幂等;终态单二次回调只回状态不重复执行。
 - **SSRF**:出站沿用现有 `webhook.allow_private` 策略与超时/重试。
 - **禁自审兜底(关键)**:审批魔方不强制非发起人审批 → 网关侧用回调里的 `user`(发起人)与 `approver` 比对,沿用现有 `approval.allowSelfApprove`(默认 false)语义,**SoD 不因对接降级**。
@@ -108,7 +108,7 @@ Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
 - `approval.external.baseURL`(https)
 - `approval.external.token`(Bearer,加密)
 - `approval.external.aiGroup`
-- `approval.external.callbackSecret`(X-Callback-Secret,加密)
+- `approval.external.callbackSecret`(回调密钥,对方以 Authorization: Bearer 传,加密)
 - `approval.external.replyResult`(bool,Phase 2:是否把执行结果 `/reply` 回帖)
 
 ### 生命周期对账

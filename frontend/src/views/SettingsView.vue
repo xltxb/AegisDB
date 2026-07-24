@@ -88,7 +88,9 @@ const extCallbackBaseURL = ref('')
 const extCallbackSecret = ref('')
 const hasExtCallbackSecret = ref(false)
 const extAllowIPs = ref('')
-// The full callback URL the vendor must POST to (assembled from the base URL).
+// The callback URL to register with the vendor. The vendor authenticates by
+// sending the callback secret as `Authorization: Bearer <secret>` (configured on
+// their side); the URL itself carries no secret.
 const extCallbackURL = computed(() => {
   const b = extCallbackBaseURL.value.trim().replace(/\/+$/, '')
   return b ? `${b}/api/v1/approvals/lark/callback` : ''

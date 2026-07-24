@@ -171,7 +171,7 @@
   secretConfigured: '已配置 · 留空保持不变',
   setExtAppr: '外部飞书审批(审批魔方)', setExtApprD: '将高危命令推送到审批魔方,在飞书交互卡片上审批,结果经回调驱动执行(默认关,建议先在测试环境灰度)',
   extBaseURL: '审批服务地址', extToken: '接口令牌 (Bearer)', extTokenPh: '审批魔方签发的调用令牌', extAiGroup: 'AI 分组 (ai_group)',
-  extCallbackBase: '回调根地址', extCallbackFull: '回调地址(需在审批魔方登记):', extCallbackSecret: '回调密钥 (X-Callback-Secret)', extCallbackSecretPh: '校验回调来源的密钥,必填',
+  extCallbackBase: '回调根地址', extCallbackFull: '回调地址(登记给审批魔方):', extCallbackSecret: '回调密钥', extCallbackSecretPh: '校验回调来源,必填;对方回调需带 Authorization: Bearer 此密钥',
   extAllowIPs: '回调来源 IP 白名单', extAllowIPsPh: '可选,逗号分隔 IP/CIDR;留空则仅凭密钥校验',
   setEmail: '邮件通知', setEmailD: '每日审计摘要邮件', setPush: '拦截即时通知', setPushD: '命令被拦截时实时通知发起人',
   setAppearance: '外观与语言', setAppearanceSub: '界面主题与显示语言', setLangRow: '界面语言', setThemeRow: '主题', themeDark: '深色', themeLight: '浅色', themeSystem: '跟随系统', themeToggle: '切换主题',
