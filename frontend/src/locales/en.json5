@@ -155,7 +155,7 @@
   secretConfigured: 'Configured · leave blank to keep',
   setExtAppr: 'External Lark approval (审批魔方)', setExtApprD: 'Forward high-risk commands to审批魔方 for interactive approval in Lark; the result drives execution via callback (off by default — pilot in a test env first)',
   extBaseURL: 'Approval service URL', extToken: 'API token (Bearer)', extTokenPh: 'Caller token issued by审批魔方', extAiGroup: 'AI group (ai_group)',
-  extCallbackBase: 'Callback base URL', extCallbackFull: 'Callback URL (register with审批魔方):', extCallbackSecret: 'Callback secret (X-Callback-Secret)', extCallbackSecretPh: 'Secret to authenticate callbacks, required',
+  extCallbackBase: 'Callback base URL', extCallbackFull: 'Callback URL (register with the vendor):', extCallbackSecret: 'Callback secret', extCallbackSecretPh: 'Authenticates callbacks, required; vendor sends it as an Authorization: Bearer header',
   extAllowIPs: 'Callback source IP allowlist', extAllowIPsPh: 'Optional, comma-separated IP/CIDR; blank = secret only',
   setEmail: 'Email notifications', setEmailD: 'Daily audit digest email', setPush: 'Instant intercept push', setPushD: 'Notify requester on interception',
   setAppearance: 'Appearance & language', setAppearanceSub: 'Theme & display language', setLangRow: 'Language', setThemeRow: 'Theme', themeDark: 'Dark', themeLight: 'Light', themeSystem: 'System', themeToggle: 'Toggle theme',

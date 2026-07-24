@@ -173,10 +173,11 @@ func (s *Services) approversAreInitiator(approvers []string, ap *model.Approval)
 	return true
 }
 
-// VerifyExternalCallback authenticates an inbound审批魔方 callback: the
-// X-Callback-Secret must match (fail closed — an unconfigured secret rejects
-// everything), and, when a callback IP allowlist is configured, the client IP
-// must be listed. Returns ErrForbidden on any failure.
+// VerifyExternalCallback authenticates an inbound审批魔方 callback: the provided
+// secret (from Authorization: Bearer, or a ?secret= query fallback) must match
+// (fail closed — an unconfigured secret rejects everything), and, when a callback
+// IP allowlist is configured, the client IP must be listed. Returns ErrForbidden
+// on any failure.
 func (s *Services) VerifyExternalCallback(providedSecret, clientIP string) error {
 	cfg := s.extApprovalConfig()
 	if cfg.callbackSecret == "" {

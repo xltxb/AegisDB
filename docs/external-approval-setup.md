@@ -24,7 +24,7 @@
 | `approval.external.token` | 调用令牌(Bearer) | **加密落库**,界面不回显;留空=保持原值 |
 | `approval.external.aiGroup` | AI 分组 `ai_group` | |
 | `approval.external.callbackBaseURL` | 网关回调根地址 | 完整回调地址 = `<根地址>/api/v1/approvals/lark/callback` |
-| `approval.external.callbackSecret` | 回调密钥 `X-Callback-Secret` | **加密落库**,界面不回显;**必填**(未配则一律拒绝回调) |
+| `approval.external.callbackSecret` | 回调密钥 | **加密落库**,界面不回显;**必填**(未配则一律拒绝回调)。对方回调以 `Authorization: Bearer <此值>` 传(或 URL `?secret=<此值>` 兜底) |
 | `approval.external.callbackAllowIPs` | 回调来源 IP 白名单 | 可选,逗号分隔 IP/CIDR;留空则仅凭密钥校验 |
 
 > `token` / `callbackSecret` 以 AES 加密存储,`GET /settings` 永不回传明文;界面「已配置 · 留空保持不变」即表示已有值。
@@ -48,7 +48,7 @@
 
 ## 5. 安全说明
 
-- **回调是能触发生产执行的高危入口**,鉴权 fail-closed:未配 `callbackSecret` 则拒绝一切回调;`X-Callback-Secret` 常量时间比较;可选来源 IP 白名单。
+- **回调是能触发生产执行的高危入口**,鉴权 fail-closed:未配 `callbackSecret` 则拒绝一切回调;密钥经 `Authorization: Bearer`(或 `?secret=`)常量时间比较;可选来源 IP 白名单。
 - **禁自审兜底**:审批魔方不强制「非发起人审批」,网关侧会比对回调里的审批人与发起人账户——若审批人全部就是发起人本人,则按 `approval.allowSelfApprove`(默认关)处理,默认拒绝并置 rejected,SoD 不因外部对接降级。
 - **幂等**:同一单重复回调只返回当前状态,不会重复执行;站内审批与外部回调竞争时只有一方生效。
 - 令牌/密钥加密落库;出站调用沿用 SSRF 策略(`webhook.allow_private`)与禁重定向的受控客户端。

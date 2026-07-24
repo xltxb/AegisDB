@@ -325,12 +325,30 @@ func (h *Handler) RejectApproval(c *gin.Context) {
 }
 
 // LarkApprovalCallback receives审批魔方's approval-result callback (public route,
-// no user JWT). It is authenticated by the X-Callback-Secret header (+ optional
-// source-IP allowlist), correlated to our ticket by ApNo, idempotent, and — since
-// it can trigger a production execution — fails closed on any auth error.
+// no user JWT). It is authenticated by a shared secret (Authorization: Bearer, or
+// a ?secret= query fallback) + optional source-IP allowlist, correlated to our
+// ticket by ApNo, idempotent, and — since it can trigger a production execution —
+// fails closed on any auth error.
+// bearerToken extracts the token from an "Authorization: Bearer <token>" header
+// (case-insensitive scheme), or "" if absent/malformed.
+func bearerToken(auth string) string {
+	auth = strings.TrimSpace(auth)
+	const p = "bearer "
+	if len(auth) > len(p) && strings.EqualFold(auth[:len(p)], p) {
+		return strings.TrimSpace(auth[len(p):])
+	}
+	return ""
+}
+
 func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 	ip := c.ClientIP()
-	secret := c.GetHeader("X-Callback-Secret")
+	// Authenticate the callback by a shared secret carried as `Authorization:
+	// Bearer <secret>` (the vendor sends it). Fallback: a `secret` query param in
+	// the callback URL, for vendors that can register a URL but not headers.
+	secret := bearerToken(c.GetHeader("Authorization"))
+	if secret == "" {
+		secret = c.Query("secret")
+	}
 	// Parse first so we can log correlation keys even on an auth failure (the body
 	// is untrusted until VerifyExternalCallback passes — we only log from it here).
 	var req dto.LarkApprovalCallbackReq
@@ -345,7 +363,7 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 		"approved", req.Approved, "approvers", len(req.Approver))
 
 	if err := h.Svc.VerifyExternalCallback(secret, ip); err != nil {
-		// Most common misconfig: the vendor didn't send X-Callback-Secret, or our
+		// Most common misconfig: the vendor didn't send the Bearer secret, or our
 		// callbackSecret setting is empty (fail-closed) / mismatched, or the source
 		// IP isn't in the allowlist. The vendor only sees HTTP 200, so this line is
 		// how you spot a silently-rejected callback.
