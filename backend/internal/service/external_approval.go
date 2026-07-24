@@ -113,10 +113,12 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	}
 	ap, err := s.Repo.GetApprovalByApNo(apNo)
 	if err != nil || ap == nil {
+		slog.Warn("external callback: no approval for correlation key", "key", apNo)
 		return "", ErrNotFound
 	}
 	// Idempotent: an already-decided ticket just echoes its current status.
 	if ap.Status != model.StatusPending {
+		slog.Info("external callback: ticket already decided (idempotent)", "apNo", ap.ApNo, "status", ap.Status)
 		return ap.Status, nil
 	}
 	approved := cb.Approved
@@ -130,19 +132,24 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	if strings.TrimSpace(operator) == "" {
 		operator = "审批魔方"
 	}
+	slog.Info("external callback: finalizing ticket", "apNo", ap.ApNo, "approved", approved, "operator", operator)
 	if _, ferr := s.finalizeApproval(ap, approved, operator); ferr != nil {
 		if ferr == ErrAlreadyDecided {
 			// Lost the race with the in-app path / another callback — return current.
 			if cur, e := s.Repo.GetApproval(ap.ID); e == nil {
+				slog.Info("external callback: lost decide race", "apNo", ap.ApNo, "status", cur.Status)
 				return cur.Status, nil
 			}
 		}
+		slog.Error("external callback: finalize failed", "apNo", ap.ApNo, "err", ferr)
 		return "", ferr
 	}
+	final := model.StatusRejected
 	if approved {
-		return model.StatusApproved, nil
+		final = model.StatusApproved
 	}
-	return model.StatusRejected, nil
+	slog.Info("external callback: ticket finalized", "apNo", ap.ApNo, "status", final)
+	return final, nil
 }
 
 // approversAreInitiator reports whether the approver set is non-empty and every
