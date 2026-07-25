@@ -163,6 +163,7 @@
   exportServerFile: '服务器文件路径', exportNoPath: '尚未配置数据导出保存路径', copy: '复制',
   scPathTitle: '未配置上传脚本保存路径', scPathDesc: '使用上传脚本前，请先在【系统设置 · 网关】配置保存路径。', scPathGo: '去设置', scArchiveAt: '归档至',
   tabClose: '关闭标签', tabEmpty: '从左侧选择数据库实例打开标签页',
+  gridToggle: '表格视图', gridResult: '结果', gridRows: '{n} 行', gridCopyTsv: '复制为 TSV', gridClose: '关闭表格', gridEmpty: '无结果', copied: '已复制',
   edit: '编辑', tagAdd: '打标签', tagAssign: '分配标签', tagNone: '暂无标签', tagAddPh: '输入标签后回车添加', tagSuggest: '已有标签',
   tagConnTitle: '编辑数据库标签', tagRoleTitle: '分配可访问的数据库标签',
   tagAccessTitle: '可访问数据库(按标签)', tagAccessSub: '本组成员仅可访问带以下标签的数据库', tagAccessAll: '未设置标签:本组可访问全部数据库', tagAllBadge: '全部数据库',

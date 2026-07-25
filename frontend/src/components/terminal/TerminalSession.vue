@@ -28,8 +28,9 @@ const props = defineProps<{
   scriptEnabled: boolean
   scriptSavePath: string
   db?: string // target database chosen in the tree (defaults to the connection's)
+  gridView?: boolean // when true, result sets go to the HTML grid; terminal prints only the summary
 }>()
-const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string] }>()
+const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string]; result: [{ columns: string[]; rows: string[][] }] }>()
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -496,17 +497,21 @@ function onWsMessage(m: any) {
 function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: string[]; data?: string[][]; truncated?: boolean }) {
   const rows = m.rows || 0
   if (m.columns && m.columns.length) {
-    // Real result set returned by the target DB — vertical (\G) or table.
+    // Real result set returned by the target DB.
     const data = m.data || []
+    emit('result', { columns: m.columns, rows: data }) // feed the HTML grid panel
+    // Grid mode shows the data in the HTML panel; the terminal keeps only the
+    // summary. \G / \x are explicit terminal-display choices, still honoured.
     if (pendingVertical.value || expandedMode.value) outLines(renderVertical(m.columns, data))
-    else outLines(renderTable(buildTable(m.columns, data)))
+    else if (!props.gridView) outLines(renderTable(buildTable(m.columns, data)))
     const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
     out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: m.ms ?? 0 })))
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)
+    emit('result', { columns: tb.columns, rows: tb.rows })
     if (pendingVertical.value || expandedMode.value) outLines(renderVertical(tb.columns, tb.rows))
-    else outLines(renderTable(tb))
+    else if (!props.gridView) outLines(renderTable(tb))
     const shown = tb.rows.length
     const more = shown < rows ? t('termShownFirst', { n: shown }) : ''
     out(c(ANSI.gray, t('termRows', { n: rows, more, ms: m.ms ?? 0 })))
