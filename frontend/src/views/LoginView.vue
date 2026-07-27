@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { Sailboat, Mail, Lock, Languages, ShieldCheck } from 'lucide-vue-next'
@@ -24,6 +24,7 @@ const loading = ref(false)
 // backend answers CODE_MFA_REQUIRED and we reveal the TOTP field.
 const mfaRequired = ref(false)
 const mfaCode = ref('')
+const mfaInput = ref<HTMLInputElement | null>(null)
 // Surface the idle-lock notice when redirected here by the auto-lock.
 const error = ref(route.query.locked ? t('mfaLocked') : '')
 
@@ -46,6 +47,8 @@ async function submit() {
       mfaRequired.value = true
       error.value = mfaCode.value ? (e.message || t('loginMfaError')) : ''
       mfaCode.value = ''
+      // Move the cursor straight to the code field so the user can type at once.
+      nextTick(() => mfaInput.value?.focus())
       return
     }
     error.value = t('loginError')
@@ -77,7 +80,7 @@ async function submit() {
 
       <template v-if="mfaRequired">
         <label class="lbl">{{ $t('loginMfaLabel') }}</label>
-        <div class="field"><ShieldCheck :size="15" color="var(--text-faint)" /><input v-model="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :placeholder="$t('loginMfaPh')" @keyup.enter="submit" /></div>
+        <div class="field"><ShieldCheck :size="15" color="var(--text-faint)" /><input ref="mfaInput" v-model="mfaCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" :placeholder="$t('loginMfaPh')" @keyup.enter="submit" /></div>
       </template>
 
       <div v-if="error" class="err">{{ error }}</div>

@@ -7,10 +7,11 @@ export default { name: 'TerminalView' }
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { useUIStore } from '@/stores/ui'
-import { X, PanelLeftOpen } from 'lucide-vue-next'
+import { X, PanelLeftOpen, Table2 } from 'lucide-vue-next'
 import DbTree from '@/components/terminal/DbTree.vue'
 import RiskInspector from '@/components/terminal/RiskInspector.vue'
 import TerminalSession from '@/components/terminal/TerminalSession.vue'
+import ResultGrid from '@/components/terminal/ResultGrid.vue'
 import api from '@/api'
 import type { Connection, Member, RiskCommandView } from '@/types'
 import type { WsStatus } from '@/lib/wsTerminal'
@@ -25,9 +26,15 @@ const scriptEnabled = ref(false)
 const scriptSavePath = ref('')
 
 // One tab per open connection; each renders an isolated <TerminalSession>.
-interface Tab { id: number; conn: Connection; db: string; risk: 'idle' | 'safe' | 'high'; wsStatus: WsStatus }
+interface GridResult { columns: string[]; rows: string[][] }
+interface Tab { id: number; conn: Connection; db: string; risk: 'idle' | 'safe' | 'high'; wsStatus: WsStatus; result?: GridResult }
 const tabs = ref<Tab[]>([])
 const treeCollapsed = ref(false) // collapse the left database-tree panel
+// HTML result-grid panel: results render in a real table (horizontal scroll,
+// select/copy) instead of an ASCII table in the terminal. Persisted per browser.
+const gridView = ref(localStorage.getItem('vela_termgrid') === '1')
+function toggleGrid() { gridView.value = !gridView.value; localStorage.setItem('vela_termgrid', gridView.value ? '1' : '0') }
+function setResult(id: number, r: GridResult) { const tb = tabs.value.find((t) => t.id === id); if (tb) tb.result = r }
 const activeId = ref(0)
 let seq = 0
 
@@ -111,16 +118,24 @@ onMounted(async () => {
           <span class="tname">{{ tab.conn.name }}</span>
           <span class="close" :title="$t('tabClose')" @click.stop="closeTab(tab.id)"><X :size="12" /></span>
         </div>
+        <div class="gridtoggle" :class="{ on: gridView }" :title="$t('gridToggle')" @click="toggleGrid"><Table2 :size="14" />{{ $t('gridToggle') }}</div>
       </div>
 
       <div v-if="!tabs.length" class="empty">{{ $t('tabEmpty') }}</div>
-      <TerminalSession
-        v-for="tab in tabs" v-show="tab.id === activeId" :key="tab.id"
-        :conn="tab.conn" :active="tab.id === activeId" :db="tab.db"
-        :conns="conns" :chain="chain" :script-enabled="scriptEnabled" :script-save-path="scriptSavePath"
-        @update:risk="(v) => setRisk(tab.id, v)" @update:ws-status="(v) => setWs(tab.id, v)"
-        @update:db="(v) => setDb(tab.id, v)"
-      />
+      <div class="termsplit">
+        <TerminalSession
+          v-for="tab in tabs" v-show="tab.id === activeId" :key="tab.id"
+          :conn="tab.conn" :active="tab.id === activeId" :db="tab.db" :grid-view="gridView"
+          :conns="conns" :chain="chain" :script-enabled="scriptEnabled" :script-save-path="scriptSavePath"
+          @update:risk="(v) => setRisk(tab.id, v)" @update:ws-status="(v) => setWs(tab.id, v)"
+          @update:db="(v) => setDb(tab.id, v)" @result="(r) => setResult(tab.id, r)"
+        />
+        <ResultGrid
+          v-if="gridView && tabs.length && activeTab?.result"
+          :columns="activeTab.result.columns" :rows="activeTab.result.rows"
+          class="gridpanel" @close="toggleGrid"
+        />
+      </div>
     </div>
 
     <RiskInspector :risk="activeTab?.risk || 'idle'" :risk-commands="riskCommands" :conn="activeTab?.conn || null" :chain="chain" />
@@ -135,6 +150,11 @@ onMounted(async () => {
 .treerail:hover { color: var(--accent-text); }
 .term { display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
 .tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.termsplit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.gridpanel { flex: 0 0 42%; min-height: 120px; }
+.gridtoggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; align-self: center; height: 26px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11px var(--font-mono); cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+.gridtoggle:hover { color: var(--text-body); }
+.gridtoggle.on { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent-text); }
 .tab {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px 0 12px; border-radius: 9px 9px 0 0;
   background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-bottom: none;
