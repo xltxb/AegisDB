@@ -1121,3 +1121,17 @@ EF1(错库执行)、EF2(拒绝显示成功)两项会直接误导操作者,优先
 - **后端**:ER5 `RealRunAsync` 非 sqlite 连接池不关闭(**无本地 MySQL/PG,难以建可靠席位**,建议在有真实目标库的环境验证)、ER4/EX6 sqlite `database` 任意路径、ER10 连接 policy 未参与判定、ER11/ER12、EU5/EU6/EU9、EA2 残留面、EA5~EA8、ED4/ED6~ED20、EX3/EX4/EX7~EX10。
 - **导出 PROD MFA**:需前端补验弹窗配合,单改后端会让已登记 MFA 的用户导出直接失败。
 - **EW1 的 `-race` 复验**:本机无 gcc,仍未跑。
+
+---
+
+## 现场反馈修复(2026-07-30):PG `\d` 查不存在的对象不报错
+
+**现场**:`UAT-DWS/uat_c66_orders_legal ❯ \d g_big_dwd_user_t_user_oneid_result_df` 输出一张**空表**(只有表头边框),没有提示对象不存在。
+
+### EF21【中】描述不存在的关系被渲染成空结果集
+- 位置:`frontend/src/components/terminal/TerminalSession.vue` 原内联 `translateMetaSql` 的 `\d <arg>` 分支 + `renderOutput`
+- 机制:`\d <表名>` 被翻译成对 `information_schema.columns` 的查询,对象不存在时**只是返回零行**,而渲染层按"有 columns 就画表格"处理,于是画出一张空表。真实 psql 会说 `Did not find any relation named "…"`。
+- 为何是缺陷而非小瑕疵:空列清单与"对象存在但你看不到它的任何列"(`information_schema` 受权限过滤)**无法区分**,DBA 可能据此认为表存在。Oracle 的 `\d`(`all_tab_columns`)同一问题;MySQL 的 `SHOW COLUMNS` 本身会报错,不受影响。
+- 修复:`translateMetaSql` 抽出到 `src/lib/metaCommand.ts`,返回 `{ sql, emptyNotice? }` —— **由翻译器告诉调用方"空结果对这条命令意味着什么"**。列举类命令(`\dt`/`\dn`/`\l`/无参 `\d`)不带 notice(空是合法答案);描述具体对象才带。`renderOutput` 在 `data.length === 0 && pendingEmptyNotice` 时打印提示并 return。`handleSubmit` 入口重置该状态,避免上一条 `\d` 的提示串到下一条合法返回空行的查询上。
+- **顺带拿到了席位**:`translateMetaSql` 是纯函数却一直内联在 SFC 里、零测试,而它的 `ident()` 是**安全控制**(参数被拼进 SQL 字符串字面量)。现新增 5 个单测,含对 `users' OR '1'='1`、`users'; DROP TABLE t; --` 等的注入断言。
+  - 写测试时第一版断言写错了(`/['"`;\]\s*(OR|DROP|SELECT)/` 会匹配到正常 SQL 里的 `' ORDER BY`),是**假红**;改为直接断言被插值的字面量只含标识符字符、且整条 SQL 不含 `;`。
