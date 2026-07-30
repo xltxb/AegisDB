@@ -10,6 +10,7 @@ import ApprovalModal from '@/components/modals/ApprovalModal.vue'
 import ScriptScanModal from '@/components/modals/ScriptScanModal.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
+import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
@@ -212,7 +213,21 @@ onMounted(() => {
     // never appears in server access logs or Referer headers.
     protocols: () => ['vela-token', localStorage.getItem('vela_token') || ''],
     onMessage: onWsMessage,
-    onStatus: (s) => (wsStatus.value = s),
+    onStatus: (s) => {
+      wsStatus.value = s
+      // The editor stays busy from submit until a reply arrives, and the ONLY
+      // things that release it are the reply handlers. If the socket dies while a
+      // command is in flight that reply never comes, so the prompt never returns
+      // and every subsequent keystroke is swallowed into the paste queue — the
+      // terminal looks completely dead and even "reconnect session" can't revive
+      // it (printAbove skips the redraw while busy). Reconnecting restores the
+      // socket but not the editor, so release it here and be honest that the
+      // command's outcome is unknown: it may well have committed on the server.
+      if (s === 'closed' && editor?.running) {
+        out(c(ANSI.yellow, '· ' + t('termLostWhileRunning')))
+        editor.resume()
+      }
+    },
     // Repeated handshake failures MIGHT mean an expired session — but a plain
     // WebSocket close can't be told apart from a backend restart / network blip.
     // Probe a REST endpoint: a 401 confirms the session is gone (the http
@@ -353,7 +368,7 @@ async function handleSubmit(stmt: string) {
     const sql = translateMetaSql(raw, props.conn.engine)
     if (sql) {
       if (sendExec(sql, '') === 'ws') return
-      try { handleExecEnv(await api.exec(props.conn.id, sql, '', '', targetDb.value), sql, '') }
+      try { handleExecEnv(await execRest(sql, ''), sql, '') }
       catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
       return
     }
@@ -367,7 +382,7 @@ async function handleSubmit(stmt: string) {
     if (r.action === 'deny') {
       out(c(ANSI.red, t('termDeniedCap')))
       risk.value = 'safe'
-      editor.resume()
+      abandonBatch()
       return
     }
     if (r.requiresApproval) {
@@ -382,7 +397,7 @@ async function handleSubmit(stmt: string) {
     }
     risk.value = 'safe'
     if (sendExec(raw, '') === 'ws') return
-    const env = await api.exec(props.conn.id, raw)
+    const env = await execRest(raw, '')
     handleExecEnv(env, raw, '')
   } catch {
     out(c(ANSI.red, t('termExecFail')))
@@ -443,6 +458,19 @@ function printMetaHelp() {
   outLines(lines)
 }
 
+// execRest is the REST fallback used whenever the websocket is down. Every call
+// MUST carry the target database: the backend only overrides the connection's
+// default schema when `database` is non-empty, so omitting it silently redirects
+// the statement to a DIFFERENT database than the prompt shows. api.exec takes
+// database as a trailing defaulted parameter, so two of the four call sites had
+// simply left it off and executed against the wrong schema — and the approval
+// path recorded that wrong database on the ticket, freezing the mistake into
+// what the gateway later executes on the approver's behalf (EF1). Funnelling
+// every fallback through here removes the whole class.
+function execRest(sql: string, reason: string, mfaCode = '') {
+  return api.exec(props.conn.id, sql, reason, mfaCode, targetDb.value)
+}
+
 function sendExec(sql: string, reason: string, mfaCode = ''): 'ws' | 'rest' {
   lastExec = { sql, reason }
   pendingSql.value = sql
@@ -450,8 +478,8 @@ function sendExec(sql: string, reason: string, mfaCode = ''): 'ws' | 'rest' {
   return 'rest'
 }
 
-function handleExecEnv(env: { code: number; data?: any }, sql: string, reason: string) {
-  if (env.code === CODE_MFA_REQUIRED) { requestMfa(sql, reason); return }
+function handleExecEnv(env: ExecEnvelope, sql: string, reason: string) {
+  if (classifyExecEnvelope(env).kind === 'mfa') { requestMfa(sql, reason); return }
   renderExecEnvelope(env)
   editor.resume()
 }
@@ -471,10 +499,20 @@ async function submitMfa() {
   mfaOpen.value = false
   if (sendExec(sql, reason, code) === 'ws') return
   try {
-    const env = await api.exec(props.conn.id, sql, reason, code, targetDb.value)
+    const env = await execRest(sql, reason, code)
     if (env.code === CODE_MFA_REQUIRED) { requestMfa(sql, reason); mfaErr.value = t('mfaBadCode'); return }
     renderExecEnvelope(env)
   } catch { out(c(ANSI.red, t('termExecFail'))) }
+  editor.resume()
+}
+
+// abandonBatch drops whatever remains of a pasted multi-statement batch and
+// tells the user, then hands control back to the editor. A cancelled approval,
+// a cancelled MFA prompt and a hard denial all mean "stop this batch": without
+// it resume() replayed the stashed remainder, so the terminal said "cancelled,
+// not executed" and immediately ran the following statements (EF4).
+function abandonBatch() {
+  if (editor.discardQueued() > 0) out(c(ANSI.yellow, '· ' + t('termBatchAbandoned')))
   editor.resume()
 }
 
@@ -482,7 +520,7 @@ function cancelMfa() {
   mfaOpen.value = false
   pendingMfa = null
   out(c(ANSI.gray, t('termCancelled')))
-  editor.resume()
+  abandonBatch()
 }
 
 function onWsMessage(m: any) {
@@ -490,6 +528,20 @@ function onWsMessage(m: any) {
   else if (m.type === 'intercept') { renderIntercept(m); auth.pendingCount++ }
   else if (m.type === 'mfa_required') { requestMfa(lastExec.sql, lastExec.reason); return }
   else if (m.type === 'error') out(c(ANSI.red, '· ' + (m.message || t('termExecFail'))))
+  // The server sends this when the account is disabled, the token generation is
+  // bumped, or the terminal menu is revoked mid-connection — then closes the
+  // socket. Falling through the else meant the message was DISCARDED: the editor
+  // was never released, so the terminal froze, and the client just kept
+  // reconnecting (a menu revocation doesn't invalidate the token, so /auth/me
+  // still answered 200 and the retry loop never ended) — EF6.
+  else if (m.type === 'session_revoked') {
+    out(c(ANSI.red, '· ' + (m.message || t('wsDisconnected'))))
+    editor.resume()
+    ws.close()
+    auth.clearSession()
+    router.push('/login')
+    return
+  }
   else return
   editor.resume()
 }
@@ -530,13 +582,27 @@ function renderIntercept(m: { rule?: string; approvalNo?: string }) {
   out(c(ANSI.gray, t('termApprovalLine', { no: m.approvalNo || '-' })))
 }
 
-function renderExecEnvelope(env: { code: number; data?: any }) {
-  if (env.code === CODE_INTERCEPTED || env.data?.intercepted) {
-    renderIntercept({ rule: env.data?.rule, approvalNo: env.data?.approvalNo })
-    auth.pendingCount++
-  } else {
-    renderOutput({ text: env.data?.output, rows: env.data?.rows, ms: env.data?.ms,
-      columns: env.data?.columns, data: env.data?.data, truncated: env.data?.truncated })
+// renderExecEnvelope prints whatever the server actually decided. The outcome is
+// classified first (see lib/execOutcome): a rejection carries no payload, so
+// rendering it as "a result with nothing in it" printed a green success line for
+// a command that had been REFUSED (EF2).
+function renderExecEnvelope(env: ExecEnvelope) {
+  const outcome = classifyExecEnvelope(env)
+  switch (outcome.kind) {
+    case 'intercepted':
+      renderIntercept({ rule: outcome.rule, approvalNo: outcome.approvalNo })
+      auth.pendingCount++
+      return
+    case 'failed':
+      out(c(ANSI.red, '· ' + (outcome.message || t('termExecFail'))))
+      risk.value = 'safe'
+      return
+    case 'mfa':
+      requestMfa(lastExec.sql, lastExec.reason)
+      return
+    default:
+      renderOutput({ text: outcome.data.output, rows: outcome.data.rows, ms: outcome.data.ms,
+        columns: outcome.data.columns, data: outcome.data.data, truncated: outcome.data.truncated })
   }
 }
 
@@ -544,20 +610,27 @@ async function submitApproval(reason: string) {
   apOpen.value = false
   if (sendExec(apCmd.value, reason) === 'ws') return
   try {
-    const env = await api.exec(props.conn.id, apCmd.value, reason)
-    if (env.code === CODE_MFA_REQUIRED) { requestMfa(apCmd.value, reason); return }
-    if (env.code === CODE_INTERCEPTED || env.data?.intercepted) {
-      renderIntercept({ rule: env.data?.rule || apRule.value, approvalNo: env.data?.approvalNo })
+    const env = await execRest(apCmd.value, reason)
+    const outcome = classifyExecEnvelope(env)
+    if (outcome.kind === 'mfa') { requestMfa(apCmd.value, reason); return }
+    if (outcome.kind === 'intercepted') {
+      renderIntercept({ rule: outcome.rule || apRule.value, approvalNo: outcome.approvalNo })
       auth.pendingCount++
+    } else {
+      // The command may not have been intercepted after all (the rule could have
+      // been relaxed between the pre-check and the submit), in which case the
+      // server just RAN it. Printing nothing left the operator with no evidence
+      // that anything happened, and the bare catch hid outright failures too (EF7).
+      renderExecEnvelope(env)
     }
-  } catch { /* ignore */ }
+  } catch { out(c(ANSI.red, t('termExecFail'))) }
   editor.resume()
 }
 
 function cancelApproval() {
   apOpen.value = false
   out(c(ANSI.gray, t('termCancelSubmit')))
-  editor.resume()
+  abandonBatch()
 }
 
 function refreshSession() {

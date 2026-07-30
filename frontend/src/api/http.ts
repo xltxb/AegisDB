@@ -7,11 +7,16 @@ export interface Envelope<T = any> {
   data: T
 }
 
-export const CODE_OK = 0
-export const CODE_INTERCEPTED = 42200
-export const CODE_SCRIPT_PATH_UNSET = 42600
-export const CODE_EXPORT_PATH_UNSET = 42601
-export const CODE_MFA_REQUIRED = 42800
+// Re-exported from api/codes so pure logic can import the codes without pulling
+// in this axios client (which needs bundler-provided import.meta.env).
+export {
+  CODE_OK,
+  CODE_INTERCEPTED,
+  CODE_SCRIPT_PATH_UNSET,
+  CODE_EXPORT_PATH_UNSET,
+  CODE_MFA_REQUIRED,
+} from './codes'
+import { CODE_OK } from './codes'
 
 const http: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api/v1',

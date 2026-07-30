@@ -29,8 +29,18 @@ func exportSQLReadOnly(sql string) bool {
 	if len(stmts) != 1 {
 		return false // empty, or stacked queries (e.g. "SELECT 1; DROP TABLE x")
 	}
+	if writesFileRe.MatchString(gateway.StripComments(stmts[0])) {
+		return false // see writesFileRe
+	}
 	return gateway.MapVerbToCapability(gateway.ParseVerb(stmts[0])) == "select"
 }
+
+// writesFileRe matches the MySQL clauses that make a SELECT write a file on the
+// database server. They keep the leading verb SELECT, so the verb whitelist
+// classifies them as read-only while the statement is really a write primitive
+// (EX2) — the check has to be explicit. Comments are stripped first so the
+// clause cannot be broken up by an executable comment.
+var writesFileRe = regexp.MustCompile(`(?is)\binto\s+(outfile|dumpfile)\b`)
 
 // exportPartSize is the (uncompressed) CSV size at which the export rolls over
 // to a new part file. There is no row limit — large results split into parts.
@@ -112,6 +122,23 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	if !exportSQLReadOnly(sql) {
 		return nil, ErrExportNotReadOnly
 	}
+	// FR-CONN-04: maintenance-state instances restrict operations. The worker
+	// opens a real connection, so the export channel has to honour this too.
+	if conn.Status == "maint" {
+		return nil, ErrForbidden
+	}
+	// The worker runs this SQL against the target DB, so an export is an
+	// EXECUTION channel and carries the same gate as the terminal. Being
+	// read-only is not sufficient authorisation: a role explicitly denied
+	// `select` on an environment was still able to pull whole tables out through
+	// /export while /terminal/exec refused the identical statement (EX1).
+	// Anything the engine does not outright allow is refused — an export has no
+	// approval flow to route an `approve` verdict into, so the user is sent to
+	// the terminal for that.
+	if v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql); v.Action != gateway.ActionAllow {
+		s.recordAudit(u, conn, sql, v.Risk, model.ResultRejected, "", "intercept")
+		return nil, ErrForbidden
+	}
 	// Fail fast with a clear message when neither a target database was chosen nor
 	// the connection carries a default one — otherwise an unqualified query fails
 	// async with a cryptic driver error ("No database selected"). Real execution
@@ -128,6 +155,12 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	if err := s.Repo.CreateExportJob(job); err != nil {
 		return nil, err
 	}
+	// The SUBMISSION is the auditable event — it is the moment someone asked for
+	// the data, and it is the only point guaranteed to be reached (a job can fail,
+	// be queued away or be reconciled by a restart). Auditing only completions
+	// meant a probing loop of failing exports left no trace at all (EX5). The full
+	// query is recorded, not a clip: a truncated query cannot show what ran.
+	s.recordAudit(u, conn, "EXPORT "+sql, model.RiskLow, model.ResultPending, "", "exec")
 	// Non-blocking enqueue: if the buffered queue is full, fail fast instead of
 	// leaking a goroutine that blocks until a slot frees (L8).
 	select {
@@ -223,7 +256,7 @@ func (s *Services) runExportJob(id int64) {
 		s.failExport(id, "导出已生成但写回状态失败: "+uerr.Error())
 		return
 	}
-	s.recordAudit(u, conn, "EXPORT "+clip(job.SQL, 80), model.RiskMid, model.ResultExecuted, "", "exec")
+	s.recordAudit(u, conn, "EXPORT "+job.SQL, model.RiskLow, model.ResultExecuted, "", "exec")
 }
 
 func (s *Services) failExport(id int64, msg string) {

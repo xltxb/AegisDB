@@ -1,0 +1,13 @@
+-- 0008: record WHO authorised an audited action when that is not the actor.
+--
+-- The audit row is attributed to the user the command ran on behalf of. That was
+-- adequate while every approver was a gateway user recorded in tbl_approval_step,
+-- but external (飞书) approval broke the premise: the approver is not a gateway
+-- user, so they appeared in neither the step rows nor the hash chain, and an
+-- externally-approved DROP read as if the initiator had simply run it (EA4).
+--
+-- Empty means actor and operator are the same person. The column is part of the
+-- chained hash payload from this release on, so rows written earlier hash without
+-- it — a verifier must key on the row's own era, not re-hash old rows with the
+-- new payload shape.
+ALTER TABLE tbl_audit_log ADD COLUMN operator VARCHAR(128) NOT NULL DEFAULT '';

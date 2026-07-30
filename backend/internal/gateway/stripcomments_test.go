@@ -34,3 +34,18 @@ func TestStripComments_InnerCommentDoesNotSwallowVerb(t *testing.T) {
 		})
 	}
 }
+
+// '#' is a MySQL line comment but a PostgreSQL operator. Treating it as a
+// comment deletes whatever follows from the text the dictionary scan and the
+// WHERE heuristic see, while PostgreSQL still executes it (ER2). Keeping the
+// text can only make a statement look more dangerous, which is the safe
+// direction for both engines.
+func TestStripComments_HashDoesNotSwallowFollowingText(t *testing.T) {
+	if got := StripComments("SELECT 1 #x; DROP TABLE orders"); !strings.Contains(strings.ToUpper(got), "DROP TABLE ORDERS") {
+		t.Errorf("StripComments dropped the stacked command: %q", got)
+	}
+	// A '#' must not be able to hide the WHERE clause either.
+	if NoWhere("UPDATE t SET a=1 #c\n WHERE id=2") {
+		t.Error("NoWhere reported a full-table UPDATE, but a WHERE clause is present")
+	}
+}

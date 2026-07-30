@@ -210,3 +210,29 @@ func (a *testApp) getWithIP(path, token, ip string) apiResp {
 	}
 	return out
 }
+
+// EU1: /auth/mfa/setup re-issues an enrollment secret, and to do so it cleared
+// mfa_enabled — with nothing but a session required. So whoever held a session
+// could switch off a user's second factor and receive a fresh secret in the
+// response, after which password-only login worked again and the PROD step-up
+// treated the account as never enrolled. /auth/mfa/disable demands a valid code
+// for the same outcome; an attacker simply used the cheaper door. Re-enrolment
+// must not disarm a factor that is currently protecting the account.
+func TestMFA_SetupCannotDisarmAnEnabledFactorWithoutProof(t *testing.T) {
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	secret := app.setupMFA(token) // MFA is now enabled
+
+	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, nil)
+	if r.Code == 0 {
+		t.Error("re-enrolment succeeded without proving possession of the current factor")
+	}
+
+	// The factor is still armed: password-only login must not be enough.
+	if tok := app.loginRaw("linwei@vela.io", "vela123"); tok.Code == 0 {
+		t.Error("password-only login succeeded — MFA was disarmed by the setup call")
+	}
+	// And a valid current code still logs in, i.e. the original secret is intact.
+	ok := app.loginRaw("linwei@vela.io", "vela123", totp.Code(secret, time.Now()))
+	eq(t, ok.Code, 0, "login with the original factor still works")
+}

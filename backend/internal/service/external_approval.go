@@ -116,6 +116,19 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 		slog.Warn("external callback: no approval for correlation key", "key", apNo)
 		return "", ErrNotFound
 	}
+	// Cross-check the vendor's task against the one this ticket was dispatched as.
+	// Correlation runs on our ApNo, which is a predictable counter the submitter
+	// can read off their own exec response, so the quoted task is the only part
+	// of the payload tying the callback to a real dispatch (EA2). Only checked
+	// once we actually hold a task id: it is written asynchronously after
+	// dispatch, and demanding it unconditionally would reject a legitimate
+	// callback that beats our own write (see EA10).
+	if ap.ExternalTaskID != "" && strings.TrimSpace(cb.TaskID) != "" &&
+		strings.TrimSpace(cb.TaskID) != ap.ExternalTaskID {
+		slog.Warn("external callback: vendor task mismatch",
+			"apNo", ap.ApNo, "expected", ap.ExternalTaskID, "got", cb.TaskID)
+		return "", ErrForbidden
+	}
 	// Idempotent: an already-decided ticket just echoes its current status.
 	if ap.Status != model.StatusPending {
 		slog.Info("external callback: ticket already decided (idempotent)", "apNo", ap.ApNo, "status", ap.Status)
@@ -180,6 +193,13 @@ func (s *Services) approversAreInitiator(approvers []string, ap *model.Approval)
 // on any failure.
 func (s *Services) VerifyExternalCallback(providedSecret, clientIP string) error {
 	cfg := s.extApprovalConfig()
+	// The feature switch governs the INBOUND side too. dispatch/cancel already
+	// bail when it is off, but the callback used to stay live off a leftover
+	// callbackSecret, so switching the integration off did not close the endpoint
+	// it opened — and that endpoint drives commands to execution (EA1).
+	if !cfg.enabled {
+		return ErrForbidden
+	}
 	if cfg.callbackSecret == "" {
 		return ErrForbidden // never accept unauthenticated callbacks
 	}

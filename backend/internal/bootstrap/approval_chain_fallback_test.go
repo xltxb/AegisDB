@@ -44,7 +44,13 @@ func TestApprovalChain_FallsBackToAdminWhenOwnerEmpty(t *testing.T) {
 	if len(chain.Chain) == 0 {
 		t.Fatal("expected a seeded owner chain to start from")
 	}
+	// Owner is these users' only role, and a user may not be left with none (that
+	// would leave role_id dangling), so give them a second role before revoking
+	// owner — the same order an administrator has to follow in the UI.
+	roID := app.roleIDByCode(token, "ro")
 	for _, m := range chain.Chain {
+		add := app.do(http.MethodPost, fmt.Sprintf("/api/v1/roles/%d/members", roID), token, map[string]any{"userId": m.ID})
+		eq(t, add.Code, 0, "grant replacement role")
 		d := app.do(http.MethodDelete, fmt.Sprintf("/api/v1/roles/%d/members/%d", ownerID, m.ID), token, nil)
 		eq(t, d.Code, 0, "remove owner member")
 	}

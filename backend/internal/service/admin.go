@@ -1,6 +1,8 @@
 package service
 
 import (
+	"encoding/json"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +28,10 @@ func connEnvMeta(env string) (layer, role string) {
 
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
 	host, port := splitHostPort(req.Host)
-	env := strings.ToLower(req.Env)
+	env := strings.ToLower(strings.TrimSpace(req.Env))
+	if !validEnvs[env] {
+		return nil, ErrBadRequest // see validEnvs
+	}
 	layer, role := connEnvMeta(env)
 	// Encrypt the DB password at rest (AES-256-GCM). It must stay reversible
 	// because the gateway needs it to open the real connection.
@@ -57,6 +62,9 @@ func (s *Services) UpdateConnection(id int64, req dto.ConnectionUpdateReq) (*mod
 		return nil, ErrBadRequest
 	}
 	env := strings.ToLower(strings.TrimSpace(req.Env))
+	if !validEnvs[env] {
+		return nil, ErrBadRequest // see validEnvs
+	}
 	layer, role := connEnvMeta(env)
 	c.Name = strings.TrimSpace(req.Name)
 	c.Engine = strings.TrimSpace(req.Engine)
@@ -150,7 +158,10 @@ func (s *Services) AccessibleConnections(u *model.User) ([]model.Connection, err
 	if u == nil {
 		return all, nil
 	}
-	allow, unrestricted := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	allow, unrestricted, err := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	if err != nil {
+		return nil, err // don't fall back to "unrestricted" on a failed read (ED3)
+	}
 	if unrestricted {
 		return all, nil
 	}
@@ -175,7 +186,11 @@ func (s *Services) canAccessConn(u *model.User, conn *model.Connection) bool {
 	if u == nil || conn == nil {
 		return false
 	}
-	allow, unrestricted := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	allow, unrestricted, err := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	if err != nil {
+		slog.Error("tag access check failed — denying", "userID", u.ID, "connID", conn.ID, "err", err)
+		return false // a check that cannot run denies (ED3)
+	}
 	if unrestricted {
 		return true
 	}
@@ -204,6 +219,16 @@ func (s *Services) AllTags() []string { return s.Repo.AllConnectionTags() }
 
 // validPolicies are the gateway policies a connection may carry.
 var validPolicies = map[string]bool{"strict": true, "approve-1": true, "audit-only": true}
+
+// validEnvs are the environments the risk controls are defined for. Capability
+// levels and dictionary rules are stored per environment and a lookup that finds
+// no row falls through to "allow", so an unrecognised env is not a label — it is
+// an environment with no rules at all. Storing one (e.g. a typo like "uat") would
+// silently create an unregulated instance, so connections are restricted to
+// these four (ED5).
+var validEnvs = map[string]bool{
+	model.EnvProd: true, model.EnvGli: true, model.EnvStaging: true, model.EnvDev: true,
+}
 
 // SetConnectionPolicy updates a connection's gateway policy (strict | approve-1 |
 // audit-only), rejecting an unknown value.
@@ -301,8 +326,9 @@ func (s *Services) UsersView() ([]dto.UserView, error) {
 	return out, nil
 }
 
-func (s *Services) PatchUser(id int64, req dto.UserPatchReq) error {
-	if _, err := s.Repo.GetUserByID(id); err != nil {
+func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) error {
+	target, err := s.Repo.GetUserByID(id)
+	if err != nil {
 		return ErrNotFound
 	}
 	// Write ONLY the edited columns — never Save() a full snapshot, which would
@@ -343,7 +369,35 @@ func (s *Services) PatchUser(id int64, req dto.UserPatchReq) error {
 	if req.RoleID != nil {
 		_ = s.Repo.AddMember(*req.RoleID, id)
 	}
+	s.auditPatchUser(actor, target, req)
 	return nil
+}
+
+// auditPatchUser records which account attributes an administrator changed.
+// Status and role edits are privilege changes, so they belong in the immutable
+// log alongside command execution (EU4).
+func (s *Services) auditPatchUser(actor, target *model.User, req dto.UserPatchReq) {
+	if target == nil {
+		return
+	}
+	changed := []string{}
+	if req.Status != "" {
+		changed = append(changed, "status="+req.Status)
+	}
+	if req.RoleID != nil {
+		changed = append(changed, "roleId="+strconv.FormatInt(*req.RoleID, 10))
+	}
+	if req.RoleIDs != nil {
+		ids := make([]string, 0, len(req.RoleIDs))
+		for _, id := range req.RoleIDs {
+			ids = append(ids, strconv.FormatInt(id, 10))
+		}
+		changed = append(changed, "roleIds="+strings.Join(ids, "|"))
+	}
+	if len(changed) == 0 {
+		return
+	}
+	s.auditAdminAction(actor, "admin.user.patch "+strings.Join(changed, " ")+" user="+target.Email)
 }
 
 // validateRoleIDs ensures every id refers to an existing role.
@@ -608,4 +662,84 @@ func isFormulaLead(b byte) bool {
 		return true
 	}
 	return false
+}
+
+// RemoveRoleMember revokes a role from a user.
+//
+// Effective permissions are the union of tbl_user.role_id and the user's
+// tbl_role_member rows, and every account-creation path writes BOTH for the
+// primary role. Deleting only the membership row therefore removed the user from
+// the role's member list while leaving every permission it granted in place —
+// an administrator revoking platform-admin was told it worked and was wrong
+// (EU2). So when the revoked role is also the primary one, re-point role_id at a
+// role the user still holds.
+//
+// A user must keep at least one role: role_id is dereferenced when building the
+// session (an id pointing at nothing fails the whole /auth/me call), so dropping
+// someone's last role would lock the account rather than downgrade it. Removing
+// it is refused — assign the replacement role first, then revoke.
+func (s *Services) RemoveRoleMember(roleID, userID int64) error {
+	u, err := s.Repo.GetUserByID(userID)
+	if err != nil {
+		return ErrNotFound
+	}
+	if u.RoleID == roleID {
+		held, herr := s.Repo.RoleIDsOfUser(userID)
+		if herr != nil {
+			return herr
+		}
+		replacement := int64(0)
+		for _, id := range held {
+			if id != roleID {
+				replacement = id
+				break
+			}
+		}
+		if replacement == 0 {
+			return ErrBadRequest // would leave the user with no role at all
+		}
+		if err := s.Repo.UpdateUserFields(userID, map[string]any{"role_id": replacement}); err != nil {
+			return err
+		}
+	}
+	if err := s.Repo.RemoveMember(roleID, userID); err != nil {
+		return err
+	}
+	// Revocation must apply to sessions already issued, not just future ones.
+	return s.Repo.BumpTokenVersion(userID)
+}
+
+// auditAdminAction records an administrative change to an account or role in the
+// same hash-chained log as command execution.
+//
+// These actions are the ones an attacker with an admin session would use to
+// borrow another user's identity — reset their password, bind a fresh MFA secret
+// — and they were the only privileged operations writing no audit at all, so
+// that impersonation left no trace while the resulting approval was faithfully
+// recorded against the impersonated approver (EU4). detail should be a stable,
+// greppable key plus the target, e.g. `admin.password.reset user=x@y.io`.
+//
+// No connection is involved, and no webhook event type is emitted: the webhook
+// vocabulary is exec/login/intercept/approve, so admin events stay audit-only
+// until a subscriber vocabulary exists for them.
+func (s *Services) auditAdminAction(actor *model.User, detail string) {
+	if actor == nil {
+		return
+	}
+	s.recordAudit(actor, nil, detail, model.RiskMid, model.ResultExecuted, "", "")
+}
+
+// AuditRoleChange records a change to what a role may do — the capability
+// matrix, menu grants, tag grants or membership. These grants decide every
+// permission check in the system, so editing them is a privilege change and
+// belongs in the same immutable log as the actions they authorise (EU4).
+// Without it, someone could widen a role, act under it, and narrow it back with
+// the chain showing only the action and never the grant that permitted it.
+func (s *Services) AuditRoleChange(actor *model.User, roleID int64, what string, value any) {
+	name := strconv.FormatInt(roleID, 10)
+	if r, err := s.Repo.GetRole(roleID); err == nil && r != nil {
+		name = r.Code
+	}
+	detail, _ := json.Marshal(value)
+	s.auditAdminAction(actor, "admin.role."+what+" role="+name+" value="+clip(string(detail), 400))
 }

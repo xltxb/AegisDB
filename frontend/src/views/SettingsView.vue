@@ -8,6 +8,7 @@ import MfaModal from '@/components/modals/MfaModal.vue'
 import IpAllowlistModal from '@/components/modals/IpAllowlistModal.vue'
 import WebhookPanel from '@/components/settings/WebhookPanel.vue'
 import { useI18n } from 'vue-i18n'
+import { APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
 import { useRouter } from 'vue-router'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -110,8 +111,8 @@ function parse<T>(raw: string | undefined, def: T): T {
 }
 
 onMounted(async () => {
-  apprTimeout.value = t('autoEscalate')
-  ttl.value = t('ttl8')
+  apprTimeout.value = 'auto-escalate'
+  ttl.value = '8h'
   try {
     const s = await api.settings()
     const g = s.settings || {}
@@ -131,10 +132,8 @@ onMounted(async () => {
     larkSecret.value = ''
     hasLarkSecret.value = !!s.secretsSet?.['notify.larkSecret']
     consoleURL.value = parse<string>(g['notify.consoleURL'], '')
-    const onTimeout = parse<string>(g['approval.onTimeout'], 'auto-escalate')
-    apprTimeout.value = onTimeout === 'auto-reject' ? t('autoReject') : onTimeout === 'keep-waiting' ? t('keepWaiting') : t('autoEscalate')
-    const ttlKey = parse<string>(g['security.sessionTTL'], '8h')
-    ttl.value = ttlKey === '4h' ? t('ttl4') : ttlKey === '24h' ? t('ttl24') : t('ttl8')
+    apprTimeout.value = keyOf(parse<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate')
+    ttl.value = keyOf(parse<string>(g['security.sessionTTL'], '8h'), SESSION_TTL_KEYS, '8h')
     ipAllow.value = parse<string>(g['security.ipAllowlist'], '')
     ipAllowEnabled.value = parse<boolean>(g['security.ipAllowEnabled'], false)
     scriptPath.value = parse<string>(g['script.savePath'], '')
@@ -167,9 +166,10 @@ async function toggleStrict() {
 }
 
 async function save() {
-  const onTimeout = apprTimeout.value === t('autoReject') ? 'auto-reject'
-    : apprTimeout.value === t('keepWaiting') ? 'keep-waiting' : 'auto-escalate'
-  const ttlKey = ttl.value === t('ttl4') ? '4h' : ttl.value === t('ttl24') ? '24h' : '8h'
+  // The model holds the stored key, so saving needs no reverse lookup against
+  // the current language (EF11).
+  const onTimeout = keyOf(apprTimeout.value, APPROVAL_TIMEOUT_KEYS, 'auto-escalate')
+  const ttlKey = keyOf(ttl.value, SESSION_TTL_KEYS, '8h')
   try {
     await api.saveSettings({
       strictMode: strict.value,
@@ -233,7 +233,7 @@ async function save() {
       <!-- Approval -->
       <section v-show="activeTab === 'approval'" class="card">
         <div class="shead"><div class="sic"><GitPullRequestArrow :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setAppr') }}</div><div class="ss">{{ $t('setApprSub') }}</div></div></div>
-        <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect v-model="apprTimeout" :options="[$t('autoReject'), $t('autoEscalate'), $t('keepWaiting')]" /></div></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setApprTimeout') }}</div><div class="rd">{{ $t('setApprTimeoutD') }}</div></div><div class="w180"><VSelect :model-value="labelOf(apprTimeout, $t)" :options="APPROVAL_TIMEOUT_KEYS.map((k) => labelOf(k, $t))" @update:model-value="(l: string) => (apprTimeout = keyForLabel(l, APPROVAL_TIMEOUT_KEYS, $t, 'auto-escalate'))" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefApprovers') }}</div><div class="rd">{{ $t('setDefApproversD') }}</div></div><div class="approvers"><span v-for="a in approvers" :key="a.id" class="apv"><span class="ava">{{ a.initials }}</span>{{ a.name }}</span><span v-if="!approvers.length" class="apv-empty">{{ $t('setApproversEmpty') }}</span><a class="apv-manage" @click="goPerms">{{ $t('setApproversManage') }}</a></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setEscalate') }}</div><div class="rd">{{ $t('setEscalateD') }}</div></div><VSwitch v-model="escalate" /></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setSelfApprove') }}</div><div class="rd">{{ $t('setSelfApproveD') }}</div></div><VSwitch v-model="allowSelf" /></div>
@@ -253,7 +253,7 @@ async function save() {
       <!-- Security -->
       <section v-show="activeTab === 'security'" class="card">
         <div class="shead"><div class="sic"><Lock :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setSec') }}</div><div class="ss">{{ $t('setSecSub') }}</div></div></div>
-        <div class="srow"><div class="grow"><div class="rt">{{ $t('setTtl') }}</div><div class="rd">{{ $t('setTtlD') }}</div></div><div class="w160"><VSelect v-model="ttl" :options="[$t('ttl8'), $t('ttl4'), $t('ttl24')]" /></div></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setTtl') }}</div><div class="rd">{{ $t('setTtlD') }}</div></div><div class="w160"><VSelect :model-value="labelOf(ttl, $t)" :options="SESSION_TTL_KEYS.map((k) => labelOf(k, $t))" @update:model-value="(l: string) => (ttl = keyForLabel(l, SESSION_TTL_KEYS, $t, '8h'))" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setIdle') }}</div><div class="rd">{{ $t('setIdleD') }}</div></div><VSwitch v-model="idle" /></div>
         <div v-if="idle" class="srow"><div class="grow"><div class="rt">空闲锁定时长</div><div class="rd">无操作多少分钟后自动锁定(不超过会话有效期)</div></div><div class="w160"><input v-model.number="idleMinutes" type="number" min="1" max="1440" class="lkin" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setMfa') }}</div><div class="rd">{{ $t('setMfaD') }}</div></div><VSwitch v-model="mfa" /></div>

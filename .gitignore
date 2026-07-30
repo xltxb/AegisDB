@@ -36,3 +36,6 @@ Thumbs.db
 .claude/
 /frontend/test-results/
 /frontend/playwright-report/
+
+# Test residue: export_default_test exercises the default (relative) export dir
+/backend/internal/bootstrap/export/

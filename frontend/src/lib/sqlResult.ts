@@ -183,6 +183,34 @@ function padDisp(s: string, w: number, right: boolean): string {
   return right ? gap + s : s + gap
 }
 
+// sanitizeCell strips terminal control characters from DATA before it is written
+// to xterm.
+//
+// Cell values and column names come from the target database, so anyone able to
+// write a row controls them. term.write() interprets ANSI/OSC escapes, so an
+// escape stored in a row could repaint the scrollback the operator is reading —
+// erasing the PROD warning banner, forging a success line, faking a prompt — and
+// a device-status query (ESC[6n) makes xterm reply on the INPUT channel, so the
+// answer lands in the SQL the user is typing. Only the colouring this module adds
+// itself may reach the terminal (EF3).
+//
+// Newlines and tabs become spaces first so single-line layouts stay intact; what
+// remains of the C0/C1 ranges is dropped outright.
+export const sanitizeCell = (s: string) =>
+  (s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/[\x00-\x1f\x7f-\x9f]/g, '')
+
+// sanitizeMultiline is sanitizeCell for vertical (\G) display, which exists
+// precisely to show values a horizontal row cannot — a SHOW CREATE TABLE body, a
+// JSON blob — so their real newlines carry meaning and must survive. Every other
+// control character still goes, and the surviving newlines become CRLF because
+// xterm needs the carriage return to start the next line at column 0.
+export const sanitizeMultiline = (s: string) =>
+  (s ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(/[\x00-\x09\x0b-\x1f\x7f-\x9f]/g, '')
+    .replace(/\n/g, '\r\n')
+
 // renderVertical produces MySQL `\G`-style vertical output: one "column: value"
 // pair per line, grouped per row. Ideal for wide/long values (e.g. SHOW CREATE
 // TABLE) whose multi-line content would break a horizontal table.
@@ -193,8 +221,7 @@ export function renderVertical(columns: string[], rows: string[][]): string[] {
     out.push(c(ANSI.gray, `*************************** ${i + 1}. row ***************************`))
     columns.forEach((col, j) => {
       const label = ' '.repeat(Math.max(0, w - col.length)) + col
-      // Keep embedded newlines readable in xterm (carriage-return each line).
-      const val = (row[j] ?? '').replace(/\r?\n/g, '\r\n')
+      const val = sanitizeMultiline(row[j] ?? '')
       out.push(c(ANSI.bold, label) + c(ANSI.gray, ': ') + val)
     })
   })
@@ -210,8 +237,8 @@ const maxColWidth = 60
 // rows stay aligned; cells are single-lined and truncated at maxColWidth.
 export function renderTable(t: SynthTable): string[] {
   const clean = (s: string) => (s ?? '').replace(/[\r\n\t]+/g, ' ')
-  const heads = t.columns.map((h) => truncateDisp(clean(h), maxColWidth))
-  const cells = t.rows.map((r) => t.columns.map((_, i) => truncateDisp(clean(r[i] ?? ''), maxColWidth)))
+  const heads = t.columns.map((h) => truncateDisp(sanitizeCell(h), maxColWidth))
+  const cells = t.rows.map((r) => t.columns.map((_, i) => truncateDisp(sanitizeCell(r[i] ?? ''), maxColWidth)))
   const widths = heads.map((h, i) => {
     let w = dispWidth(h)
     for (const r of cells) w = Math.max(w, dispWidth(r[i]))

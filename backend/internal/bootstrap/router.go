@@ -1,7 +1,9 @@
 package bootstrap
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,7 +27,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// Trust only the explicitly configured proxies (default: none) so a client
 	// cannot spoof its source IP via X-Forwarded-For and bypass the IP allowlist.
 	_ = r.SetTrustedProxies(cfg.Server.TrustedProxies)
-	r.Use(gin.Logger(), middleware.Recovery(), middleware.CORS(cfg.Server.CORSOrigins), middleware.Latency())
+	r.Use(accessLogger(), middleware.Recovery(), middleware.CORS(cfg.Server.CORSOrigins), middleware.Latency())
 
 	r.GET("/healthz", func(c *gin.Context) { resp.OK(c, gin.H{"status": "ok"}) })
 	r.StaticFile("/openapi.yaml", "docs/openapi.yaml") // API contract (backend doc §11)
@@ -184,3 +186,44 @@ func serveSPA(r *gin.Engine, dir string) {
 
 func dirExists(p string) bool  { fi, err := os.Stat(p); return err == nil && fi.IsDir() }
 func fileExists(p string) bool { fi, err := os.Stat(p); return err == nil && !fi.IsDir() }
+
+// secretQueryKeys are query parameters that carry a credential. Some callers
+// cannot send headers (审批魔方 registers a callback URL and nothing else), so the
+// credential legitimately rides in the URL — but gin's default formatter writes
+// path+rawQuery, which would file a working approve-anything secret into the
+// access log for anyone with log access, un-rotated (EA3).
+var secretQueryKeys = map[string]bool{"secret": true, "token": true, "access_token": true}
+
+// redactQuery rewrites a raw query string with the values of secretQueryKeys
+// replaced, preserving the rest so the log still shows what was called with
+// which non-sensitive parameters.
+func redactQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	vals, err := url.ParseQuery(raw)
+	if err != nil {
+		return "REDACTED" // unparseable — drop it wholesale rather than risk a leak
+	}
+	for k := range vals {
+		if secretQueryKeys[strings.ToLower(k)] {
+			vals.Set(k, "REDACTED")
+		}
+	}
+	return vals.Encode()
+}
+
+// accessLogger is gin.Logger with credential-bearing query parameters redacted.
+func accessLogger() gin.HandlerFunc {
+	return gin.LoggerWithFormatter(func(p gin.LogFormatterParams) string {
+		// NOT p.Path — gin has already appended the raw query to it, which is the
+		// very string being redacted here.
+		path := p.Request.URL.Path
+		if q := redactQuery(p.Request.URL.RawQuery); q != "" {
+			path += "?" + q
+		}
+		return fmt.Sprintf("[GIN] %v | %3d | %13v | %15s | %-7s %#v\n%s",
+			p.TimeStamp.Format("2006/01/02 - 15:04:05"), p.StatusCode, p.Latency,
+			p.ClientIP, p.Method, path, p.ErrorMessage)
+	})
+}

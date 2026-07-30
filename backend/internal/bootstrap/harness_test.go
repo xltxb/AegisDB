@@ -24,9 +24,11 @@ import (
 
 // testApp is a running gateway instance bound to an httptest server.
 type testApp struct {
-	srv *httptest.Server
-	t   *testing.T
-	svc *service.Services // for driving scheduled entry points (e.g. timeout sweep)
+	srv  *httptest.Server
+	t    *testing.T
+	svc  *service.Services // for driving scheduled entry points (e.g. timeout sweep)
+	repo *repository.Repo  // for asserting on stored rows directly
+	cfg  *Config
 }
 
 // newTestApp assembles the app exactly like cmd/server/main.go, but against an
@@ -72,7 +74,7 @@ func newTestApp(t *testing.T) *testApp {
 
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
-	return &testApp{srv: srv, t: t, svc: svc}
+	return &testApp{srv: srv, t: t, svc: svc, repo: repo, cfg: cfg}
 }
 
 // apiResp mirrors the unified envelope { code, msg, data }.
@@ -134,6 +136,17 @@ func (a *testApp) login(email, password string, mfaCode ...string) string {
 		a.t.Fatalf("login %s: empty token", email)
 	}
 	return data.Token
+}
+
+// loginRaw is login without the fail-on-error, for asserting that a particular
+// credential combination is REFUSED.
+func (a *testApp) loginRaw(email, password string, mfaCode ...string) apiResp {
+	a.t.Helper()
+	body := map[string]string{"email": email, "password": password}
+	if len(mfaCode) > 0 {
+		body["mfaCode"] = mfaCode[0]
+	}
+	return a.do(http.MethodPost, "/api/v1/auth/login", "", body)
 }
 
 // auditItemsRaw fetches GET /audit (optionally with a query string like

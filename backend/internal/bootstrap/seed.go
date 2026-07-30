@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
+	"gorm.io/gorm"
+
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/pkg/crypto"
@@ -16,6 +18,15 @@ import (
 // Default login: linwei@vela.io / vela123 (platform admin).
 func Seed(repo *repository.Repo, cfg *Config) error {
 	if repo.Count(&model.Role{}) == 0 {
+		// The demo seed creates a platform administrator whose password is
+		// published in the README. config.yaml ships with seed: true and its
+		// header suggests running `APP_ENV=prod ./server` with it, so without this
+		// guard an empty production database gets a publicly-known super user
+		// (ED2). Production is initialised by `server init`, which demands a
+		// strong password. Refuse loudly rather than seed a weaker path.
+		if cfg.Env == "prod" {
+			return fmt.Errorf("refusing to seed demo data in production: set database.seed=false and run `server init` to create the first administrator")
+		}
 		if err := seedFreshData(repo, cfg); err != nil {
 			return err
 		}
@@ -31,9 +42,11 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 // (演练UAT tier) so grey-release instances are gated coherently from day one.
 // Idempotent: clones every staging row to a gli counterpart only when absent,
 // so DBs seeded before GLI existed self-heal on boot (like seedSchema).
-func seedGliEnv(repo *repository.Repo) error {
-	db := repo.DB()
+func seedGliEnv(repo *repository.Repo) error { return backfillGliEnv(repo.DB()) }
 
+// backfillGliEnv is seedGliEnv against a raw handle, so the migration path can
+// run it too (see Migrate).
+func backfillGliEnv(db *gorm.DB) error {
 	// Capability matrix: mirror each staging (role × capability) level to gli.
 	var caps []model.RoleCapability
 	if err := db.Where("env = ?", model.EnvStaging).Find(&caps).Error; err != nil {
