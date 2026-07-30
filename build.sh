@@ -3,10 +3,13 @@
 # production-deployable bundle under ./dist, plus a versioned tarball.
 #
 # Usage:
-#   ./build.sh                                  # build for the host OS/arch
-#   GOOS=linux  GOARCH=amd64 ./build.sh         # cross-compile for Linux servers
-#   GOOS=windows GOARCH=amd64 ./build.sh        # cross-compile for Windows servers
+#   ./build.sh                                  # build for linux/amd64 (the deploy target)
+#   GOOS=... GOARCH=... ./build.sh              # override the target explicitly
 #   VERSION=1.2.0 ./build.sh                    # stamp an explicit version
+#
+# The server runs on Linux. The target therefore defaults to linux/amd64 rather
+# than the host OS: building on a Windows workstation used to silently produce a
+# Windows server binary that can never be deployed.
 #
 # The backend is pure-Go (sqlite + mysql drivers need no cgo), so cross-compiling
 # needs no C toolchain.
@@ -26,8 +29,9 @@ DIST="$ROOT/dist"
 GO="${GO:-go}"
 command -v "$GO" >/dev/null 2>&1 || GO="/c/Program Files/Go/bin/go.exe"
 
-GOOS_="${GOOS:-$("$GO" env GOOS)}"
-GOARCH_="${GOARCH:-$("$GO" env GOARCH)}"
+# Deploy target, NOT the host: see the usage note above.
+GOOS_="${GOOS:-linux}"
+GOARCH_="${GOARCH:-amd64}"
 EXT=""
 case "$GOOS_" in windows*) EXT=".exe";; esac
 BIN="vela-gateway"
