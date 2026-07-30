@@ -15,7 +15,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
-import { translateMetaSql } from '@/lib/metaCommand'
+import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
@@ -80,7 +80,9 @@ let editor: LineEditor
 let ws: WsTerminal
 let ro: ResizeObserver | null = null
 const pendingSql = ref('')
-const pendingEmptyNotice = ref('') // what an empty result means for the command in flight (see lib/metaCommand)
+// What an empty result MEANS for the command in flight, as an i18n ref so it is
+// rendered in whatever language is active when it prints (see lib/metaCommand).
+const pendingEmptyNotice = ref<NoticeRef | null>(null)
 const pendingVertical = ref(false) // render the pending command's result MySQL \G-style
 const expandedMode = ref(false)    // psql \x: persistent expanded (vertical) display
 
@@ -299,14 +301,14 @@ async function handleSubmit(stmt: string) {
   pendingVertical.value = /\\G\s*$/.test(trimmed)
   // Reset per-command state up front: a leftover notice from an earlier \d would
   // otherwise be printed for the next query that legitimately returns no rows.
-  pendingEmptyNotice.value = ''
+  pendingEmptyNotice.value = null
   const raw = trimmed.replace(/\\[gG]\s*$/, '').replace(/;+\s*$/, '').trim()
   if (raw.startsWith('\\')) {
     // psql-style DB meta-commands (\dt, \d, \dn) translate to a query the driver
     // understands; the rest are local terminal meta-commands.
     const meta = translateMetaSql(raw, props.conn.engine)
     if (meta) {
-      pendingEmptyNotice.value = meta.emptyNotice || ''
+      pendingEmptyNotice.value = meta.emptyNotice ?? null
       if (sendExec(meta.sql, '') === 'ws') return
       try { handleExecEnv(await execRest(meta.sql, ''), meta.sql, '') }
       catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
@@ -496,8 +498,9 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     // empty grid reads as "it exists but has no columns" (psql instead says it
     // did not find the relation). translateMetaSql tells us when that applies.
     if (data.length === 0 && pendingEmptyNotice.value) {
-      out(c(ANSI.yellow, '· ' + pendingEmptyNotice.value))
-      pendingEmptyNotice.value = ''
+      const n = pendingEmptyNotice.value
+      out(c(ANSI.yellow, '· ' + t(n.id, n.params ?? {})))
+      pendingEmptyNotice.value = null
       risk.value = 'safe'
       return
     }

@@ -15,8 +15,15 @@ test('describing a specific relation carries a not-found notice', () => {
   for (const engine of ['postgres', 'dws', 'gaussdb', 'oracle']) {
     const r = translateMetaSql('\\d g_big_dwd_user_oneid_result_df', engine)
     expect(r, engine).not.toBeNull()
+    // The notice must be a TRANSLATABLE descriptor — a message id plus its
+    // parameters — not baked-in text. Returning a literal string meant the
+    // terminal printed Chinese even with the UI switched to English, because this
+    // module has no way to know the active locale.
     expect(r!.emptyNotice, engine).toBeTruthy()
-    expect(r!.emptyNotice, engine).toContain('g_big_dwd_user_oneid_result_df')
+    expect(r!.emptyNotice!.id, engine).toBe('termRelationNotFound')
+    expect(r!.emptyNotice!.params, engine).toEqual({ name: 'g_big_dwd_user_oneid_result_df' })
+    // No human-language text may appear in this module at all.
+    expect(JSON.stringify(r!.emptyNotice), engine).not.toMatch(/[一-鿿]/)
   }
 })
 
@@ -26,7 +33,7 @@ test('listing commands have no not-found notice', () => {
   for (const cmd of ['\\dt', '\\dn', '\\l', '\\dv', '\\di', '\\d']) {
     const r = translateMetaSql(cmd, 'postgres')
     expect(r, cmd).not.toBeNull()
-    expect(r!.emptyNotice ?? '', cmd).toBe('')
+    expect(r!.emptyNotice, cmd).toBeUndefined()
   }
 })
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import QRCode from 'qrcode'
 import { KeyRound, X, ShieldCheck } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
@@ -7,6 +8,8 @@ import api from '@/api'
 
 const props = defineProps<{ open: boolean; enabled: boolean }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
+
+const { t } = useI18n()
 
 const secret = ref('')
 const qr = ref('')
@@ -24,11 +27,11 @@ watch(() => props.open, async (open) => {
     const s = await api.mfaSetup()
     secret.value = s.secret
     qr.value = await QRCode.toDataURL(s.otpauthUri, { margin: 1, width: 176 })
-  } catch { err.value = '初始化失败' }
+  } catch { err.value = t('mfaInitFailed') }
 })
 
 async function enable() {
-  if (code.value.trim().length !== 6) { err.value = '请输入 6 位验证码'; return }
+  if (code.value.trim().length !== 6) { err.value = t('mfaNeed6'); return }
   busy.value = true
   err.value = ''
   try {
@@ -36,12 +39,12 @@ async function enable() {
     emit('changed')
     emit('close')
   } catch (e: any) {
-    err.value = e?.message || '验证码错误,请重试'
+    err.value = e?.message || t('mfaBadCodeRetry')
   } finally { busy.value = false }
 }
 
 async function disable() {
-  if (code.value.trim().length !== 6) { err.value = '请输入当前 6 位验证码'; return }
+  if (code.value.trim().length !== 6) { err.value = t('mfaNeedCurrent6'); return }
   busy.value = true
   err.value = ''
   try {
@@ -49,7 +52,7 @@ async function disable() {
     emit('changed')
     emit('close')
   } catch (e: any) {
-    err.value = e?.message || '验证码错误,请重试'
+    err.value = e?.message || t('mfaBadCodeRetry')
   } finally { busy.value = false }
 }
 

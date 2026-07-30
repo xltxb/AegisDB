@@ -1135,3 +1135,19 @@ EF1(错库执行)、EF2(拒绝显示成功)两项会直接误导操作者,优先
 - 修复:`translateMetaSql` 抽出到 `src/lib/metaCommand.ts`,返回 `{ sql, emptyNotice? }` —— **由翻译器告诉调用方"空结果对这条命令意味着什么"**。列举类命令(`\dt`/`\dn`/`\l`/无参 `\d`)不带 notice(空是合法答案);描述具体对象才带。`renderOutput` 在 `data.length === 0 && pendingEmptyNotice` 时打印提示并 return。`handleSubmit` 入口重置该状态,避免上一条 `\d` 的提示串到下一条合法返回空行的查询上。
 - **顺带拿到了席位**:`translateMetaSql` 是纯函数却一直内联在 SFC 里、零测试,而它的 `ident()` 是**安全控制**(参数被拼进 SQL 字符串字面量)。现新增 5 个单测,含对 `users' OR '1'='1`、`users'; DROP TABLE t; --` 等的注入断言。
   - 写测试时第一版断言写错了(`/['"`;\]\s*(OR|DROP|SELECT)/` 会匹配到正常 SQL 里的 `' ORDER BY`),是**假红**;改为直接断言被插值的字面量只含标识符字符、且整条 SQL 不含 `;`。
+
+---
+
+## 现场反馈修复(2026-07-30):切到英文后仍有中文提示
+
+### EF22【中】前端存在硬编码中文,不随语言切换
+- 现场:UI 切成 English 后,提示仍是中文。
+- 直接触发点是上一条修复自己引入的:`src/lib/metaCommand.ts` 的 `notFound()` 返回**字面中文**。该模块是纯逻辑、拿不到 i18n 上下文,返回文本就必然锁死语言。
+- 修法:引入 `NoticeRef { id, params }` —— 模块只返回 **i18n message id + 参数**,由组件在打印时翻译。因此提示语言总是「打印那一刻」的语言,而不是「生成那一刻」的。单测新增断言:该模块返回值内**不允许出现任何汉字**,防止再犯。
+- 顺带清掉同类的其余硬编码(全站扫描 `[一-鿿]` 后逐个核对):
+  - `MfaModal.vue` 5 条错误提示(初始化失败/请输入 6 位验证码/验证码错误…)—— 该组件原先**完全没有 i18n 上下文**,补 `useI18n()`
+  - `WebhookPanel.vue` 保存失败、密钥占位符,以及 5 处 `zh ? '中' : 'en'` 内联三元 —— 改走 `t()`,并删掉随之失效的 `zh`/`locale` 死变量
+  - `ApprovalModal.vue` `高危 P1`/`权限 P2` 徽章 —— 同样补 `useI18n()`
+  - `ApprovalModal.vue` 模板里硬编码的句号 `。`—— 英文下也是中文标点,改为 locale 项 `sentenceSep`(zh `。` / en `. `)
+  - `stores/ui.ts` `notifyError(e, fallback = '操作失败')` —— Pinia store 无 i18n 上下文,**删掉默认值**改为必传参数,由调用方传 `t('actionFailed')`;type-check 确认所有调用点都已传值
+- 校验:zh/en 各 **227 个 key,完全对齐**(脚本比对无缺失);并复查所有新增文案无未转义的 `@`/`|`(见 [[vue-i18n 运行时编译 prod 崩]] 那个坑),仅含预期的 `{name}`/`{n}` 插值。

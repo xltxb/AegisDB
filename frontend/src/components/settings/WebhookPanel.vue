@@ -8,7 +8,7 @@ import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import type { WebhookConfig, WebhookDelivery } from '@/types'
 
-const { locale } = useI18n()
+const { t } = useI18n()
 const ui = useUIStore()
 const webhook = ref<WebhookConfig | null>(null)
 const whState = ref<'idle' | 'sending' | 'ok'>('idle')
@@ -31,7 +31,7 @@ const KNOWN_EVENTS = EVENT_DEFS.map(e => e.key)
 
 const retryText = computed(() => {
   const n = webhook.value?.retryMax ?? 5
-  return locale.value === 'zh' ? `最多重试 ${n} 次` : `Up to ${n} retries`
+  return t('whRetryUpTo', { n })
 })
 function fmtTime(s: string) { return new Date(s).toLocaleTimeString('en-GB') }
 
@@ -47,7 +47,7 @@ async function persistWebhook(): Promise<boolean> {
     })
     return true
   } catch (e) {
-    ui.notifyError(e, 'Webhook 保存失败')
+    ui.notifyError(e, t('whSaveFailed'))
     return false
   }
 }
@@ -99,15 +99,14 @@ onMounted(async () => {
 })
 
 const whState_ = computed(() => {
-  const zh = locale.value === 'zh'
   if (whState.value === 'sending')
-    return { status: zh ? '正在发送测试事件…' : 'Sending test event…', icon: Loader, color: 'var(--accent-text)', spin: true }
+    return { status: t('whSending'), icon: Loader, color: 'var(--accent-text)', spin: true }
   if (whState.value === 'ok')
-    return { status: whMessage.value || (zh ? '测试事件已投递' : 'Test event delivered'), icon: CircleCheck, color: 'var(--success-text)', spin: false }
+    return { status: whMessage.value || t('whDelivered'), icon: CircleCheck, color: 'var(--success-text)', spin: false }
   const d = lastDelivery.value
   if (!d)
-    return { status: zh ? '尚未投递' : 'No deliveries yet', icon: Webhook, color: 'var(--text-muted)', spin: false }
-  const prefix = zh ? '上次投递' : 'Last delivery'
+    return { status: t('whNoDelivery'), icon: Webhook, color: 'var(--text-muted)', spin: false }
+  const prefix = t('whLastDelivery')
   return {
     status: `${prefix} ${fmtTime(d.createdAt)} · ${d.status} · ${d.attempts}×`,
     icon: d.success ? CircleCheck : CircleX,
@@ -132,7 +131,7 @@ const whState_ = computed(() => {
       </div>
       <div>
         <div class="fl">{{ $t('whSecret') }}</div>
-        <div class="whbox"><KeyRound :size="14" color="var(--text-faint)" /><input class="ep" type="password" v-model="whSecret" :placeholder="whHasSecret ? '已配置 · 留空保持不变' : $t('whSecretPh')" @change="persistWebhook" /></div>
+        <div class="whbox"><KeyRound :size="14" color="var(--text-faint)" /><input class="ep" type="password" v-model="whSecret" :placeholder="whHasSecret ? $t('whSecretConfigured') : $t('whSecretPh')" @change="persistWebhook" /></div>
       </div>
       <div>
         <div class="fl">{{ $t('whEvents') }}</div>

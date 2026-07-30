@@ -7,21 +7,29 @@
 // cannot express: describing a relation that does not exist returns no rows, and
 // a bare empty grid is indistinguishable from "the relation exists but has no
 // columns you can see" — real psql reports `Did not find any relation named "…"`.
-// So a translation carries the notice to print when the result comes back empty.
+// So a translation carries a NoticeRef for that case — an i18n id, never text.
+
+/** A message to display, as an i18n id plus its parameters. This module holds no
+ *  human-language text: it cannot know the active locale, and returning a literal
+ *  made the terminal print Chinese after the UI was switched to English. */
+export interface NoticeRef {
+  id: string
+  params?: Record<string, string>
+}
 
 export interface MetaTranslation {
   /** The query to execute (still subject to the gateway's normal judgement). */
   sql: string
-  /** What an EMPTY result means for this command, if it means anything. Blank for
+  /** What an EMPTY result means for this command, if it means anything. Absent for
    *  listing commands, where "nothing" is a legitimate answer. */
-  emptyNotice?: string
+  emptyNotice?: NoticeRef
 }
 
 /** ident keeps only characters valid in an identifier. The result is embedded in
  *  a SQL string literal, so quotes, semicolons and backslashes must not survive. */
 const ident = (s: string) => s.replace(/["'`]/g, '').replace(/[^A-Za-z0-9_$.]/g, '')
 
-const notFound = (name: string) => `未找到名为 "${name}" 的对象`
+const notFound = (name: string): NoticeRef => ({ id: 'termRelationNotFound', params: { name } })
 
 export function translateMetaSql(cmd: string, engine: string): MetaTranslation | null {
   const m = cmd.trim().match(/^\\([a-z]+)\+?\s*(.*)$/i)
