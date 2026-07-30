@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ShieldAlert, ArrowRight, Radio } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import { useAuthStore } from '@/stores/auth'
@@ -16,6 +17,8 @@ const props = defineProps<{
   rule: string
 }>()
 const emit = defineEmits<{ cancel: []; submit: [string] }>()
+
+const { t } = useI18n()
 const auth = useAuthStore()
 
 const reason = ref('')
@@ -29,8 +32,8 @@ const chainNodes = computed(() => {
 })
 
 const badge = () => (props.risk === 'high'
-  ? { t: '高危 P1', bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
-  : { t: '权限 P2', bg: 'var(--warning-subtle)', c: 'var(--warning-text)' })
+  ? { t: t('apBadgeHigh'), bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
+  : { t: t('apBadgePerm'), bg: 'var(--warning-subtle)', c: 'var(--warning-text)' })
 </script>
 
 <template>
@@ -46,7 +49,7 @@ const badge = () => (props.risk === 'high'
               <div class="title">{{ $t('mApprTitle') }}</div>
               <span class="badge" :style="{ background: badge().bg, color: badge().c }">{{ badge().t }}</span>
             </div>
-            <div class="desc">{{ $t('mPolicyHit') }} <span class="b">{{ rule || $t('mPolicyName') }}</span>。{{ $t('mApprDesc') }}</div>
+            <div class="desc">{{ $t('mPolicyHit') }} <span class="b">{{ rule || $t('mPolicyName') }}</span>{{ $t('sentenceSep') }}{{ $t('mApprDesc') }}</div>
           </div>
         </div>
 

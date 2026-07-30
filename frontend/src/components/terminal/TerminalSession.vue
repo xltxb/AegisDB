@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
+import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
@@ -79,6 +80,9 @@ let editor: LineEditor
 let ws: WsTerminal
 let ro: ResizeObserver | null = null
 const pendingSql = ref('')
+// What an empty result MEANS for the command in flight, as an i18n ref so it is
+// rendered in whatever language is active when it prints (see lib/metaCommand).
+const pendingEmptyNotice = ref<NoticeRef | null>(null)
 const pendingVertical = ref(false) // render the pending command's result MySQL \G-style
 const expandedMode = ref(false)    // psql \x: persistent expanded (vertical) display
 
@@ -290,85 +294,23 @@ function switchDb(db: string) {
   risk.value = 'safe'
 }
 
-// translateMetaSql maps a client backslash meta-command (psql \dt, MySQL-client
-// \l, etc.) to a SQL query the driver can run — engine-aware for PostgreSQL/DWS,
-// MySQL/TiDB and Oracle so users can keep their familiar client shortcuts. Returns
-// null for commands handled locally (\?, \clear, \c/\u <db>, \conns). ident chars
-// are sanitised so a name can't break the literal (the user could run any SQL
-// directly anyway).
-function translateMetaSql(cmd: string, engine: string): string | null {
-  const m = cmd.trim().match(/^\\([a-z]+)\+?\s*(.*)$/i)
-  if (!m) return null
-  const verb = m[1].toLowerCase()
-  const arg = m[2].trim().replace(/;$/, '')
-  const ident = (s: string) => s.replace(/["'`]/g, '').replace(/[^A-Za-z0-9_$.]/g, '')
-  const isPG = /postgre|dws|gauss/i.test(engine)
-  const isOra = /oracle/i.test(engine)
-
-  if (isPG) {
-    const notSys = `NOT IN ('pg_catalog','information_schema')`
-    switch (verb) {
-      case 'l': case 'list': return `SELECT datname AS "Name" FROM pg_database WHERE datistemplate=false ORDER BY 1`
-      case 'dn': return `SELECT schema_name AS "Name" FROM information_schema.schemata WHERE schema_name ${notSys} ORDER BY 1`
-      case 'dt': return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_type='BASE TABLE' AND table_schema ${notSys} ORDER BY 1,2`
-      case 'dv': return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.views WHERE table_schema ${notSys} ORDER BY 1,2`
-      case 'di': return `SELECT schemaname AS "Schema", indexname AS "Name", tablename AS "Table" FROM pg_indexes WHERE schemaname ${notSys} ORDER BY 1,2`
-      case 'ds': return `SELECT sequence_schema AS "Schema", sequence_name AS "Name" FROM information_schema.sequences WHERE sequence_schema ${notSys} ORDER BY 1,2`
-      case 'df': return `SELECT routine_schema AS "Schema", routine_name AS "Name", data_type AS "Result" FROM information_schema.routines WHERE routine_schema ${notSys} ORDER BY 1,2`
-      case 'du': case 'dg': return `SELECT rolname AS "Role", rolsuper AS "Super", rolcanlogin AS "Login" FROM pg_roles ORDER BY 1`
-      case 'dp': case 'z': return `SELECT table_schema AS "Schema", table_name AS "Name", grantee AS "Grantee", privilege_type AS "Privilege" FROM information_schema.role_table_grants WHERE table_schema ${notSys} ORDER BY 1,2`
-      case 'conninfo': return `SELECT current_database() AS "Database", current_user AS "User", version() AS "Version"`
-      case 'd':
-        if (!arg) return `SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_schema ${notSys} ORDER BY 1,2`
-        { const p = ident(arg).split('.'); const tbl = p.pop() || ''; const sch = p.length ? ` AND table_schema='${p[0]}'` : ''
-          return `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", column_default AS "Default" FROM information_schema.columns WHERE table_name='${tbl}'${sch} ORDER BY ordinal_position` }
-    }
-    return null
-  }
-
-  if (isOra) {
-    const notSys = `NOT IN ('SYS','SYSTEM','OUTLN','XDB','MDSYS','CTXSYS','DBSNMP','WMSYS','APPQOSSYS')`
-    switch (verb) {
-      case 'l': case 'list': case 'dn': return `SELECT username AS "Name" FROM all_users ORDER BY 1`
-      case 'dt': return `SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`
-      case 'dv': return `SELECT owner AS "Owner", view_name AS "Name" FROM all_views WHERE owner ${notSys} ORDER BY 1,2`
-      case 'di': return `SELECT owner AS "Owner", index_name AS "Name", table_name AS "Table" FROM all_indexes WHERE owner ${notSys} ORDER BY 1,2`
-      case 'ds': return `SELECT sequence_owner AS "Owner", sequence_name AS "Name" FROM all_sequences WHERE sequence_owner ${notSys} ORDER BY 1,2`
-      case 'du': return `SELECT username AS "User", account_status AS "Status" FROM all_users ORDER BY 1`
-      case 'conninfo': return `SELECT SYS_CONTEXT('USERENV','DB_NAME') AS "Database", USER AS "User" FROM DUAL`
-      case 'd':
-        if (!arg) return `SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`
-        return `SELECT column_name AS "Column", data_type AS "Type", nullable AS "Nullable" FROM all_tab_columns WHERE table_name=UPPER('${ident(arg)}') ORDER BY column_id`
-    }
-    return null
-  }
-
-  // MySQL / TiDB
-  switch (verb) {
-    case 'l': case 'list': case 'dn': return 'SHOW DATABASES'
-    case 'dt': return `SHOW FULL TABLES WHERE Table_type='BASE TABLE'`
-    case 'dv': return `SHOW FULL TABLES WHERE Table_type='VIEW'`
-    case 'du': case 'dg': return 'SELECT User, Host FROM mysql.user ORDER BY 1,2'
-    case 'conninfo': return 'SELECT DATABASE() AS `Database`, CURRENT_USER() AS `User`, VERSION() AS `Version`'
-    case 'di': return arg ? `SHOW INDEX FROM \`${ident(arg)}\`` : null
-    case 'd': return arg ? `SHOW COLUMNS FROM \`${ident(arg)}\`` : 'SHOW TABLES'
-  }
-  return null
-}
-
 async function handleSubmit(stmt: string) {
   // \G (vertical) / \g (horizontal) are MySQL client display terminators, not SQL —
   // strip them before sending and remember whether to render the result vertically.
   const trimmed = stmt.trim()
   pendingVertical.value = /\\G\s*$/.test(trimmed)
+  // Reset per-command state up front: a leftover notice from an earlier \d would
+  // otherwise be printed for the next query that legitimately returns no rows.
+  pendingEmptyNotice.value = null
   const raw = trimmed.replace(/\\[gG]\s*$/, '').replace(/;+\s*$/, '').trim()
   if (raw.startsWith('\\')) {
     // psql-style DB meta-commands (\dt, \d, \dn) translate to a query the driver
     // understands; the rest are local terminal meta-commands.
-    const sql = translateMetaSql(raw, props.conn.engine)
-    if (sql) {
-      if (sendExec(sql, '') === 'ws') return
-      try { handleExecEnv(await execRest(sql, ''), sql, '') }
+    const meta = translateMetaSql(raw, props.conn.engine)
+    if (meta) {
+      pendingEmptyNotice.value = meta.emptyNotice ?? null
+      if (sendExec(meta.sql, '') === 'ws') return
+      try { handleExecEnv(await execRest(meta.sql, ''), meta.sql, '') }
       catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
       return
     }
@@ -551,6 +493,17 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
   if (m.columns && m.columns.length) {
     // Real result set returned by the target DB.
     const data = m.data || []
+    // Some commands ask a question that "zero rows" cannot answer: describing a
+    // relation that does not exist returns an empty column list, and drawing the
+    // empty grid reads as "it exists but has no columns" (psql instead says it
+    // did not find the relation). translateMetaSql tells us when that applies.
+    if (data.length === 0 && pendingEmptyNotice.value) {
+      const n = pendingEmptyNotice.value
+      out(c(ANSI.yellow, '· ' + t(n.id, n.params ?? {})))
+      pendingEmptyNotice.value = null
+      risk.value = 'safe'
+      return
+    }
     emit('result', { columns: m.columns, rows: data }) // feed the HTML grid panel
     // Grid mode shows the data in the HTML panel; the terminal keeps only the
     // summary. \G / \x are explicit terminal-display choices, still honoured.

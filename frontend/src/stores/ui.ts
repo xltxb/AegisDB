@@ -25,7 +25,10 @@ export const useUIStore = defineStore('ui', () => {
     toasts.value = toasts.value.filter((x) => x.id !== id)
   }
   // notifyError extracts a human message from a thrown API error and toasts it.
-  function notifyError(e: unknown, fallback = '操作失败') {
+  // The fallback is a parameter with no default text: a Pinia store has no i18n
+  // context, so a literal here would print in one language regardless of the
+  // active locale. Callers pass t('actionFailed').
+  function notifyError(e: unknown, fallback: string) {
     const msg = (e as any)?.message || (e as any)?.msg || fallback
     notify(String(msg), 'error')
   }
