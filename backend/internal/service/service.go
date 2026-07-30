@@ -108,7 +108,14 @@ func (s *Services) nextAuditID() string {
 // The prev-hash read and the insert are serialized so the chain never forks
 // under concurrent writers.
 func (s *Services) recordAudit(actor *model.User, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
-	a := s.appendAudit(actor, conn, command, risk, result, apNo)
+	return s.recordAuditBy(actor, "", conn, command, risk, result, apNo, eventType)
+}
+
+// recordAuditBy is recordAudit for an action authorised by someone other than
+// the actor — an external approver, or an administrator acting on another
+// user's account. See AuditLog.Operator.
+func (s *Services) recordAuditBy(actor *model.User, operator string, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
+	a := s.appendAudit(actor, conn, command, risk, result, apNo, operator)
 	if eventType != "" {
 		s.Webhook.Dispatch(eventType, a) // fire the webhook OUTSIDE the audit lock
 	}
@@ -124,7 +131,10 @@ func (s *Services) recordAudit(actor *model.User, conn *model.Connection, comman
 // (A4) is the cross-connection/cross-process backstop: if another writer chained
 // onto the same predecessor first, InsertAudit fails with a duplicate-key error;
 // we re-read the chain tip and retry so the chain stays linear instead of forking.
-func (s *Services) appendAudit(actor *model.User, conn *model.Connection, command, risk, result, apNo string) *model.AuditLog {
+// appendAudit writes one hash-chained audit row. operator names who actually
+// authorised the action when that differs from actor (see AuditLog.Operator);
+// pass "" when they are the same.
+func (s *Services) appendAudit(actor *model.User, conn *model.Connection, command, risk, result, apNo, operator string) *model.AuditLog {
 	// Never persist credentials in the clear: mask password literals before the
 	// command enters the (immutable, hash-chained) audit log. The audit row is
 	// never re-executed, so redaction here is safe; it also flows into the webhook
@@ -145,6 +155,7 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 			Risk:       risk,
 			Result:     result,
 			ApprovalNo: apNo,
+			Operator:   operator,
 			PrevHash:   prev,
 		}
 		if conn != nil {
@@ -154,7 +165,7 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 		}
 		payload, _ := json.Marshal(map[string]any{
 			"time": now.Format(time.RFC3339), "actor": actor.Name, "instance": a.Instance,
-			"database": a.Database, "command": command, "risk": risk, "result": result, "ap": apNo,
+			"database": a.Database, "command": command, "risk": risk, "result": result, "ap": apNo, "operator": operator,
 		})
 		a.Hash = crypto.ChainHash(prev, payload)
 		if err = s.Repo.InsertAudit(a); err == nil {

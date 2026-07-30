@@ -33,9 +33,19 @@ func (schemaMigration) TableName() string { return "schema_migrations" }
 //     GORM AutoMigrate which understands the sqlite dialect.
 func Migrate(cfg *Config, db *gorm.DB) error {
 	if cfg.Database.Driver == "mysql" {
-		return RunSQLMigrations(db, migrations.FS)
+		if err := RunSQLMigrations(db, migrations.FS); err != nil {
+			return err
+		}
+	} else if err := autoMigrate(db); err != nil {
+		return err
 	}
-	return autoMigrate(db)
+	// Reference DATA that a later release introduced has to be backfilled here
+	// too, not only from Seed: production upgrades run `migrate` while `seed` is
+	// a first-install-only step (config.prod.yaml keeps it off). A capability or
+	// dictionary row that is merely ABSENT reads as "allow", so shipping an
+	// environment without backfilling it leaves that environment unregulated
+	// (ED1). Idempotent, so it is safe on every run.
+	return backfillGliEnv(db)
 }
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).

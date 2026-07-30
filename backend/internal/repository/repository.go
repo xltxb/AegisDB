@@ -140,13 +140,25 @@ func (r *Repo) AllConnectionTags() []string {
 
 // TagsForRole returns the tags granted to a role (empty = unrestricted).
 func (r *Repo) TagsForRole(roleID int64) []string {
+	tags, err := r.tagsForRole(roleID)
+	if err != nil {
+		slog.Error("role tag read failed", "roleID", roleID, "err", err)
+	}
+	return tags
+}
+
+// tagsForRole is TagsForRole with the error kept, so access checks can tell a
+// role with no restrictions apart from a tag table it could not read (ED3).
+func (r *Repo) tagsForRole(roleID int64) ([]string, error) {
 	var rows []model.RoleTag
-	r.db.Where("role_id = ?", roleID).Order("tag asc").Find(&rows)
+	if err := r.db.Where("role_id = ?", roleID).Order("tag asc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
 	out := make([]string, 0, len(rows))
 	for _, t := range rows {
 		out = append(out, t.Tag)
 	}
-	return out
+	return out, nil
 }
 
 // SetRoleTags replaces a role's granted tags.
@@ -237,19 +249,21 @@ func (r *Repo) SetMenus(roleID int64, menus map[string]bool) error {
 // ----------------------------------------------------------------- Capabilities
 
 // CapabilityLevel implements gateway.Store: role × capability × env -> level (default allow).
-func (r *Repo) CapabilityLevel(roleID int64, capability, env string) string {
+func (r *Repo) CapabilityLevel(roleID int64, capability, env string) (string, error) {
 	var row model.RoleCapability
 	// Case-insensitive on capability/env so matching is consistent across the
 	// SQLite (dev) and MySQL (prod) drivers regardless of stored/input casing.
 	err := r.db.Where("role_id = ? AND LOWER(capability) = ? AND LOWER(env) = ?",
 		roleID, strings.ToLower(strings.TrimSpace(capability)), strings.ToLower(strings.TrimSpace(env))).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return model.LevelAllow
+		return model.LevelAllow, nil // no rule configured for this cell = allow
 	}
 	if err != nil {
-		return model.LevelAllow
+		// A failed QUERY is not an absent rule. Reporting allow here disabled the
+		// capability matrix during any transient database fault (ED3).
+		return "", err
 	}
-	return row.Level
+	return row.Level, nil
 }
 
 // MatrixForRole returns capability -> env -> level.
@@ -437,13 +451,19 @@ func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error)
 // TagsForRoles returns the union of DB tags across roles. A role with no tags is
 // unrestricted; if ANY of the user's roles is unrestricted the user sees every
 // connection, so unrestricted=true is returned and the tag list is irrelevant.
-func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool) {
+func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool, err error) {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, id := range ids {
-		tags := r.TagsForRole(id)
+		tags, terr := r.tagsForRole(id)
+		if terr != nil {
+			// Never report unrestricted on a failed read: an empty result means
+			// "no restrictions", so swallowing the error would hand a restricted
+			// role the whole estate during a database blip (ED3).
+			return nil, false, terr
+		}
 		if len(tags) == 0 {
-			return nil, true
+			return nil, true, nil
 		}
 		for _, t := range tags {
 			if !seen[t] {
@@ -452,7 +472,7 @@ func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool) {
 			}
 		}
 	}
-	return out, false
+	return out, false, nil
 }
 
 // ----------------------------------------------------------------- Connections
@@ -477,16 +497,23 @@ func (r *Repo) UpdateConnection(c *model.Connection) error { return r.db.Save(c)
 
 // ----------------------------------------------------------------- Risk dictionary
 
-// RiskCommands implements gateway.Store.
-func (r *Repo) RiskCommands() []model.RiskCommand {
+// RiskCommands implements gateway.Store. The error is propagated rather than
+// swallowed: an unreadable dictionary is not an empty one, and the engine must
+// be able to tell them apart to fail closed (ED3).
+func (r *Repo) RiskCommands() ([]model.RiskCommand, error) {
 	var rc []model.RiskCommand
-	r.db.Find(&rc)
-	return rc
+	if err := r.db.Find(&rc).Error; err != nil {
+		return nil, err
+	}
+	return rc, nil
 }
 
 // RiskCommandsGrouped returns command -> env -> level, preserving insertion order of commands.
 func (r *Repo) RiskCommandsGrouped() ([]string, map[string]map[string]string) {
-	rows := r.RiskCommands()
+	rows, err := r.RiskCommands()
+	if err != nil {
+		slog.Error("risk dictionary read failed", "err", err)
+	}
 	grouped := map[string]map[string]string{}
 	order := []string{}
 	// stable command order: by a fixed priority then alpha

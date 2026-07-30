@@ -169,7 +169,13 @@ type AsyncJob struct {
 	SQL          string     `gorm:"type:text" json:"sql"`
 	Reason       string     `gorm:"size:512" json:"reason"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
-	Log          string     `gorm:"type:mediumtext" json:"log"`                     // streamed NOTICE / progress lines
+	// Risk is the verdict that authorised this job, captured at submit time. The
+	// worker audits when the job finishes — possibly an hour later — and the
+	// dictionary may have changed by then, so the level that actually permitted
+	// the run is the one worth recording. It used to be hardcoded to "mid" at
+	// audit time, which made the field meaningless for filtering (ER7).
+	Risk string `gorm:"size:16" json:"risk"` // high|mid|low
+	Log  string `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
 	Rows         int        `json:"rows"`
 	Error        string     `gorm:"size:512" json:"error"`
 	CreatedAt    time.Time  `json:"createdAt"`
@@ -274,6 +280,12 @@ type AuditLog struct {
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
 	Result       string    `gorm:"size:16;not null" json:"result"`                       // executed|pending|rejected|warn
 	ApprovalNo   string    `gorm:"size:32" json:"approvalNo"`
+	// Operator is who actually authorised/performed the action when that is not
+	// the actor — an external 飞书 approver, or an administrator acting on another
+	// user's account. Empty means actor and operator are the same person. Without
+	// it an externally-approved command was recorded as if the initiator had
+	// simply run it, and the real approver appeared nowhere in the chain (EA4).
+	Operator string `gorm:"size:128" json:"operator"`
 	// PrevHash carries a UNIQUE index so the hash chain cannot fork at the database
 	// layer: two rows can never chain onto the same predecessor, even across
 	// connections/processes where the in-process auditMu doesn't reach (A4). The

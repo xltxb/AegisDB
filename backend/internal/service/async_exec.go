@@ -31,6 +31,14 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// FR-CONN-04: maintenance freezes activity on an instance. This channel runs
+	// against the same instance through the same executor, so skipping the check
+	// meant anyone blocked in the terminal could resubmit the identical statement
+	// as a background job and have it run (ER6).
+	if conn.Status == "maint" {
+		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
+		return &dto.AsyncSubmitResp{Output: "· 目标实例处于维护态，操作受限"}, nil
+	}
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return nil, err
 	}
@@ -54,6 +62,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 		job := &model.AsyncJob{
 			UserID: u.ID, ConnectionID: conn.ID, Instance: conn.Env + "-" + conn.Name,
 			Database: conn.Database, SQL: sql, Reason: reason, Status: model.AsyncPending,
+			Risk: v.Risk,
 		}
 		if err := s.Repo.CreateAsyncJob(job); err != nil {
 			return nil, err
@@ -149,12 +158,12 @@ func (s *Services) runAsyncJob(id int64) {
 	if runErr != nil {
 		final += "· 执行失败: " + runErr.Error() + "\n"
 		_ = s.Repo.FinishAsyncJob(id, model.AsyncFailed, final, clip(runErr.Error(), 500), int(rows), fin)
-		s.recordAudit(u, conn, "ASYNC "+clip(job.SQL, 80), model.RiskMid, model.ResultWarn, "", "exec")
+		s.recordAudit(u, conn, "ASYNC "+job.SQL, asyncAuditRisk(job), model.ResultWarn, "", "exec")
 		return
 	}
 	final += fmt.Sprintf("· 执行完成 @ %s · 影响 %d 行\n", fin.Format("2006-01-02 15:04:05"), rows)
 	_ = s.Repo.FinishAsyncJob(id, model.AsyncDone, final, "", int(rows), fin)
-	s.recordAudit(u, conn, "ASYNC "+clip(job.SQL, 80), model.RiskMid, model.ResultExecuted, "", "exec")
+	s.recordAudit(u, conn, "ASYNC "+job.SQL, asyncAuditRisk(job), model.ResultExecuted, "", "exec")
 }
 
 func (s *Services) failAsync(id int64, msg string) {
@@ -194,4 +203,13 @@ func (s *Services) GetAsyncJob(u *model.User, id int64) (*model.AsyncJob, error)
 		return nil, ErrForbidden
 	}
 	return j, nil
+}
+
+// asyncAuditRisk returns the verdict recorded when the job was authorised,
+// falling back to mid for jobs created before the column existed (ER7).
+func asyncAuditRisk(job *model.AsyncJob) string {
+	if job.Risk == "" {
+		return model.RiskMid
+	}
+	return job.Risk
 }

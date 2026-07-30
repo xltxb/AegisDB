@@ -168,6 +168,7 @@ func (h *Handler) SetRoleMenus(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditRoleChange(middleware.CurrentUser(c), pathID(c), "menus", req.Menus)
 	resp.OK(c, gin.H{"ok": true})
 }
 
@@ -181,6 +182,7 @@ func (h *Handler) SetRoleCapabilities(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditRoleChange(middleware.CurrentUser(c), pathID(c), "capabilities", req.Matrix)
 	resp.OK(c, gin.H{"ok": true})
 }
 
@@ -195,6 +197,7 @@ func (h *Handler) SetRoleTags(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditRoleChange(middleware.CurrentUser(c), pathID(c), "tags", req.Tags)
 	r, _ := h.Svc.RoleDetail(pathID(c))
 	resp.OK(c, r)
 }
@@ -209,13 +212,19 @@ func (h *Handler) AddRoleMember(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "添加失败")
 		return
 	}
+	h.Svc.AuditRoleChange(middleware.CurrentUser(c), pathID(c), "member.add", req.UserID)
 	r, _ := h.Svc.RoleDetail(pathID(c))
 	resp.OK(c, r)
 }
 
 func (h *Handler) RemoveRoleMember(c *gin.Context) {
 	userID, _ := strconv.ParseInt(c.Param("userId"), 10, 64)
-	if err := h.Repo.RemoveMember(pathID(c), userID); err != nil {
+	err := h.Svc.RemoveRoleMember(pathID(c), userID)
+	if err == service.ErrBadRequest {
+		resp.Fail(c, resp.CodeBadRequest, "该用户仅剩此一个角色,请先分配其他角色再移除")
+		return
+	}
+	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "移除失败")
 		return
 	}
@@ -379,6 +388,13 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "审批单不存在")
 		return
 	}
+	if err == service.ErrForbidden {
+		// The payload authenticated but does not describe this ticket (e.g. it
+		// quotes a different vendor task) — see DecideApprovalExternal.
+		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
+		resp.Fail(c, resp.CodeForbidden, "回调与该审批单不匹配")
+		return
+	}
 	if err != nil {
 		slog.Error("lark callback: process failed", "externalTaskId", req.ExternalTaskID, "err", err)
 		resp.Fail(c, resp.CodeInternalError, "回调处理失败")
@@ -416,6 +432,10 @@ func (h *Handler) MarkNotificationsRead(c *gin.Context) {
 
 func (h *Handler) MFASetup(c *gin.Context) {
 	out, err := h.Svc.MFASetup(middleware.CurrentUser(c))
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "已启用二次验证,如需重新绑定请先关闭,或联系管理员重置")
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "生成失败")
 		return
@@ -462,7 +482,7 @@ func (h *Handler) PatchUser(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	if err := h.Svc.PatchUser(pathID(c), req); err != nil {
+	if err := h.Svc.PatchUser(middleware.CurrentUser(c), pathID(c), req); err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "更新失败")
 		return
 	}
@@ -506,7 +526,7 @@ func (h *Handler) SetUserPassword(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	if err := h.Svc.AdminSetPassword(pathID(c), req.Password); err != nil {
+	if err := h.Svc.AdminSetPassword(middleware.CurrentUser(c), pathID(c), req.Password); err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "重置失败:密码至少 6 位")
 		return
 	}
@@ -515,7 +535,7 @@ func (h *Handler) SetUserPassword(c *gin.Context) {
 
 // ResetUserMFA unbinds a user's OTP (admin).
 func (h *Handler) ResetUserMFA(c *gin.Context) {
-	if err := h.Svc.AdminResetMFA(pathID(c)); err != nil {
+	if err := h.Svc.AdminResetMFA(middleware.CurrentUser(c), pathID(c)); err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "解绑失败")
 		return
 	}
@@ -525,7 +545,7 @@ func (h *Handler) ResetUserMFA(c *gin.Context) {
 // BindUserMFA generates + binds a fresh OTP secret for a user (admin), returning
 // the secret + otpauth URI to hand over.
 func (h *Handler) BindUserMFA(c *gin.Context) {
-	out, err := h.Svc.AdminBindMFA(pathID(c))
+	out, err := h.Svc.AdminBindMFA(middleware.CurrentUser(c), pathID(c))
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "绑定失败")
 		return

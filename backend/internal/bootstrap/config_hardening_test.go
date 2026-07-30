@@ -1,6 +1,11 @@
 package bootstrap
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+
+	"velagateway/internal/repository"
+)
 
 // C5: a prod JWT secret that is long enough and not blacklisted can still be
 // trivially weak (e.g. a repeated character). Require a minimum character variety
@@ -40,5 +45,35 @@ func TestIsKnownEnv(t *testing.T) {
 		if isKnownEnv(s) {
 			t.Errorf("isKnownEnv(%q) = true, want false", s)
 		}
+	}
+}
+
+// ED2: config.yaml ships with seed: true and its header invites operators to run
+// `APP_ENV=prod ./server` with it. auto_migrate is already ignored for MySQL, but
+// nothing gated the SEED, so an empty production database would be populated with
+// the demo platform administrator — whose password is printed in the README.
+// Production accounts come from `server init`, never from the demo seed.
+func TestSeed_RefusesToPlantDemoDataInProduction(t *testing.T) {
+	cfg := &Config{}
+	cfg.Env = "prod"
+	cfg.Database.Driver = "sqlite"
+	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "prod-seed.db")
+	cfg.Database.AutoMigrate = true
+	cfg.Database.Seed = true
+
+	db, err := OpenDB(cfg)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if sqlDB, derr := db.DB(); derr == nil {
+		t.Cleanup(func() { sqlDB.Close() })
+	}
+	repo := repository.New(db)
+
+	if err := Seed(repo, cfg); err == nil {
+		t.Error("seeding a production database silently succeeded")
+	}
+	if _, err := repo.GetUserByEmail("linwei@vela.io"); err == nil {
+		t.Error("the demo administrator was planted in a production database")
 	}
 }

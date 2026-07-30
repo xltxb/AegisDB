@@ -71,3 +71,55 @@ func TestMultiRole_UnionGrantsAndRevokesAdmin(t *testing.T) {
 		t.Errorf("after revoking admin, ro user blocked again: got %d, want 40300", got)
 	}
 }
+
+// EU2: effective permissions are the union of tbl_user.role_id and the
+// tbl_role_member rows. Every account-creation path writes BOTH for the primary
+// role, but "remove member" only deleted the membership row — so revoking the
+// role an account was created with removed it from the role's member list in the
+// UI while the user kept every permission it granted. An administrator who
+// revoked platform-admin from someone would be told it worked and be wrong.
+func TestMultiRole_RemovingMemberRevokesThePrimaryRoleToo(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	adminID := app.roleIDByCode(admin, "admin")
+	roID := app.roleIDByCode(admin, "ro")
+
+	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
+		"email": "temp-admin@vela.io", "name": "Temp Admin", "password": "initpass9",
+		"roleIds": []int64{adminID, roID}, // admin is the primary role
+	}).Code, 0, "create account holding admin + ro")
+
+	victim := app.login("temp-admin@vela.io", "initpass9")
+	eq(t, app.do(http.MethodGet, "/api/v1/users", victim, nil).Code, 0, "admin rights before revocation")
+
+	uid := app.userByEmail(admin, "temp-admin@vela.io").ID
+	eq(t, app.do(http.MethodDelete, "/api/v1/roles/"+itoa(adminID)+"/members/"+itoa(uid), admin, nil).Code, 0, "remove member")
+
+	// The revocation must actually bite — the guard re-reads roles per request.
+	fresh := app.login("temp-admin@vela.io", "initpass9") // revocation also ends old sessions
+	if app.do(http.MethodGet, "/api/v1/users", fresh, nil).Code == 0 {
+		t.Error("admin rights survived removal from the role: the primary role_id still grants them")
+	}
+	// The account is downgraded, not broken — it keeps working as its other role.
+	eq(t, app.do(http.MethodGet, "/api/v1/auth/me", fresh, nil).Code, 0, "account still usable after downgrade")
+}
+
+// Revoking a user's LAST role would leave role_id pointing at nothing, which
+// fails session construction and locks the account instead of downgrading it.
+// That must be refused outright rather than half-applied.
+func TestMultiRole_RemovingTheOnlyRoleIsRefused(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	roID := app.roleIDByCode(admin, "ro")
+
+	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
+		"email": "solo@vela.io", "name": "Solo", "password": "initpass9",
+		"roleIds": []int64{roID},
+	}).Code, 0, "create single-role account")
+	uid := app.userByEmail(admin, "solo@vela.io").ID
+
+	if app.do(http.MethodDelete, "/api/v1/roles/"+itoa(roID)+"/members/"+itoa(uid), admin, nil).Code == 0 {
+		t.Error("removing the user's only role should be refused")
+	}
+	eq(t, app.loginCode("solo@vela.io", "initpass9"), 0, "account still works")
+}

@@ -94,10 +94,17 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 	// statement past the matrix on backends that accept stacked queries (e.g.
 	// PostgreSQL's simple query protocol). Judge every statement and let the
 	// strictest verdict govern the whole command (A1).
-	if stmts := sqlutil.SplitStatements(sql); len(stmts) > 1 {
-		return s.applyVerdict(u, conn, sql, s.strictestVerdict(u, conn, stmts), reason)
+	//
+	// This runs for a single statement too, so the judged text is always the
+	// SPLIT one. Judging the raw string in that case let a stray leading
+	// separator (";UPDATE …") defeat verb parsing: no leading keyword was found,
+	// the unknown verb fell into the read dimension, and the write ran under a
+	// read-only role (ER3). Splitting normalises the separator away.
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
+		return s.execJudged(u, conn, sql, reason)
 	}
-	return s.execJudged(u, conn, sql, reason)
+	return s.applyVerdict(u, conn, sql, s.strictestVerdict(u, conn, stmts), reason)
 }
 
 // strictestVerdict evaluates every statement and returns the one demanding the
@@ -364,7 +371,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			result, title = model.ResultWarn, "审批已通过但目标连接不存在,未执行"
 		}
 		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
-		s.recordAudit(initiator, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
+		s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
 			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", operatorName, clip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
@@ -380,7 +387,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 	}
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
 	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
-	s.recordAudit(initiator, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
+	s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
 	s.notify(ap.InitiatorID, model.NotifApprovalRejected, "审批被拒绝",
 		fmt.Sprintf("%s 驳回了你的命令：%s", operatorName, clip(ap.Command, 80)), ap.ApNo)
 	return nil, nil
@@ -742,9 +749,23 @@ func (s *Services) SessionTTL() time.Duration {
 // MFASetup begins enrollment: (re)issues a pending secret and returns the
 // otpauth URI. The secret is stored but MFA stays disabled until MFAEnable.
 func (s *Services) MFASetup(u *model.User) (*dto.MFASetupResp, error) {
+	// Enrolling stores a pending secret and clears mfa_enabled, which means this
+	// endpoint DISARMS the second factor. That is fine for a first enrolment, but
+	// on an account already protected it let anyone holding a session turn the
+	// factor off and collect a fresh secret — password-only login worked again and
+	// the PROD step-up saw an unenrolled user (EU1). MFADisable requires a valid
+	// code to reach the same state, so allowing it here just offered a cheaper
+	// door. A user who lost their authenticator is recovered by an administrator
+	// via POST /users/:id/mfa/reset.
+	// Keyed on an ARMED factor (flag AND secret), not the flag alone: an account
+	// flagged enabled with no stored secret has nothing to disarm and nothing to
+	// prove possession of, and checkMFA already treats it as unenrolled. Blocking
+	// that state would lock such users out of enrolling at all.
+	if u.MFAEnabled && u.MFASecret != "" {
+		return nil, ErrForbidden
+	}
 	secret := u.MFASecret
-	if secret == "" || u.MFAEnabled {
-		// fresh secret for a new enrollment (or re-enrollment)
+	if secret == "" {
 		secret = totp.GenerateSecret()
 	}
 	if err := s.Repo.UpdateUserMFA(u.ID, false, secret); err != nil {
@@ -792,7 +813,7 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 // ---- admin user management (password + OTP binding on behalf of a user) ----
 
 // AdminSetPassword resets a user's password (bcrypt), no old password needed.
-func (s *Services) AdminSetPassword(id int64, newPassword string) error {
+func (s *Services) AdminSetPassword(actor *model.User, id int64, newPassword string) error {
 	if len(newPassword) < 8 { // keep in sync with the frontend savePw check (C4)
 		return ErrBadRequest
 	}
@@ -807,22 +828,28 @@ func (s *Services) AdminSetPassword(id int64, newPassword string) error {
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return err
 	}
+	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
 	// A password reset must invalidate the user's existing sessions (M1).
 	return s.Repo.BumpTokenVersion(u.ID)
 }
 
 // AdminResetMFA unbinds a user's OTP (disable + clear secret) so they can
 // re-enroll.
-func (s *Services) AdminResetMFA(id int64) error {
-	if _, err := s.Repo.GetUserByID(id); err != nil {
+func (s *Services) AdminResetMFA(actor *model.User, id int64) error {
+	u, err := s.Repo.GetUserByID(id)
+	if err != nil {
 		return ErrNotFound
 	}
-	return s.Repo.UpdateUserMFA(id, false, "")
+	if err := s.Repo.UpdateUserMFA(id, false, ""); err != nil {
+		return err
+	}
+	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
+	return nil
 }
 
 // AdminBindMFA generates a fresh OTP secret, binds it (enabled) to the user, and
 // returns the secret + otpauth URI so the admin can hand the QR to the user.
-func (s *Services) AdminBindMFA(id int64) (*dto.MFASetupResp, error) {
+func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp, error) {
 	u, err := s.Repo.GetUserByID(id)
 	if err != nil {
 		return nil, ErrNotFound
@@ -831,6 +858,7 @@ func (s *Services) AdminBindMFA(id int64) (*dto.MFASetupResp, error) {
 	if err := s.Repo.UpdateUserMFA(u.ID, true, secret); err != nil {
 		return nil, err
 	}
+	s.auditAdminAction(actor, "admin.mfa.bind user="+u.Email)
 	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "DP DB GATEWAY")}, nil
 }
 

@@ -314,6 +314,10 @@ type AsyncSubmitResp struct {
 	ApprovalNo  string `json:"approvalNo,omitempty"`
 	Risk        string `json:"risk,omitempty"`
 	Rule        string `json:"rule,omitempty"`
+	// Output carries a terminal-style notice when the submission was accepted but
+	// nothing was queued — e.g. the instance is in maintenance (ER6). Mirrors how
+	// the synchronous exec path reports the same restriction.
+	Output string `json:"output,omitempty"`
 }
 
 // LarkApprovalCallbackReq is the payload审批魔方 POSTs to our callback_url when a

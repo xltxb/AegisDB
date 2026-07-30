@@ -65,6 +65,23 @@ export class LineEditor {
     if (!this.busy) this.redraw()
   }
 
+  /** Abandon the remainder of a pasted batch.
+   *
+   *  A paste of several statements runs one at a time, with the rest stashed
+   *  until resume(). When the statement in flight raises an approval or MFA
+   *  prompt and the user cancels — or the gateway denies it — the user means
+   *  "stop this batch", but resume() replays the remainder regardless: the
+   *  terminal printed "cancelled, not executed" and then ran the next statements
+   *  anyway (EF4). Callers handling a cancellation must call this before
+   *  resume(). Ctrl+C already does the same thing.
+   *  @returns how many characters of pending input were dropped, so the caller
+   *  can tell the user something was discarded. */
+  discardQueued(): number {
+    const n = this.queued.length
+    this.queued = ''
+    return n
+  }
+
   /** Resume input after a submitted statement finished. */
   resume() {
     if (!this.busy) return

@@ -2,6 +2,7 @@
 package gateway
 
 import (
+	"log/slog"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -29,10 +30,13 @@ func (v Verdict) RequiresApproval() bool { return v.Action == ActionApprove }
 
 // Store supplies the engine with capability-matrix and risk-dictionary data.
 type Store interface {
-	// CapabilityLevel returns allow|approve|deny for role×capability×env (default allow).
-	CapabilityLevel(roleID int64, capability, env string) string
-	// RiskCommands returns the full high-risk dictionary (all envs).
-	RiskCommands() []model.RiskCommand
+	// CapabilityLevel returns allow|approve|deny for role×capability×env. A row
+	// that simply does not exist means allow; a non-nil error means the level is
+	// UNKNOWN and must not be confused with it (ED3).
+	CapabilityLevel(roleID int64, capability, env string) (string, error)
+	// RiskCommands returns the full high-risk dictionary (all envs). An error
+	// means the dictionary is unavailable, not that it is empty.
+	RiskCommands() ([]model.RiskCommand, error)
 }
 
 // RiskEngine evaluates commands against the three layers + strict mode.
@@ -56,9 +60,15 @@ var verbRe = regexp.MustCompile(`(?i)^\s*([a-z_]+)`)
 // MySQL *executable* comments `/*!ver ... */` are actually run by the server, so
 // their body is KEPT (only the `/*!ver` and matching `*/` markers are dropped) —
 // deleting the whole thing would hide a real DROP and let it fall through to
-// allow. Ordinary line (`--`, `#`) and block (`/* */`) comments are removed,
+// allow. Ordinary line (`--`) and block (`/* */`) comments are removed,
 // INCLUDING ones nested inside an executable comment (MySQL treats those as
 // whitespace within the executed body).
+//
+// `#` is NOT treated as a comment even though MySQL says it is: PostgreSQL reads
+// it as an operator, so skipping to end-of-line would erase a real command from
+// the text the dictionary scan and NoWhere examine while the server still ran it
+// (ER2). Keeping the text can only make a statement look more dangerous, which
+// is the safe direction on either engine.
 //
 // It is a single left-to-right scan so it never loses non-comment text. The
 // earlier regex version unwrapped `/*! */` with a non-greedy match that stopped
@@ -92,11 +102,6 @@ func StripComments(sql string) string {
 				i++
 			}
 		case c == '-' && i+1 < n && sql[i+1] == '-': // "--" line comment
-			for i < n && sql[i] != '\n' {
-				i++
-			}
-			b.WriteByte(' ')
-		case c == '#': // MySQL "#" line comment
 			for i < n && sql[i] != '\n' {
 				i++
 			}
@@ -173,13 +178,52 @@ func firstWord(s string) string {
 // no longer masquerades as a WHERE clause (B7).
 func NoWhere(sql string) bool {
 	verb := strings.ToLower(ParseVerb(sql))
+	structure := blankQuoted(StripComments(sql))
+	// A CTE can carry the DELETE/UPDATE (`WITH d AS (DELETE ...) SELECT ...`), so
+	// gating on the leading verb alone let a full-table mutation past the guard
+	// (ER9). Treat such a statement as the mutation it performs.
+	if verb == "with" && deleteOrUpdateRe.MatchString(structure) {
+		verb = "delete"
+	}
 	if verb != "delete" && verb != "update" {
 		return false
 	}
-	return !whereRe.MatchString(StripComments(sql))
+	// Look for WHERE in the statement's STRUCTURE only. A word boundary alone
+	// stops `elsewhere` from counting, but not a value that literally contains
+	// the word: `UPDATE users SET note='where'` has no WHERE clause at all yet
+	// satisfied the check, so strict mode waved through a full-table write (ER8).
+	return !whereRe.MatchString(structure)
 }
 
 var whereRe = regexp.MustCompile(`(?i)\bwhere\b`)
+
+// blankQuoted replaces the CONTENTS of string literals and quoted identifiers
+// with spaces, leaving the delimiters and everything else in place. Keyword
+// heuristics run over the result so data can never be mistaken for syntax.
+// Lengths are preserved so any positional reporting stays meaningful.
+func blankQuoted(sql string) string {
+	b := []byte(sql)
+	for i := 0; i < len(b); i++ {
+		q := b[i]
+		if q != '\'' && q != '"' && q != '`' {
+			continue
+		}
+		i++
+		for i < len(b) {
+			if b[i] == q {
+				if i+1 < len(b) && b[i+1] == q { // doubled quote = escaped, stay inside
+					b[i], b[i+1] = ' ', ' '
+					i += 2
+					continue
+				}
+				break // closing delimiter
+			}
+			b[i] = ' '
+			i++
+		}
+	}
+	return string(b)
+}
 
 // readVerbs are the non-mutating leading verbs. Bare EXPLAIN only plans (no
 // execution), so it counts as a read; EXPLAIN ANALYZE is handled by IsRead via
@@ -196,8 +240,20 @@ var readVerbs = map[string]bool{
 // ANALYZE resolves to the DML verb and is conservatively treated as a write,
 // which is the safe direction for audit classification.
 func IsRead(sql string) bool {
-	return readVerbs[ParseVerb(sql)]
+	verb := ParseVerb(sql)
+	// A CTE may carry the mutation: `WITH d AS (DELETE ... RETURNING *) SELECT ...`
+	// really deletes rows on PostgreSQL. WITH leads, so keying on the first verb
+	// alone routed it down the query path and recorded it as a read (ER9). What
+	// matters is whether the statement mutates, not which keyword comes first.
+	if verb == "WITH" && mutatingRe.MatchString(blankQuoted(StripComments(sql))) {
+		return false
+	}
+	return readVerbs[verb]
 }
+
+// mutatingRe finds a data-modifying verb anywhere in a statement's structure
+// (quoted text is blanked first so a value can't trigger it).
+var mutatingRe = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|replace|truncate|drop|alter|create|grant|revoke)\b`)
 
 // MapVerbToCapability maps a SQL verb to a capability-matrix dimension
 // (case-insensitive).
@@ -213,9 +269,16 @@ func MapVerbToCapability(verb string) string {
 		return "grant"
 	case "":
 		// No leading SQL keyword (blank line, bare number, comment-only): not a
-		// mutating operation, so treat it as read-level rather than gating it
-		// behind the write-approval path. Any embedded high-risk command is still
-		// caught by the dictionary scan in Evaluate (e.g. "1; DROP TABLE x").
+		// mutating operation, so treat it as read-level rather than gating a
+		// harmless no-op behind the write-approval path.
+		//
+		// This is only safe because callers judge SPLIT statements: every real
+		// command starts with a keyword, so the empty verb means there is no
+		// command here. Do NOT judge raw terminal input against this mapping —
+		// a stray leading separator (";UPDATE …") parses to no verb and would be
+		// filed as a read (ER3). Service.Exec normalises via SplitStatements
+		// first; the old claim that the dictionary scan backstops this case was
+		// wrong, since the seeded dictionary has no UPDATE/INSERT/CREATE entries.
 		return "select"
 	default:
 		return "write"
@@ -223,10 +286,14 @@ func MapVerbToCapability(verb string) string {
 }
 
 // matchCommand finds the first dictionary command (for env) appearing in the SQL.
-func (e *RiskEngine) matchCommand(sql, env string) (string, string) {
+func (e *RiskEngine) matchCommand(sql, env string) (string, string, error) {
 	names := make([]string, 0)
 	levelByName := map[string]string{}
-	for _, rc := range e.store.RiskCommands() {
+	cmds, err := e.store.RiskCommands()
+	if err != nil {
+		return "", "", err
+	}
+	for _, rc := range cmds {
 		if !strings.EqualFold(rc.Env, env) { // env match is case-insensitive
 			continue
 		}
@@ -234,22 +301,28 @@ func (e *RiskEngine) matchCommand(sql, env string) (string, string) {
 		levelByName[strings.ToUpper(rc.Command)] = rc.Level
 	}
 	if len(names) == 0 {
-		return "", model.RiskOff
+		return "", model.RiskOff, nil
 	}
 	re := regexp.MustCompile(`(?i)\b(` + strings.Join(names, "|") + `)\b`)
 	m := re.FindString(StripComments(sql))
 	if m == "" {
-		return "", model.RiskOff
+		return "", model.RiskOff, nil
 	}
 	name := strings.ToUpper(m)
-	return name, levelByName[name]
+	return name, levelByName[name], nil
 }
 
 // ScanStatement judges a single statement by the dictionary (for env) + strict
 // mode only — used by SQL script scanning. Returns (command, risk, noWhere)
 // where risk is high|mid|safe.
 func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
-	matched, lvl := e.matchCommand(sql, env)
+	matched, lvl, err := e.matchCommand(sql, env)
+	if err != nil {
+		// The dictionary is unreadable; report the statement as high risk rather
+		// than clearing it (ED3). A script scan that silently downgrades every
+		// statement to "safe" during an outage is worse than a noisy one.
+		return ParseVerb(sql), model.RiskHigh, NoWhere(sql)
+	}
 	verb := matched
 	if verb == "" {
 		verb = ParseVerb(sql)
@@ -270,19 +343,22 @@ func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
 // capabilityLevelUnion returns the most permissive capability level across the
 // user's roles (allow ≺ approve ≺ deny). No rows / unknown role default to allow
 // via the store, so a single permissive role is enough to grant the capability.
-func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, env string) string {
+func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, env string) (string, error) {
 	best := model.LevelDeny
 	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 	if len(roleIDs) == 0 {
-		return model.LevelAllow
+		return model.LevelAllow, nil
 	}
 	for _, id := range roleIDs {
-		lvl := e.store.CapabilityLevel(id, cap, env)
+		lvl, err := e.store.CapabilityLevel(id, cap, env)
+		if err != nil {
+			return "", err // unknown level — the caller must not guess (ED3)
+		}
 		if rank[lvl] < rank[best] {
 			best = lvl
 		}
 	}
-	return best
+	return best, nil
 }
 
 // Evaluate runs the three-layer judgement (menu guard is enforced by middleware):
@@ -303,12 +379,18 @@ func (e *RiskEngine) Evaluate(roleID int64, env, sql string) Verdict {
 func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
 	verb := ParseVerb(sql)
 	cap := MapVerbToCapability(verb)
-	capLevel := e.capabilityLevelUnion(roleIDs, cap, env)
+	capLevel, err := e.capabilityLevelUnion(roleIDs, cap, env)
+	if err != nil {
+		return unavailableVerdict(verb, err)
+	}
 	if capLevel == model.LevelDeny {
 		return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
 	}
 
-	matched, lvl := e.matchCommand(sql, env)
+	matched, lvl, err := e.matchCommand(sql, env)
+	if err != nil {
+		return unavailableVerdict(verb, err)
+	}
 	if matched != "" {
 		verb = matched
 	}
@@ -333,3 +415,17 @@ func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
 		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
 	}
 }
+
+// unavailableVerdict is returned when a gate layer cannot be read at all. Both
+// layers live in the database, so a transient outage would otherwise silently
+// disable them together — a missing capability row reads as allow and an empty
+// dictionary reads as off, so DROP TABLE on PROD would sail through (ED3). If
+// the gate cannot be consulted the command is refused, not waved past.
+func unavailableVerdict(verb string, err error) Verdict {
+	slog.Error("risk evaluation unavailable — denying command", "verb", verb, "err", err)
+	return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "风险控制暂时不可用 · 已按最严处理", Command: verb}
+}
+
+// deleteOrUpdateRe finds a row-mutating DML verb anywhere in a statement's
+// structure — used to recognise a CTE that carries the mutation.
+var deleteOrUpdateRe = regexp.MustCompile(`(?i)\b(delete|update)\b`)

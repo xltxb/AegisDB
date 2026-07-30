@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"strings"
 	"time"
 
@@ -489,54 +490,89 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		return
 	}
 	defer conn.Close()
-	for {
-		var msg wsMsg
-		if err := conn.ReadJSON(&msg); err != nil {
-			return
+
+	// Reading and executing must not share a goroutine. Executing a statement
+	// blocks for as long as the target database takes, and a blocked loop cannot
+	// read the client's heartbeat — the browser then gets no pong inside its 5s
+	// budget, concludes the socket is half-open and closes it. The effect was that
+	// any statement outlasting the heartbeat interval severed its own connection
+	// mid-run: the terminal showed "已断开" and the result was written to a socket
+	// nobody was listening on, so the operator never learned whether their DDL had
+	// applied. So: a reader goroutine answers pings immediately and hands exec
+	// requests to this goroutine, which still runs them one at a time (the
+	// terminal is a single-statement console).
+	//
+	// gorilla/websocket allows one concurrent reader and one concurrent writer, so
+	// every write goes through send() under a mutex.
+	var writeMu sync.Mutex
+	send := func(v any) error {
+		writeMu.Lock()
+		defer writeMu.Unlock()
+		return conn.WriteJSON(v)
+	}
+	execCh := make(chan wsMsg, 1)
+	go func() {
+		defer close(execCh)
+		for {
+			var msg wsMsg
+			if err := conn.ReadJSON(&msg); err != nil {
+				return // socket closed / unreadable: stop the executor loop too
+			}
+			switch msg.Type {
+			case "ping":
+				// app-level heartbeat: lets the client detect a half-open socket
+				// (browsers can't send native WS ping frames).
+				if err := send(gin.H{"type": "pong"}); err != nil {
+					return
+				}
+			case "exec":
+				select {
+				case execCh <- msg:
+				default:
+					// A statement is already running; the console submits one at a
+					// time, so this is a stray. Tell the client rather than queueing
+					// work it is no longer waiting for.
+					_ = send(gin.H{"type": "error", "message": "已有命令正在执行,请等待完成"})
+				}
+			}
 		}
-		if msg.Type == "ping" {
-			// app-level heartbeat: lets the client detect a half-open socket
-			// (browsers can't send native WS ping frames).
-			conn.WriteJSON(gin.H{"type": "pong"})
-			continue
-		}
-		if msg.Type != "exec" {
-			continue
-		}
+	}()
+
+	for msg := range execCh {
 		// Re-validate the session on every command so a mid-connection logout /
 		// disable / password reset / role change takes effect immediately instead
 		// of living until the socket drops (R5).
 		fresh, ferr := h.Repo.GetUserByID(claims.UserID)
 		if ferr != nil || fresh.Status == "disabled" || fresh.TokenVersion != claims.TokenVersion {
-			conn.WriteJSON(gin.H{"type": "session_revoked", "message": "会话已失效，请重新登录"})
+			send(gin.H{"type": "session_revoked", "message": "会话已失效，请重新登录"})
 			return
 		}
 		// Re-check the terminal menu too: revoking a role's terminal access does NOT
 		// bump the token version, so without this an open socket would keep executing
 		// after its access was pulled (B9).
 		if menus, _ := h.Repo.MenusForRoles(h.Repo.EffectiveRoleIDs(fresh)); !menus["terminal"] {
-			conn.WriteJSON(gin.H{"type": "session_revoked", "message": "终端访问权限已被回收，请重新登录"})
+			send(gin.H{"type": "session_revoked", "message": "终端访问权限已被回收，请重新登录"})
 			return
 		}
 		u = fresh
 		r, err := h.Svc.Exec(u, msg.ConnectionID, msg.SQL, msg.Reason, msg.MfaCode, msg.Database)
 		if err == service.ErrForbidden {
-			conn.WriteJSON(gin.H{"type": "error", "message": "命令被拒绝:能力矩阵禁止"})
+			send(gin.H{"type": "error", "message": "命令被拒绝:能力矩阵禁止"})
 			continue
 		}
 		if err == service.ErrMFARequired {
-			conn.WriteJSON(gin.H{"type": "mfa_required", "message": "生产操作需要 MFA 二次验证"})
+			send(gin.H{"type": "mfa_required", "message": "生产操作需要 MFA 二次验证"})
 			continue
 		}
 		if err != nil {
-			conn.WriteJSON(gin.H{"type": "error", "message": "连接不存在或执行失败"})
+			send(gin.H{"type": "error", "message": "连接不存在或执行失败"})
 			continue
 		}
 		if r.Intercepted {
-			conn.WriteJSON(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule})
+			send(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule})
 			continue
 		}
-		conn.WriteJSON(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
+		send(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
 			"columns": r.Columns, "data": r.Data, "truncated": r.Truncated})
 	}
 }

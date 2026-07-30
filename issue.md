@@ -479,3 +479,645 @@
 - **模型与迁移一致性**:逐字段核对 18 个模型与 `0001_init.sql`,当前字段 / 索引 / 保留字反引号(`` `sql` ``/`` `rows` ``/`` `database` ``/`is_read`)均一致,无实际漂移(但依赖人工维护,见 H13)。
 - **并发正确项**:`partWriter` 为每 job 局部创建不共享;`metrics.Recorder` 全程持锁;`http.Client`、`math/rand` 全局复用并发安全。
 - **加密正确项**:`HashPassword`(bcrypt)、`HMACSHA256`、`ChainHash`、`GzipEncrypt`(AES-256-GCM + rand nonce + 长度校验)实现健全(问题在于 GCM 未用于生产导出,见 H8)。
+
+---
+
+# 第五轮全面审查(2026-07-27)
+
+**背景**:第四轮(2026-07-16)A/B/C 共 23 项已全部 TDD 修复关闭。此后 main 分支合入了大量新功能——外部飞书审批(审批魔方,Phase 1+2)、后台异步执行、终端三家客户端元命令 + 边框表格 + `\x` 竖排 + HTML 结果网格、多角色并集权限、后台直建账户、GLI 灰度环境、Oracle service name/SID、导出越权修复、Webhook 事件筛选。本轮对**全部代码**做六维度并行审查(认证会话RBAC · 风险引擎与终端执行 · 审批与外部回调 · 导出Webhook加密 · 数据层配置迁移 · 前端),重点是新功能引入的面。
+
+**基线**:后端 `go vet` 干净、全部 Go 包测试通过;前端 `vue-tsc --noEmit` + `vite build` 通过。
+
+**编号规则**:本轮统一用 `E<n>`(E = Edition 5)。前四轮编号(C/H/M/L/R/V/A/B/C)不复用。
+
+## A 组 · 外部飞书审批(审批魔方)与审批/审计链
+
+新增的外部审批回调是**全站唯一一个"未经用户 JWT 鉴权即可触发生产库 SQL 执行"的入口**(`router.go:55` 公开路由,不挂 `auth`、不挂用户 IP 白名单),因此该端点的每一处 fail-open 都直接等价于生产执行权限。以下 11 项已逐条对照源码核实。
+
+### EA1【高】外部审批总开关不覆盖入站回调:功能"关闭"后回调仍能批准并执行
+- 位置:`service/external_approval.go:181-193`(`VerifyExternalCallback`)、`:106`(`DecideApprovalExternal`)
+- 问题:`extApprovalConfig()` 第 33 行取了 `enabled`,但**回调链路上没有任何一处读它**。出站的 `dispatchExternalApproval:63`、`cancelExternalApproval:91` 都检查了 `!cfg.enabled` 就返回,唯独入站不检查。
+- 场景:运维试用外部审批后把 `approval.external.enabled` 关掉(或从未打开),只要 `callbackSecret` 还在库里,端点就仍然全功能可用。持有该密钥的一方(厂商、离职运维、从日志/DB 拿到密钥的人)`POST /api/v1/approvals/lark/callback` + `{"external_task_id":"AP-2301","approved":true}` 即可让网关以发起人身份在生产库执行该高危 SQL。
+- 佐证:`bootstrap/external_approval_test.go:95-117` 的回归用例**只设了 `callbackSecret`**、`enabled` 保持 seed 默认 `false`(`seed.go:193`),回调依然把工单推到 approved 并执行——测试本身就是这条路径可用的证据。
+- 修复:`VerifyExternalCallback` 首行加 `if !cfg.enabled { return ErrForbidden }`。
+
+### EA2【高】回调不校验工单是否走过外部审批,且 ApNo 可枚举 → 一把密钥可批准任意待审工单
+- 位置:`service/external_approval.go:106-123`、`service/service.go:99-101`(`nextApNo`)、`repository.go:594-600`
+- 问题:关联键用我方 `ApNo`(`GetApprovalByApNo`),但**不检查** `ap.ExternalTaskID != ""`(这张单是否真派发给过厂商),也不把回调里的厂商 `cb.TaskID` 与存库值做一致性校验。而 ApNo 完全可预测:`fmt.Sprintf("AP-%d", counter)` 单调自增,发起人在 `/terminal/exec` 响应里就能看到自己的 `approvalNo`。
+- 场景:密钥一旦泄露(见 EA3 日志面、EA7 库内明文面,或厂商侧被攻破),爆炸半径不是"已推到飞书的那几张单",而是**系统内全部 pending 工单**——包括从未派发到外部、本应只能由站内审批链成员决策的单。`for i in 2295..2400: POST {"external_task_id":"AP-$i","approved":true}`,每命中一张 pending 单就执行一条高危 SQL。即使不谈泄露,这也把第三方厂商的权限从"它经手的单"放大到"全部审批单"。
+- 修复:`DecideApprovalExternal` 增加 `if ap.ExternalTaskID == "" { return ErrNotFound }`,并用 `cb.TaskID` 与存库 `ExternalTaskID` 比对;更稳妥的做法是给外发单生成不可猜的 nonce 作为回调关联键。
+
+### EA3【高】`?secret=` 查询兜底把可触发生产执行的密钥写进访问日志(R17 同类回归)
+- 位置:`handler/admin.go:348-351`、`bootstrap/router.go:28`(`r.Use(gin.Logger(), ...)`)、`docs/external-approval-setup.md:27`、`docs/adr/0003-*.md:86,100`
+- 问题:`secret := bearerToken(...)`,空则回落 `c.Query("secret")`。`gin.Logger()` 默认 formatter 输出 `path + "?" + rawQuery`。**第二轮 R17 就是同一条**("`?token=` 回退 + gin.Logger 记查询串 → JWT 落访问日志"),当时的修复是删掉 query 回退;新代码在一个权限更高的入口重新引入了同一模式,且 `docs/external-approval-setup.md:27` 明确引导运维把密钥拼进回调 URL。
+- 场景:厂商按文档注册 `https://gw/api/v1/approvals/lark/callback?secret=xxxx` → 每次回调在网关日志留一行明文密钥,同时该 URL 还出现在厂商侧配置与中间 TLS 终结代理/LB 的访问日志里。任何有日志读权限的人(通常不是审批链成员)就此获得 approve-anything 凭证,配合 EA2 可批准任意工单。
+- 修复:删除 `?secret=` 兜底只保留 Bearer;若业务上必须保留,给该路径套自定义 formatter 抹掉 rawQuery。
+
+### EA4【高】外部回调的决策被记成站内审批人的决策:审批步骤与审计链失真
+- 位置:`service/gateway.go:354`/`:381`(`DecideActiveStep`)、`:367`/`:383`(`recordAudit(initiator, ...)`)、`model/model.go:265-283`(`AuditLog` 无 operator 字段)、`external_approval.go:131-134`
+- 问题:`finalizeApproval` 被站内与外部回调共用,它 ① 把当前 `active` 的**站内**链步骤(预置 DBA 负责人)标成 approved 并盖 `acted_at`——飞书上是外部审批人点的通过,库里记的却是"张三已审批",不是少记而是**记错人**;② `recordAudit` 的 actor 是发起人,而 `AuditLog` 结构里**没有任何**审批人/决策来源字段,`operatorName` 只进了站内通知正文、不进哈希链;③ `cb.Reason` 全程丢弃(`SetApprovalResult(ap.ID, "", 0, now)`)。
+- 关键:第二轮曾把"审批 approve 审计 actor 记发起人"评估为可不改,理由明写在 `issue.md:76`——"审批人已在 `tbl_approval_step` 完整记录"。**外部审批上线后这个前提不再成立**:外部审批人不是网关用户,既进不了 step 表也进不了审计链。工单 `02-callback-endpoint.md:17,26` 与 ADR:92 都要求"审计 operator = join(approver)、备注 = reason",该验收项未实现。
+- 场景:一条生产 `DELETE` 由飞书上某人批准执行,事后审计时不可篡改的哈希链里只有"发起人执行了 DELETE",step 表里是一个从未操作过的站内 DBA。既无法追责真实审批人,也让被冤枉的站内审批人无法举证。
+- 修复:`finalizeApproval` 增加 decider 上下文(来源 + 审批人标识 + reason);`AuditLog` 加 `operator`/`decision_source` 并纳入哈希 payload;外部回调不要改动站内 active 步骤。
+
+### EA5【中】禁自审兜底在 approver 为空或身份格式不匹配时 fail-open
+- 位置:`service/external_approval.go:157-174`、`:127`、`:131-134`
+- 问题:三个 fail-open 点——`approver: []` 或字段缺失 → `len(approvers)==0` 直接 `return false`,禁自审不触发且 operator 退化成 `"审批魔方"`;发起人 email 为空/用户已删 → `init == ""` 也 `return false`;比对基准是网关库里的 email,而回调 `approver` 是飞书侧身份(ADR 样例里 `approver` 是 email 但 `user` 是账号名 `"pax"`,若厂商某些配置回传 open_id/显示名则 `!= init` 恒成立)。**后一点待验证**:需向厂商确认回调身份字段格式。
+- 场景:发起人自己在飞书卡片上点通过,只要 approver 为空或不是他的网关 email,默认关闭的两人复核就形同虚设——正是 ADR:103 声称"SoD 不因对接降级"要挡的场景。
+- 修复:`approver` 为空时 fail-closed 拒绝;比对时纳入发起人的全部已知标识。
+
+### EA6【中】回调端点无速率限制、密钥无强度要求 → 可在线爆破 approve-anything 凭证
+- 位置:`router.go:55`、`external_approval.go:186`、`:198-202`、`handler/admin.go:604-629`
+- 问题:全站唯一未鉴权即可触发生产执行的入口,却没有 `handler/loginlimit.go` 那样的限速(登录在 R29 已加"5 次锁 5 分钟");`allowIPs` 默认空 = 放行所有来源(`seed.go:199`);`SaveSettings` 对 callbackSecret 只判空,`s3cr3t` 这种长度也照收;`subtle.ConstantTimeCompare` 在长度不等时立即返回,泄露密钥长度。鉴权失败只写 `slog.Warn`,不进审计链、不触发告警。
+- 修复:复用 `loginLimiter` 限速 + 锁定;鉴权失败写审计链;callbackSecret 强制最小长度/熵,或由服务端生成。
+
+### EA7【中】密钥解密失败 fail-open 成密文本身(V4 同类回归)
+- 位置:`service/external_approval.go:46-55`
+- 问题:`if v, err := crypto.DecryptSecret(raw); err == nil { return v }; return raw`。`DecryptSecret`(`pkg/crypto/cipher.go:83-111`)对无前缀值已原样返回,所以这条 `return raw` 只在**带 `enc:v1:` 前缀但解不开**时生效(密钥轮换/换库/密文截断)。此时 `cfg.callbackSecret` 变成 settings 表里那串密文本身 → 任何能读库或拿到备份的人直接持有可批准生产执行的凭证,恰恰是 `admin.go:19-25` 注释声明要防的事。**第三轮 V4 修的就是同一模式(导出口令),新代码又写了回来。**
+- 修复:解密失败返回空串 + `slog.Error`(空串天然 fail-closed),前端提示"密钥已轮换,请重填"。
+
+### EA8【中】出站与回调地址不强制 HTTPS
+- 位置:`service/webhook.go:63-88`(`validateOutboundURL` 接受 `http`)、`:136-158`(`SendExternalApproval` 把 Bearer token 与 `payload.command` 高危 SQL 全文一起发出)、`external_approval.go:27-31`
+- 问题:ADR:99 写明"HTTPS 强制:出站与回调地址均 https",代码无一处落实。`baseURL` 为 http → token + 完整高危 SQL 明文过网;`callbackBaseURL` 为 http → 我们主动告诉厂商用明文回调,厂商把 approve-anything 密钥明文发回,链路任一跳截获后可重放批准。
+- 修复:两个 URL 保存时强制 `https://`(留显式 dev 例外),出站前再校验一次。
+
+### EA9【低】站内决策不回写外部卡片,飞书卡片长期可点
+- 位置:`service/gateway.go:332-387`(`finalizeApproval` 从不调 `cancelExternalApproval`)vs `:650`(仅 sweep 的 auto-reject 分支会调)
+- 问题:Phase 2 的取消回写只覆盖"内部超时自动驳回"。站内审批人决策后飞书卡片仍是 pending 且可点,审批人点通过后厂商侧反馈成功而网关幂等返回原状态(`external_approval.go:120-123`),两侧观感不一致,诱发重复提单。
+- 修复:把 `cancelExternalApproval` 提到 `finalizeApproval` 的两个终态分支统一回写。
+
+### EA10【低】超时清扫与异步 dispatch 竞态:ExternalTaskID 未写回时取消被跳过
+- 位置:`external_approval.go:61-80`(异步 `SetApprovalExternalTask`)、`:86-89`、`gateway.go:634-650`(sweep 用 claim 之前读出的快照)
+- 问题:`timeoutMinutes` 很小或厂商响应慢时,sweep 读到的 `ExternalTaskID` 还是空 → 取消直接 return,卡片永不收敛;反向地 dispatch goroutine 可能在工单已 expired 之后才写回 task_id。仅影响卡片收敛,执行安全由幂等保证。
+- 修复:取消前按 id 重读最新 `ExternalTaskID`;或 dispatch 写回时检查终态并补发 PATCH。
+
+### EA11【低】未鉴权即完整解析并落日志任意大小 JSON 体
+- 位置:`handler/admin.go:354-363`
+- 问题:`ShouldBindJSON` 与随后的 `slog.Info("lark callback received", ...)` 都在 `VerifyExternalCallback`(:365)**之前**。gin 对 JSON body 无默认大小上限,未鉴权来源可让网关读入任意大报文并把字段写进日志。`slog` 会转义控制字符,不构成日志注入,但可放大内存/磁盘占用。
+- 修复:该路由套 `http.MaxBytesReader`(如 64KB),日志字段用 `clip` 裁剪。
+
+### A 组复核为"防护正确"的点(避免误报)
+- **状态机原子性**:`DecideApproval` / `DecideApprovalExternal` / sweep auto-reject 三条终态转移全部走 `ClaimApproval` 条件更新 + `RowsAffected == 1`(`repository.go:621-626`),auto-escalate 走 `ClaimEscalation`;`UpdateApprovalStatus` 已无调用点。已取消/已超时单被回调时 `external_approval.go:120` 幂等分支先行返回,不会被"复活"执行。
+- **重放与并发**:第二次回调进幂等分支;并发同时进入时 `ClaimApproval` 只有一方赢,输方走 `ErrAlreadyDecided` 返回当前状态,不重复执行。
+- **审计链**:外部回调最终仍经 `finalizeApproval` → `recordAudit`,新事件类型均入链;A4 的 `defer Unlock` + `prev_hash` 唯一约束重试在回调并发路径下依旧成立。
+- **新增日志的敏感信息**:`c72cf9f` 新增的 slog 只打 ip / apNo / 布尔 approved / 审批人数量 / 状态,未打印 callbackSecret、外部 token、SQL 全文或口令。唯一敏感面是 EA3 的 query string(由 gin.Logger 记录,非这些 slog 语句)。
+
+## B 组 · 风险引擎 / SQL 判定 / 终端执行通道
+
+**根因聚类——「判定串 ≠ 执行串」**:`Exec` 与导出都是先用 `sqlutil.SplitStatements` + `risk.StripComments` 把 SQL **净化**后判定,再把**原始串**交给目标库执行。只要净化器的词法与目标库真实词法有任何偏差,就产生"判定看到的是一条无害 SELECT、数据库执行的是两条"的错位。本轮找到 3 个可利用的偏差变体(ER1/ER2)+ 1 个动词解析空洞(ER3),它们**同时打穿终端与导出两条通道**。以下均已在本仓库用探针实测取证。
+
+### ER1【严重】分割器不认 PG 美元引用与 `E''` 转义串 → 吞掉分号,堆叠语句整体逃过判定
+- 位置:`pkg/sqlutil/split.go:30-46`、`service/gateway.go:97-100`、`service/export.go:27-33`、`gateway/realdb.go:299`
+- 问题:`SplitStatements` 只认「双写引号转义」(`''`),不认 PostgreSQL 的美元引用 `$$...$$` 与 `E'\''` 转义串。遇到第一个 `'` 就进入"引号内逐字复制"直到下一个落单 `'`,后面没有了就**一路吞到串尾**,把 `;` 和后续语句一并并进同一条。
+- 实测(直接调用被审代码):
+
+  ```
+  n=1  in="SELECT $$'$$ ; DROP TABLE t"   out=["SELECT $$'$$ ; DROP TABLE t"]
+  n=1  in="SELECT E'\'' ; DROP TABLE t"  out=["SELECT E'\'' ; DROP TABLE t"]
+  ```
+
+  → `len(stmts)==1` 不触发 `strictestVerdict`,`ParseVerb`=SELECT → 能力维度 select=allow → 放行。而 PG 侧 `$$'$$` 是一个内容为单引号的合法字面量,语句在 `;` 处真实断开为两条。
+- 后果:执行侧 `RealQueryEach`/`RealRun` 调 `QueryContext(ctx, query)` **不带参数**,`lib/pq` 在 `len(args)==0` 时走 **simple query 协议**,一次提交多条语句并全部执行。任何持 terminal 菜单的用户(含只读角色 `ro`)在 PROD 的 PG/GaussDB/DWS 连接上即可跑 DROP/DELETE/GRANT;**只有导出菜单的账号**经 `POST /api/v1/export` 同样可达(`exportSQLReadOnly` 用的是同一个分割器,`export.go:196` 的"纵深防御"复检也是同一个函数,双双放行)。
+- 修复:分割器支持 `$tag$...$tag$` 与 `E''`;**未闭合引号一律判非法并拒绝**(而不是吞掉尾部);更根本的做法是把**判定后已归一化的语句**交给执行器,杜绝判定串与执行串分叉。
+
+### ER2【严重】`#` 被无条件当行注释剥离,而 PG 中 `#` 是合法运算符 → 同一根因的第二个变体
+- 位置:`pkg/sqlutil/split.go:56-60`、`gateway/risk.go:99-103`(`StripComments` 同样无条件吃 `#` 到行尾)
+- 实测:`n=1  in="SELECT 1 #x; DROP TABLE orders;"  out=["SELECT 1"]`,`StripComments` 结果为 `"SELECT 1  "`——**字典扫描根本看不到 DROP**。
+- 后果:PG 中 `#` 是整数按位异或,`SELECT 1 #2` 正常求值为 3,紧跟的 `DROP TABLE orders` 在同一 simple query 批里执行。判定链全绿(ParseVerb=SELECT、字典扫不到、能力 select=allow),数据库执行 DDL。把 DROP 换成 `UPDATE/INSERT` 连字典兜底都没有(见 ER5)。导出通道同样可达:`SELECT * FROM t #x; DROP TABLE t` 过 `exportSQLReadOnly`。
+- 注:`split.go` 头注释论证"标准引号规则只会过分割(安全),绝不会合并"——**该论证对 `#` 不成立**。`#` 是 MySQL 专有注释,被无条件套到 PG 上就是合并方向。反引号有同样的不对称(`SELECT 1 \`; DROP TABLE t; \`` 实测 n=1),只是 PG 词法层会报错、MySQL 侧 `AllowMultiStatements=false` 挡住,目前不可利用但同属该缺陷类。
+- 修复:`SplitStatements`/`StripComments` 增加 engine 维度(`#` 与反引号只在 MySQL 家族生效)。
+
+### ER3【严重】前导 `;` 使 `ParseVerb` 返回空 → 能力维度降级为 `select`,只读角色可在 PROD 执行任意写/DDL
+- 位置:`gateway/risk.go:52`(`verbRe = ^\s*([a-z_]+)`,`;` 打头即无匹配)、`risk.go:214-219`(`MapVerbToCapability("") → "select"`)、`service/gateway.go:97-100`
+- 输入:`;UPDATE accounts SET balance=0`
+- 实测:`split(1)=["UPDATE accounts SET balance=0"]`(只有 1 条 → 不走 `strictestVerdict`,`execJudged` 拿到的是**含前导分号的原串**)→ `verb=""` → `cap="select"` → `ro` 在 prod 的 select=allow → 不 deny;字典默认不含 UPDATE → RiskOff;strict 模式 `NoWhere` 因 `verb==""` 非 delete/update 直接返回 false,全表写兜底也失效 → `ActionAllow` → `IsRead`=false → `ExecContext` → 目标库执行。
+- 关键:`MapVerbToCapability` 的 `case ""` 处有一段注释,声称"任何内嵌高危命令仍会被 Evaluate 里的字典扫描抓到(如 `1; DROP TABLE x`)"——**这个补偿控制只对字典里有的动词成立**,而 seed 默认字典(`seed.go:159-168`)只有 `DROP/TRUNCATE/DELETE/ALTER/RENAME/GRANT/REVOKE`,不含 `UPDATE/INSERT/CREATE/REPLACE/MERGE/COPY`。注释所依赖的前提不成立。
+- 目标库接受性:**SQLite 实测接受并执行**(探针中 `bal` 由 100 变 0);PG/GaussDB 语法上接受(`stmtmulti: stmtmulti ';' stmt`,`stmt` 可空);MySQL 会语法报错。PG 上 `;COPY t FROM PROGRAM 'cmd'` 在 superuser 账户下即 RCE。顺带 `RiskCheck`(`gateway.go:57`)也返回 allow,前端不会拦。
+- 修复:`Exec` 不论条数一律对 `SplitStatements` 结果逐条判定取最严;`MapVerbToCapability("")` 从 `select` 改为保守的 `write` 或直接拒绝无法解析动词的语句。
+
+### ER4【高】SQLite 连接的 `database` 参数不过 `dbNameRe`,可指向网关自身数据库
+- 位置:`gateway/realdb.go:47`(`!strings.Contains(e,"sqlite")` 显式豁免校验)、`:52`、`service/gateway.go:74-76`、`async_exec.go:28-30`、`export.go:119-126`(三处都无条件 `conn.Database = database`,`canAccessConn` 只看 tag、与库名无关)
+- 场景:环境里存在任一 engine 含 `sqlite` 的连接(本地/自托管默认形态),用户对它有 tag 访问权 → `POST /terminal/exec` 的 `database` 传网关自身 `vela.db` 路径 → 读/改**网关用户表、连接口令密文、审计链**。SELECT 在任何环境矩阵里都是 allow,判定不拦。第二轮 H7 只给网络引擎补了 `dbNameRe`,sqlite 留了口子;不存在的路径还会被创建。
+- 修复:`database` 覆盖前做白名单校验(只允许 `ConnectionSchema` 列出的库名);sqlite 连接禁止运行时覆盖 `Database`。
+
+### ER5【高】`RealRunAsync` 每个异步任务新建连接池且从不关闭,连接/FD 泄漏
+- 位置:`gateway/realdb.go:342-348`
+- 问题:`db, err := dialPool(drv, dsn)` 绕过 `dbPoolCache` 新开一个 `*sql.DB`,但只有 `if drv == "sqlite"` 分支 `defer db.Close()`。MySQL/PG 的池既不进缓存也不关闭,函数返回后成为孤儿池(`SetMaxOpenConns(3)`)。
+- 后果:3 个 worker 反复跑长任务即可把目标实例 `max_connections` 顶满——普通用户可触发的 DoS。
+- 修复:改用 `openConn(conn)`(走 `dbPoolCache` + release),或对非 sqlite 也 `defer db.Close()`。
+
+### ER6【中】异步执行通道漏检维护态,绕过 FR-CONN-04
+- 位置:`service/async_exec.go:23-41` 无 maint 分支(对照 `gateway.go:82-85`)。管理员把 PROD 置维护态后,用户改调 `/terminal/exec-async` 即可照常执行。
+
+### ER7【中】异步任务审计只记 SQL 前 80 字符、风险恒为 `mid`、提交时不落审计
+- 位置:`async_exec.go:152,157`(`"ASYNC "+clip(job.SQL, 80)` + 恒 `model.RiskMid`)、`:53-67`(allow 分支只入队不写审计)
+- 后果:长脚本审计不可追责;风险等级与真实 verdict 脱节;进程崩溃则执行意图在审计链里完全消失。
+
+### ER8【中】`NoWhere` 被字符串字面量里的 `where` 蒙蔽,strict 全表写兜底失效
+- 位置:`risk.go:174-182` + `:77-93`。实测 `UPDATE users SET note='where'` → `noWhere=false`。B7 只修了词边界(`elsewhere`),字面量/引号标识符里的 `where` 是同一漏洞的另一半;在 write=allow 的 dev/staging/GLI 下即为直接执行的全表写。
+
+### ER9【中】数据修改型 CTE(`WITH … AS (DELETE …)`)逃过 strict 且被 `IsRead` 判成读
+- 位置:`risk.go:174-177`(`NoWhere` 只认首动词)、`:187-199`(`readVerbs` 含 `WITH`)。实测 `verb="WITH" isRead=true noWhere=false`:无 WHERE 的全表 DELETE 不被 strict 兜底,且走 `QueryContext` 被当读记账。
+
+### ER10【中】连接的 `policy`(strict/approve-1/audit-only)从未参与任何判定,是纯装饰配置
+- 位置:`model/model.go:115` + `service/admin.go:206-218` 落库并校验,但 `risk.go:295-335` 完全不读;全仓 `.Policy` 只出现在建/改连接与前端展示。属"安全控制存在但无效",且终端状态栏还把它显示给用户(`TerminalSession.vue:702`),造成虚假安全感。
+
+### ER11【低】`RiskCheck` 不做多语句最严判定,与 `Exec` 口径不一致(仅提示层,服务端仍拦)。`service/gateway.go:52-65`
+### ER12【低】默认风险字典缺 `UPDATE/INSERT/CREATE/REPLACE/MERGE`,是 ER2/ER3 得以落地的放大因子。`bootstrap/seed.go:159-168`
+
+### B 组复核为"防护正确"的点
+- **终端元命令无旁路**:`TerminalSession.vue:284-342` 把 `\dt/\d/\l/...` 翻译成 SQL 后经 `sendExec` → WS `exec` → `handler/terminal.go:522` → `Svc.Exec`,照常过三层判定与审计;纯本地命令(`\? \clear \c \u \x \conns \G/\g`)不产生 DB 交互;用户参数经 `ident()` 白名单(`[A-Za-z0-9_$.]`)过滤后才拼进字面量,**无注入**。
+- **Oracle service/SID 无 DSN 注入**:`realdb.go:101-117` 用 `dbNameRe` 校验,`go-ora` 的 `BuildUrl` 对 user/password/service 做 `url.PathEscape`(会转义 `?`),options 走 `url.QueryEscape`。
+- **MySQL DSN**:`AllowMultiStatements` 保持 false + `dbNameRe`,堆叠语句在 MySQL 侧执行不了(故 ER1/ER2 的可利用面主要在 PG 系)。
+- `schema.go` 内省 SQL 全为常量,`conn.Database` 不进 SQL 文本;异步任务归属越权读取已挡住;`StripComments` 的 `/*! */` 处理(A3)未回归;`strictestVerdict` 逻辑本身正确。
+
+## C 组 · 数据导出 / Webhook / 加密
+
+**总结论:commit d17e11f「修复数据导出可绕过网关执行任意 SQL」的修复不彻底。** `exportSQLReadOnly` 依赖的分割器与真实数据库词法存在偏差(即 ER1/ER2,同一根因在导出通道的落点),且导出路径**完整绕过能力矩阵、风险字典、PROD MFA 步进与维护态**——后者被 C 组与 D 组两个独立审查方向各自发现并实测复现。
+
+### EX1【严重】导出通道完全绕过能力矩阵 / 风险字典 / PROD MFA / 维护态(双方独立确认)
+- 位置:`service/export.go:96-139`(`EnqueueExport`)、路由 `router.go:97`;对照完整判权链 `service/gateway.go:68-101` 与 `async_exec.go:31-38`
+- 问题:`EnqueueExport` 只做 savePath 检查 + `canAccessConn`(标签) + `exportSQLReadOnly`(动词白名单)。**没有 `EvaluateRoles`/能力矩阵、没有风险字典、没有 `checkMFA`、没有 `conn.Status=="maint"` 判定。**
+- 实测复现:把 `ro` 角色的矩阵设为 `select@prod=deny`,用 ro 账号对 prod 连接 `analytics-ro`——`POST /terminal/exec "SELECT * FROM events"` 返回 **40300 拒绝**;同一条 SQL 走 `POST /export` 返回 **code=0**,任务入队、worker 连真库把整表导成加密包供下载。
+- 另一维:`checkMFA`(`gateway.go:696-711`,默认 `security.requireMFA=true`)在导出路径**从不调用**——被劫持的会话(有 JWT 无 TOTP)在终端跑不了 SELECT,却能用导出把整张生产表拖走。
+- 再一维:"动词是 SELECT" 不等于无副作用。`select pg_read_file('/etc/passwd')` 实测 `readOnly=true`,可把服务器任意文件导成加密 zip。
+- 修复:`EnqueueExport` 补 `EvaluateRoles(EffectiveRoleIDs(u), conn.Env, sql)`(deny 拒 / approve 走审批)+ 风险字典 + PROD `checkMFA` + maint 判定;对 PG 禁用 `pg_read_file` 一类函数或改用受限角色执行导出。
+
+### EX2【严重/高】导出的只读闸可被 ER1/ER2 绕过(同根因落点)
+- 位置:`service/export.go:27-33`(`exportSQLReadOnly` 用 `sqlutil.SplitStatements`)、`:196`(纵深防御复检用同一函数)、`:271-275` → `gateway.RealQueryEach(conn, job.SQL /* 原串 */, …)`
+- 实测:`SELECT 1 FROM dual /*!40000 INTO OUTFILE '/tmp/pwn' */` → 分割器返回 `["SELECT 1 FROM dual"]`(执行注释被整段剥离),而 MySQL 会执行注释体,把结果写到**目标服务端文件系统**。这是 A3 修复在导出路径上的回归面:`risk.go` 的 `StripComments` 为修 A3 特意保留了 `/*!` 可执行体,`split.go:61-71` 却不识别 `/*!`——**两个注释剥离器语义不一致,校验用前者、执行用原文**。
+- 加上 ER1(美元引用)/ER2(`#`)两个变体,一个**只有导出菜单**的账号即可在 PROD PG 上跑 DDL。
+- 修复:统一到同一个 engine 感知的净化器;执行已归一化的语句。
+
+### EX3【中】非 prod 环境 SSRF 防护整体关闭
+- 位置:`cmd/server/main.go:83`(`AllowPrivateWebhookTargets = cfg.Env != "prod" || cfg.Webhook.AllowPrivate`)、`config.go:131-136`(把 `staging`/未知 env 静默降级为 dev)、`webhook.go:75`、`:95`
+- 问题:开关一旦为 true,`validateOutboundURL` 与 dial 时的 `checkDialAddr` **双双直接 return nil**,只剩 http/https 检查,连 DNS 重绑定校验也跳过,且同时影响 Webhook / 飞书 / 审批魔方三个出站通道。利用前提是管理员账户(endpoint 由 admin 配置),属提权后打内网。
+
+### EX4【中】导出产物无清理 / 无配额 / 无保留期
+- 位置:`export.go:358-378`;全仓无删除导出文件的代码。加密包长期堆在磁盘上,既是容量问题也是数据留存合规问题。
+
+### EX5【中】导出提交与失败均不入审计,成功审计只截 80 字符 SQL
+- 位置:`failExport` 只写作业表;`export.go:226` 成功审计 `clip(sql, 80)`。试探性拖数据不留痕。
+
+### EX6【中·待验证】`database` 参数对 sqlite 引擎连接零校验(同 ER4 在导出通道的落点)
+- 位置:`realdb.go:47-52`。若环境存在 sqlite 连接,可指向 `../vela.db` 导出网关自身用户表/MFA secret;不存在的路径还会被创建。
+
+### EX7【低】`WebhookConfig.Secret` 明文入库;`notify.larkWebhook` 会回显给非管理员
+- 位置:对比 `admin.go:22-25` 只加密了 approval token;`notify.larkWebhook`(URL 内嵌 bot token)不匹配 `isSecretKey` 的子串过滤,被 `GET /settings` 返回给任何持 settings 菜单的用户(`router.go:147` 无 admin 中间件)。
+
+### EX8【低】队列满时 `export.go:133-138` 返回 200 + 一个实际已 failed 的 job。
+### EX9【低】`FailStuckExportJobs`(`repository.go:825`)无实例维度,多副本部署会误杀他实例在跑的作业(与 ED10 同源)。
+### EX10【低】单分片 100 MiB 内存缓冲 × 3 worker + `ZipEncrypt` 再复制一份密文,低权限用户可自由触发 OOM。
+
+### C 组复核为"防护正确"的点
+- **重定向被无条件拒绝**,Bearer token 不会随 302 泄露到第三方主机。
+- **`GenPassword` 用 `crypto/rand` + 拒绝采样**(`export.go:201` 的 `math/rand` 只用于模拟延迟,不涉密)。
+- **AES-GCM nonce 每次随机、无复用**,解密失败不回显密文;`ZipEncrypt` 用 WinZip AES-256 而非弱 ZipCrypto。
+- **下载有 base 前缀 + `ownsExportFile` 双重校验**,无路径穿越/越权;webhook 事件筛选的包含匹配无前缀误匹配。
+
+---
+
+## D 组 · 认证 / 会话 / RBAC / MFA / 用户管理
+
+本组多数条目由并行审查方在 `internal/bootstrap` 的 httptest 黑盒 harness 上写临时用例**实测取证**(标 [已实测]),临时文件已清理。
+
+### EU1【高】任何持有会话的人可无验证码关闭已启用的 MFA(MFA 自助降级)
+- 位置:`service/gateway.go:744-754`(`MFASetup`)、路由 `router.go:68`
+- 问题:`secret := u.MFASecret; if secret == "" || u.MFAEnabled { secret = totp.GenerateSecret() }` 之后直接 `UpdateUserMFA(u.ID, false, secret)`——`POST /auth/mfa/setup` 只挂 JWT,**不要求 TOTP 码也不要求重输密码**,对已绑定 MFA 的账户调用即刻 `mfa_enabled=false` 并换新密钥(新密钥还在响应里返回)。
+- [已实测]:调用后 `/auth/me` 的 `mfaEnabled` 变 false、纯口令登录重新成功、`checkMFA`(`gateway.go:700`)判定为"未注册" → PROD 二次验证整体跳过;即使开 `mfaMandatory`,攻击者手里已有新 secret,可自行 `mfa/enable` 重新绑定继续绕。
+- 对比:`MFADisable`(`:778`)要求有效且未消费的码——**两条路径强度不对等,攻击者只走弱的那条**。
+- 修复:`MFASetup` 在已启用时先验一枚当前 TOTP 码(或重输密码);新密钥存 pending 字段,`MFAEnable` 通过后再替换,验证前绝不关闭已生效的 MFA。
+
+### EU2【高】"移除角色成员"不撤销权限(主角色 `role_id` 残留)
+- 位置:`repository.go:321-323`(`RemoveMember` 只 `DELETE FROM tbl_role_member`,从不动 `tbl_user.role_id`)+ `:336-354`(`EffectiveRoleIDs = u.RoleID ∪ tbl_role_member`)、路由 `router.go:119`、UI 入口 `PermissionsView.vue:162-169,355`
+- 问题:所有建号路径都会让主角色同时有成员行,于是"移除成员"对主角色完全无效。
+- [已实测]:`POST /users {roleIds:[adminRoleID]}` 建号 → 管理员点 X 移除该成员(返回 ok,角色详情里成员消失)→ 该用户**同一 token 继续 `POST /users` 建号仍 code=0**,`AdminOnly` 拿到的并集仍含 admin。**管理员以为收回了平台管理员权限,实际没收回。**
+- 修复:`RemoveMember` 在 `roleID == u.RoleID` 时拒绝或同步重指 `role_id`,并 `BumpTokenVersion`。
+
+### EU3【高】导出通道绕过能力矩阵(与 EX1 为同一问题,两个方向独立复现)
+- 见 EX1。此处补记 D 组的实测口径:`ro` 矩阵 `select@prod=deny` 下,`/terminal/exec` 返回 40300 而 `/export` 返回 code=0 并真实导出。
+
+### EU4【中】管理侧操作零审计,可无痕冒充审批人
+- 位置:`service/admin.go` 全文、`service/gateway.go:795-835`、`handler/admin.go:161-224,454-534`
+- 问题:全仓 `recordAudit` 调用点只有登录、exec/async/export、审批流转。`POST /users`、`PATCH /users/:id`、`/users/:id/password`、`/mfa/bind`、`/mfa/reset`、`PUT /roles/:id/menus|capabilities|tags`、角色成员增删**一条审计都不写**。
+- 利用场景:拿到 admin 会话者改掉某 owner 的口令 + `mfa/bind` 拿其 TOTP 密钥(响应直接返回明文 secret,`handler/admin.go:527`),以该审批人身份登录批准自己的高危工单(绕开 R16 自批禁令与两人控制),事后改回口令。审计链里只有"该审批人批准了工单",**无任何一行记录口令/MFA 被谁改过——哈希链再完整也证明不了这段**。
+- 修复:用户/角色/权限的每次写操作都过 `recordAudit`;`AdminBindMFA` 改为一次性链接而非明文 secret。
+
+### EU5【中】管理控制台可绕过 M12 口令策略
+- 位置:`service/admin.go:368`(`CreateUser` 只判 `len<8`)、`service/gateway.go:797`(`AdminSetPassword` 同)vs `bootstrap/init.go:89-116`(`validateAdminPassword` ≥12 位 + ≥3 类)——**强度策略只挂在 CLI 上,HTTP 侧没接**。
+- [已实测]:`POST /users {password:"password", roleIds:[adminRoleID]}` → code=0 且该口令登录成功,得到一个平台管理员;`POST /users/1/password {"password":"12345678"}` → code=0,超管口令降为 8 位纯数字。配合 EU4 无审计 + 登录限速仅按来源 IP,M12 实际等于没有。
+- 修复:抽公共 `ValidatePassword`,被授予 admin 角色码的账户强制 ≥12 位 + ≥3 类。
+
+### EU6【中】WS 建连后不再校验 token 过期,`sessionTTL` 对终端通道不成立
+- 位置:`handler/terminal.go:458-521`。握手时 `JWT.Parse` 校验 `exp`,但循环内的 fresh 重查(`:509-520`)只看 `disabled`/`TokenVersion`/菜单,**从不再看 `claims.ExpiresAt`**,也没有 read deadline / 最大寿命。
+- 场景:在到期前 1 秒建连、靠客户端 `ping` 保活,即可在会话有效期结束后无限期继续执行 SQL;调小 `sessionTTL` 对已建连接无效。R5 当初只补了 token_version/disabled,**过期这一维漏了**。
+
+### EU7【低】账户置为 `invited` 后仍保留活会话
+- 位置:`middleware.go:78-81`、`terminal.go:472` 只拒 `disabled`,而 `PatchUser`(`admin.go:315-320`)允许置 `invited`。[已实测] 改为 invited 后 `GET /auth/me` 仍 code=0,会话照常可执行命令直到 TTL。当前前端只发 active/disabled,属 API 层面可达。
+
+### EU8【低】邮箱未归一化:SQLite 下同一邮箱可存在两个账户
+- 位置:`admin.go:401-415`(`Invite` 不 trim 不小写)vs `:364`(`CreateUser` 小写)vs `service.go:182`(`Login` 原样查)。[已实测] 先 invite `Dup@Vela.io` 再 create `dup@vela.io`,两条都 ok,停用/改权限只作用于其中一行。MySQL 默认 CI 排序规则下会被唯一键挡住(环境相关)。
+
+### EU9【低】`PatchUser` 不校验 `roleId`
+- 位置:`admin.go:322-324` 只有 `RoleIDs` 走 `validateRoleIDs`。`PATCH {"roleId":999999}` 落库 → `BuildMe` 的 `GetRole` 失败 → `/auth/me` 50000,**账号锁死**。若成员行也被删空,`EffectiveRoleIDs` 为空,`risk.go:276-278` 的 `capabilityLevelUnion` 空集返回 `LevelAllow` 是 fail-open(当前被 MenuGuard 与 `canAccessConn` 挡住不可利用,但默认值方向错)。
+
+### EU10【低·待验证(需 MySQL)】超长邮箱可绕过登录失败审计并占用审计全局锁
+- 位置:`service.go:227-230` 把原始 email 直接当 `ActorName`,而 `AuditLog.ActorName` 是 `size:64`,`LoginReq.Email` 无长度约束、无截断。MySQL 严格模式下超过 64 字符触发 1406 → `appendAudit` 在全局 `auditMu` 内连做 5 次失败插入后吞错。
+- 后果:暴力破解只要把邮箱补到 65+ 字符就**不留失败登录审计**(绕过 R29),且每次请求串行占锁 5 次往返拖慢全进程审计写入。卡在本地只有 SQLite(不强制列长),需在 MySQL 上验证。
+
+### D 组复核为"防护正确"的点
+- **多角色并集在所有校验点一致**:MenuGuard(`middleware.go:139`)、AdminOnly(`:117`)、`canAccessConn`(`admin.go:153,178`)、`canSeeAllActivity`(`:437`)、RiskCheck/Exec/strictestVerdict/execJudged/SubmitScriptForApproval(`gateway.go:57,108,135,212`)、ExecAsync(`async_exec.go:38`)、WS fresh 重查(`terminal.go:483,517`)**全部走 `EffectiveRoleIDs`,无残留单 `RoleID` 判定**;`jwt.Claims.RoleID/RoleCode` 只用于展示,不参与授权。
+- M1 吊销三通道成立;R8/C2/C3/R17/R29/M3/B8/R15 均在位;`resp.Abort` 用 `AbortWithStatusJSON` 确实中断链;路由无漏挂鉴权/白名单;CORS 与 `SetTrustedProxies` 无绕过。
+- **设计确认项(非新缺陷)**:`security.idleLock`/`idleMinutes` 只有前端实现(`AppLayout.vue:111-122`),后端无消费点——空闲锁定对直接调 API / 已建 WS 无效,被盗 token 在整个 TTL 内始终可用。与 L6 定位一致,若要作为安全控制需服务端 `last_seen` 判定。
+
+---
+
+## E 组 · 数据层 / 模型 / 迁移 / 配置 / 启动部署
+
+**模型 ↔ 迁移逐表核对结论:19 个模型 vs 0001–0007 SQL,列级无漂移。** 第四轮之后新增的字段/表都有对应增量迁移:`AuditLog.Database`→0003、`ExportJob.Database`→0004、`ExportJob.Password` 加宽→0005、`Approval.ExternalTaskID`+索引→0006、`AsyncJob` 整表→0007。Oracle service name/SID 没有新增列(复用 `tbl_connection.db_name`,`realdb.go:97-110` 用 `sid/` 前缀区分)。GLI 也没有新增列——**但它需要的是数据行,而那条路在生产升级流程上是断的(ED1)**。
+
+### ED1【严重】GLI 灰度环境在生产升级路径上零风险管控(fail-open)
+- 位置:`bootstrap/seed.go:34-73`(`seedGliEnv`),调用点仅 `seed.go:23`(受 `database.seed` 开关)与 `init.go:29`;`cmd/server/main.go:162-184`(`runMigrate` 只调 `bootstrap.Migrate`);`configs/config.prod.yaml:21`(`seed: false`);`DEPLOY.md:52-60`(每次发版跑 `migrate`)vs `DEPLOY.md:62`(`init` **仅首次**);`migrations/` 下无任何写 gli 行的迁移。
+- 问题:已上线的生产库(GLI 提交 `dd4c72c` 之前完成 `init`)按文档升级只跑 `migrate` → `seedGliEnv` **永不执行** → `tbl_role_capability`/`tbl_risk_command` 里一条 `env='gli'` 都没有。此时**双重 fail-open**:`repository.go:246-252` `CapabilityLevel` 查不到行返回 `LevelAllow`(已核实,连 `err != nil` 也返回 allow);`gateway/risk.go:226-246` `matchCommand` 收集到 0 条字典行返回 `RiskOff`。
+- 后果:**管理员一旦建出 `env=gli` 连接,`DROP TABLE`/`TRUNCATE` 在灰度库上直接执行,不拦截不送审**,任何角色(含研发只读)都拿到 allow。
+- 为何测试是绿的:`gli_env_test.go` 走 sqlite + `Seed()` 路径,恰好覆盖不到生产的 `migrate` 路径。
+- 修复:新增 `0008_seed_gli_env.sql`(`INSERT...SELECT` 从 staging 克隆 + `ON DUPLICATE KEY UPDATE`),或在 `runMigrate` 后无条件调 `seedGliEnv`(它本身幂等)。
+
+### ED2【高】`APP_ENV=prod` + 仓库自带 `config.yaml` 会把演示管理员 `linwei@vela.io / vela123` 播种进生产 MySQL
+- 位置:`configs/config.yaml:6-7`(注释明确引导 `APP_ENV=prod ./server`)+ `config.yaml:25`(`seed: true`)+ `main.go:65-69` + `seed.go:17-22` → `seedFreshData`(`seed.go:222-233`)
+- 问题:`auto_migrate` 已被 `shouldAutoMigrate` 正确忽略(B6 未回归),但 **seed 没有任何 env 守卫**;`validateAdminPassword`(≥12 位/≥3 类)只作用于 `init` 路径。README 公开了这组凭据 → 生产平台管理员被公开口令接管。
+- 修复:`main.go` 在 `cfg.Env=="prod"` 时拒绝 `Seed()`,并在 `seedFreshData` 入口断言非 prod。
+
+### ED3【高】Repository 关键读取一律吞错并 fail-open:一次 DB 抖动 = 全量放行 + 标签隔离失效
+- 位置:`repository.go:481-485`(`RiskCommands` 丢弃 error)、`:246-252`(`CapabilityLevel` `if err != nil { return LevelAllow }`,已核实)、`:142-150`(`TagsForRole` 丢弃 error)
+- 问题:把"查询失败"与"查无此行=默认"混为一谈。MySQL 连接被 kill / 连接数打满 / 锁超时任一瞬时错误下,风险字典层与能力矩阵层**同时静默消失** → PROD 上 `DROP TABLE` 直接放行;`TagsForRoles`(`:440-456`)命中 `len(tags)==0 → unrestricted` → 受限角色瞬间看到并可操作全部连接。
+- 与 ED8(MySQL 连接池完全未配置)叠加时,这不是理论故障——`wait_timeout` 后的 `invalid connection` 就足以触发。
+- 修复:改返回 `(T, error)`,调用方对**查询错误**一律 fail-closed(区别于"无行=默认")。
+
+### ED4【高】`/gateway/stats` 每 5 秒 × 每在线用户触发一次 `tbl_audit_log` 全表 JOIN
+- 位置:`repository.go:950-957`(`CountProdInterceptions` JOIN `tbl_connection`)+ `0001_init.sql:138-155`(只有 time/actor/risk 三个索引,**无 `connection_id`**)+ `router.go:64`(无菜单门禁,所有登录用户可访)+ `frontend/src/components/AppLayout.vue:106`(`setInterval(fetchGwStats, 5000)`)
+- 后果:审计表 append-only 持续增长,50 人在线 = 10 次/秒全表扫,百万行后打满网关自身 MySQL,进而触发 ED3 的 fail-open 连锁。
+- 修复:加 `(connection_id)` 索引 + 进程内 30~60s 缓存。
+
+### ED5【高】`CreateConnection` 不校验 `env`/`policy` 白名单 → 任意 env 字符串等于"零管控环境"
+- 位置:`service/admin.go:27-46`(既无 `validPolicies` 也无 env 白名单;`UpdateConnection` 在 `:56` 校验了 policy 但**同样不校验 env**)、`dto/dto.go:130-139`(binding 只有 `required`)、`0001_init.sql:72-91`(裸 VARCHAR 无 CHECK)
+- 问题:env 写成 `uat`/`pre`/拼写错误,就得到与 ED1 完全相同的 fail-open——**打字错误就能造出"无管控生产库"**。
+- 修复:抽 `validEnvs = {prod,gli,staging,dev}`,Create/Update 双向校验。
+
+### ED6【中】已发布迁移 0006 被就地改写,ledger 无内容校验
+- `150bd84`(07-23)发布的 0006 含 `lark_message_id`,`ef3b98a`(07-24)修改了**同一已发布文件**删掉该行;`migrate.go:109-138` 的 ledger 只记文件名不记 hash。07-24 前跑过 migrate 的库会永久多一个孤儿列,且**无任何检测手段**。修复:确立迁移不可变约定 + `schema_migrations` 加 checksum 列。
+
+### ED7【中】多语句迁移非事务非幂等,部分失败后 `migrate` 永远修不好
+- `migrate.go:127-137` 任一条失败即 return 且 ledger 不写;`0006` 有 2 条语句(`ADD COLUMN`+`CREATE INDEX`)。第 2 条因锁超时失败后重跑必在第 1 条报 `Duplicate column name`,只能人工进库补。
+
+### ED8【中】MySQL 连接池完全未配置
+- `db.go:22-27` mysql 分支 `gorm.Open` 后直接 return(只有 sqlite 分支设了 `SetMaxOpenConns(1)`)。无上限连接数会打满 MySQL `max_connections`;无 `ConnMaxLifetime` 导致 `wait_timeout` 后的 `invalid connection`,**叠加 ED3 静默变成"全部放行"**。
+
+### ED9【中】没有优雅关闭
+- `main.go:112-121` 直接 `r.Run`,无 `http.Server.Shutdown`/信号处理;`main.go:99-105` 的清扫 goroutine 与 `service.go:65-84` 的 worker 池无退出通道。`systemctl restart` 时执行中的 SQL 被切断(可能已在目标库提交但审计行未写,**哈希链缺环**)。
+
+### ED10【中】`FailStuck{Export,Async}Jobs` 无实例归属判定,多副本互杀
+- `repository.go:825-830`/`887-892` 无条件把所有 pending/running 置 failed,`service.go:60,74` 在 `New` 里无条件执行。副本 B 启动会把副本 A 正在跑的 30–60 分钟任务写成 failed,A 跑完再覆写回 done,状态来回翻转。表上没有 owner/heartbeat 列。
+
+### ED11【中】`VELA_SECRET_KEY` 无强度校验(第四轮 A2 解耦修复引入的新面)
+- `config.go:154-190` 只校验 `JWT.Secret`;`config.go:224-229` + `crypto/cipher.go:51-54` 任意非空值直接 SHA-256。设 `VELA_SECRET_KEY=vela` 服务照常启动,**全库被管 DB 连接口令实际由 4 字符口令保护**。
+
+### ED12【中】分页 limit ≤ 0 视为"不限"
+- `repository.go:854-862`/`769-777`/`832-840`/`754-762` 都是 `if limit > 0`;`handler/terminal.go:161` `strconv.Atoi` 出错时 limit=0 且不钳上限。`GET /async-jobs?limit=abc` 一次拉全部任务连同每条完整 MEDIUMTEXT 日志(`0007:14`,单行 16MB),循环请求可 OOM。审计接口做了 500 钳制,这几个漏了。
+
+### ED13【中】`tbl_approval_step.approver_id` 无索引
+- `repository.go:568` 每次 `GET /approvals` 全表扫,并把命中的全部 approval_id Pluck 进内存拼 `IN(...)`(`:573,577`),`ListApprovals` 本身也无 LIMIT。上万单后会撞 prepared statement 参数上限。
+
+### ED14–ED20【低】
+`tbl_role_member` 无 user_id 索引而鉴权热路径按 user_id 查(`repository.go:326-330`,PK 前导列是 role_id);`0007` 时间列 `DATETIME NULL` 与 0001 的 `DATETIME(3) NOT NULL DEFAULT` 不一致;`maxSeq`(`:24-39`)启动时 `LIKE` 前缀 + 全量 Pluck 两个无索引列;启动不校验 schema 版本,漏跑 migrate 时静默启动且 `/healthz` 仍 ok;`/openapi.yaml`(`router.go:31`)未鉴权公开且 `build.sh:68` 真的打包进生产;`Services` 无 Close,worker goroutine 永不回收;审计深翻页 page 无上限(`service/admin.go:469-476` 只钳下限)。
+
+### E 组复核为"防护正确"的点
+- 模型↔SQL 列级无漂移;`shouldAutoMigrate` 对 mysql 恒 false(B6/H13/H14 未回归);迁移咨询锁用 `sqlDB.Conn(ctx)` 固定连接并校验 `RELEASE_LOCK`(B4 未回归);`splitSQLStatements` 引号/注释感知并跳过 `CREATE DATABASE`/`USE`。
+- **repository 全层无字符串拼接进 Where/Order/Raw**(`maxSeq` 的 table/col 是包内常量);五个 Claim/Consume 方法都是条件 UPDATE + `RowsAffected==1`;五个 Set* 方法均在事务内。
+- `weakJWTSecrets` 已收录 config.yaml 实际默认值 + 熵下限(R10/C5 未回归);`webhook.allow_private` 生产默认 false 且开启时 WARN;docker-compose 绑 127.0.0.1 且不再挂 initdb.d。
+- **设置项缺失时代码侧都有安全默认**(`approval.external.enabled` 默认 false、`gateway.asyncExecTimeout` 默认 5400),所以"老库未播种新设置键"不构成缺陷——**这正是它与 ED1 的区别:ED1 走的是"表里无行=放行"的语义,没有代码侧默认兜底。**
+
+---
+
+## F 组 · 前端(Vue 3 + TS + xterm.js)
+
+先记本轮**确认无问题**的项,避免后续重复排查:
+- 全仓 `v-html` / `innerHTML` / `insertAdjacentHTML` / `document.write` / `eval` **零命中**,新增的 `ResultGrid.vue` 单元格走 `{{ }}` 文本插值(`:56`),**不存在存储型 XSS**。
+- `src/locales/*.json5` 中除 `loginHint` 已用 `{'@'}` 正确转义外,无其他裸 `@` / `|` / `{}`,本轮新增文案不会触发 vue-i18n prod 编译报错(该坑未回归)。
+- 后端终端结果集有 `maxResultRows = 200` 上限(`realdb.go:222`),ResultGrid 全量渲染不构成主线程卡死。
+- `truncateDisp`/`dispWidth` 用 `for...of` 按码点迭代(`sqlResult.ts:162-179`),不会切坏代理对,也不存在死循环。
+- `translateMetaSql` 的 `ident()` 白名单为 `[A-Za-z0-9_$.]`,引号/反斜杠均被剥离,拼进字面量无法逃逸。
+- `wsTerminal.ts` 的心跳/退避/`MAX_FAILED_OPENS`/空 token 短路(R27)完好;`TerminalSession.onUnmounted`(248-252)与 `AppLayout`(157-161)定时器与监听器均已清理,**无泄漏**。
+
+### EF1【严重】WS 断开走 REST 回退时丢掉目标库,语句在**错误的数据库**上执行
+- 位置:`TerminalSession.vue:385`(另 `:547`)
+- 问题:`if (sendExec(raw, '') === 'ws') return;` 之后 `const env = await api.exec(props.conn.id, raw)` —— **少了第 5 个参数 `database`**。`sendExec` 走 WS 时带 `database: targetDb.value`(`:449`),元命令 REST 分支带(`:356`),MFA 补验 REST 分支带(`:474`),**唯独最常用的普通 SQL REST 回退(:385)与审批提交 REST 回退(:547)没带**。后端 `gateway.go:74` 仅在 `database != ""` 时覆盖 `conn.Database`,否则用连接自身默认库。
+- 场景:用户在树里选中 `orders_db`(提示符显示 `cluster/orders_db ❯`),WS 因网关重启/网络抖动断开(状态栏显示"已断开·重连中"但终端仍可用),执行 `DELETE FROM t WHERE id=1;` → **实际打在连接配置的默认库上**。`:547` 更糟:审批工单落库的 `ap.Database` 就是错的默认库,审批通过后网关按工单里的库代执行,**错误被永久固化**。
+- 修复:两处补 `targetDb.value`(及 `:547` 的 `mfaCode` 位参),或让 `sendExec` 统一封装 REST 回退,杜绝调用点各写一份参数。
+
+### EF2【严重】REST 回退下"能力矩阵拒绝"被渲染成 `✓ 执行成功`
+- 位置:`TerminalSession.vue:453-457 / 518-523 / 533-541`
+- 问题:后端 `resp.Fail` 一律返回 **HTTP 200 + 业务 code**(`pkg/resp/resp.go:113`),能力矩阵拒绝时返回 `code=40300` 且 `data` 为空(`handler/terminal.go:107-110`)。前端 `handleExecEnv` 只识别 `42800`,其余一律进 `renderExecEnvelope` → 非 42200 → `renderOutput({text: undefined, rows: undefined})` → 落到 `:523` 的 `else` 分支,打印绿色 **`✓ 执行成功`**,并把 `risk` 置为 `safe`。
+- 场景:WS 断开时(REST 回退唯一被触发的场景)在 PROD 执行一条被能力矩阵 deny 的 DDL,**终端明确告诉用户"执行成功"**,而实际命令被拒绝、审计里记的是 rejected。`code=40001`(连接不存在)同样显示成功。WS 路径有 `type:"error"` 分支正确提示,两条路径行为不一致。
+- 修复:`handleExecEnv` 增加 `env.code !== CODE_OK` 兜底分支按 `env.msg` 红色输出;`renderOutput` 的"无 text 无 columns"只有在 `code===0` 时才算成功。
+
+### EF3【高】数据库结果内容里的 ANSI/OSC 转义序列被原样写入 xterm(输出伪造 + 输入行注入)
+- 位置:`lib/sqlResult.ts:212`(`renderTable` 的 `clean` 只清 `\r\n\t`,**不清 ESC/C0/C1**)、`:197`(`renderVertical` 完全未过滤);另 `TerminalSession.vue:520`、`:492`。后端 `cellString`(`realdb.go:386-397`)把列值原样转字符串,不做控制字符清洗,`[][]string` 经 WS 直达 `term.write()`。
+- 利用场景:攻击者只要能往被查询的表里写一行数据(常见:用户昵称、备注、日志表),在值里塞转义序列 —— DBA 一条 `SELECT * FROM users` 就会:①**改写已打印的滚动区**,例如抹掉 `⚠ 正在操作 PROD` 红色警示行,或伪造绿色 `✓ 执行成功` / 伪造提示符,做操作现场的视觉欺骗;②值含 `\x1b[6n`(DSR)时 xterm.js 会回应 `\x1b[<r>;<c>R`,该回应经 `term.onData` 进入 `LineEditor`,未匹配已知序列走 `lineEditor.ts:187` 的"跳过引导符"分支,剩余 `[12;5R` 被当可打印字符**插入当前 SQL 缓冲区**(`:211-217`);若此时正忙则塞进 `queued` 在 `resume()` 时回放到下一条语句。(能否直接注入 `\r` 触发自动执行**待验证**,但污染输入行已确证。)③破坏列宽计算,整张边框表格错位。
+- 修复:在 `renderTable`/`renderVertical`/`renderOutput` 写入前统一 `replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g, '')`,仅保留前端自己生成的 ANSI 着色。
+
+### EF4【高】粘贴多语句批次:取消审批 / 取消 MFA / 命令被拒后,**剩余语句照跑**
+- 位置:`lib/lineEditor.ts:77-82`(`resume()` 无条件回放 `queued`)+ `TerminalSession.vue:557-561`(`cancelApproval`)、`:481-486`(`cancelMfa`)、`:367-372`(deny 分支)——三条"用户明确终止"的路径全都调了 `editor.resume()`。
+- 场景:粘贴 `A; B; C; D;`,B 命中高危规则弹出审批框,用户看到 `DROP TABLE` 后点"取消"——终端打印"已取消提交,命令未执行",然后**立刻继续执行 C 和 D**。用户的取消语义是"停止这一批",实际只停了一条。`Ctrl+C` 才会清空 `queued`(`:169/242`),但弹窗里点取消不会触发。
+- 修复:`resume(abortQueue = false)` 或新增 `dropQueued()`,在三处先清空队列再恢复,并提示"已丢弃剩余 N 条语句"。
+
+### EF5【高】执行中 WS 断开 → 编辑器永久 busy,终端假死且无恢复路径
+- 位置:`TerminalSession.vue:446-451`、`lib/wsTerminal.ts:97-113`
+- 问题:`sendExec` 经 WS 发出后即返回 `'ws'`,`LineEditor.busy` 置 true,**只等 `onWsMessage` 里的 `editor.resume()`**。而 `WsTerminal.onclose` 只调 `onStatus('closed')`(仅更新状态灯),**没有任何"在途请求失败"的回调**。
+- 场景:执行一条 30s 查询,期间网关重启/心跳 pong 超时触发 `ws.close()`。socket 重连成功,但那条命令的响应永远不会到达 → 编辑器一直 busy,之后所有按键被静默吞进 `queued`,终端看起来"完全没反应"。点"重连会话"也救不回来:`refreshSession()` 只 `printAbove` + `ws.reconnect()`,而 `printAbove` 在 busy 时连重绘都不做(`lineEditor.ts:65`),更不会 `resume()`。唯一出路是刷新整页。
+- 修复:`WsTerminal` 增加 `onDisconnected` 回调,或在 `onStatus('closed')` 时若存在在途 `pendingSql` 就打印"连接中断,本条命令结果未知"并 `editor.resume()`;同时给 exec 加超时看门狗。
+
+### EF6【高】后端 `session_revoked` 消息前端未处理:权限被回收时静默吞掉
+- 位置:`TerminalSession.vue:488-495`,`onWsMessage` 的 if/else 链只处理 `output`/`intercept`/`mfa_required`/`error`,**其余 `return` 直接丢弃**。而后端两处会主动下发 `{"type":"session_revoked"}`:用户被停用/token 版本变更(`handler/terminal.go:511`)、以及 B9 新增的 terminal 菜单被回收(`:518`),发完即关闭 socket。
+- 场景:管理员停用某用户或撤销其 terminal 菜单 → 该用户终端里刚提交的命令毫无反应(消息被丢弃、`resume()` 未调用,**叠加 EF5 直接卡死**),既不提示"会话已失效"也不跳登录。后续只能靠连续 3 次握手失败 → `onAuthError` → 探测 `/auth/me`;而**菜单回收并不会让 token 失效**,`/auth/me` 返回 200 → 重连 → 无限循环。
+- 修复:增加 `session_revoked` 分支,打印 `m.message` 并 `auth.clearSession()` + 跳转 `/login`。
+
+### EF7【高】审批提交的 REST 回退:成功执行不打印任何输出,失败被空 catch 吞掉
+- 位置:`TerminalSession.vue:543-555`。`code === 0`(命令实际已执行)时什么都不打印;`catch { /* ignore */ }` 把网络/500 也完全静默。
+- 场景:WS 断开时提交高危命令审批,若该命令实际未命中拦截,后端直接执行并返回结果——**终端只是回到提示符,用户看不到任何执行痕迹**,也看不到影响行数。修复:补 `else renderExecEnvelope(env)`,`catch` 里打印 `termExecFail`。
+
+### EF8【中】DbTree 切换实例存在竞态,旧实例的 schema 会覆盖新实例
+- 位置:`DbTree.vue:15-26`,`watch(() => props.selectedId, ...)` 内 `schema.value = await api.connectionSchema(id)` **无请求序号/取消**。
+- 场景:先点实例 A(内省真连库常需数秒),再点 B(快)。B 先渲染,随后 A 的响应覆盖 `schema.value`,但树上高亮的是 B → 点某个库触发 `selectDb(B.id, "A 的库名")` → 用一个 B 上并不存在的库名开标签页,**后续执行按 EF1 的路径再打到默认库上**。`dbLoading`/`schemaOpen` 也未随实例切换重置。
+- 修复:引入请求序号(`const seq = ++reqId; ... if (seq !== reqId) return`)或 AbortController。
+
+### EF9【中】`RiskRulesView` 的 isAdmin 判定没走多角色并集
+- 位置:`RiskRulesView.vue:17` `auth.me?.roleCode === 'admin'`,对比 `ConnectionsView.vue:15` / `PermissionsView.vue:25` 的 `roleCodes?.includes('admin') ?? (roleCode === 'admin')`。
+- 场景:持有 `[ro, admin]`、主角色为 `ro` 的账号,在连接配置页和权限页是管理员,**到高危规则页却全部只读**——切换等级、增删命令、严格模式开关全部静默 `return`(`:98/116/126/139`)。权限模型不一致,且这是"最该能改"的风控页。修复:抽 `useIsAdmin()` 三处共用。
+
+### EF10【中】`RiskRulesView.toggleStrict` 乐观翻转失败不回滚
+- 位置:`RiskRulesView.vue:97-106`,翻转在 `try` 内、`await` 之前,`catch` 无回滚。同一个"严格模式"开关在 `SettingsView.toggleStrict`(`:158-167`)已按 R28 修成失败回滚,**风控页这份副本没修**。后果:保存失败后页面显示已开启而服务端仍关闭,管理员误以为兜底防护生效。
+
+### EF11【中】设置页用"翻译后的 label"当持久化取值:切语言后保存会静默重置审批超时与会话 TTL
+- 位置:`SettingsView.vue:113 / 134-137 / 170-172`。`apprTimeout`/`ttl` 两个 ref 存的是**当前语言下的显示文案**,`save()` 再用 `t()` 反查。
+- 场景:服务端配置为 `auto-reject` + `24h`,用户点右上角中/EN 切换语言(`ui.setLang` 不会同步这两个 ref)→ 下拉显示的仍是旧语言文案且不在新 options 里 → 点"保存设置",两个比较全部落空 → **静默把配置改成 `auto-escalate` + `8h`**。审批超时策略与会话有效期被悄悄放宽,无任何提示。
+- 修复:ref 存内部 key(`'auto-reject'`/`'4h'`),渲染时再 `t()` 映射(`AuditView` 的 `riskLabel` 按索引映射是正确写法)。
+
+### EF12【中】审计导出不检查 `res.ok`,且绕过 401 拦截器
+- 位置:`AuditView.vue:82-99`。裸 `fetch` 后直接 `res.blob()` 存盘并提示"✓ 已导出":①服务端返回 401/403/500 时把错误 JSON/HTML 存成 `audit_export.csv` 并显示成功;②绕过 `api/http.ts:30-42` 的 401 拦截器,会话过期不会清 store、不会跳登录。
+
+### EF13【中】LineEditor 单行重绘假设在"SQL 超过终端宽度"时花屏 + 光标错位
+- 位置:`lineEditor.ts:101-105`(另 `:248-253` Ctrl+L)。`\r\x1b[2K` 只擦当前一行,`\x1b[{n}D` 到列 0 即停、不跨行。
+- 场景:输入超过终端列宽的 SQL(SQL 控制台常态,尤其配合左侧树 + 右侧检查面板后终端只剩中间一栏),缓冲区折行显示;此时按退格/←→/Home/Ctrl+U,上面几行残留旧文本,光标停在错误位置,后续输入插到错误位置。文件头注释虽把"单行光标数学"写成有意简化,但它在真实使用中直接产生显示错乱与误编辑风险。
+- 修复:按 `(promptLen + buf.length) / term.cols` 计算占用行数,重绘前 `\x1b[{k}A` 回首行逐行清除,光标用 CUP 绝对定位。
+
+### EF14–EF20【低】
+`renderVertical` 标签宽度用 `col.length` 而非 `dispWidth`,CJK 列名竖排错位(`sqlResult.ts:190/195`);`WebhookPanel.loadDeliveries` 无 try/catch 产生 unhandled rejection(`:76-82`);`URL.revokeObjectURL` 紧跟 `a.click()` 且 anchor 未入 DOM,Firefox/Safari 大文件下载可能被取消(`ExportView.vue:97-98`、`UploadView.vue:56-57`、`AuditView.vue:92-93`);异步执行页 `setInterval` 两请求不排序、整体赋值互相覆盖导致日志抖动,且列表接口返回完整 mediumtext 日志每 2s 反复搬运(`AsyncExecView.vue:65/33-44`);新建高危规则表单的"规则名称" `rfName` 从未提交(`RiskRulesView.vue:51-68`);连接页"导入实例""新建连接"两个按钮无 `@click`(`ConnectionsView.vue:176-177`);结果网格把 SQL NULL 与空字符串都渲染成 `∅` 无法区分(`ResultGrid.vue:56`)。
+
+---
+
+## 第五轮汇总
+
+| 组 | 严重 | 高 | 中 | 低 | 小计 |
+|---|---|---|---|---|---|
+| A 外部审批 | 0 | 4 | 4 | 3 | 11 |
+| B 风险引擎/终端 | 3 | 2 | 5 | 2 | 12 |
+| C 导出/Webhook/加密 | 2 | 0 | 4 | 4 | 10 |
+| D 认证/RBAC/MFA | 0 | 3 | 3 | 4 | 10 |
+| E 数据层/迁移/配置 | 1 | 4 | 8 | 7 | 20 |
+| F 前端 | 2 | 5 | 6 | 7 | 20 |
+| **合计** | **8** | **18** | **30** | **27** | **83** |
+
+(EU3 与 EX1 为同一问题的两次独立复现,汇总计一次;EX6 与 ER4 同源、EX9 与 ED10 同源,均已交叉标注。)
+
+### 建议修复顺序
+
+**第一梯队——判定可被绕过(先修,互相有依赖)**
+1. **ER1/ER2/EX2 分割器与净化器**:统一为 engine 感知的实现,未闭合引号拒绝,`#`/反引号仅 MySQL 生效;更根本地改为"执行判定后已归一化的语句",一次性关掉"判定串 ≠ 执行串"这一整类。
+2. **ER3 `MapVerbToCapability("")` 改为保守值** + `Exec` 一律逐条判定。注意其注释所依赖的"字典兜底"前提不成立(ER12),两处要一起改。
+3. **EX1/EU3 导出补齐完整判权链**(能力矩阵 + 风险字典 + PROD MFA + maint)。
+4. **ED1 GLI 环境播种** + **ED5 env 白名单**:两者是同一个"表里无行=放行"语义的两个入口。
+5. **ED3 fail-open 吞错**:把"查询失败"与"无行=默认"分开,否则前四项修好也会被一次 DB 抖动全部旁路。
+
+**第二梯队——鉴权与凭证**
+EA1(开关不覆盖回调)、EA2(工单归属)、EA3(密钥进日志)、EU1(MFA 自助降级)、EU2(移除成员不撤权)、ED2(prod 播种演示管理员)。
+
+**第三梯队——审计完整性**
+EA4(外部审批人无处可查)、EU4(管理侧零审计)、ER7(异步审计失真)、EX5(导出不留痕)。这四项合起来决定"事后能否追责",建议一并设计 `AuditLog.operator`/`decision_source` 字段后统一改。
+
+**第四梯队——前端正确性**
+EF1(错库执行)、EF2(拒绝显示成功)两项会直接误导操作者,优先级高于其余前端项;EF3(ANSI 注入)需后端 `cellString` 与前端渲染两侧同时加固。
+
+### 本轮方法说明
+- 六个方向并行独立审查,互不共享中间结论,因此 EX1/EU3 的双向命中可视为交叉验证。
+- 标注实测的条目分别通过:`pkg/sqlutil` 探针(ER1/ER2/EX2 的分割器行为)、`internal/bootstrap` httptest 黑盒 harness(EU1/EU2/EU5/EU7/EU8、EX1/EU3)、`internal/gateway` 探针(ER3/ER8/ER9)。所有临时测试文件已删除,工作树除 `issue.md` 外无改动。
+- 前四轮 C1–C4 / H1–H14 / M / L / R1–R29 / V1–V7 / A1–A4 / B1–B9 / C1–C10 已逐条抽验,**未发现回归**;但有三处"同类缺陷在新代码里重现":EA3 之于 R17、EA7 之于 V4、EX2 之于 A3。建议把这三条的修复要点固化为提交前检查项。
+---
+
+## 修复状态(2026-07-28,TDD 逐条修第一梯队)
+
+**第一梯队 8 项已修复**(ER1/ER2/ER3/EX1/EX2/ED1/ED3/ED5),后端 `go vet` 干净、全部包测试通过,前端 `vue-tsc` + `vite build` 通过。每项均先写失败测试(RED)取证、再最小实现(GREEN),逐个 vertical slice 推进。
+
+### 新增回归测试
+| 测试 | 位置 | 锁定的行为 |
+|---|---|---|
+| `TestSplitStatements_DollarQuoteDoesNotMergeStatements` | `pkg/sqlutil` | `$$…$$` / `$tag$…$tag$` 内的引号不再吞掉分隔符 |
+| `TestSplitStatements_EscapeStringDoesNotMergeStatements` | `pkg/sqlutil` | `E'\''` 按反斜杠转义解析,不再吞尾 |
+| `TestSplitStatements_HashDoesNotHideStackedStatement` | `pkg/sqlutil` | `#` 后的堆叠语句仍被切出来判定 |
+| `TestSplitStatements_KeepsExecutableCommentBody` | `pkg/sqlutil` | `/*!…*/` 体保留进判定文本 |
+| `TestStripComments_HashDoesNotSwallowFollowingText` | `internal/gateway` | 字典扫描与 NoWhere 不再被 `#` 蒙蔽 |
+| `TestEvaluate_FailsClosedWhenStoreErrors` | `internal/gateway` | 风险数据读取失败 → deny,而非 allow |
+| `TestExec_LeadingSeparatorDoesNotDowngradeCapability` | `internal/bootstrap` | `;UPDATE …` 不再降级为 select 维度 |
+| `TestExport_RejectsDialectLexerSmuggles` | `internal/bootstrap` | 导出拒绝 OUTFILE/DUMPFILE 与三类词法走私 |
+| `TestExport_HonoursCapabilityMatrixAndMaintenance` | `internal/bootstrap` | 导出与终端同一道闸 |
+| `TestConnection_RejectsUnknownEnvironment` | `internal/bootstrap` | 只接受 prod/gli/staging/dev |
+| `TestMigrate_BackfillsGliEnvironmentRules` | `internal/bootstrap` | `migrate` 路径也落 GLI 规则 |
+| `TestTagsForRoles_QueryFailureIsNotUnrestricted` | `internal/repository` | 标签查询失败不等于"无限制" |
+
+### 各项要点
+
+**ER1/ER2/EX2 — 统一"判定串 = 执行串"的词法契约。** `split.go` 头注释现在把**不对称原则**写成硬约束:过分割安全(片段照样逐条判定,最坏是过拦),合并即绕过。据此三处改动:①新增 PG 美元引用(`dollarTag` 识别 `$$`/`$tag$`,按 PG 规则排除 `$1` 占位符)与 `E'…'` 反斜杠转义解析——**不支持它们才会合并**;②`#` 不再当注释——MySQL 是注释但 PG 是运算符,跳到行尾会把真实语句从判定文本里删掉,改为在此切分,MySQL 侧退化为过分割(安全方向);③`/*!…*/` 改为**保留 body 只删标记**,与 `risk.StripComments`(A3)对齐,消除"两个注释剥离器语义不一致"。`risk.StripComments` 同步去掉 `#` 分支。
+
+**ER3 — `Exec` 一律判定 split 后的文本。** 原来只在 `len(stmts) > 1` 时逐条判定,单条走原串,于是前导 `;` 让 `ParseVerb` 取不到动词、落入 read 维度。现在无论几条都走 `strictestVerdict`(空输入才回落原串)。`MapVerbToCapability("")` **保持 select 未改**:一度改成 write,但它会拦掉 `1`、`42;`、`-- comment` 这类无害输入(`TestBlankInput_NotInterceptedButStillScanned` 明确锁定了该行为),而拆分归一化后真实命令必有动词,该分支不再承重。改的是注释——原注释声称"字典扫描兜底"是**错的**(seed 字典无 UPDATE/INSERT/CREATE),现在写明真正的保证来自调用方先 split,并警告不要拿原始输入直接套这个映射。
+
+**EX1 — 导出补齐完整判权链。** `EnqueueExport` 增加维护态判定与 `EvaluateRoles`,非 allow 一律拒绝并记 `intercept` 审计。导出没有审批通道可承接 approve,故 approve 也拒绝并引导用户走终端。种子矩阵 `select` 三环境均为 allow,默认部署行为不变,只有管理员显式设 deny 时才生效——正是被绕过的那条路径。**PROD MFA 步进未纳入本次**:`ExportReq` 无 `mfaCode` 字段,后端单方面加校验会让已登记 MFA 的用户导出直接失败(R18 同型故障),需与前端补验弹窗一并改,留待第二梯队。
+
+**EX2 — OUTFILE/DUMPFILE 显式拒绝。** 保留可执行注释体后,`SELECT … INTO OUTFILE` 的动词仍是 SELECT,动词白名单结构上抓不到,故加 `writesFileRe` 显式匹配(先 `StripComments` 再匹配,防注释拆词)。
+
+**ED1 — `Migrate` 尾部无条件 `backfillGliEnv`。** 根因是"新版本引入的**参考数据**只在 seed 落地,而生产升级只跑 migrate"。把 `seedGliEnv` 抽成接受 `*gorm.DB` 的 `backfillGliEnv`,`Seed` 与 `Migrate` 共用;幂等,MySQL/SQLite 两条路径都覆盖。注释里点明通用教训:**缺行=放行的语义下,发新环境必须同时回填**。
+
+**ED3 — 读取失败与"无规则"分开。** `gateway.Store` 接口改为 `CapabilityLevel(...) (string, error)` / `RiskCommands() ([]RiskCommand, error)`;`EvaluateRoles` 任一层读取出错即 `unavailableVerdict` → **deny + 记错误日志**;`ScanStatement` 出错时按 high 报而非清零。`repository.CapabilityLevel` 保留 `ErrRecordNotFound → allow`(无规则=放行是设计),但真实查询错误上抛。`TagsForRole` 拆出带 error 的 `tagsForRole`,`TagsForRoles` 增加 error 返回,`canAccessConn` 出错即拒绝、`AccessibleConnections` 出错即上抛——堵住"标签查询失败 → len==0 → unrestricted → 看见全部实例"。
+
+**ED5 — 连接 env 白名单。** `validEnvs`(prod/gli/staging/dev)在 `CreateConnection`/`UpdateConnection` 双向校验。注释写明为何这是安全问题而非参数校验洁癖:env 是能力矩阵与字典的查询键,查不到行就放行,所以一个拼错的 `uat` 等于一个**零管控环境**。
+
+### 仍未修(按梯队顺序推进中)
+- **第二梯队(鉴权与凭证)**:EA1 外部审批开关不覆盖回调、EA2 回调可批准任意工单、EA3 密钥进访问日志、EU1 MFA 自助降级、EU2 移除成员不撤权、ED2 prod 播种演示管理员。
+- **第三梯队(审计完整性)**:EA4、EU4、ER7、EX5 —— 建议统一设计 `AuditLog.operator`/`decision_source` 后一并改。
+- **第四梯队(前端正确性)**:EF1 错库执行、EF2 拒绝显示成功优先;EF3 ANSI 注入需前后端同时加固。
+- **另行处理**:导出 PROD MFA(见 EX1 说明,需前端配合)、ER4/EX6 sqlite database 路径、ER5 异步连接池泄漏、ER6 异步维护态、ER8/ER9 NoWhere 字面量与 CTE、ER10 policy 未生效。
+---
+
+## 修复状态(2026-07-28,TDD 逐条修第二梯队)
+
+**第二梯队 6 项已修复**(EA1/EA2/EA3/EU1/EU2/ED2),后端 `go vet` 干净、全部包测试通过,前端 build 通过。
+
+### 新增回归测试
+| 测试 | 锁定的行为 |
+|---|---|
+| `TestExternalApproval_CallbackRefusedWhenFeatureDisabled` | 关掉外部审批后回调即失效 |
+| `TestExternalApproval_CallbackRejectsMismatchedVendorTask` | 回调引用他单 task_id 被拒 |
+| `TestExternalApproval_CallbackSecretIsNotWrittenToAccessLog` | 密钥不进访问日志,URL 传参仍可用 |
+| `TestMFA_SetupCannotDisarmAnEnabledFactorWithoutProof` | 重新绑定不能卸掉在用的二次验证 |
+| `TestMultiRole_RemovingMemberRevokesThePrimaryRoleToo` | 移除成员真正收回主角色权限 |
+| `TestMultiRole_RemovingTheOnlyRoleIsRefused` | 不允许把用户的最后一个角色移光 |
+| `TestSeed_RefusesToPlantDemoDataInProduction` | prod 拒绝播种演示管理员 |
+
+### 各项要点
+
+**EA1 — `VerifyExternalCallback` 首行校验 `cfg.enabled`。** 出站的 dispatch/cancel 早就检查了开关,入站漏检,导致关掉功能后只要 `callbackSecret` 还在库里端点就仍能驱动生产执行。RED 复现:`enabled=false` 下回调把 PROD 工单推到 `approved`。修复后 4 个既有回调测试转红——它们**从来没开过这个开关**(正是 EA1 的佐证),已逐个补上 `approval.external.enabled: true`,它们测的是回调鉴权而非开关本身。
+
+**EA2 — 厂商 task_id 交叉校验。** 关联键是可预测的 `AP-<自增>`,而回调里的厂商 `task_id` 收下却从不比对。现在 `ap.ExternalTaskID` 与 `cb.TaskID` **都非空时**必须相等,否则 403。**刻意不要求"必须已派发"**:`ExternalTaskID` 是 dispatch 后异步写回的,强制要求会把 EA10 那个竞态(厂商回调快于我方写库)变成对合法回调的误拒。这样取到的是"有据可查时必须对得上",无误拒风险。残留面:从未派发的工单仍可被持密钥者决策,彻底封堵需要在 dispatch 前同步落一个"已外发"标记(需加列),留待后续。
+
+**EA3 — 改的是日志,不是接口。** 既有测试 `TestExternalApproval_CallbackSecretViaQueryParam` **明确要求** `?secret=` 可用(审批魔方无法发自定义头),所以不能按审查建议直接删。真正的缺陷是 gin 默认 formatter 把 path+rawQuery 写进访问日志。新增 `accessLogger()`:自定义 formatter,对 `secret`/`token`/`access_token` 三个参数值打码后再拼路径。**关键坑**:`gin.LogFormatterParams.Path` 已经把 rawQuery 拼进去了,必须用 `p.Request.URL.Path` 重建,否则打码等于没做(第一版就踩了,测试抓住了)。残留风险(URL 仍会出现在厂商侧配置与中间代理日志)已在注释中写明。
+
+**EU1 — 判定条件是"已武装",不是"已启用"。** `MFASetup` 为发新密钥会先把 `mfa_enabled` 置 false,等于**未经验证就卸掉二次验证**;而 `MFADisable` 达到同样效果却要求有效验证码,攻击者自然走便宜的那扇门。RED 实测:调用后纯口令登录重新成功。第一版守卫写成 `if u.MFAEnabled` 就打挂了 `TestMFA_EnrollmentCodeCannotAlsoStepUp`——因为**测试夹具里所有用户都是 `MFAEnabled: true` 但 secret 为空**,这种状态什么也没保护(`checkMFA` 本就按 secret 判定未登记),挡它会让这些用户根本无法首次绑定。最终条件改为 `MFAEnabled && MFASecret != ""`。丢失验证器的恢复路径是管理员 `POST /users/:id/mfa/reset`。
+
+**EU2 — 移除成员同时改主角色,并 bump token 版本。** 权限是 `tbl_user.role_id ∪ tbl_role_member`,而建号路径两边都写,于是"移除成员"对主角色完全无效——管理员被告知收回成功,实际没收回。新增 `Services.RemoveRoleMember`:若被移除的正是主角色,则把 `role_id` 改指向该用户仍持有的其它角色,再删成员行并 `BumpTokenVersion`(撤权必须对已签发会话生效)。**并发新约束:不允许移除用户的最后一个角色**——`role_id` 指向不存在的角色会让 `/auth/me` 整体失败,是锁死账户而非降权;而且空角色集在 `capabilityLevelUnion` 里返回 `LevelAllow`(EU9 那个 fail-open),更不能放任。改为明确报错"请先分配其他角色"。这条新约束打挂了 `TestApprovalChain_FallsBackToAdminWhenOwnerEmpty`(它要清空 owner 角色),已按真实管理流程调整:先授予替补角色再撤 owner。
+
+**ED2 — prod 拒绝播种演示数据。** `config.yaml` 自带 `seed: true` 且头注释引导 `APP_ENV=prod ./server`,空库启动即植入 README 公开口令的平台管理员。`Seed()` 在 `cfg.Env == "prod"` 且需要建种子数据时**直接返回错误**而非静默跳过——静默跳过会留下一个没有角色的半初始化库,同样不可用却不易察觉;报错则明确指向正确路径(`database.seed=false` + `server init`)。`auto_migrate` 早已对 MySQL 屏蔽(B6),这次补上的是 seed 这一半。
+
+### 仍未修
+- **第三梯队(审计完整性)**:EA4、EU4、ER7、EX5 —— 需先定 `AuditLog.operator`/`decision_source` 字段设计(含迁移),再一并改。
+- **第四梯队(前端)**:EF1 错库执行、EF2 拒绝显示成功、EF3 ANSI 注入(需前后端同时改)、EF4 取消后剩余语句照跑、EF5 断连假死、EF6 `session_revoked` 未处理、EF7 静默吞错。
+- **其余**:导出 PROD MFA(需前端补验弹窗)、EA5/EA6/EA7/EA8、EU5/EU6、ER4~ER10、ED4/ED6~ED13、EX3~EX10。
+---
+
+## 生产故障诊断(2026-07-28):执行 DDL 时 WS 断开且终端此后无法操作
+
+**现场**:`[GIN] 2026/07/28 - 14:58:36 | 200 | 2m54s | 127.0.0.1 | GET "/api/v1/terminal/ws"`,偶发于执行 DDL 时;前端显示「已断开」→ 自动重连成功 → 但 Web 命令行**无法做任何操作**。
+
+两个独立缺陷叠加,一个是**新发现**(不在第五轮清单内),一个是已记录的 EF5 被生产验证。
+
+### EW1【严重·新发现】WS 读循环与命令执行共用 goroutine,长命令把自己的连接掐断
+- 位置:`handler/terminal.go` `TerminalWS` 消息循环;`frontend/src/lib/wsTerminal.ts:127-139`
+- 机制:服务端是**严格串行**的单循环 —— `conn.ReadJSON` → 收到 exec → `h.Svc.Exec(...)` **同步阻塞**直到目标库返回。阻塞期间循环读不到客户端的 `{"type":"ping"}`,自然也发不出 `pong`。而浏览器发不了原生 WS ping 帧,`wsTerminal.ts` 每 **20s** 发一次应用层 ping 并只等 **5s** pong,超时即判定半开连接并 `ws.close()`。
+- **结论:任何执行时间超过约 25s 的语句都会把自己的连接掐断**——这正是"只在 DDL 时偶发"的原因,普通查询跑不到这个时长。日志里的 2m54s 是整条 socket 的存活时长(连上后闲置一段 + DDL 开始 + ~25s 后被客户端关闭),不是超时值。
+- 附带后果:服务端命令**照常执行完**,结果 `WriteJSON` 写进已死的 socket、错误被丢弃,操作者永远不知道自己的 DDL 到底生效没有。
+- 复现(确定性,~5s):`TestTerminalWS_AnswersHeartbeatWhileCommandRuns`(`internal/bootstrap/ws_longexec_test.go`)—— 建一个 sqlite 目标连接,发一条约 5s 的递归 CTE,紧接着发 ping,断言 2s 内收到 pong。修复前红:`no pong while a command was running`。
+- 修复:读与执行拆成两个 goroutine。读 goroutine 独占 `ReadJSON`,**立即**回 pong,把 exec 请求经 `execCh`(缓冲 1)交给执行 goroutine;执行仍是一次一条(终端本就是单语句控制台)。gorilla/websocket 允许一读一写并发,所有写统一走 `writeMu` 保护的 `send()`。读 goroutine 退出即 `close(execCh)`,执行循环随之结束并 `conn.Close()`,socket 死亡时两边都能收敛,无 goroutine 泄漏。
+- **未用竞态检测器验证**:本机无 gcc,`-race` 需要 cgo。共享面已逐项人工核对:`ReadJSON` 单一读者;两个 goroutine 的写全部经 `send()` 加锁;`u` 仅执行循环写;`claims` 只读;`execCh` 由读者关闭、执行者 range。建议在有 gcc 的环境补跑一次 `-race`。
+
+### EW2【高】= 第五轮 EF5,已被生产验证
+- 位置:`frontend/src/components/terminal/TerminalSession.vue` `onStatus`
+- 机制:`sendExec` 后 `LineEditor.busy = true`,而**唯一**能解除的是收到回复时的 `editor.resume()`。socket 在命令在途时断开 → 回复永不到达 → busy 永久为真 → 之后所有按键被吞进 `queued`(`lineEditor.ts:167-173`),终端看起来完全无反应。点「重连会话」也救不回:`printAbove` 在 busy 时跳过重绘,更不会 resume。**这就是"重连后无法做任何操作"的直接原因**,唯一出路是刷新整页。
+- 修复:`onStatus` 收到 `closed` 且 `editor.running` 时,打印黄色提示并 `editor.resume()`。提示文案(新增 i18n `termLostWhileRunning`)明确告知**该命令是否已生效未知,请先查审计日志再重试**——因为按 EW1 的分析,服务端很可能已经执行完成。
+- **无自动化测试席位**:该 glue 在 Vue SFC 内,仓库没有 vitest/组件测试基建(只有一个 Playwright e2e)。按诊断流程,席位缺失本身即为发现:**这块 WS↔编辑器状态机的衔接目前无法被回归测试锁定**。若要补,建议把「在途命令 + 连接状态」的状态机从 SFC 中抽出为可在 Node 下测试的模块(`LineEditor` 已经是这种形态:只依赖 `write`/`onData`/`clear`,可用 stub 终端驱动)。
+
+### 运维建议(与代码修复无关)
+- `gateway.exec_timeout_seconds` 默认 **30s**。真正耗时数分钟的 DDL 即便连接不再掉线,也会在 30s 被 `context deadline exceeded` 取消。长 DDL 应走**异步执行通道**(`POST /terminal/exec-async`,前端「异步执行」页),它就是为 30–60min+ 的语句设计的,不受请求生命周期约束。
+- 若中间有 Nginx/LB,另需确认其 `proxy_read_timeout` 大于心跳间隔,否则会是第三个独立的断连来源。
+---
+
+## 修复状态(2026-07-28,TDD 逐条修第三梯队 · 审计完整性)
+
+**第三梯队 4 项已修复**(EA4/EU4/ER7/EX5),后端 `go vet` 干净、全部包测试通过,前端 build 通过。这组的共同主题是:**审计链记的是"发生了什么",但记不出"是谁授权的"**。
+
+### 新增回归测试
+| 测试 | 锁定的行为 |
+|---|---|
+| `TestExternalApproval_AuditIdentifiesTheExternalApprover` | 外部审批人写进审计链 |
+| `TestAdmin_AccountMutationsAreAudited` | 改口令/绑 MFA/改状态留痕 |
+| `TestAdmin_PermissionChangesAreAudited` | 能力矩阵/标签授予留痕 |
+| `TestAsyncExec_AuditsFullCommandAndRealRisk` | 异步审计记全量 SQL + 真实风险等级 |
+| `TestExport_SubmissionIsAudited` | 导出提交即留痕、记全量查询 |
+
+### 数据结构改动
+- **`tbl_audit_log.operator`**(迁移 `0008_audit_operator.sql`,VARCHAR(128) NOT NULL DEFAULT ''):记录**实际授权者**,当其不等于 actor 时。空 = 二者同一人。
+- **`tbl_async_job.risk`**(迁移 `0009_async_job_risk.sql`,VARCHAR(16) NOT NULL DEFAULT ''):提交时的裁决等级。
+- `operator` **已纳入哈希载荷**,因此是防篡改的。注意:此前写入的行按当时的载荷形状计算哈希,**校验工具必须按行所属版本计算,不能拿新载荷去重算老行**——已写进迁移注释。
+
+### 各项要点
+
+**EA4 — `recordAuditBy` 携带授权人。** `appendAudit` 增加 `operator` 参数,`recordAudit` 保持原签名(内部传空),新增 `recordAuditBy` 给"代他人执行"的场景。`finalizeApproval` 两条终态分支都改用它,把 `operatorName` 落库——**站内与外部审批都记**,不只外部。原先的设计理由(审批人已在 `tbl_approval_step`)在外部审批上线后失效:飞书审批人不是网关用户,既进不了 step 表也进不了哈希链,一条生产 DROP 在链上只显示"发起人执行了它"。
+
+**EU4 — 两个半:账户变更 + 权限变更。**
+- 账户侧:`AdminSetPassword`/`AdminBindMFA`/`AdminResetMFA`/`PatchUser` 增加 `actor` 参数并写审计。审计文本用**稳定可 grep 的键**加目标,如 `admin.password.reset user=chenhao@vela.io`、`admin.user.patch status=disabled user=...`,便于后续按前缀检索。
+- 权限侧:新增 `Services.AuditRoleChange`,由 `SetRoleMenus`/`SetRoleCapabilities`/`SetRoleTags`/`AddRoleMember` 四个 handler 调用,记 `admin.role.capabilities role=ro value={...}`(value 裁到 400 字符)。理由写在注释里:这些授予决定了系统里每一次权限判定,**改它就是提权动作**;否则有人可以放宽角色→操作→再收窄,链上只有操作、没有那次授予。
+- **webhook 暂不投递**:事件词汇表是 `exec/login/intercept/approve` 四种,admin 事件传空 eventType(仅入审计链),等订阅端有对应词汇再接。
+
+**ER7 — 异步审计记全量 SQL + 真实风险。** 原来 `"ASYNC "+clip(job.SQL, 80)` 且风险恒 `RiskMid`。80 字符对迁移脚本毫无意义(截在语句中间);风险恒定则让该字段完全失去筛选价值。改为记全量 SQL,并把提交时的裁决 `v.Risk` **持久化到 `tbl_async_job.risk`** —— worker 可能一小时后才审计,期间字典可能已变,**值得记的是当初授权这次执行的那个等级**。老数据无该列时回落 `mid`(`asyncAuditRisk`)。
+
+**EX5 — 审计提交而非仅审计成功。** 原来只有成功才写审计、且 SQL 截 80 字符;提交与失败都不写,于是"提交→失败→改→再提交"的试探式拖数据完全不留痕。现在**提交即写**(`EXPORT <全量 SQL>`,result=pending),理由写在注释:提交是唯一保证会到达的点(任务可能失败、可能被队列丢弃、可能被重启回收),而且它才是"某人索取了这份数据"的时刻。完成时仍写一条 executed,同样不再截断。
+
+### 仍未修
+- **第四梯队(前端)**:EF1 错库执行、EF2 拒绝显示成功、EF3 ANSI 注入(需前后端同改)、EF4 取消后剩余语句照跑、EF6 `session_revoked` 未处理、EF7 静默吞错、EF8~EF13。(EF5 已在 2026-07-28 生产故障诊断中修复,见 EW2。)
+- **其余**:导出 PROD MFA(需前端补验弹窗)、EA5/EA6/EA7/EA8、EA2 残留面(未派发工单仍可被决策)、EU5/EU6/EU9、ER4~ER6/ER8~ER12、ED4/ED6~ED20、EX3/EX4/EX6~EX10、EW1 的 `-race` 复验。
+---
+
+## 修复状态(2026-07-28,TDD 逐条修第四梯队 · 前端)
+
+**第四梯队 6 项已修复**(EF1/EF2/EF3/EF4/EF6/EF7),前端 `vue-tsc` + `vite build` 通过,新增单元测试 14 个全绿,后端未受影响。
+
+### 先补上了缺失的测试席位
+第三梯队结束时记录过:**SFC glue 无自动化测试席位**(仓库只有一个 Playwright e2e,无 vitest/组件测试)。本轮先建席位再修:
+
+- 新增 `frontend/playwright.unit.config.ts` —— 复用仓库**已有的** Playwright runner 跑纯逻辑测试(`testDir: tests/unit`,不启浏览器、不启 dev server),**零新增依赖**。
+- 新增 `npm run test:unit`。
+- 新增 `frontend/src/api/codes.ts`:把业务 code 常量从 `api/http.ts` 抽出成无副作用模块(`http.ts` 原样 re-export,调用点不受影响)。原因:纯逻辑要判断 code,而 `http.ts` 会拉起 axios 与 `import.meta.env`,在 Node 下直接报错。
+
+新增测试 14 个:`sqlResult.spec.ts`(5)、`lineEditor.spec.ts`(3)、`execOutcome.spec.ts`(6)。
+
+### 各项要点
+
+**EF3【高】结果内容里的控制字符不再进 xterm。** `sqlResult.ts` 新增 `sanitizeCell`(单行:换行/制表→空格,其余 C0/C1 全删)与 `sanitizeMultiline`(竖排 `\G` 用:**保留真实换行**并转 CRLF,其余控制字符删)。`renderTable` 的表头与单元格、`renderVertical` 的值全部经过。
+- **一个差点造成的功能回归**:第一版对竖排也用了 `sanitizeCell`,把换行压成空格 —— 而 `\G` 存在的意义就是显示 `SHOW CREATE TABLE` 这类多行值。补了「竖排必须保留换行、同时仍剥离转义」的测试才发现,于是拆出 `sanitizeMultiline`。
+- 测试覆盖 `\x1b[2K\x1b[1A`(重绘滚动区)、`\x1b[6n`(DSR,xterm 会在**输入通道**回应,污染用户正在输入的 SQL)、OSC、BEL、NUL,并断言 CJK/emoji 正常显示。
+
+**EF4【高】取消后不再继续跑剩余语句。** `LineEditor` 新增 `discardQueued()`(返回被丢弃的字符数);SFC 新增 `abandonBatch()`,在**取消审批 / 取消 MFA / 命中拒绝**三处调用(原先三处都直接 `resume()`,而 `resume()` 无条件回放 `queued`)。用户看到 `DROP TABLE` 点了取消,终端却继续执行后面的语句 —— 现在丢弃并提示 `termBatchAbandoned`。测试同时锁定了"正常粘贴批次仍逐条执行"与"Ctrl+C 仍丢弃批次"两条既有行为不回归。
+
+**EF1【严重】REST 回退不再丢目标库。** 根因是 `api.exec(connectionId, sql, reason='', mfaCode='', database='')` 用**位置参数 + 尾部默认值**,四个调用点各写一份,其中两个漏了最后一个参数。修法是消除这一类:SFC 内新增 `execRest(sql, reason, mfaCode)`,**只此一处**拼装并恒带 `targetDb.value`,四个回退点全部改走它。原先审批回退那处更严重——错误的库名会被写进工单,审批通过后网关按工单代执行,错误被永久固化。
+
+**EF2【严重】拒绝不再显示成功。** 新增 `src/lib/execOutcome.ts` 的纯函数 `classifyExecEnvelope(env)`,返回 `mfa | intercepted | ok | failed`。后端所有业务结果都是 HTTP 200 + 信封 code,而前端只特判了 42800,其余一律当结果渲染;拒绝没有 data,于是落进"无输出"分支打出绿色 `✓ 执行成功`——审计里记的却是 rejected。`renderExecEnvelope` 改为按 outcome 分派,`failed` 用红色打印服务端 msg。**保留了「code=0 但 payload 为空仍算成功」**(DDL 本就无返回),这正是原先被混为一谈的区分点,测试专门锁了这一条。
+
+**EF6【高】`session_revoked` 不再被丢弃。** `onWsMessage` 的 if/else 链原先让它落到 `else return`,消息被丢、`resume()` 不执行 → 终端冻死;而菜单回收并不会让 token 失效,`/auth/me` 仍返回 200,于是无限重连。现在打印原因 → `resume()` → 关闭 socket → `clearSession()` → 跳登录。
+
+**EF7【高】审批回退不再静默。** `catch { /* ignore */ }` 改为打印失败;`code === 0`(规则在预检与提交之间被放宽、命令实际已执行)时补 `renderExecEnvelope(env)`,否则操作者看不到任何执行痕迹。
+
+### 仍未修
+- **EF5 已于 2026-07-28 生产故障诊断中修复**(见 EW2)。
+- 前端剩余:EF8 DbTree 切换实例竞态、EF9 RiskRulesView isAdmin 未走并集、EF10 严格模式开关失败不回滚、EF11 设置页用译文当取值、EF12 审计导出不查 `res.ok`、EF13 LineEditor 超宽行重绘错乱、EF14~EF20 低危。
+- 后端剩余:导出 PROD MFA(需前端补验弹窗)、EA2 残留面、EA5~EA8、EU5/EU6/EU9、ER4~ER6/ER8~ER12、ED4/ED6~ED20、EX3/EX4/EX6~EX10、EW1 的 `-race` 复验。
+- **仍无席位**:`TerminalSession.vue` 内的 WS↔编辑器状态机(EF1/EF6/EF7 的接线)依旧只能靠人工核对。EF2 已通过抽出 `execOutcome` 拿到席位,同样手法可继续用于其余 glue。
+---
+
+## 修复状态(2026-07-28,续修余项)
+
+**5 项已修复**(ER8/ER9/ER6/EF11 + `keyForLabel` 席位),后端 `go vet` 干净、全部包测试通过;前端 build 通过、单元测试 18 个全绿。
+
+### 新增回归测试
+| 测试 | 锁定的行为 |
+|---|---|
+| `TestNoWhere_NotFooledByWhereInsideALiteral`(gateway) | 字面量里的 `where` 不再冒充 WHERE 子句 |
+| `TestDataModifyingCTE_IsAWriteAndStrictModeSeesIt`(gateway) | 改数据的 CTE 算写、且受 strict 兜底 |
+| `TestAsyncExec_RefusedWhileInstanceIsInMaintenance`(bootstrap) | 维护态下异步通道同样拒绝 |
+| `settingOptions.spec.ts`(前端,4 个) | 配置项取值跨语言切换保持不变 |
+
+### 各项要点
+
+**ER8【中】`NoWhere` 不再被字面量蒙蔽。** 新增 `blankQuoted()`:把字符串字面量与引号标识符的**内容**替换为空格、保留定界符与其余结构,关键字启发式只在「结构」上跑。`UPDATE users SET note='where'` 原本满足 `\bwhere\b` 从而躲过 strict 全表写兜底。B7 当初用词边界修掉了 `elsewhere`(标识符那一半),字面量是同一个洞的另一半。
+
+**ER9【中】改数据的 CTE 算写。** PG 的 `WITH d AS (DELETE ... RETURNING *) SELECT * FROM d` 真的删数据,但首动词是 `WITH`(在只读集合里),于是被当读走 `QueryContext`、按读记账、并完全跳过 strict 兜底。
+- `IsRead`:`WITH` 打头时若结构里出现改数据动词则判为写。
+- `NoWhere`:`WITH` 打头且结构含 `delete|update` 时按该 DML 处理,于是无 WHERE 的 CTE 全表删除会被 strict 拦下。
+- 只读 CTE(`WITH d AS (SELECT ...)`)仍是读,测试锁定。
+
+**ER6【中】异步通道补维护态判定。** `ExecAsync` 增加 `conn.Status == "maint"` 分支,与 `/terminal/exec` 一致:记 warn 审计并返回受限提示(`AsyncSubmitResp.Output`,新增字段)。原先终端被拦的人只要把同一条语句改投异步就能照常执行。
+
+**EF11【中】设置项不再用译文当取值。** 新增 `src/lib/settingOptions.ts`:`APPROVAL_TIMEOUT_KEYS` / `SESSION_TTL_KEYS` 为权威取值,`labelOf(key, t)` 只用于显示,`keyOf` 校验存量值,`keyForLabel` 做下拉回填。`SettingsView` 的 model 改为持 **key**,`VSelect` 显示层做 label↔key 转换。原先 model 持译文、保存时再用 `t()` 反查,切语言后比较全部落空 → **静默把审批超时改成 auto-escalate、会话有效期改成 8h**,且无任何提示。
+- 测试用「按 message id 索引」的两套假字典模拟中英切换 —— 第一版假字典按取值索引,与 vue-i18n 真实行为不符,**测试本身不忠实**,已改正。
+
+### 仍未修
+- **前端**:EF8 DbTree 切换实例竞态、EF9 RiskRulesView isAdmin 未走角色并集、EF10 严格模式开关失败不回滚、EF12 审计导出不查 `res.ok`、EF13 超宽行重绘错乱、EF14~EF20 低危。
+- **后端**:ER5 `RealRunAsync` 非 sqlite 连接池不关闭(**无本地 MySQL/PG,难以建可靠席位**,建议在有真实目标库的环境验证)、ER4/EX6 sqlite `database` 任意路径、ER10 连接 policy 未参与判定、ER11/ER12、EU5/EU6/EU9、EA2 残留面、EA5~EA8、ED4/ED6~ED20、EX3/EX4/EX7~EX10。
+- **导出 PROD MFA**:需前端补验弹窗配合,单改后端会让已登记 MFA 的用户导出直接失败。
+- **EW1 的 `-race` 复验**:本机无 gcc,仍未跑。

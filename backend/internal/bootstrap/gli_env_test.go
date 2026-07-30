@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"velagateway/internal/model"
 	"velagateway/pkg/resp"
 )
 
@@ -58,4 +59,31 @@ func TestExec_GliHighRiskIsGatedLikeStaging(t *testing.T) {
 	}
 	// Staging tier: DROP is "mid", not PROD's "high".
 	eq(t, data.Risk, "mid", "GLI intercept risk level (mirrors staging)")
+}
+
+// ED1: production upgrades run `server migrate` — `seed` is a first-install-only
+// step and config.prod.yaml keeps seeding off. GLI arrived after those databases
+// were installed, and its capability/dictionary rows are DATA, not schema, so no
+// migration created them. A missing row is not a closed door: CapabilityLevel
+// returns allow when it finds none and matchCommand returns off on an empty
+// dictionary, so a gli connection would run DROP/TRUNCATE unjudged. Migrating
+// must therefore leave the GLI rules in place.
+func TestMigrate_BackfillsGliEnvironmentRules(t *testing.T) {
+	app := newTestApp(t)
+	db := app.repo.DB()
+
+	// Simulate a database installed before GLI existed.
+	db.Where("env = ?", model.EnvGli).Delete(&model.RoleCapability{})
+	db.Where("env = ?", model.EnvGli).Delete(&model.RiskCommand{})
+
+	if err := Migrate(app.cfg, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	var caps, cmds int64
+	db.Model(&model.RoleCapability{}).Where("env = ?", model.EnvGli).Count(&caps)
+	db.Model(&model.RiskCommand{}).Where("env = ?", model.EnvGli).Count(&cmds)
+	if caps == 0 || cmds == 0 {
+		t.Errorf("after migrate GLI is unregulated: capability rows=%d dictionary rows=%d", caps, cmds)
+	}
 }
