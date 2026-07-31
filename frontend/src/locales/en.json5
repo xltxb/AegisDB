@@ -15,7 +15,7 @@
   notifTitle: 'Notifications', notifEmpty: 'No notifications', notifMarkAll: 'Mark all read', notifViewAppr: 'View approvals',
   t_terminal: 'Web CLI', t_terminalSub: 'prod-order-cluster · dba_l2',
   t_approve: 'Approval inbox', t_approveSub: 'Your queue · DBA lead view',
-  t_db: 'Connections', t_dbSub: '9 instances · 3 tiers',
+  t_db: 'Data sources', t_dbSub: '9 instances · 3 tiers',
   t_rules: 'Risk policies', t_rulesSub: 'strict · live matching',
   t_perms: 'Users & roles', t_permsSub: '5 roles · tiered auth',
   t_audit: 'Audit log', t_auditSub: 'Tamper-proof · full trail',

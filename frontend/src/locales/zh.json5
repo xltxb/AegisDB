@@ -17,7 +17,7 @@
   // titles
   t_terminal: 'Web 命令行', t_terminalSub: 'prod-order-cluster · dba_l2',
   t_approve: '审批待办', t_approveSub: '你的审批队列 · DBA 组长视角',
-  t_db: '数据库配置', t_dbSub: '9 实例 · 3 环境分层',
+  t_db: '数据源配置', t_dbSub: '9 实例 · 3 环境分层',
   t_rules: '高危命令规则', t_rulesSub: 'strict 策略 · 实时匹配',
   t_perms: '用户与权限', t_permsSub: '5 角色 · 分层授权',
   t_audit: '审计日志', t_auditSub: '不可篡改 · 全量留痕',

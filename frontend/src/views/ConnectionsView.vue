@@ -18,7 +18,6 @@ const { t } = useI18n()
 const ui = useUIStore()
 
 const conns = ref<Connection[]>([])
-const saved = ref(false)
 const allTags = ref<string[]>([])
 const tagModal = ref<{ open: boolean; conn: Connection | null }>({ open: false, conn: null })
 const tagArr = (s: string) => (s ? s.split(',').map((x) => x.trim()).filter(Boolean) : [])
@@ -31,7 +30,7 @@ async function saveTags(tags: string[]) {
     await load()
     allTags.value = await api.tags()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -63,6 +62,16 @@ const draft = ref(blankDraft())
 
 // Edit an existing instance in a modal (separate from the create form). Password is
 // left blank = keep the stored one.
+// Creating an instance uses the same modal treatment as editing one: the form
+// used to sit permanently at the bottom of the page, below the table, so the
+// "new connection" button had nowhere to go and was wired to nothing.
+const newModal = ref(false)
+const newBusy = ref(false)
+function openNew() {
+  if (!isAdmin.value) return
+  draft.value = blankDraft()
+  newModal.value = true
+}
 const editModal = ref<{ open: boolean; id: number }>({ open: false, id: 0 })
 const editDraft = ref(blankDraft())
 const editBusy = ref(false)
@@ -149,16 +158,19 @@ async function add() {
     username: draft.value.username.trim(), password: draft.value.password, database: draft.value.database.trim(),
   }
   // M14: 失败以 toast 呈现
+  newBusy.value = true
   try {
     // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
     const created = await api.createConnection(body)
     try { await api.testConnection(created.id) } catch { /* best-effort */ }
     draft.value = blankDraft()
-    saved.value = true
-    setTimeout(() => (saved.value = false), 2600)
+    newModal.value = false
     await load()
+    ui.notify(t('connSaved'), 'success')
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
+  } finally {
+    newBusy.value = false
   }
 }
 </script>
@@ -174,7 +186,7 @@ async function add() {
         <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
         <template v-else>
           <VButton variant="secondary">{{ $t('importInst') }}</VButton>
-          <VButton variant="primary">{{ $t('newConn') }}</VButton>
+          <VButton variant="primary" @click="openNew">{{ $t('newConn') }}</VButton>
         </template>
       </div>
     </div>
@@ -216,28 +228,37 @@ async function add() {
       </template>
     </div>
 
-    <div v-if="isAdmin" class="form">
-      <div class="ftitle">{{ $t('formNewConn') }}<span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
-      <div class="fsub">{{ $t('formNewConnSub') }}</div>
-      <div class="fgrid">
-        <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
-        <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
-        <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="draft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
-        <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="draft.host" placeholder="10.20.3.12:3306" /></div>
-        <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
-        <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" :placeholder="dbHint(draft.engine)" /></div>
-        <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
-        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
-      </div>
-      <div class="credhint">{{ $t('connCredHint') }}</div>
-      <div class="fsaverow"><VButton variant="primary" @click="add">{{ $t('fSave') }}</VButton></div>
-    </div>
-
     <TagEditModal
       :open="tagModal.open" :title="$t('tagConnTitle')" :subtitle="tagModal.conn ? tagModal.conn.name : ''"
       :tags="tagArr(tagModal.conn?.tags || '')" :suggestions="allTags"
       @close="tagModal.open = false" @save="saveTags"
     />
+
+    <!-- New-instance modal (same shape as the edit one) -->
+    <Teleport to="body">
+      <div v-if="newModal" class="ce-mask" @click.self="newModal = false">
+        <div class="ce-card">
+          <div class="ce-head"><div class="ce-title">{{ $t('formNewConn') }}</div><div class="ce-sub">{{ $t('formNewConnSub') }}</div></div>
+          <div class="ce-body">
+            <div class="fgrid">
+              <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
+              <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
+              <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="draft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
+              <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="draft.host" placeholder="10.20.3.12:3306" /></div>
+              <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
+              <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" :placeholder="dbHint(draft.engine)" /></div>
+              <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
+              <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
+            </div>
+            <div class="credhint">{{ $t('connCredHint') }}</div>
+          </div>
+          <div class="ce-foot">
+            <VButton variant="secondary" @click="newModal = false">{{ $t('mCancel') }}</VButton>
+            <VButton variant="primary" :disabled="newBusy" @click="add">{{ newBusy ? $t('connTestSaving') : $t('connTestSave') }}</VButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Edit-instance modal -->
     <Teleport to="body">
@@ -301,9 +322,6 @@ async function add() {
 .polsel:focus { border-color: var(--accent-text); }
 .polsel option { background: var(--surface-card); color: var(--text-body); }
 .dotc { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.form { margin-top: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 20px 22px; }
-.ftitle { font: 600 14px var(--font-display); color: var(--text-strong); display: flex; align-items: center; gap: 10px; }
-.savetag { font: 600 12px var(--font-mono); color: var(--success-text); }
 .statuscell { display: flex; align-items: center; gap: 10px; }
 .editbtn { width: 28px; height: 26px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .editbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
@@ -315,11 +333,9 @@ async function add() {
 .ce-sub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
 .ce-body { padding: 18px 22px; }
 .ce-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); border-radius: 0 0 16px 16px; }
-.fsub { font: 500 12px var(--font-body); color: var(--text-muted); margin: 4px 0 16px; }
 .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
 .fgrid input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-body); outline: none; }
 .fgrid input:focus { border-color: var(--accent-text); }
 .credhint { margin-top: 14px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
-.fsaverow { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
 </style>
