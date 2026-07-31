@@ -44,6 +44,10 @@ const (
 	familyPostgres = "postgres"
 	familyOracle   = "oracle"
 	familySQLite   = "sqlite"
+	// MongoDB is judged by its own dialect (see dialect.go). It has no driver
+	// here yet, so it resolves to a family without being executable — a
+	// connection is refused rather than silently simulated.
+	familyMongo = "mongo"
 )
 
 // engineFamily maps an engine label to the wire protocol used to reach it, or ""
@@ -55,10 +59,11 @@ const (
 // silently win and pick the wrong protocol. It also gives "which engines are
 // actually supported" a single answer the console can be checked against.
 //
-// MongoDB, Redis and ClickHouse deliberately resolve to "": they are not
-// reachable over database/sql here, and — more importantly — the risk engine
-// parses SQL. Attaching them to a driver would leave their commands judged by a
-// SQL verb parser that cannot understand them.
+// Redis and ClickHouse deliberately resolve to "": no driver here, and the risk
+// engine would have nothing meaningful to say about them. MongoDB DOES resolve to
+// a family because it has its own judgement dialect (dialect.go) — but no driver
+// yet, so engineDriver still reports it as not executable rather than attaching
+// it to a protocol it cannot speak.
 func engineFamily(engine string) string {
 	e := strings.ToLower(strings.TrimSpace(engine))
 	switch {
@@ -68,6 +73,8 @@ func engineFamily(engine string) string {
 		return familySQLite
 	case strings.Contains(e, "oracle"):
 		return familyOracle
+	case strings.Contains(e, "mongo"):
+		return familyMongo
 	// PolarDB is MySQL-compatible, so it speaks the MySQL protocol.
 	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"),
 		strings.Contains(e, "tidb"), strings.Contains(e, "polardb"):

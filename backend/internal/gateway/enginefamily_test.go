@@ -23,10 +23,12 @@ func TestEngineFamily(t *testing.T) {
 		// others
 		"Oracle": familyOracle, "oracle 19c": familyOracle,
 		"SQLite": familySQLite, "sqlite3": familySQLite,
-		// Engines this gateway cannot execute against — they must resolve to no
-		// family rather than being quietly attached to a driver that cannot speak
-		// their protocol.
-		"MongoDB": "", "Redis 7": "", "ClickHouse": "", "": "",
+		// MongoDB has its own judgement dialect, so it resolves to a family — but
+		// no driver, which TestEngineDriver_MongoIsJudgedButNotExecutable covers.
+		"MongoDB": familyMongo, "mongo": familyMongo,
+		// No driver and no dialect: these must resolve to nothing rather than be
+		// quietly attached to a protocol they cannot speak.
+		"Redis 7": "", "ClickHouse": "", "": "",
 	}
 	for engine, want := range cases {
 		if got := engineFamily(engine); got != want {
@@ -47,5 +49,25 @@ func TestEngineDriver_PolarDBUsesTheMySQLProtocol(t *testing.T) {
 	}
 	if dsn == "" {
 		t.Error("expected a MySQL DSN for PolarDB")
+	}
+}
+
+// MongoDB can be JUDGED (it has a dialect) but not yet EXECUTED (no driver).
+// Those are separate properties and the gap must be explicit: reporting it as
+// executable would attach it to a SQL driver, while hiding the family would send
+// its commands back to the SQL parser that misreads them.
+func TestEngineDriver_MongoIsJudgedButNotExecutable(t *testing.T) {
+	c := &model.Connection{
+		Engine: "MongoDB", Host: "10.0.0.1", Port: 27017,
+		Username: "u", Password: "p", Database: "appdb",
+	}
+	if _, _, ok := engineDriver(c); ok {
+		t.Error("MongoDB reported as executable, but no driver can speak its protocol")
+	}
+	if RealExecSupported(c) {
+		t.Error("RealExecSupported(MongoDB) = true")
+	}
+	if DialectFor(c.Engine).Name() != "mongo" {
+		t.Error("MongoDB must still be judged by the Mongo dialect")
 	}
 }
