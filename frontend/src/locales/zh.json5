@@ -228,6 +228,8 @@
   envStaging: 'STAGING · L3 演练UAT',
   envDev: 'DEV · L4 沙盒',
   dbHintOracle: 'service name 或 sid/ORCL',
+  groupByTier: '按环境分层',
+  groupByType: '按数据库类型',
   termExecFail: '· 执行失败',
   termLostWhileRunning: '连接在命令执行期间中断,该命令是否已生效未知,请先查审计日志再重试。',
   termDeniedCap: '· 命令被拒绝:能力矩阵在该环境禁止此操作',

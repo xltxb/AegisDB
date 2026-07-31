@@ -9,6 +9,7 @@ import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
+import { engineLabels } from '@/lib/engines'
 import type { Connection } from '@/types'
 
 const auth = useAuthStore()
@@ -54,13 +55,17 @@ const envOpts = computed(() => [
   { label: t('envStaging'), env: 'staging' },
   { label: t('envDev'), env: 'dev' },
 ])
-const engineOpts = ['MySQL 8.0', 'TiDB', 'GaussDB (DWS)', 'Oracle', 'PostgreSQL 15', 'ClickHouse', 'Redis 7']
+// Straight from the shared catalogue so the console can only offer engines the
+// gateway can actually drive (see lib/engines). ClickHouse and Redis used to be
+// listed here with no driver behind them: such a connection saves fine and then
+// behaves as a simulated one.
+const engineOpts = engineLabels()
 // Oracle identifies the target DB by a service name (or a SID via the "sid/" prefix),
 // not a plain schema name — hint that in the 数据库名 field placeholder.
 const dbHint = (engine: string) => (/oracle/i.test(engine) ? t('dbHintOracle') : 'orders_db')
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
-const blankDraft = () => ({ name: '', host: '', engine: 'MySQL 8.0', envLabel: t('envProd'), policy: 'strict', username: '', password: '', database: '' })
+const blankDraft = () => ({ name: '', host: '', engine: engineOpts[0], envLabel: t('envProd'), policy: 'strict', username: '', password: '', database: '' })
 const draft = ref(blankDraft())
 
 // Creating an instance uses the same modal treatment as editing one: the form

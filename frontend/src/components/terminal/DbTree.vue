@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose } from 'lucide-vue-next'
 import api from '@/api'
+import { engineDisplay } from '@/lib/engines'
 import type { Connection, ConnectionSchema } from '@/types'
 
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
 const emit = defineEmits<{ select: [number]; selectDb: [number, string]; collapse: [] }>()
+const { t } = useI18n()
 
 // Schema (db → tables) for the selected instance, introspected live from the
 // gateway. Real introspection can take a moment and may fail (bad creds / network),
@@ -90,19 +93,44 @@ function tag(c: Connection) {
   return null
 }
 
-const grouped = computed(() => {
+// The tree groups by deployment tier by default — that is the axis that decides
+// how dangerous a command is. An estate with several engines is easier to
+// navigate by type, so the grouping axis is switchable; the keys differ per mode,
+// which is why sections are driven by `sections` rather than a fixed env list.
+type GroupMode = 'env' | 'type'
+const groupMode = ref<GroupMode>('env')
+
+const matching = computed(() => {
   const q = search.value.trim().toLowerCase()
-  const byEnv: Record<string, Connection[]> = { prod: [], gli: [], staging: [], dev: [] }
-  for (const c of props.connections) {
-    if (q && !c.name.toLowerCase().includes(q)) continue
-    if (byEnv[c.env]) byEnv[c.env].push(c)
-  }
-  return byEnv
+  return q ? props.connections.filter((c) => c.name.toLowerCase().includes(q)) : props.connections.slice()
 })
 
+const grouped = computed<Record<string, Connection[]>>(() => {
+  const out: Record<string, Connection[]> = {}
+  if (groupMode.value === 'env') {
+    for (const k of ['prod', 'gli', 'staging', 'dev']) out[k] = []
+    for (const c of matching.value) if (out[c.env]) out[c.env].push(c)
+    return out
+  }
+  for (const c of matching.value) {
+    const k = engineDisplay(c.engine)
+    ;(out[k] ||= []).push(c)
+  }
+  return out
+})
+
+// Section keys in display order: fixed for tiers, alphabetical for types.
+const sections = computed(() =>
+  groupMode.value === 'env' ? ['prod', 'gli', 'staging', 'dev'] : Object.keys(grouped.value).sort(),
+)
+const sectionLabel = (k: string) => (groupMode.value === 'env' ? t(envMeta[k].label as any) : k)
+const sectionDot = (k: string) => (groupMode.value === 'env' ? envMeta[k].dot : 'info')
+
 const searching = computed(() => search.value.trim().length > 0)
-function toggle(env: string) { collapsed.value[env] = !collapsed.value[env] }
-function isOpen(env: string) { return searching.value || !collapsed.value[env] }
+function toggle(key: string) { collapsed.value[key] = !collapsed.value[key] }
+// Type sections start expanded (there is no "most dangerous" one to default to).
+function isOpen(key: string) { return searching.value || !collapsed.value[key] }
+function setGroupMode(m: GroupMode) { groupMode.value = m }
 
 // Per-instance collapse of its database list. Clicking an instance selects it and
 // expands the list; clicking the already-selected instance collapses/expands it.
@@ -119,16 +147,20 @@ function clickInst(id: number) {
     <div class="head">
       <div class="eyebrow">{{ $t('treeTitle') }}<PanelLeftClose class="collapse" :size="15" :title="$t('treeCollapse')" @click="emit('collapse')" /></div>
       <div class="searchbox"><Search :size="14" color="var(--text-faint)" /><input v-model="search" :placeholder="$t('search')" /></div>
+      <div class="gmode">
+        <button :class="{ on: groupMode === 'env' }" @click="setGroupMode('env')">{{ $t('groupByTier') }}</button>
+        <button :class="{ on: groupMode === 'type' }" @click="setGroupMode('type')">{{ $t('groupByType') }}</button>
+      </div>
     </div>
     <div class="scy body">
-      <template v-for="env in ['prod', 'gli', 'staging', 'dev']" :key="env">
-        <div class="env" :class="{ muted: env !== 'prod' }" @click="toggle(env)">
-          <component :is="isOpen(env) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
-          <span class="d" :class="envMeta[env].dot" />{{ $t(envMeta[env].label as any) }}
-          <span class="cnt">{{ grouped[env].length }}</span>
+      <template v-for="key in sections" :key="key">
+        <div class="env" :class="{ muted: groupMode === 'env' && key !== 'prod' }" @click="toggle(key)">
+          <component :is="isOpen(key) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
+          <span class="d" :class="sectionDot(key)" />{{ sectionLabel(key) }}
+          <span class="cnt">{{ grouped[key].length }}</span>
         </div>
-        <div v-if="isOpen(env)" class="ind">
-          <template v-for="c in grouped[env]" :key="c.id">
+        <div v-if="isOpen(key)" class="ind">
+          <template v-for="c in grouped[key]" :key="c.id">
             <div class="inst" :class="{ active: c.id === selectedId }" @click="clickInst(c.id)">
               <component :is="instOpen(c.id) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" />
               <Database :size="14" />{{ c.name }}
@@ -171,7 +203,7 @@ function clickInst(id: number) {
               </template>
             </div>
           </template>
-          <div v-if="!grouped[env].length" class="empty">{{ $t('treeNoMatch') }}</div>
+          <div v-if="!grouped[key].length" class="empty">{{ $t('treeNoMatch') }}</div>
         </div>
       </template>
     </div>
@@ -187,6 +219,10 @@ function clickInst(id: number) {
 .eyebrow { display: flex; align-items: center; font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 10px; }
 .collapse { margin-left: auto; color: var(--text-faint); cursor: pointer; }
 .collapse:hover { color: var(--accent-text); }
+.gmode { display: flex; gap: 4px; margin-top: 8px; }
+.gmode button { flex: 1; padding: 4px 0; border: 1px solid var(--border-subtle); border-radius: 7px;
+  background: transparent; color: var(--text-muted); font: 500 11px var(--font-body); cursor: pointer; }
+.gmode button.on { background: var(--surface-card); color: var(--text-strong); border-color: var(--accent-text); }
 .searchbox {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 11px;
   background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 10px;

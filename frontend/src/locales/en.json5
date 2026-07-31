@@ -212,6 +212,8 @@
   envStaging: 'STAGING · L3 UAT',
   envDev: 'DEV · L4 sandbox',
   dbHintOracle: 'service name or sid/ORCL',
+  groupByTier: 'By tier',
+  groupByType: 'By type',
   termExecFail: '· Execution failed',
   termLostWhileRunning: 'Connection lost while the command was running — its outcome is unknown. Check the audit log before retrying.',
   termDeniedCap: '· Command denied: the capability matrix forbids this operation in this environment',
