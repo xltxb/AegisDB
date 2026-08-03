@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, ChevronLeft, ChevronRight, X,
+  Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, ChevronLeft, ChevronRight, X, FileText,
 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -168,8 +168,8 @@ function fmtTime(s: string) {
 
     <!-- table -->
     <div class="table">
-      <div class="th"><span>{{ $t('colTime') }}</span><span>{{ $t('colWho') }}</span><span>{{ $t('mInst') }}</span><span>{{ $t('colTables') }}</span><span>{{ $t('colRisk') }}</span><span>{{ $t('colResult') }}</span><span>{{ $t('colAp') }}</span></div>
-      <div v-for="r in rows" :key="r.id" class="tr click" @click="openDetail(r)">
+      <div class="th"><span>{{ $t('colTime') }}</span><span>{{ $t('colWho') }}</span><span>{{ $t('mInst') }}</span><span>{{ $t('colTables') }}</span><span>{{ $t('colRisk') }}</span><span>{{ $t('colResult') }}</span><span>{{ $t('colAp') }}</span><span></span></div>
+      <div v-for="r in rows" :key="r.id" class="tr">
         <span class="mono mute">{{ fmtTime(r.occurredAt) }}</span>
         <span class="who">{{ r.actor }}</span>
         <span class="mono mute">{{ r.instance }}<span v-if="r.database" class="dbtag"> / {{ r.database }}</span></span>
@@ -183,8 +183,11 @@ function fmtTime(s: string) {
           class="ap" :class="{ link: r.approvalNo && canOpenApproval }"
           :style="{ color: r.approvalNo ? '#8facff' : 'var(--text-faint)' }"
           :title="r.approvalNo && canOpenApproval ? $t('apOpenTicket') : ''"
-          @click.stop="openApproval(r.approvalNo)"
+          @click="openApproval(r.approvalNo)"
         >{{ r.approvalNo ? '#' + r.approvalNo : '—' }}</span>
+        <button class="detbtn" :title="$t('auditDetail')" @click="openDetail(r)">
+          <FileText :size="13" />{{ $t('auditDetail') }}
+        </button>
       </div>
     </div>
     <!-- detail card: the executed command in full, with its context -->
@@ -227,8 +230,11 @@ function fmtTime(s: string) {
 </template>
 
 <style scoped>
-.tr.click { cursor: pointer; }
-.tr.click:hover { background: var(--surface-page); }
+.detbtn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 8px;
+  border: 1px solid var(--border-subtle); border-radius: 7px; background: transparent;
+  color: var(--text-muted); font: 500 11px var(--font-body); cursor: pointer; }
+.detbtn:hover { color: var(--accent-text); border-color: var(--accent-text); }
+
 .cmd .tbl { color: var(--text-muted); margin-left: 6px; }
 .overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
 .mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
@@ -270,7 +276,7 @@ function fmtTime(s: string) {
 .dbtag { color: var(--text-faint); }
 /* table */
 .table { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
-.th, .tr { display: grid; grid-template-columns: 0.9fr 1fr 1.1fr 2.2fr 0.8fr 1fr 0.9fr; gap: 12px; }
+.th, .tr { display: grid; grid-template-columns: 0.9fr 1fr 1.1fr 2.2fr 0.8fr 1fr 0.9fr 78px; gap: 12px; }
 .th { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
 .tr { padding: 13px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
 .who { font: 500 12px var(--font-body); color: var(--text-body); }

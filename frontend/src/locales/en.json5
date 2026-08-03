@@ -239,6 +239,7 @@
   apTables: 'Tables',
   colTables: 'Tables',
   colOperator: 'Operator',
+  auditDetail: 'Details',
   termExecFail: '· Execution failed',
   termLostWhileRunning: 'Connection lost while the command was running — its outcome is unknown. Check the audit log before retrying.',
   termDeniedCap: '· Command denied: the capability matrix forbids this operation in this environment',
