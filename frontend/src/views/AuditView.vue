@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, ChevronLeft, ChevronRight, X,
@@ -7,11 +8,23 @@ import {
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import type { AuditRow, AuditQuery } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
+const router = useRouter()
+const authStore = useAuthStore()
+// An audited action carries the ticket that authorised it; following that link is
+// the natural next question ("who approved this?"). Only offer it to someone who
+// can actually open the approvals page — otherwise the click would land on a
+// guard and look broken.
+const canOpenApproval = computed(() => !!authStore.menus.approve)
+function openApproval(apNo?: string) {
+  if (!apNo || !canOpenApproval.value) return
+  router.push({ name: 'approvals', query: { ap: apNo } })
+}
 const rows = ref<AuditRow[]>([])
 const total = ref(0)
 const page = ref(1)
@@ -154,7 +167,12 @@ function fmtTime(s: string) {
         <span class="mono cmd"><span :style="{ color: kwColor(r.risk) }">{{ kw(r.command) }}</span>{{ rest(r.command) }}</span>
         <span><span class="rbadge" :style="{ background: riskMeta(r.risk).bg, color: riskMeta(r.risk).c }">{{ riskMeta(r.risk).t }}</span></span>
         <span class="res" :style="{ color: resMeta(r.result).c }"><component :is="resMeta(r.result).icon" :size="12" />{{ resMeta(r.result).t }}</span>
-        <span class="ap" :style="{ color: r.approvalNo ? '#8facff' : 'var(--text-faint)' }">{{ r.approvalNo ? '#' + r.approvalNo : '—' }}</span>
+        <span
+          class="ap" :class="{ link: r.approvalNo && canOpenApproval }"
+          :style="{ color: r.approvalNo ? '#8facff' : 'var(--text-faint)' }"
+          :title="r.approvalNo && canOpenApproval ? $t('apOpenTicket') : ''"
+          @click="openApproval(r.approvalNo)"
+        >{{ r.approvalNo ? '#' + r.approvalNo : '—' }}</span>
       </div>
     </div>
     <div class="foot">
@@ -201,6 +219,8 @@ function fmtTime(s: string) {
 .cmd { color: var(--text-body); }
 .rbadge { display: inline-flex; height: 20px; padding: 0 8px; align-items: center; border-radius: 999px; font: 600 10px var(--font-mono); }
 .res { display: flex; align-items: center; gap: 5px; font: 600 11px var(--font-mono); }
+.ap.link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.ap.link:hover { filter: brightness(1.25); }
 .ap { font: 600 11px var(--font-mono); }
 .foot { margin-top: 12px; display: flex; align-items: center; gap: 14px; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .foot .total { color: var(--text-muted); }
