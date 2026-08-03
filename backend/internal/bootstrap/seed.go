@@ -199,6 +199,11 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.idleLock":       true,
 		"security.idleMinutes":    15,
 		"security.requireMFA":     true,
+		// Off by default: turning it on blocks every PROD operation for anyone not
+		// yet enrolled, so it is an explicit rollout decision.
+		"security.mfaMandatory":   false,
+		// One PROD step-up vouches for a session on that instance for this long.
+		"security.mfaGraceMinutes": 30,
 		"security.ipAllowlist":    "",
 		"notify.larkChannel":      "",
 		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/gli 灰度。

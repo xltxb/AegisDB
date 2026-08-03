@@ -711,9 +711,18 @@ func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) 
 		}
 		return nil // opt-in default
 	}
+	// One step-up vouches for this session on THIS instance for a while. Demanding
+	// a fresh code per command meant retyping one every 30s during an incident —
+	// friction whose realistic outcome is the policy being switched off. The grace
+	// is bound to the session generation and the connection, so a logout, password
+	// reset or role change voids it, and it never carries to another instance.
+	if s.mfaVerifiedRecently(u, conn) {
+		return nil
+	}
 	if !s.validateTOTP(u, code) {
 		return ErrMFARequired
 	}
+	s.noteMFAVerified(u, conn)
 	return nil
 }
 
