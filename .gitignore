@@ -16,6 +16,7 @@ vela-gateway.db
 # ---- Frontend (Node) ----
 /frontend/node_modules/
 /frontend/dist/
+/frontend/dist.zip
 /frontend/.vite/
 *.local
 
