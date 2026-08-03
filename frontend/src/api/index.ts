@@ -124,6 +124,10 @@ export const api = {
   createUser: (body: { email: string; name?: string; password: string; roleIds: number[] }) =>
     http.post<any, Envelope<any>>('/users', body).then(ok),
   setUserRoles: (id: number, roleIds: number[]) => http.patch(`/users/${id}`, { roleIds }),
+  // Per-user data-access scope. An empty list clears it and the user falls back
+  // to the scope their roles grant.
+  userTags: (id: number) => http.get<any, Envelope<string[]>>(`/users/${id}/tags`).then(ok),
+  setUserTags: (id: number, tags: string[]) => http.put(`/users/${id}/tags`, { tags }),
   // admin user management: password reset + OTP binding
   setUserPassword: (id: number, password: string) =>
     http.post<any, Envelope<any>>(`/users/${id}/password`, { password }).then(ok),

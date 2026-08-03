@@ -128,6 +128,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)
 		a.POST("/users/:id/mfa/reset", menu("perms"), admin, h.ResetUserMFA)
 		a.POST("/users/:id/mfa/bind", menu("perms"), admin, h.BindUserMFA)
+			// Per-user data-access scope (overrides the role scope; see model.UserTag)
+			a.GET("/users/:id/tags", menu("perms"), h.UserTags)
+			a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)
 
 		// risk command dictionary — read is available to terminal operators (risk
 		// inspector needs it); edits are rules-menu + admin-only

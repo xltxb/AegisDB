@@ -982,3 +982,59 @@ func (r *Repo) CountProdInterceptions() (int64, error) {
 		Count(&n).Error
 	return n, err
 }
+
+// ----------------------------------------------------------------- User tags
+
+// TagsForUser returns the tags granted directly to a user (empty = none set, in
+// which case the role-derived scope applies — see ScopeForUser).
+func (r *Repo) TagsForUser(userID int64) ([]string, error) {
+	var rows []model.UserTag
+	if err := r.db.Where("user_id = ?", userID).Order("tag asc").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, t := range rows {
+		out = append(out, t.Tag)
+	}
+	return out, nil
+}
+
+// SetUserTags replaces a user's directly-granted tags.
+func (r *Repo) SetUserTags(userID int64, tags []string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&model.UserTag{}).Error; err != nil {
+			return err
+		}
+		seen := map[string]bool{}
+		for _, raw := range tags {
+			t := strings.ToLower(strings.TrimSpace(raw))
+			if t == "" || seen[t] {
+				continue
+			}
+			seen[t] = true
+			if err := tx.Create(&model.UserTag{UserID: userID, Tag: t}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ScopeForUser resolves which connection tags a user may reach.
+//
+// A grant made directly on the user is the MORE SPECIFIC statement and REPLACES
+// the role-derived scope. Unioning the two instead would make a user-level grant
+// meaningless for anyone whose role is already unrestricted — an administrator
+// would stay unrestricted whatever tags you gave them, which is precisely the
+// case per-user scoping exists for. With no user-level rows the role behaviour is
+// returned unchanged.
+func (r *Repo) ScopeForUser(userID int64, roleIDs []int64) (allow []string, unrestricted bool, err error) {
+	own, err := r.TagsForUser(userID)
+	if err != nil {
+		return nil, false, err // never fall back to unrestricted on a failed read (ED3)
+	}
+	if len(own) > 0 {
+		return own, false, nil
+	}
+	return r.TagsForRoles(roleIDs)
+}

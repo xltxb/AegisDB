@@ -209,6 +209,21 @@ func (ScriptUpload) TableName() string { return "tbl_script_upload" }
 
 // RoleTag grants a role (user group) access to connections carrying the tag.
 // A role with no tags is unrestricted (sees every connection).
+// UserTag scopes ONE user's data access, overriding the role-derived scope.
+//
+// Tags are otherwise grants on roles, where "no tags" means unrestricted and the
+// most permissive role wins. That composes well for groups but cannot express
+// "this particular person": unioned with the role grants, a user-level tag would
+// do nothing for anyone whose role is already unrestricted — exactly the people
+// most often scoped. So a user-level grant is the MORE SPECIFIC statement and
+// replaces the role scope; a user with no rows here keeps the role behaviour.
+type UserTag struct {
+	UserID int64  `gorm:"primaryKey" json:"userId"`
+	Tag    string `gorm:"primaryKey;size:64" json:"tag"`
+}
+
+func (UserTag) TableName() string { return "tbl_user_tag" }
+
 type RoleTag struct {
 	RoleID int64  `gorm:"primaryKey" json:"roleId"`
 	Tag    string `gorm:"primaryKey;size:64" json:"tag"`
