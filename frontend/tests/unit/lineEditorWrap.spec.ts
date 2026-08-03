@@ -51,6 +51,7 @@ class Screen {
       }
       if (ch === '\r') { this.col = 0; continue }
       if (ch === '\n') { this.row++; this.col = 0; continue }
+      if (ch === '\b') { this.col = Math.max(0, this.col - 1); continue } // move left, erase nothing
       this.cell(this.row, this.col)[this.col] = ch
       this.col++
       if (this.col >= this.cols) { this.row++; this.col = 0 }
@@ -168,4 +169,41 @@ test('Ctrl+L repaints a wrapped line exactly once', () => {
 
   const expected = '> ' + sql.slice(0, -1)
   expect(screen.text()).toBe(expected)
+})
+
+// Typing must not repaint the whole line. The wrapped-line fix made every
+// keystroke walk to the top of the block, erase to the end of the display and
+// rewrite prompt+buffer — correct, but on a long statement that is a full
+// repaint per character, which the terminal shows as flicker.
+//
+// Appending at the end of a line is the overwhelmingly common edit and needs no
+// repaint at all: the character can simply be emitted. The cost of one keystroke
+// must therefore not grow with what is already typed.
+test('appending a character does not repaint the whole line', () => {
+  const screen = new Screen(120)
+  let handler: (d: string) => void = () => {}
+  let written = 0
+  const term = {
+    cols: 120,
+    onData(cb: (d: string) => void) { handler = cb },
+    write(s: string) { written += s.length; screen.write(s) },
+    clear() {},
+  }
+  const editor = new LineEditor(term as any, {
+    prompt: () => '> ', promptLen: () => 2,
+    contPrompt: () => '. ', contPromptLen: () => 2,
+    onSubmit: () => {},
+  })
+  editor.start()
+
+  const long = 'SELECT id, name, email FROM users WHERE tenant = 42 AND active = 1'
+  handler(long)
+
+  written = 0
+  handler('X') // one more character
+  expect(written, `one keystroke wrote ${written} chars for a ${long.length}-char line`)
+    .toBeLessThan(20)
+
+  // …and the screen is still right.
+  expect(screen.text()).toBe('> ' + long + 'X')
 })
