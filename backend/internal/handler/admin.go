@@ -305,9 +305,26 @@ func (h *Handler) ApprovalChain(c *gin.Context) {
 }
 
 func (h *Handler) ListApprovals(c *gin.Context) {
-	scope := c.DefaultQuery("scope", "all")
 	u := middleware.CurrentUser(c)
-	aps, _ := h.Repo.ListApprovals(scope, u.ID)
+	scope := c.DefaultQuery("scope", "all")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	if pageSize < 1 || pageSize > 500 {
+		pageSize = 50
+	}
+	// A ticket looked up by number is a single row wherever it happens to sit.
+	apNo := strings.TrimSpace(c.Query("ap"))
+	if apNo != "" {
+		page, pageSize = 1, 1
+	}
+	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, (page-1)*pageSize, pageSize)
+	if err != nil {
+		resp.Fail(c, resp.CodeInternalError, "加载失败")
+		return
+	}
 	type apView struct {
 		model.Approval
 		Steps []model.ApprovalStep `json:"steps"`
@@ -320,7 +337,8 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		a.Command = sqlutil.RedactSecrets(a.Command)
 		out = append(out, apView{Approval: a, Steps: steps})
 	}
-	resp.OK(c, out)
+	pending, _ := h.Repo.CountPendingApprovals(scope, u.ID)
+	resp.OK(c, gin.H{"items": out, "total": total, "pending": pending, "page": page, "pageSize": pageSize})
 }
 
 func (h *Handler) ApproveApproval(c *gin.Context) {

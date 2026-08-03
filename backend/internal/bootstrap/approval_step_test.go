@@ -21,11 +21,18 @@ type apWithSteps struct {
 func (a *testApp) approvalByNo(token, apNo string) apWithSteps {
 	a.t.Helper()
 	r := a.do(http.MethodGet, "/api/v1/approvals", token, nil)
+	// The listing is paged: unwrap the envelope before decoding the rows.
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil {
+		a.t.Fatalf("approvals envelope decode: %v", err)
+	}
 	if r.Code != 0 {
 		a.t.Fatalf("list approvals: code=%d msg=%s", r.Code, r.Msg)
 	}
 	var aps []apWithSteps
-	if err := json.Unmarshal(r.Data, &aps); err != nil {
+	if err := json.Unmarshal(page.Items, &aps); err != nil {
 		a.t.Fatalf("approvals decode: %v", err)
 	}
 	for _, ap := range aps {

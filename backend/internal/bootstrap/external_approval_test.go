@@ -27,8 +27,15 @@ func (a *testApp) approvalRow(token, apNo string) apStatusRow {
 	a.t.Helper()
 	r := a.do(http.MethodGet, "/api/v1/approvals", token, nil)
 	eq(a.t, r.Code, 0, "list approvals code")
+	// The listing is paged: unwrap the envelope before decoding the rows.
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil {
+		a.t.Fatalf("approvals envelope decode: %v", err)
+	}
 	var aps []apStatusRow
-	_ = json.Unmarshal(r.Data, &aps)
+	_ = json.Unmarshal(page.Items, &aps)
 	for _, ap := range aps {
 		if ap.ApNo == apNo {
 			return ap

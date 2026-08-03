@@ -101,8 +101,10 @@ function openApprovals() {
 onMounted(async () => {
   if (auth.menus.approve) {
     try {
-      const list = await api.approvals('all')
-      auth.pendingCount = list.filter((a) => a.status === 'pending').length
+      // The listing is paged, so the badge uses the server-side count rather than
+      // counting a page — otherwise it would silently cap at the page size.
+      const res = await api.approvals('all', 1, 1)
+      auth.pendingCount = res.pending
     } catch { /* ignore */ }
   }
   await fetchNotifs()

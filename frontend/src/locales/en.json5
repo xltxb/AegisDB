@@ -230,6 +230,7 @@
   apOpenTicket: 'Open this ticket',
   apNotFound: 'Ticket {ap} not found (it may have been purged, or you may not be allowed to see it)',
   apConfirm: '{verb} "{cmd}"?',
+  apTotal: '{n} total',
   termExecFail: '· Execution failed',
   termLostWhileRunning: 'Connection lost while the command was running — its outcome is unknown. Check the audit log before retrying.',
   termDeniedCap: '· Command denied: the capability matrix forbids this operation in this environment',

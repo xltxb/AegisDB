@@ -39,7 +39,7 @@ func TestScriptExecute_TargetDatabase(t *testing.T) {
 		ApNo     string `json:"apNo"`
 		Database string `json:"database"`
 	}
-	_ = json.Unmarshal(r.Data, &aps)
+	_ = json.Unmarshal(approvalItems(t, r.Data), &aps)
 	var got string
 	for _, a := range aps {
 		if a.ApNo == out.Exec.ApprovalNo {

@@ -53,11 +53,18 @@ func TestScriptExecute_RiskyScriptCreatesApproval(t *testing.T) {
 func (a *testApp) approvalDetail(token, apNo string) string {
 	a.t.Helper()
 	r := a.do(http.MethodGet, "/api/v1/approvals", token, nil)
+	// The listing is paged: unwrap the envelope before decoding the rows.
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil {
+		a.t.Fatalf("approvals envelope decode: %v", err)
+	}
 	var aps []struct {
 		ApNo    string `json:"apNo"`
 		Command string `json:"command"`
 	}
-	_ = json.Unmarshal(r.Data, &aps)
+	_ = json.Unmarshal(page.Items, &aps)
 	for _, ap := range aps {
 		if ap.ApNo == apNo {
 			return ap.Command

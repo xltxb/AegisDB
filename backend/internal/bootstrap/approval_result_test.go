@@ -53,8 +53,15 @@ type apFull struct {
 func (a *testApp) approvalFull(token, apNo string) apFull {
 	a.t.Helper()
 	r := a.do(http.MethodGet, "/api/v1/approvals", token, nil)
+	// The listing is paged: unwrap the envelope before decoding the rows.
+	var page struct {
+		Items json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil {
+		a.t.Fatalf("approvals envelope decode: %v", err)
+	}
 	var aps []apFull
-	_ = json.Unmarshal(r.Data, &aps)
+	_ = json.Unmarshal(page.Items, &aps)
 	for _, ap := range aps {
 		if ap.ApNo == apNo {
 			return ap

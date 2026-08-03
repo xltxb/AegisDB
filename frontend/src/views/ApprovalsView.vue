@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, FileText } from 'lucide-vue-next'
+import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, FileText, ChevronLeft, ChevronRight } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
@@ -28,14 +28,21 @@ function closeDetail() {
 }
 const scope = ref<'mine' | 'all'>('all')
 const list = ref<Approval[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 50
+const pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 
 const pending = computed(() => list.value.filter((a) => a.status === 'pending').length)
 
 async function load() {
   // M14: 加载失败以 toast 呈现，避免静默失败
   try {
-    list.value = await api.approvals(scope.value)
-    auth.pendingCount = list.value.filter((a) => a.status === 'pending').length
+    const res = await api.approvals(scope.value, page.value, pageSize)
+    list.value = res.items
+    total.value = res.total
+    // Server-side count: the badge must not be limited to the current page.
+    auth.pendingCount = res.pending
   } catch (e) {
     ui.notifyError(e, t('actionFailed'))
   }
@@ -52,18 +59,27 @@ onMounted(async () => {
 async function openFromQuery() {
   const ap = String(route.query.ap || '')
   if (!ap) return
-  let hit = list.value.find((a) => a.apNo === ap)
-  if (!hit && scope.value !== 'all') {
-    scope.value = 'all'
-    await load()
-    hit = list.value.find((a) => a.apNo === ap)
+  // Ask the server for this one ticket. Searching the loaded page would only
+  // work while it happened to be on it — with paging that is mostly false, and
+  // the link would appear broken exactly as it did before paging existed.
+  try {
+    const hit = await api.approvalByNo(ap)
+    if (hit) openDetail(hit)
+    else ui.notify(t('apNotFound', { ap }), 'info')
+  } catch {
+    ui.notify(t('apNotFound', { ap }), 'info')
   }
-  if (hit) openDetail(hit)
-  else ui.notify(t('apNotFound', { ap }), 'info')
 }
 
 async function setScope(s: 'mine' | 'all') {
   scope.value = s
+  page.value = 1 // a scope change invalidates the current position
+  await load()
+}
+
+async function goto(p: number) {
+  if (p < 1 || p > pages.value || p === page.value) return
+  page.value = p
   await load()
 }
 
@@ -136,6 +152,15 @@ function chainText(a: Approval) {
       <div v-if="!list.length" class="empty">{{ $t('apEmpty') }}</div>
     </div>
 
+    <div v-if="list.length" class="pfootbar">
+      <span class="ptotal">{{ $t('apTotal', { n: total }) }}</span>
+      <div class="pager">
+        <button class="pg" :disabled="page <= 1" @click="goto(page - 1)"><ChevronLeft :size="15" /></button>
+        <span class="pgn">{{ $t('auditPageOf', { p: page, n: pages }) }}</span>
+        <button class="pg" :disabled="page >= pages" @click="goto(page + 1)"><ChevronRight :size="15" /></button>
+      </div>
+    </div>
+
     <!-- detail card: the full command and everything needed to decide on it -->
     <div v-if="detail" class="overlay">
       <div class="mask" @click="closeDetail" />
@@ -174,6 +199,14 @@ function chainText(a: Approval) {
 </template>
 
 <style scoped>
+.pfootbar { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
+.ptotal { font: 500 12px var(--font-body); color: var(--text-muted); }
+.pager { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.pg { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border-subtle);
+  border-radius: 8px; background: var(--surface-card); color: var(--text-body); cursor: pointer; }
+.pg:disabled { opacity: .4; cursor: default; }
+.pgn { font: 500 12px var(--font-mono); color: var(--text-muted); }
+
 .table { border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
 .thead, .tr { display: grid; grid-template-columns: 110px 88px minmax(180px, 1fr) 130px 190px 120px 96px 76px; gap: 10px; align-items: center; padding: 10px 14px; }
 .thead { background: var(--surface-page); font: 600 11px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
