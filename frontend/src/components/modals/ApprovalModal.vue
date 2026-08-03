@@ -37,8 +37,8 @@ const badge = () => (props.risk === 'high'
 </script>
 
 <template>
-  <div v-if="open" class="overlay">
-    <div class="mask" @click="emit('cancel')" />
+  <div v-if="open" class="appr-overlay">
+    <div class="appr-mask" @click="emit('cancel')" />
     <div class="modal">
       <div class="topbar" />
       <div class="pad">
@@ -93,8 +93,8 @@ const badge = () => (props.risk === 'high'
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 50; }
-.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.appr-overlay { position: fixed; inset: 0; z-index: 50; }
+.appr-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
 .modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 580px; max-width: 92vw; background: var(--surface-card);

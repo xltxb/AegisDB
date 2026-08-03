@@ -22,8 +22,8 @@ function save() {
 </script>
 
 <template>
-  <div v-if="open" class="overlay">
-    <div class="mask" @click="emit('close')" />
+  <div v-if="open" class="ipallow-overlay">
+    <div class="ipallow-mask" @click="emit('close')" />
     <div class="modal">
       <div class="topbar" />
       <div class="pad">
@@ -55,8 +55,8 @@ function save() {
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 60; }
-.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.ipallow-overlay { position: fixed; inset: 0; z-index: 60; }
+.ipallow-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
 .modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 460px; max-width: 94vw; display: flex; flex-direction: column;

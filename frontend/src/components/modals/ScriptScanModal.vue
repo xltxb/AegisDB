@@ -24,8 +24,8 @@ function badgeMeta(r: string) {
 </script>
 
 <template>
-  <div v-if="open && scan" class="overlay">
-    <div class="mask" @click="emit('close')" />
+  <div v-if="open && scan" class="scan-overlay">
+    <div class="scan-mask" @click="emit('close')" />
     <div class="modal">
       <div class="topbar" />
       <div class="pad">
@@ -96,8 +96,8 @@ function badgeMeta(r: string) {
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 50; }
-.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.scan-overlay { position: fixed; inset: 0; z-index: 50; }
+.scan-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
 .modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 680px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column;
