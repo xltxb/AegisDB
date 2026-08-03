@@ -6,6 +6,7 @@ import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, FileText, Chevr
 import VButton from '@/components/common/VButton.vue'
 import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
+import { extractTables, tablesLabel } from '@/lib/sqlTables'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import type { Approval } from '@/types'
@@ -104,6 +105,11 @@ async function decide(a: Approval, approve: boolean) {
   }
 }
 
+// The row answers "which data does this touch"; the command itself is in the
+// detail card. A command can be a whole script, so putting it in the row means
+// truncating it — and the truncated part is often the part that matters.
+function tablesOf(a: Approval) { return tablesLabel(extractTables(a.command)) }
+
 function riskMeta(a: Approval) {
   return a.riskLevel === 'high'
     ? { t: 'highP1', bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
@@ -138,7 +144,7 @@ function chainText(a: Approval) {
       <div v-for="a in list" :key="a.id" class="tr" @click="openDetail(a)">
         <span class="mono apno">#{{ a.apNo }}</span>
         <span><span class="badge" :style="{ background: riskMeta(a).bg, color: riskMeta(a).c }">{{ $t(riskMeta(a).t as any) }}</span></span>
-        <span class="mono cmd1">{{ a.command }}</span>
+        <span class="mono cmd1" :title="a.command">{{ tablesOf(a) }}</span>
         <span class="who"><span class="ava">{{ a.initiator.slice(0, 2).toUpperCase() }}</span>{{ a.initiator }}</span>
         <span class="mono mute">{{ a.env.toUpperCase() }} · {{ a.instance }}</span>
         <span class="mono mute">{{ new Date(a.createdAt).toLocaleString('zh', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>

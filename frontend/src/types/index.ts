@@ -155,6 +155,9 @@ export interface AuditRow {
   risk: string
   result: string
   approvalNo: string
+  // Who actually authorised the action when that is not the actor (an external
+  // approver, or an administrator acting on another account). Empty = same person.
+  operator?: string
   hash: string
 }
 

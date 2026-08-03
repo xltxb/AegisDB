@@ -9,6 +9,7 @@ import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { extractTables, tablesLabel } from '@/lib/sqlTables'
 import { useUIStore } from '@/stores/ui'
 import type { AuditRow, AuditQuery } from '@/types'
 
@@ -21,6 +22,14 @@ const authStore = useAuthStore()
 // can actually open the approvals page — otherwise the click would land on a
 // guard and look broken.
 const canOpenApproval = computed(() => !!authStore.menus.approve)
+// Same reasoning as the approval queue: the row says which data was touched,
+// the full command lives in a card. An audited command is frequently a script,
+// and the audit row also carries context worth reading together with it (who,
+// where, the authorising ticket, and who approved it).
+const detail = ref<AuditRow | null>(null)
+function openDetail(r: AuditRow) { detail.value = r }
+function tablesOf(cmd: string) { return tablesLabel(extractTables(cmd)) }
+
 function openApproval(apNo?: string) {
   if (!apNo || !canOpenApproval.value) return
   router.push({ name: 'approvals', query: { ap: apNo } })
@@ -159,22 +168,52 @@ function fmtTime(s: string) {
 
     <!-- table -->
     <div class="table">
-      <div class="th"><span>{{ $t('colTime') }}</span><span>{{ $t('colWho') }}</span><span>{{ $t('mInst') }}</span><span>{{ $t('colCmd') }}</span><span>{{ $t('colRisk') }}</span><span>{{ $t('colResult') }}</span><span>{{ $t('colAp') }}</span></div>
-      <div v-for="r in rows" :key="r.id" class="tr">
+      <div class="th"><span>{{ $t('colTime') }}</span><span>{{ $t('colWho') }}</span><span>{{ $t('mInst') }}</span><span>{{ $t('colTables') }}</span><span>{{ $t('colRisk') }}</span><span>{{ $t('colResult') }}</span><span>{{ $t('colAp') }}</span></div>
+      <div v-for="r in rows" :key="r.id" class="tr click" @click="openDetail(r)">
         <span class="mono mute">{{ fmtTime(r.occurredAt) }}</span>
         <span class="who">{{ r.actor }}</span>
         <span class="mono mute">{{ r.instance }}<span v-if="r.database" class="dbtag"> / {{ r.database }}</span></span>
-        <span class="mono cmd"><span :style="{ color: kwColor(r.risk) }">{{ kw(r.command) }}</span>{{ rest(r.command) }}</span>
+        <span class="mono cmd" :title="r.command">
+          <span :style="{ color: kwColor(r.risk) }">{{ kw(r.command) }}</span>
+          <span class="tbl">{{ tablesOf(r.command) }}</span>
+        </span>
         <span><span class="rbadge" :style="{ background: riskMeta(r.risk).bg, color: riskMeta(r.risk).c }">{{ riskMeta(r.risk).t }}</span></span>
         <span class="res" :style="{ color: resMeta(r.result).c }"><component :is="resMeta(r.result).icon" :size="12" />{{ resMeta(r.result).t }}</span>
         <span
           class="ap" :class="{ link: r.approvalNo && canOpenApproval }"
           :style="{ color: r.approvalNo ? '#8facff' : 'var(--text-faint)' }"
           :title="r.approvalNo && canOpenApproval ? $t('apOpenTicket') : ''"
-          @click="openApproval(r.approvalNo)"
+          @click.stop="openApproval(r.approvalNo)"
         >{{ r.approvalNo ? '#' + r.approvalNo : '—' }}</span>
       </div>
     </div>
+    <!-- detail card: the executed command in full, with its context -->
+    <div v-if="detail" class="overlay">
+      <div class="mask" @click="detail = null" />
+      <div class="dcard">
+        <div class="dhead">
+          <span class="rbadge" :style="{ background: riskMeta(detail.risk).bg, color: riskMeta(detail.risk).c }">{{ riskMeta(detail.risk).t }}</span>
+          <span class="dtitle">{{ $t('colCmd') }}</span>
+          <span class="mono mute">{{ fmtTime(detail.occurredAt) }}</span>
+          <X :size="18" class="dx" @click="detail = null" />
+        </div>
+        <div class="dbody">
+          <pre class="dcmd">{{ detail.command }}</pre>
+          <div class="dgrid">
+            <div><span class="ml">{{ $t('colWho') }}</span><div class="dv">{{ detail.actor }}</div></div>
+            <div><span class="ml">{{ $t('mInst') }}</span><div class="dv mono">{{ detail.instance }}<template v-if="detail.database"> / {{ detail.database }}</template></div></div>
+            <div><span class="ml">{{ $t('colResult') }}</span><div class="dv" :style="{ color: resMeta(detail.result).c }">{{ resMeta(detail.result).t }}</div></div>
+            <div><span class="ml">{{ $t('colTables') }}</span><div class="dv mono">{{ tablesOf(detail.command) }}</div></div>
+            <div v-if="detail.operator"><span class="ml">{{ $t('colOperator') }}</span><div class="dv">{{ detail.operator }}</div></div>
+            <div v-if="detail.approvalNo">
+              <span class="ml">{{ $t('colAp') }}</span>
+              <div class="dv ap" :class="{ link: canOpenApproval }" @click="openApproval(detail.approvalNo)">#{{ detail.approvalNo }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="foot">
       <span class="hint">{{ $t('auditFootHint') }}</span>
       <span class="total">{{ $t('auditTotal', { n: total }) }}</span>
@@ -188,6 +227,25 @@ function fmtTime(s: string) {
 </template>
 
 <style scoped>
+.tr.click { cursor: pointer; }
+.tr.click:hover { background: var(--surface-page); }
+.cmd .tbl { color: var(--text-muted); margin-left: 6px; }
+.overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.dcard { position: relative; width: min(760px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
+.dhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.dtitle { font: 600 14px var(--font-display); color: var(--text-strong); }
+.dx { margin-left: auto; cursor: pointer; color: var(--text-muted); }
+.dbody { padding: 14px 16px; overflow: auto; }
+.dcmd { margin: 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-page);
+  border: 1px solid var(--border-subtle); font: 400 12px/1.65 var(--font-mono); color: var(--text-strong);
+  white-space: pre-wrap; word-break: break-word; }
+.dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.ml { font: 600 11px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.dv { font: 500 12px var(--font-body); color: var(--text-body); margin-top: 4px; }
+.dv.ap { color: #8facff; }
+
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
