@@ -8,6 +8,8 @@ import TagEditModal from '@/components/modals/TagEditModal.vue'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
+import { engineLabels } from '@/lib/engines'
 import type { Connection } from '@/types'
 
 const auth = useAuthStore()
@@ -18,7 +20,6 @@ const { t } = useI18n()
 const ui = useUIStore()
 
 const conns = ref<Connection[]>([])
-const saved = ref(false)
 const allTags = ref<string[]>([])
 const tagModal = ref<{ open: boolean; conn: Connection | null }>({ open: false, conn: null })
 const tagArr = (s: string) => (s ? s.split(',').map((x) => x.trim()).filter(Boolean) : [])
@@ -31,7 +32,7 @@ async function saveTags(tags: string[]) {
     await load()
     allTags.value = await api.tags()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -42,27 +43,111 @@ async function setPolicy(c: Connection, policy: string) {
     await api.setConnectionPolicy(c.id, policy)
     await load()
   } catch (e) {
-    ui.notifyError(e, '网关策略更新失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
-const envOpts = [
-  { label: 'PROD · L1 核心', env: 'prod' },
-  { label: 'GLI · L2 灰度', env: 'gli' },
-  { label: 'STAGING · L3 演练UAT', env: 'staging' },
-  { label: 'DEV · L4 沙盒', env: 'dev' },
-]
-const engineOpts = ['MySQL 8.0', 'TiDB', 'GaussDB (DWS)', 'Oracle', 'PostgreSQL 15', 'ClickHouse', 'Redis 7']
+// Computed, not a constant: built once at module scope the labels would stay in
+// whichever language was active at load time.
+const envOpts = computed(() => [
+  { label: t('envProd'), env: 'prod' },
+  { label: t('envGli'), env: 'gli' },
+  { label: t('envStaging'), env: 'staging' },
+  { label: t('envDev'), env: 'dev' },
+])
+// Straight from the shared catalogue so the console can only offer engines the
+// gateway can actually drive (see lib/engines). ClickHouse and Redis used to be
+// listed here with no driver behind them: such a connection saves fine and then
+// behaves as a simulated one.
+const engineOpts = engineLabels()
 // Oracle identifies the target DB by a service name (or a SID via the "sid/" prefix),
 // not a plain schema name — hint that in the 数据库名 field placeholder.
-const dbHint = (engine: string) => (/oracle/i.test(engine) ? 'service name 或 sid/ORCL' : 'orders_db')
+const dbHint = (engine: string) => (/oracle/i.test(engine) ? t('dbHintOracle') : 'orders_db')
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
-const blankDraft = () => ({ name: '', host: '', engine: 'MySQL 8.0', envLabel: 'PROD · L1 核心', policy: 'strict', username: '', password: '', database: '' })
+const blankDraft = () => ({ name: '', host: '', engine: engineOpts[0], envLabel: t('envProd'), policy: 'strict', username: '', password: '', database: '' })
 const draft = ref(blankDraft())
 
-// Edit an existing instance in a modal (separate from the create form). Password is
-// left blank = keep the stored one.
+// Creating an instance uses the same modal treatment as editing one: the form
+// used to sit permanently at the bottom of the page, below the table, so the
+// "new connection" button had nowhere to go and was wired to nothing.
+const newModal = ref(false)
+const newBusy = ref(false)
+function openNew() {
+  if (!isAdmin.value) return
+  draft.value = blankDraft()
+  newModal.value = true
+}
+// ---- bulk import ----
+//
+// Each row becomes a real instance the gateway proxies commands to, so the whole
+// sheet is parsed and validated BEFORE anything is created (see lib/connectionImport):
+// a half-applied sheet that then fails leaves the estate in a state nobody asked
+// for. Rows are created through the ordinary connections API, so the server-side
+// environment/policy validation and credential encryption all still apply.
+const impModal = ref(false)
+const impText = ref('')
+const impFile = ref<HTMLInputElement>()
+const impBusy = ref(false)
+const impDone = ref(0)
+const impFailures = ref<string[]>([])
+const impParsed = computed(() => parseConnectionImport(impText.value))
+
+function openImport() {
+  if (!isAdmin.value) return
+  impText.value = ''
+  impFailures.value = []
+  impDone.value = 0
+  impModal.value = true
+}
+
+async function pickImportFile(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0]
+  if (!f) return
+  impText.value = await f.text()
+  if (impFile.value) impFile.value.value = '' // let the same file be chosen again
+}
+
+function downloadTemplate() {
+  const url = URL.createObjectURL(new Blob([IMPORT_TEMPLATE], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'connections-template.csv'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function runImport() {
+  const rows: ImportRow[] = impParsed.value.rows
+  if (!rows.length) { ui.notify(t('impNothing'), 'info'); return }
+  impBusy.value = true
+  impDone.value = 0
+  impFailures.value = []
+  let ok = 0
+  // Sequential on purpose: each create is a privileged write, and a per-row
+  // outcome is far more useful than one aggregate failure from a parallel burst.
+  for (const r of rows) {
+    try {
+      const created = await api.createConnection({
+        name: r.name, engine: r.engine, host: r.host, env: r.env as any,
+        policy: r.policy, username: r.username, password: r.password, database: r.database,
+      })
+      try { await api.testConnection(created.id) } catch { /* best-effort attach */ }
+      ok++
+    } catch (e: any) {
+      impFailures.value.push(t('impRowFailed', { line: r.line, name: r.name, msg: e?.message || '' }))
+    }
+    impDone.value++
+  }
+  impBusy.value = false
+  await load()
+  ui.notify(t('impDone', { ok, fail: rows.length - ok }), impFailures.value.length ? 'error' : 'success')
+  if (!impFailures.value.length) impModal.value = false
+}
+
+// Edit an existing instance in a modal. A blank password keeps the stored one.
 const editModal = ref<{ open: boolean; id: number }>({ open: false, id: 0 })
 const editDraft = ref(blankDraft())
 const editBusy = ref(false)
@@ -72,7 +157,7 @@ function openEdit(c: Connection) {
     name: c.name,
     host: `${c.host}:${c.port}`,
     engine: c.engine,
-    envLabel: envOpts.find((o) => o.env === c.env)?.label || envOpts[0].label,
+    envLabel: envOpts.value.find((o) => o.env === c.env)?.label || envOpts.value[0].label,
     policy: c.policy,
     username: c.username || '',
     password: '',
@@ -82,7 +167,7 @@ function openEdit(c: Connection) {
 }
 async function saveEdit() {
   if (!editDraft.value.name.trim() || !editDraft.value.host.trim()) return
-  const env = envOpts.find((o) => o.label === editDraft.value.envLabel)?.env || 'prod'
+  const env = envOpts.value.find((o) => o.label === editDraft.value.envLabel)?.env || 'prod'
   editBusy.value = true
   try {
     // Update, then test-attach to the gateway (best-effort).
@@ -95,7 +180,7 @@ async function saveEdit() {
     editModal.value = { open: false, id: 0 }
     await load()
   } catch (e) {
-    ui.notifyError(e, '更新失败')
+    ui.notifyError(e, t('actionFailed'))
   } finally {
     editBusy.value = false
   }
@@ -112,7 +197,7 @@ async function load() {
     conns.value = await api.connections()
     ui.pageSub = t('subDb', { n: conns.value.length })
   } catch (e) {
-    ui.notifyError(e, '加载失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 onMounted(async () => { await load(); try { allTags.value = await api.tags() } catch { /* ignore */ } })
@@ -136,29 +221,32 @@ async function toggle(c: Connection) {
     await api.toggleConnection(c.id)
     await load()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
 async function add() {
   if (!draft.value.name.trim() || !draft.value.host.trim()) return
-  const env = envOpts.find((o) => o.label === draft.value.envLabel)?.env || 'prod'
+  const env = envOpts.value.find((o) => o.label === draft.value.envLabel)?.env || 'prod'
   const body = {
     name: draft.value.name.trim(), engine: draft.value.engine,
     host: draft.value.host.trim(), env: env as any, policy: draft.value.policy,
     username: draft.value.username.trim(), password: draft.value.password, database: draft.value.database.trim(),
   }
   // M14: 失败以 toast 呈现
+  newBusy.value = true
   try {
     // "测试连接并保存" (FR-CONN-02): create then test-attach to the gateway.
     const created = await api.createConnection(body)
     try { await api.testConnection(created.id) } catch { /* best-effort */ }
     draft.value = blankDraft()
-    saved.value = true
-    setTimeout(() => (saved.value = false), 2600)
+    newModal.value = false
     await load()
+    ui.notify(t('connSaved'), 'success')
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
+  } finally {
+    newBusy.value = false
   }
 }
 </script>
@@ -173,8 +261,8 @@ async function add() {
       <div class="acts">
         <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
         <template v-else>
-          <VButton variant="secondary">{{ $t('importInst') }}</VButton>
-          <VButton variant="primary">{{ $t('newConn') }}</VButton>
+          <VButton variant="secondary" @click="openImport">{{ $t('importInst') }}</VButton>
+          <VButton variant="primary" @click="openNew">{{ $t('newConn') }}</VButton>
         </template>
       </div>
     </div>
@@ -216,28 +304,74 @@ async function add() {
       </template>
     </div>
 
-    <div v-if="isAdmin" class="form">
-      <div class="ftitle">{{ $t('formNewConn') }}<span v-if="saved" class="savetag">{{ $t('connSaved') }}</span></div>
-      <div class="fsub">{{ $t('formNewConnSub') }}</div>
-      <div class="fgrid">
-        <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
-        <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
-        <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="draft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
-        <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="draft.host" placeholder="10.20.3.12:3306" /></div>
-        <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
-        <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" :placeholder="dbHint(draft.engine)" /></div>
-        <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
-        <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
-      </div>
-      <div class="credhint">{{ $t('connCredHint') }}</div>
-      <div class="fsaverow"><VButton variant="primary" @click="add">{{ $t('fSave') }}</VButton></div>
-    </div>
-
     <TagEditModal
       :open="tagModal.open" :title="$t('tagConnTitle')" :subtitle="tagModal.conn ? tagModal.conn.name : ''"
       :tags="tagArr(tagModal.conn?.tags || '')" :suggestions="allTags"
       @close="tagModal.open = false" @save="saveTags"
     />
+
+    <!-- Bulk-import modal -->
+    <Teleport to="body">
+      <div v-if="impModal" class="ce-mask" @click.self="impBusy || (impModal = false)">
+        <div class="ce-card imp">
+          <div class="ce-head">
+            <div class="ce-title">{{ $t('impTitle') }}</div>
+            <div class="ce-sub">{{ $t('impSub') }}</div>
+          </div>
+          <div class="ce-body">
+            <div class="imp-bar">
+              <VButton variant="secondary" @click="impFile?.click()">{{ $t('impPick') }}</VButton>
+              <VButton variant="secondary" @click="downloadTemplate">{{ $t('impTemplate') }}</VButton>
+              <input ref="impFile" type="file" accept=".csv,text/csv,text/plain" hidden @change="pickImportFile" />
+            </div>
+            <div class="fl">{{ $t('impPaste') }}</div>
+            <textarea v-model="impText" class="imp-ta" spellcheck="false" :placeholder="IMPORT_TEMPLATE"></textarea>
+            <div class="imp-hint">{{ $t('impCols') }}</div>
+
+            <div v-if="impParsed.rows.length" class="imp-ok">{{ $t('impPreview', { n: impParsed.rows.length }) }}</div>
+            <div v-if="impParsed.errors.length" class="imp-bad">
+              <div class="imp-bad-t">{{ $t('impErrTitle', { n: impParsed.errors.length }) }}</div>
+              <div v-for="(e, i) in impParsed.errors" :key="i" class="imp-bad-l">{{ e.message }}</div>
+            </div>
+            <div v-if="impFailures.length" class="imp-bad">
+              <div v-for="(f, i) in impFailures" :key="'f' + i" class="imp-bad-l">{{ f }}</div>
+            </div>
+          </div>
+          <div class="ce-foot">
+            <VButton variant="secondary" :disabled="impBusy" @click="impModal = false">{{ $t('mCancel') }}</VButton>
+            <VButton variant="primary" :disabled="impBusy || !impParsed.rows.length" @click="runImport">
+              {{ impBusy ? $t('impRunning', { done: impDone, total: impParsed.rows.length }) : $t('impRun') }}
+            </VButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- New-instance modal (same shape as the edit one) -->
+    <Teleport to="body">
+      <div v-if="newModal" class="ce-mask" @click.self="newModal = false">
+        <div class="ce-card">
+          <div class="ce-head"><div class="ce-title">{{ $t('formNewConn') }}</div><div class="ce-sub">{{ $t('formNewConnSub') }}</div></div>
+          <div class="ce-body">
+            <div class="fgrid">
+              <div><div class="fl">{{ $t('fName') }}</div><input v-model="draft.name" placeholder="order-cluster-2" /></div>
+              <div><div class="fl">{{ $t('fEngine') }}</div><VSelect v-model="draft.engine" :options="engineOpts" /></div>
+              <div><div class="fl">{{ $t('fEnv') }}</div><VSelect v-model="draft.envLabel" :options="envOpts.map((o) => o.label)" /></div>
+              <div><div class="fl">{{ $t('fAddr') }}</div><input v-model="draft.host" placeholder="10.20.3.12:3306" /></div>
+              <div><div class="fl">{{ $t('fPolicy') }}</div><VSelect v-model="draft.policy" :options="policyOpts" /></div>
+              <div><div class="fl">{{ $t('fDatabase') }}</div><input v-model="draft.database" :placeholder="dbHint(draft.engine)" /></div>
+              <div><div class="fl">{{ $t('fUser') }}</div><input v-model="draft.username" placeholder="app_ro" /></div>
+              <div><div class="fl">{{ $t('fPassword') }}</div><input v-model="draft.password" type="password" placeholder="••••••" /></div>
+            </div>
+            <div class="credhint">{{ $t('connCredHint') }}</div>
+          </div>
+          <div class="ce-foot">
+            <VButton variant="secondary" @click="newModal = false">{{ $t('mCancel') }}</VButton>
+            <VButton variant="primary" :disabled="newBusy" @click="add">{{ newBusy ? $t('connTestSaving') : $t('connTestSave') }}</VButton>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Edit-instance modal -->
     <Teleport to="body">
@@ -301,9 +435,6 @@ async function add() {
 .polsel:focus { border-color: var(--accent-text); }
 .polsel option { background: var(--surface-card); color: var(--text-body); }
 .dotc { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.form { margin-top: 20px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 20px 22px; }
-.ftitle { font: 600 14px var(--font-display); color: var(--text-strong); display: flex; align-items: center; gap: 10px; }
-.savetag { font: 600 12px var(--font-mono); color: var(--success-text); }
 .statuscell { display: flex; align-items: center; gap: 10px; }
 .editbtn { width: 28px; height: 26px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .editbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
@@ -315,11 +446,18 @@ async function add() {
 .ce-sub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
 .ce-body { padding: 18px 22px; }
 .ce-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); border-radius: 0 0 16px 16px; }
-.fsub { font: 500 12px var(--font-body); color: var(--text-muted); margin: 4px 0 16px; }
 .fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
 .fgrid input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-body); outline: none; }
 .fgrid input:focus { border-color: var(--accent-text); }
+.ce-card.imp { max-width: 720px; }
+.imp-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+.imp-ta { width: 100%; min-height: 180px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border-subtle);
+  border-radius: 10px; background: var(--surface-page); color: var(--text-body); font: 400 12px/1.6 var(--font-mono); }
+.imp-hint { font: 500 11px var(--font-body); color: var(--text-faint); margin-top: 8px; }
+.imp-ok { margin-top: 12px; font: 600 12px var(--font-mono); color: var(--success-text); }
+.imp-bad { margin-top: 12px; border-left: 3px solid var(--danger-text); padding-left: 10px; }
+.imp-bad-t { font: 600 12px var(--font-body); color: var(--danger-text); margin-bottom: 4px; }
+.imp-bad-l { font: 400 12px/1.7 var(--font-mono); color: var(--text-muted); }
 .credhint { margin-top: 14px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
-.fsaverow { margin-top: 14px; display: flex; gap: 10px; justify-content: flex-end; }
 </style>

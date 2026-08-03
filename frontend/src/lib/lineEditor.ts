@@ -60,7 +60,12 @@ export class LineEditor {
   /** Insert output lines above the current input line, then redraw the prompt.
    *  Use for out-of-band output (script results, notices) while the editor is idle. */
   printAbove(lines: string[]) {
-    this.term.write('\r\x1b[2K')
+    // Erase the WHOLE input block first — it may span several rows, and clearing
+    // only the current one left the earlier rows on screen with the output
+    // printed under them, so the half-typed statement appeared twice (see redraw).
+    if (this.renderedRow > 0) this.term.write(`\x1b[${this.renderedRow}A`)
+    this.term.write('\r\x1b[0J')
+    this.renderedRow = 0
     for (const l of lines) this.term.write(l + '\r\n')
     if (!this.busy) this.redraw()
   }
@@ -113,12 +118,48 @@ export class LineEditor {
     return this.inCont ? this.opts.contPrompt() : this.opts.prompt()
   }
 
-  // Redraw the current physical line: carriage-return, erase, prompt+buffer,
-  // then reposition the cursor.
+  // renderedRow is which row of the last render the cursor was left on, so the
+  // next redraw knows how far UP the block it has to go before erasing.
+  private renderedRow = 0
+
+  private cols() {
+    return Math.max(1, this.term.cols || 80)
+  }
+
+  // Redraw the current input line, which may occupy SEVERAL terminal rows.
+  //
+  // The old version erased with `\r\x1b[2K` — carriage return plus "erase this
+  // row". That only holds while the line fits on one row. Once prompt+buffer is
+  // wider than the terminal it wraps, and the cursor sits on the LAST row: the
+  // erase cleared just that row, the rewrite wrapped again and landed BELOW the
+  // stale copy, so every keystroke left another copy behind. Holding backspace on
+  // a long statement filled the screen with dozens of near-identical lines.
+  //
+  // So: walk back up to the first row of what was drawn, erase from there to the
+  // end of the display, redraw, then place the cursor.
   private redraw() {
-    this.term.write('\r\x1b[2K' + this.curPrompt() + this.buf)
-    const back = this.buf.length - this.cur
-    if (back > 0) this.term.write(`\x1b[${back}D`)
+    const cols = this.cols()
+    if (this.renderedRow > 0) this.term.write(`\x1b[${this.renderedRow}A`)
+    this.term.write('\r\x1b[0J')
+    this.term.write(this.curPrompt() + this.buf)
+
+    const promptLen = this.curPromptLen()
+    const end = promptLen + this.buf.length
+    // A buffer ending exactly at the right edge leaves the terminal in "pending
+    // wrap": the cursor is still on the last full row rather than the next one,
+    // which would make the row arithmetic below off by one. Emit one space to
+    // commit the wrap so both agree. It sits past the text and is erased by the
+    // next redraw.
+    if (end > 0 && end % cols === 0) this.term.write(' ')
+
+    const target = promptLen + this.cur
+    const endRow = Math.floor(end / cols)
+    const targetRow = Math.floor(target / cols)
+    const targetCol = target % cols
+    if (endRow > targetRow) this.term.write(`\x1b[${endRow - targetRow}A`)
+    this.term.write('\r')
+    if (targetCol > 0) this.term.write(`\x1b[${targetCol}C`)
+    this.renderedRow = targetRow
   }
 
   private insert(s: string) {
@@ -264,8 +305,9 @@ export class LineEditor {
 
   private ctrlL() {
     this.term.clear()
-    this.term.write('\r\x1b[2K' + this.curPrompt() + this.buf)
-    const back = this.buf.length - this.cur
-    if (back > 0) this.term.write(`\x1b[${back}D`)
+    // clear() homes the cursor and nothing of ours is on screen any more, so the
+    // remembered row would send the next redraw upwards into cleared space.
+    this.renderedRow = 0
+    this.redraw()
   }
 }

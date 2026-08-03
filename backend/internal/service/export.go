@@ -135,7 +135,7 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	// Anything the engine does not outright allow is refused — an export has no
 	// approval flow to route an `approve` verdict into, so the user is sent to
 	// the terminal for that.
-	if v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql); v.Action != gateway.ActionAllow {
+	if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql); v.Action != gateway.ActionAllow {
 		s.recordAudit(u, conn, sql, v.Risk, model.ResultRejected, "", "intercept")
 		return nil, ErrForbidden
 	}

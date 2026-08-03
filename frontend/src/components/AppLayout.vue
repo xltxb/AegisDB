@@ -35,9 +35,14 @@ const navItems = [
 
 const visibleNav = computed(() => navItems.filter((n) => auth.menus[(n as any).gate ?? n.key]))
 const activeKey = computed(() => (route.meta.menuKey as string) || '')
-const pageTitle = computed(() => t(`t_${route.name as string}` as any))
+// Titles are keyed off the MENU key, not the route name. The two differ for
+// several routes (connections→db, approvals→approve, risk-rules→rules,
+// permissions→perms), and vue-i18n renders a missing key as the key itself — so
+// those four pages showed a raw "t_connections" where their title belongs.
+const titleKey = computed(() => (route.meta.menuKey as string) || (route.name as string) || '')
+const pageTitle = computed(() => t(`t_${titleKey.value}` as any))
 // Views may publish a data-driven subtitle via ui.pageSub; otherwise fall back to i18n default.
-const pageSub = computed(() => ui.pageSub || t(`t_${route.name as string}Sub` as any))
+const pageSub = computed(() => ui.pageSub || t(`t_${titleKey.value}Sub` as any))
 const isDark = computed(() => ui.resolvedTheme() === 'dark')
 
 // Reset the override on navigation so each view starts from its default.

@@ -36,6 +36,55 @@ func pqEscape(v string) string {
 // reports whether real execution is configured (credentials present, or a
 // sqlite file). Supported: MySQL, TiDB, PostgreSQL/GaussDB(DWS), Oracle, SQLite.
 // The stored password is decrypted here (it is AES-encrypted at rest).
+// Engine families: the wire protocols this gateway can actually speak. The
+// Engine field on a connection is free text (chosen in the console, or imported
+// from a CSV), so it is normalised to one of these before a driver is picked.
+const (
+	familyMySQL    = "mysql"
+	familyPostgres = "postgres"
+	familyOracle   = "oracle"
+	familySQLite   = "sqlite"
+	// MongoDB is judged by its own dialect (see dialect.go). It has no driver
+	// here yet, so it resolves to a family without being executable — a
+	// connection is refused rather than silently simulated.
+	familyMongo = "mongo"
+)
+
+// engineFamily maps an engine label to the wire protocol used to reach it, or ""
+// when this gateway cannot drive it at all.
+//
+// Deciding this in one place rather than through a chain of substring checks
+// inside engineDriver matters because labels overlap: a name can contain more
+// than one product word, and whichever branch happened to be written first would
+// silently win and pick the wrong protocol. It also gives "which engines are
+// actually supported" a single answer the console can be checked against.
+//
+// Redis and ClickHouse deliberately resolve to "": no driver here, and the risk
+// engine would have nothing meaningful to say about them. MongoDB DOES resolve to
+// a family because it has its own judgement dialect (dialect.go) — but no driver
+// yet, so engineDriver still reports it as not executable rather than attaching
+// it to a protocol it cannot speak.
+func engineFamily(engine string) string {
+	e := strings.ToLower(strings.TrimSpace(engine))
+	switch {
+	case e == "":
+		return ""
+	case strings.Contains(e, "sqlite"):
+		return familySQLite
+	case strings.Contains(e, "oracle"):
+		return familyOracle
+	case strings.Contains(e, "mongo"):
+		return familyMongo
+	// PolarDB is MySQL-compatible, so it speaks the MySQL protocol.
+	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"),
+		strings.Contains(e, "tidb"), strings.Contains(e, "polardb"):
+		return familyMySQL
+	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
+		return familyPostgres
+	}
+	return ""
+}
+
 func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 	e := strings.ToLower(conn.Engine)
 	pw, err := crypto.DecryptSecret(conn.Password)
@@ -47,10 +96,10 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 	if !strings.Contains(e, "sqlite") && !strings.Contains(e, "oracle") && !dbNameRe.MatchString(conn.Database) {
 		return "", "", false
 	}
-	switch {
-	case strings.Contains(e, "sqlite"):
+	switch engineFamily(e) {
+	case familySQLite:
 		return "sqlite", conn.Database, conn.Database != ""
-	case strings.Contains(e, "tidb") || strings.Contains(e, "mysql") || strings.Contains(e, "mariadb"):
+	case familyMySQL:
 		cfg := mysqldrv.NewConfig()
 		cfg.User = conn.Username
 		cfg.Passwd = pw
@@ -68,7 +117,7 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 		// gate's one-statement guarantee cannot be bypassed via the DSN.
 		cfg.TLSConfig = "preferred"
 		return "mysql", cfg.FormatDSN(), conn.Username != ""
-	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
+	case familyPostgres:
 		// PostgreSQL must connect to a specific database. When none is configured,
 		// default to "postgres" (the maintenance DB that almost always exists) —
 		// otherwise libpq defaults dbname to the USER, which usually doesn't exist
@@ -83,7 +132,7 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 		dsn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=require connect_timeout=8",
 			pqEscape(conn.Host), conn.Port, pqEscape(conn.Username), pqEscape(pw), pqEscape(dbName))
 		return "postgres", dsn, conn.Username != ""
-	case strings.Contains(e, "oracle"):
+	case familyOracle:
 		// Oracle identifies the target DB by a SERVICE NAME (go-ora default) or a
 		// SID. The "数据库名" field carries it; prefix "sid/" (or "sid:") to connect
 		// by SID, e.g. "sid/ORCL". An empty/unsafe value yields empty params so

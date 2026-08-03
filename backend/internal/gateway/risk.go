@@ -377,8 +377,18 @@ func (e *RiskEngine) Evaluate(roleID int64, env, sql string) Verdict {
 // compose as a union. Layers ② (risk dictionary) and ③ (strict mode) are
 // role-independent and unchanged.
 func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
-	verb := ParseVerb(sql)
-	cap := MapVerbToCapability(verb)
+	return e.EvaluateFor(roleIDs, "", env, sql)
+}
+
+// EvaluateFor is EvaluateRoles for a command written in a specific engine's
+// language. The three policy layers are identical; only the reading of the
+// command differs, and that is delegated to the engine's dialect (see
+// dialect.go). An empty engine keeps the SQL dialect, so existing callers and
+// behaviour are unchanged.
+func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, env, sql string) Verdict {
+	d := DialectFor(engine)
+	verb := d.Verb(sql)
+	cap := d.Capability(verb)
 	capLevel, err := e.capabilityLevelUnion(roleIDs, cap, env)
 	if err != nil {
 		return unavailableVerdict(verb, err)
@@ -395,7 +405,7 @@ func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
 		verb = matched
 	}
 	rule := ""
-	if e.strict.Load() && NoWhere(sql) {
+	if e.strict.Load() && d.UnscopedMutation(sql) {
 		lvl = model.RiskHigh
 		rule = "严格模式 · 无 WHERE 的 DELETE / UPDATE"
 	}

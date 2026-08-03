@@ -54,7 +54,7 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.Risk
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql)
+	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql)
 	return &dto.RiskCheckResp{
 		Risk:             v.Risk,
 		Action:           v.Action,
@@ -114,7 +114,7 @@ func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	roleIDs := s.Repo.EffectiveRoleIDs(u)
 	for _, st := range stmts {
-		v := s.Engine.EvaluateRoles(roleIDs, conn.Env, st)
+		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, conn.Env, st)
 		if actionRank(v.Action) > actionRank(strict.Action) {
 			strict = v
 		}
@@ -139,7 +139,7 @@ func actionRank(a string) int {
 // this out lets a whole-script execution validate MFA ONCE up front instead of
 // per statement (which forced an empty code on every line — R18).
 func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
-	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, sql), reason)
+	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql), reason)
 }
 
 // applyVerdict routes a judged command to deny / approve / allow and records the
@@ -216,7 +216,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 		}
 	}
 	if worst != "" {
-		if v := s.Engine.EvaluateRoles(s.Repo.EffectiveRoleIDs(u), conn.Env, worst); v.Action == gateway.ActionDeny {
+		if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, worst); v.Action == gateway.ActionDeny {
 			s.recordAudit(u, conn, "\\i "+filename, model.RiskHigh, model.ResultRejected, "", "intercept")
 			return nil, ErrForbidden
 		}
