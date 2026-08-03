@@ -158,7 +158,7 @@ func (s *Services) AccessibleConnections(u *model.User) ([]model.Connection, err
 	if u == nil {
 		return all, nil
 	}
-	allow, unrestricted, err := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	allow, unrestricted, err := s.Repo.ScopeForUser(u.ID, s.Repo.EffectiveRoleIDs(u))
 	if err != nil {
 		return nil, err // don't fall back to "unrestricted" on a failed read (ED3)
 	}
@@ -186,7 +186,7 @@ func (s *Services) canAccessConn(u *model.User, conn *model.Connection) bool {
 	if u == nil || conn == nil {
 		return false
 	}
-	allow, unrestricted, err := s.Repo.TagsForRoles(s.Repo.EffectiveRoleIDs(u))
+	allow, unrestricted, err := s.Repo.ScopeForUser(u.ID, s.Repo.EffectiveRoleIDs(u))
 	if err != nil {
 		slog.Error("tag access check failed — denying", "userID", u.ID, "connID", conn.ID, "err", err)
 		return false // a check that cannot run denies (ED3)
@@ -742,4 +742,32 @@ func (s *Services) AuditRoleChange(actor *model.User, roleID int64, what string,
 	}
 	detail, _ := json.Marshal(value)
 	s.auditAdminAction(actor, "admin.role."+what+" role="+name+" value="+clip(string(detail), 400))
+}
+
+// UserTags returns the tags granted directly to a user (empty = the role scope
+// applies).
+func (s *Services) UserTags(id int64) ([]string, error) {
+	if _, err := s.Repo.GetUserByID(id); err != nil {
+		return nil, ErrNotFound
+	}
+	return s.Repo.TagsForUser(id)
+}
+
+// SetUserTags scopes one user's data access. This is a privilege change — it
+// decides which instances that person can see and execute against — so it is
+// audited like the other administrative mutations (EU4).
+func (s *Services) SetUserTags(actor *model.User, id int64, tags []string) error {
+	target, err := s.Repo.GetUserByID(id)
+	if err != nil {
+		return ErrNotFound
+	}
+	if err := s.Repo.SetUserTags(id, tags); err != nil {
+		return err
+	}
+	scope := strings.Join(tags, "|")
+	if scope == "" {
+		scope = "(role default)"
+	}
+	s.auditAdminAction(actor, "admin.user.tags scope="+scope+" user="+target.Email)
+	return nil
 }

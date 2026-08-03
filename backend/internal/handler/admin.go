@@ -186,6 +186,30 @@ func (h *Handler) SetRoleCapabilities(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true})
 }
 
+// UserTags returns one user's direct data-access scope.
+func (h *Handler) UserTags(c *gin.Context) {
+	tags, err := h.Svc.UserTags(pathID(c))
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "用户不存在")
+		return
+	}
+	resp.OK(c, tags)
+}
+
+// SetUserTags scopes one user's data access, overriding their role scope.
+func (h *Handler) SetUserTags(c *gin.Context) {
+	var req dto.RoleTagsReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	if err := h.Svc.SetUserTags(middleware.CurrentUser(c), pathID(c), req.Tags); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "保存失败")
+		return
+	}
+	resp.OK(c, gin.H{"ok": true})
+}
+
 // SetRoleTags assigns the DB tags a role (user group) may access.
 func (h *Handler) SetRoleTags(c *gin.Context) {
 	var req dto.RoleTagsReq

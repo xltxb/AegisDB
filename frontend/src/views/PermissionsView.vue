@@ -196,6 +196,31 @@ async function toggleUser(u: UserView) {
 }
 
 // ---- admin user management: password reset + OTP binding ----
+// ---- per-user data-access scope ----
+//
+// Tags are otherwise granted to ROLES, where "no tags" means unrestricted. That
+// cannot express "this particular person", so a grant made here is the more
+// specific statement and REPLACES the role scope; clearing it falls back to the
+// role. See backend model.UserTag.
+const userTags = ref<string[]>([])
+const userTagsOpen = ref(false)
+const tagMsg = ref('')
+
+async function loadUserTags(id: number) {
+  try { userTags.value = await api.userTags(id) } catch { userTags.value = [] }
+}
+async function saveUserTags(tags: string[]) {
+  if (!userModal.value) return
+  try {
+    await api.setUserTags(userModal.value.id, tags)
+    userTags.value = tags
+    userTagsOpen.value = false
+    tagMsg.value = tags.length ? t('utScoped', { n: tags.length }) : t('utRoleDefault')
+  } catch (e) {
+    ui.notifyError(e, t('actionFailed'))
+  }
+}
+
 const userModal = ref<UserView | null>(null)
 const newPw = ref('')
 const pwMsg = ref('')
@@ -208,6 +233,8 @@ function openUser(u: UserView) {
   userModal.value = u
   newPw.value = ''; pwMsg.value = ''; otpMsg.value = ''; otpBind.value = null; otpQr.value = ''
   roleSel.value = [...(u.roleIds || [])]; roleMsg.value = ''
+  tagMsg.value = ''; userTags.value = []
+  loadUserTags(u.id)
 }
 
 // ---- per-user role assignment (a user may hold several roles; permissions
@@ -411,6 +438,12 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
       </div>
     </div>
 
+    <TagEditModal
+      :open="userTagsOpen" :title="$t('utTitle')" :subtitle="userModal ? userModal.email : ''"
+      :tags="userTags" :suggestions="allTags"
+      @close="userTagsOpen = false" @save="saveUserTags"
+    />
+
     <!-- user management: password + OTP -->
     <div v-if="userModal" class="overlay">
       <div class="mask" @click="userModal = null" />
@@ -427,6 +460,18 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
             <VButton variant="secondary" height="40px" @click="savePw">{{ $t('save') }}</VButton>
           </div>
           <div v-if="pwMsg" class="umsg">{{ pwMsg }}</div>
+        </div>
+        <div class="usec">
+          <div class="uslbl"><Tag :size="14" />{{ $t('utTitle') }}</div>
+          <div class="uthint">{{ $t('utHint') }}</div>
+          <div class="utrow">
+            <template v-if="userTags.length">
+              <span v-for="tg in userTags" :key="tg" class="uttag">{{ tg }}</span>
+            </template>
+            <span v-else class="utnone">{{ $t('utRoleDefault') }}</span>
+            <VButton variant="secondary" height="34px" @click="userTagsOpen = true">{{ $t('utEdit') }}</VButton>
+          </div>
+          <div v-if="tagMsg" class="umsg">{{ tagMsg }}</div>
         </div>
         <div class="usec">
           <div class="uslbl"><UsersRound :size="14" />{{ $t('urTitle') }}
