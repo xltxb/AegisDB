@@ -23,7 +23,7 @@
   subDb: '{n} instances · 3 tiers', subPerms: '{r} roles · {u} users', subRules: '{n} risk commands · live matching',
   loginTitle: 'Database Gateway', loginSub: 'Sign in to the console', loginEmail: 'Work email', loginPassword: 'Password',
   loginBtn: 'Sign in', loginHint: "Demo: linwei{'@'}vela.io · password vela123", loginError: 'Wrong email or password',
-  loginMfaLabel: 'MFA code', loginMfaPh: 'Enter the 6-digit code', loginMfaError: 'Invalid MFA code',
+  loginNoMenu: 'Signed in, but your role has no accessible menu — contact an administrator', loginMfaLabel: 'MFA code', loginMfaPh: 'Enter the 6-digit code', loginMfaError: 'Invalid MFA code',
   treeTitle: 'Database tiers', search: 'Search instance / db / table',
   schemaLoading: 'Loading schema…', schemaEmpty: '— No databases —', treeCollapse: 'Collapse database tiers', treeExpand: 'Expand database tiers',
   prodEnv: 'Production · PROD', gliEnv: 'Grey · GLI', stagingEnv: 'UAT · STAGING', devEnv: 'Dev · DEV',

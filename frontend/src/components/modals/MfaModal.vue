@@ -91,7 +91,7 @@ const onlyDigits = (e: Event) => {
         <div v-else class="okrow"><ShieldCheck :size="16" color="var(--success-text)" /><span>{{ $t('mfaEnabledActive') }}</span></div>
 
         <div class="cl">{{ enabled ? $t('mfaCurrentCode') : $t('mfaCodeLabel') }}</div>
-        <input class="codein" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
+        <input v-autofocus class="codein" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
                :value="code" @input="onlyDigits" @keyup.enter="enabled ? disable() : enable()" />
         <div v-if="err" class="err">{{ err }}</div>
       </div>
