@@ -28,6 +28,10 @@ type Services struct {
 	apCounter    atomic.Int64
 	auditCounter atomic.Int64
 	auditMu      sync.Mutex // serialize audit-chain writes (prev-read + insert must be atomic)
+	// mfaGrace remembers a successful PROD step-up per user/session/instance so a
+	// code vouches for a working session rather than a single command.
+	mfaGraceMu sync.Mutex
+	mfaGrace   map[string]time.Time
 	exportQueue  chan int64 // async export-job ids, drained by a worker pool
 	asyncQueue   chan int64 // async SQL-exec-job ids, drained by a worker pool
 }
@@ -255,3 +259,51 @@ var (
 	ErrNoDatabase         = fmt.Errorf("no target database selected")
 	ErrExportNotReadOnly  = fmt.Errorf("export query must be a single read-only statement")
 )
+
+// ---------------------------------------------------------------- MFA step-up grace
+
+// noteMFAVerified records a successful PROD step-up for one user/session/instance.
+func (s *Services) noteMFAVerified(u *model.User, conn *model.Connection) {
+	s.mfaGraceMu.Lock()
+	defer s.mfaGraceMu.Unlock()
+	if s.mfaGrace == nil {
+		s.mfaGrace = map[string]time.Time{}
+	}
+	s.mfaGrace[mfaGraceKey(u, conn)] = time.Now()
+}
+
+// mfaVerifiedRecently reports whether this session already stepped up on this
+// instance within the grace window.
+func (s *Services) mfaVerifiedRecently(u *model.User, conn *model.Connection) bool {
+	window := s.mfaGraceWindow()
+	if window <= 0 {
+		return false // grace disabled: every command steps up
+	}
+	s.mfaGraceMu.Lock()
+	defer s.mfaGraceMu.Unlock()
+	at, ok := s.mfaGrace[mfaGraceKey(u, conn)]
+	return ok && time.Since(at) < window
+}
+
+// mfaGraceKey binds a grace entry to the user, their SESSION GENERATION and the
+// instance. Including the token version is what makes a logout, password reset or
+// role change void the grace: those bump it, so previous entries can never match
+// again. Including the connection keeps the decision per instance — being trusted
+// on one production database says nothing about another.
+func mfaGraceKey(u *model.User, conn *model.Connection) string {
+	return fmt.Sprintf("%d:%d:%d", u.ID, u.TokenVersion, conn.ID)
+}
+
+// mfaGraceWindow is how long one step-up vouches for a session on an instance.
+// 0 disables the grace (step up on every command). Held in memory only, so a
+// gateway restart also forces a fresh step-up — the safe direction.
+func (s *Services) mfaGraceWindow() time.Duration {
+	m := s.settingInt("security.mfaGraceMinutes", 30)
+	if m <= 0 {
+		return 0
+	}
+	if m > 720 { // never vouch for longer than half a day
+		m = 720
+	}
+	return time.Duration(m) * time.Minute
+}

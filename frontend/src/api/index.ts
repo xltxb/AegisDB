@@ -145,8 +145,20 @@ export const api = {
     http.delete<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`).then(ok),
 
   // ---- approvals ----
-  approvals: (scope: 'mine' | 'all') =>
-    http.get<any, Envelope<Approval[]>>(`/approvals?scope=${scope}`).then(ok),
+  // Paged listing {items,total,page,pageSize}.
+  approvals: (scope: 'mine' | 'all', page = 1, pageSize = 50) =>
+    http
+      .get<any, Envelope<{ items: Approval[]; total: number; pending: number }>>(
+        `/approvals?scope=${scope}&page=${page}&pageSize=${pageSize}`,
+      )
+      .then(ok),
+  // Look one ticket up by number, independent of paging — the audit log links
+  // tickets that may sit on any page.
+  approvalByNo: (apNo: string) =>
+    http
+      .get<any, Envelope<{ items: Approval[]; total: number }>>(`/approvals?ap=${encodeURIComponent(apNo)}`)
+      .then(ok)
+      .then((r) => r.items[0] || null),
   approve: (id: number) => http.post(`/approvals/${id}/approve`),
   reject: (id: number) => http.post(`/approvals/${id}/reject`),
 

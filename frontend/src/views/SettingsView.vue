@@ -61,6 +61,12 @@ const ttl = ref('')
 const idle = ref(true)
 const idleMinutes = ref(15)
 const mfa = ref(true)
+// Force every account to enrol before it may touch PROD. Off by default: turning
+// it on blocks production work for anyone not yet enrolled, so it is a rollout
+// decision rather than a default.
+const mfaMandatory = ref(false)
+// How long one PROD step-up vouches for a session on that instance.
+const mfaGrace = ref(30)
 const lark = ref(true)
 const email = ref(false)
 const push = ref(true)
@@ -121,6 +127,8 @@ onMounted(async () => {
     escalate.value = parse(g['approval.escalate'], true)
     allowSelf.value = parse(g['approval.allowSelfApprove'], false)
     mfa.value = parse(g['security.requireMFA'], true)
+    mfaMandatory.value = parse(g['security.mfaMandatory'], false)
+    mfaGrace.value = Number(parse(g['security.mfaGraceMinutes'], 30)) || 30
     idle.value = parse(g['security.idleLock'], true)
     idleMinutes.value = Number(parse(g['security.idleMinutes'], 15)) || 15
     lark.value = parse(g['notify.lark'], true)
@@ -182,6 +190,8 @@ async function save() {
       'export.savePath': exportPath.value.trim(),
       'security.sessionTTL': ttlKey,
       'security.requireMFA': mfa.value,
+      'security.mfaMandatory': mfaMandatory.value,
+      'security.mfaGraceMinutes': mfaGrace.value,
       'security.idleLock': idle.value,
       'security.idleMinutes': Math.max(1, Math.round(Number(idleMinutes.value) || 15)),
       'security.ipAllowlist': ipAllow.value,

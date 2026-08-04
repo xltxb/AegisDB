@@ -431,6 +431,15 @@ function requestMfa(sql: string, reason: string) {
   mfaInput.value = ''
   mfaErr.value = ''
   mfaOpen.value = true
+  // The caret goes into the code box via v-autofocus on the input itself.
+}
+
+// Closing the prompt removes the focused input, which drops focus on <body> —
+// the user's next keystroke would go nowhere until they clicked the terminal.
+// Hand it back to xterm, unless the prompt is about to reopen for a bad code.
+function closeMfa() {
+  mfaOpen.value = false
+  nextTick(() => { if (!mfaOpen.value) term.focus() })
 }
 
 async function submitMfa() {
@@ -438,7 +447,7 @@ async function submitMfa() {
   if (code.length !== 6) { mfaErr.value = t('mfaStepDesc'); return }
   if (!pendingMfa) return
   const { sql, reason } = pendingMfa
-  mfaOpen.value = false
+  closeMfa()
   if (sendExec(sql, reason, code) === 'ws') return
   try {
     const env = await execRest(sql, reason, code)
@@ -459,7 +468,7 @@ function abandonBatch() {
 }
 
 function cancelMfa() {
-  mfaOpen.value = false
+  closeMfa()
   pendingMfa = null
   out(c(ANSI.gray, t('termCancelled')))
   abandonBatch()
@@ -761,6 +770,7 @@ async function runScript() {
           <div class="mfa-title"><ShieldAlert :size="18" />{{ $t('mfaStepTitle') }}</div>
           <div class="mfa-desc">{{ $t('mfaStepDesc') }}</div>
           <input
+            v-autofocus
             class="mfa-code" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
             :value="mfaInput"
             @input="mfaInput = ($event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6)"

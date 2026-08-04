@@ -37,7 +37,7 @@ async function submit() {
     if (!dest) {
       // Logged in but the role has no visible menu — don't push('') (which would
       // silently stay on the login page), tell the user (V5).
-      error.value = '登录成功,但当前角色没有可访问的菜单,请联系管理员'
+      error.value = t('loginNoMenu')
       return
     }
     router.push(dest)

@@ -587,23 +587,56 @@ func (r *Repo) CreateApproval(a *model.Approval, steps []model.ApprovalStep) err
 // visible to its initiator and to the members on its approval chain:
 //   - scope "mine": approvals the user must act on (they are a chain approver)
 //   - scope "all":  approvals the user initiated OR is a chain approver of
-func (r *Repo) ListApprovals(scope string, userID int64) ([]model.Approval, error) {
-	var as []model.Approval
-	q := r.db.Order("id desc")
-	// approval ids where the user is a chain approver
-	var approverIDs []int64
-	r.db.Model(&model.ApprovalStep{}).Where("approver_id = ?", userID).Pluck("approval_id", &approverIDs)
+// approvalScope builds the visibility predicate for a caller: tickets they raised,
+// plus tickets they sit on the approval chain of. "mine" narrows to the latter —
+// the queue awaiting this person.
+//
+// The chain membership is a SQL subquery rather than a Pluck into Go: the old
+// version loaded every approval id the caller had ever been an approver on and
+// pasted them into an IN(...) list, which grows with history and eventually
+// exceeds the driver's parameter limit (ED13).
+func (r *Repo) approvalScope(scope string, userID int64) *gorm.DB {
+	sub := r.db.Model(&model.ApprovalStep{}).Select("approval_id").Where("approver_id = ?", userID)
 	if scope == "mine" {
-		if len(approverIDs) == 0 {
-			return []model.Approval{}, nil
-		}
-		q = q.Where("id IN ?", approverIDs)
-	} else if len(approverIDs) == 0 {
-		q = q.Where("initiator_id = ?", userID)
-	} else {
-		q = q.Where("initiator_id = ? OR id IN ?", userID, approverIDs)
+		return r.db.Model(&model.Approval{}).Where("id IN (?)", sub)
 	}
-	err := q.Find(&as).Error
+	return r.db.Model(&model.Approval{}).Where("initiator_id = ? OR id IN (?)", userID, sub)
+}
+
+// ListApprovalsPaged returns one page of approvals the caller may see (newest
+// first) plus the total matching that same visibility.
+//
+// apNo, when set, looks a single ticket up by number REGARDLESS of paging — the
+// audit log links tickets by number, and such a ticket may sit on any page. The
+// visibility predicate still applies, so a number cannot be used to read someone
+// else's ticket.
+func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo string, offset, limit int) ([]model.Approval, int64, error) {
+	count := r.approvalScope(scope, userID)
+	rows := r.approvalScope(scope, userID).Order("id desc")
+	if apNo != "" {
+		count = count.Where("ap_no = ?", apNo)
+		rows = rows.Where("ap_no = ?", apNo)
+	}
+	var total int64
+	if err := count.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if limit > 0 {
+		rows = rows.Limit(limit).Offset(offset)
+	}
+	var as []model.Approval
+	err := rows.Find(&as).Error
+	if as == nil {
+		as = []model.Approval{}
+	}
+	return as, total, err
+}
+
+// ListApprovals returns every approval the caller may see. Retained for callers
+// that genuinely need the whole set (the approval-chain sweep); the console uses
+// the paged form.
+func (r *Repo) ListApprovals(scope string, userID int64) ([]model.Approval, error) {
+	as, _, err := r.ListApprovalsPaged(scope, userID, "", 0, 0)
 	return as, err
 }
 
@@ -1037,4 +1070,13 @@ func (r *Repo) ScopeForUser(userID int64, roleIDs []int64) (allow []string, unre
 		return own, false, nil
 	}
 	return r.TagsForRoles(roleIDs)
+}
+
+// CountPendingApprovals counts the pending tickets the caller may see. The
+// listing is paged, so the inbox badge cannot be derived from a page — it would
+// silently cap at the page size once someone has more than that.
+func (r *Repo) CountPendingApprovals(scope string, userID int64) (int64, error) {
+	var n int64
+	err := r.approvalScope(scope, userID).Where("status = ?", model.StatusPending).Count(&n).Error
+	return n, err
 }

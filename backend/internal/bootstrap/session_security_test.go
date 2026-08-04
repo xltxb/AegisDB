@@ -28,22 +28,30 @@ func TestLogoutRevokesToken(t *testing.T) {
 
 // TestMFA_CodeCannotBeReplayed verifies a consumed TOTP step-up code is rejected
 // on reuse within its validity window (M3 anti-replay).
+// A captured code must be spendable only ONCE, so it is asserted where a code is
+// actually consulted: a second INSTANCE. Replaying it against the instance it was
+// spent on no longer proves anything, because that session already holds a
+// step-up grace there and is not asked for a code at all
+// (TestMFA_StepUpIsRememberedPerConnection). The grace is per connection, so
+// reaching a different production database still demands a code — and the one
+// already spent is refused.
 func TestMFA_CodeCannotBeReplayed(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
-	prod := app.connIDByEnv(token, "prod")
+	first := app.connIDByName(token, "order-cluster")
+	second := app.connIDByName(token, "user-cluster")
 	secret := app.setupMFA(token)
 
 	code := totp.Code(secret, time.Now())
 	// first use of the code passes MFA → reaches the engine (high-risk intercept)
-	first := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
-		"connectionId": prod, "sql": "DROP TABLE orders;", "reason": "x", "mfaCode": code,
+	firstUse := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
+		"connectionId": first, "sql": "DROP TABLE orders;", "reason": "x", "mfaCode": code,
 	})
-	eq(t, first.Code, 42200, "first use of code passes MFA (intercept)")
+	eq(t, firstUse.Code, 42200, "first use of code passes MFA (intercept)")
 
-	// replay of the SAME code is rejected
+	// replay of the SAME code against another instance is rejected
 	replay := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
-		"connectionId": prod, "sql": "DROP TABLE orders;", "reason": "x", "mfaCode": code,
+		"connectionId": second, "sql": "DROP TABLE orders;", "reason": "x", "mfaCode": code,
 	})
 	eq(t, replay.Code, 42800, "replayed MFA code rejected")
 }

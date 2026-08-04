@@ -163,8 +163,25 @@ export class LineEditor {
   }
 
   private insert(s: string) {
+    const cols = this.cols()
+    const before = this.curPromptLen() + this.buf.length
+    const appending = this.cur === this.buf.length
     this.buf = this.buf.slice(0, this.cur) + s + this.buf.slice(this.cur)
     this.cur += s.length
+    const after = this.curPromptLen() + this.buf.length
+
+    // Typing at the end of a line, without crossing a row boundary, needs no
+    // repaint at all — the characters can simply be emitted where the cursor
+    // already is. Redrawing for it means rewriting prompt+buffer on EVERY
+    // keystroke, which on a long statement the terminal shows as flicker.
+    //
+    // The row must be unchanged (so the remembered row stays valid) and the text
+    // must not land exactly on the right edge, where the terminal holds a pending
+    // wrap that redraw() handles explicitly.
+    if (appending && after % cols !== 0 && Math.floor(before / cols) === Math.floor(after / cols)) {
+      this.term.write(s)
+      return
+    }
     this.redraw()
   }
 
@@ -277,11 +294,19 @@ export class LineEditor {
   }
 
   private backspace() {
-    if (this.cur > 0) {
-      this.buf = this.buf.slice(0, this.cur - 1) + this.buf.slice(this.cur)
-      this.cur--
-      this.redraw()
+    if (this.cur <= 0) return
+    const cols = this.cols()
+    const before = this.curPromptLen() + this.buf.length
+    const atEnd = this.cur === this.buf.length
+    this.buf = this.buf.slice(0, this.cur - 1) + this.buf.slice(this.cur)
+    this.cur--
+    // Same reasoning as insert: deleting the last character of a line that does
+    // not sit on a row boundary is "back up, blank it, back up" — no repaint.
+    if (atEnd && before % cols !== 0) {
+      this.term.write('\b \b')
+      return
     }
+    this.redraw()
   }
   private del() {
     if (this.cur < this.buf.length) {

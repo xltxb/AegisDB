@@ -274,7 +274,7 @@ type ApprovalStep struct {
 	ID         int64      `gorm:"primaryKey;autoIncrement" json:"id"`
 	ApprovalID int64      `gorm:"index:idx_step_approval;not null" json:"approvalId"`
 	StepOrder  int        `gorm:"not null" json:"stepOrder"`
-	ApproverID int64      `gorm:"not null" json:"approverId"`
+	ApproverID int64      `gorm:"not null;index:idx_approval_step_approver" json:"approverId"`
 	Approver   string     `gorm:"size:64" json:"approver"`
 	Status     string     `gorm:"size:16;not null;default:waiting" json:"status"` // waiting|active|approved|rejected
 	ActedAt    *time.Time `json:"actedAt"`

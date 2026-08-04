@@ -5,11 +5,12 @@ import { useI18n } from 'vue-i18n'
 import {
   Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, UsersRound,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
-  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon,
+  CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck,
 } from 'lucide-vue-next'
 import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import api from '@/api'
+import MfaModal from '@/components/modals/MfaModal.vue'
 import type { Notification } from '@/types'
 
 const route = useRoute()
@@ -93,6 +94,18 @@ async function toggleNotif() {
   }
 }
 
+// ---- second-factor enrolment (available to every account) ----
+const mfaOpen = ref(false)
+const mfaBound = computed(() => !!auth.me?.mfaEnabled)
+function openMfa() {
+  userMenuOpen.value = false
+  mfaOpen.value = true
+}
+async function onMfaChanged() {
+  mfaOpen.value = false
+  await auth.fetchMe() // refresh the bound state shown in the menu
+}
+
 function openApprovals() {
   notifOpen.value = false
   if (auth.menus.approve) router.push('/approvals')
@@ -101,8 +114,10 @@ function openApprovals() {
 onMounted(async () => {
   if (auth.menus.approve) {
     try {
-      const list = await api.approvals('all')
-      auth.pendingCount = list.filter((a) => a.status === 'pending').length
+      // The listing is paged, so the badge uses the server-side count rather than
+      // counting a page — otherwise it would silently cap at the page size.
+      const res = await api.approvals('all', 1, 1)
+      auth.pendingCount = res.pending
     } catch { /* ignore */ }
   }
   await fetchNotifs()
@@ -198,6 +213,10 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="um-role">{{ auth.me?.roleName }}<span v-if="auth.me?.layer"> · {{ auth.me?.layer }}</span></div>
+            <div class="um-mfa" @click="openMfa">
+              <ShieldCheck :size="15" />{{ $t('mfaSelfTitle') }}
+              <span class="um-tag" :class="{ on: mfaBound }">{{ mfaBound ? $t('otpBound') : $t('otpUnboundState') }}</span>
+            </div>
             <div class="um-logout" @click="logout"><LogOut :size="15" />{{ $t('logout') }}</div>
           </div>
         </template>
@@ -258,6 +277,7 @@ onUnmounted(() => {
       </main>
     </div>
   </div>
+  <MfaModal :open="mfaOpen" :enabled="mfaBound" @close="mfaOpen = false" @changed="onMfaChanged" />
 </template>
 
 <style scoped>
@@ -358,6 +378,11 @@ onUnmounted(() => {
 }
 .avatar:hover { box-shadow: 0 0 0 3px var(--accent-subtle); }
 .um-mask { position: fixed; inset: 0; z-index: 400; }
+.um-mfa { display: flex; align-items: center; gap: 8px; padding: 10px 14px; cursor: pointer;
+  font: 500 13px var(--font-body); color: var(--text-body); border-top: 1px solid var(--border-subtle); }
+.um-mfa:hover { background: var(--surface-page); }
+.um-tag { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
+.um-tag.on { color: var(--success-text); }
 .usermenu {
   position: fixed; bottom: 18px; left: 74px; z-index: 401; width: 240px;
   background: var(--surface-overlay, var(--surface-card)); border: 1px solid var(--border-default);

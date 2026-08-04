@@ -22,9 +22,9 @@ const freeSuggest = computed(() => (props.suggestions || []).filter((s) => !list
 </script>
 
 <template>
-  <div v-if="open" class="overlay">
-    <div class="mask" @click="emit('close')" />
-    <div class="modal">
+  <div v-if="open" class="tagpick-overlay">
+    <div class="tagpick-mask" @click="emit('close')" />
+    <div class="tagpick-modal">
       <div class="topbar" />
       <div class="pad">
         <div class="hdr">
@@ -58,9 +58,12 @@ const freeSuggest = computed(() => (props.suggestions || []).filter((s) => !list
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 70; }
-.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
-.modal {
+/* Named for this component: a bare `.overlay` here is also matched by a parent's
+   scoped `.overlay` rule (Vue puts the parent's scope id on a child's root), which
+   silently overrode the stacking and hid the picker behind the card that opened it. */
+.tagpick-overlay { position: fixed; inset: 0; z-index: 120; }
+.tagpick-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.tagpick-modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 440px; max-width: 94vw; display: flex; flex-direction: column;
   background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 18px;

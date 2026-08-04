@@ -64,8 +64,8 @@ const onlyDigits = (e: Event) => {
 </script>
 
 <template>
-  <div v-if="open" class="overlay">
-    <div class="mask" @click="emit('close')" />
+  <div v-if="open" class="mfa-overlay">
+    <div class="mfa-mask" @click="emit('close')" />
     <div class="modal">
       <div class="topbar" />
       <div class="pad">
@@ -91,7 +91,7 @@ const onlyDigits = (e: Event) => {
         <div v-else class="okrow"><ShieldCheck :size="16" color="var(--success-text)" /><span>{{ $t('mfaEnabledActive') }}</span></div>
 
         <div class="cl">{{ enabled ? $t('mfaCurrentCode') : $t('mfaCodeLabel') }}</div>
-        <input class="codein" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
+        <input v-autofocus class="codein" inputmode="numeric" autocomplete="one-time-code" placeholder="000000"
                :value="code" @input="onlyDigits" @keyup.enter="enabled ? disable() : enable()" />
         <div v-if="err" class="err">{{ err }}</div>
       </div>
@@ -106,8 +106,8 @@ const onlyDigits = (e: Event) => {
 </template>
 
 <style scoped>
-.overlay { position: fixed; inset: 0; z-index: 60; }
-.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.mfa-overlay { position: fixed; inset: 0; z-index: 60; }
+.mfa-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
 .modal {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: 420px; max-width: 94vw; display: flex; flex-direction: column;
