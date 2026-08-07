@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, ChevronLeft, ChevronRight, X, FileText,
+  Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, Download, ChevronLeft, ChevronRight, X, FileText,
 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -129,6 +129,10 @@ function resMeta(s: string) {
   if (s === 'pending') return { t: t('rPending'), c: 'var(--warning-text)', icon: Hourglass }
   if (s === 'executed') return { t: t('rExecuted'), c: 'var(--success-text)', icon: CircleCheck }
   if (s === 'rejected') return { t: t('rRejected'), c: 'var(--danger-text)', icon: CircleX }
+  // Data left the console as a file. Neutral, not a warning: nothing went wrong,
+  // it is a fact worth being able to find later. Without this branch it would
+  // fall through below and be reported as 已告警, which is simply untrue.
+  if (s === 'exported') return { t: t('rExported'), c: 'var(--accent-text)', icon: Download }
   return { t: t('rWarn'), c: 'var(--warning-text)', icon: TriangleAlert }
 }
 function kw(cmd: string) { return cmd.split(/\s+/)[0] }

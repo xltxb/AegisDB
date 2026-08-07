@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown } from 'lucide-vue-next'
+import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download } from 'lucide-vue-next'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -17,6 +17,7 @@ import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
 import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
+import { Transcript } from '@/lib/transcript'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
@@ -98,8 +99,60 @@ const mfaErr = ref('')
 let lastExec = { sql: '', reason: '' }
 let pendingMfa: { sql: string; reason: string } | null = null
 
-const out = (line = '') => term.write(line + '\r\n')
+// The session recording. Captured HERE rather than read back out of xterm: the
+// renderer's scrollback is capped and carries no timestamps, and by this point
+// the text still has its structure. See lib/transcript for the masking.
+const transcript = new Transcript()
+const canExportLog = ref(false)
+
+const out = (line = '') => {
+  transcript.output(line, new Date())
+  canExportLog.value = true
+  term.write(line + '\r\n')
+}
 const outLines = (arr: string[]) => arr.forEach((l) => out(l))
+
+/**
+ * Save the session log as a file.
+ *
+ * The file is built from what was already displayed, so there is nothing to
+ * re-fetch and no gate to pass — but the export IS audited, because /export
+ * records the same act and a terminal that wrote production output to disk
+ * silently would be the gap between the two.
+ */
+async function exportLog() {
+  if (transcript.isEmpty) return
+  const meta = {
+    instance: `${props.conn.env}-${props.conn.name}`,
+    database: targetDb.value || props.conn.database || '',
+    user: auth.me?.name || '',
+    exportedAt: new Date(),
+  }
+  const name = transcript.filename(meta)
+  const blob = new Blob([transcript.render(meta)], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+
+  // Audit after the download is handed to the browser: a failed audit call must
+  // not cost the operator the file they asked for, but it must still be loud.
+  try {
+    await api.recordTranscriptExport({
+      connectionId: props.conn.id,
+      filename: name,
+      lines: transcript.length,
+      dropped: transcript.droppedCount,
+      database: meta.database,
+    })
+  } catch (e) {
+    ui.notifyError(e, t('logExportAuditFailed'))
+  }
+}
 const cssVar = (name: string, fb: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fb
 
@@ -312,6 +365,10 @@ function switchDb(db: string) {
 }
 
 async function handleSubmit(stmt: string) {
+  // Record what the operator submitted, before any of the client-side rewriting
+  // below — the log should show what they typed, not the normalised form.
+  transcript.command(stmt.trim(), new Date())
+  canExportLog.value = true
   // \G (vertical) / \g (horizontal) are MySQL client display terminators, not SQL —
   // strip them before sending and remember whether to render the result vertically.
   const trimmed = stmt.trim()
@@ -741,6 +798,11 @@ async function runScript() {
           </template>
         </Teleport>
         <div class="sample" @click="onSampleClick"><FileCode2 :size="13" />{{ $t('sampleScript') }}</div>
+        <!-- Disabled until something has actually been printed: an empty file is
+             not a useful thing to hand someone. -->
+        <div class="upload" :class="{ off: !canExportLog }" :title="$t('logExportHint')" @click="canExportLog && exportLog()">
+          <Download :size="13" />{{ $t('logExport') }}
+        </div>
         <RotateCw class="refresh" :size="14" :title="$t('refreshSession')" @click="refreshSession" />
       </div>
     </div>

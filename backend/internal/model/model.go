@@ -95,6 +95,11 @@ const (
 	ResultPending  = "pending"
 	ResultRejected = "rejected"
 	ResultWarn     = "warn"
+	// ResultExported records data leaving the console as a file. The rows were
+	// already shown to this user, so nothing new was read — but a copy now exists
+	// outside the gateway, and /export already records that. A terminal that wrote
+	// the same data to disk without a trace would be the hole in the pair.
+	ResultExported = "exported"
 )
 
 // Role — a tiered RBAC role (L0..L3).

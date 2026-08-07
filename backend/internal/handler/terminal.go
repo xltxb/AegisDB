@@ -590,3 +590,27 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 	}
 }
 
+// TranscriptExport godoc
+// @Summary 记录终端会话日志导出(仅审计,文件在浏览器生成)
+// @Router  /terminal/transcript-export [post]
+func (h *Handler) TranscriptExport(c *gin.Context) {
+	var req dto.TranscriptExportReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	err := h.Svc.RecordTranscriptExport(middleware.CurrentUser(c), req)
+	if err == service.ErrNotFound {
+		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
+		return
+	}
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "无权访问该实例")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeInternalError, "记录失败")
+		return
+	}
+	resp.OK(c, gin.H{"recorded": true})
+}

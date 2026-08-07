@@ -60,6 +60,12 @@ export const api = {
   exportJobs: () => http.get<any, Envelope<ExportJob[]>>('/export/jobs').then(ok),
   exportDownload: (file: string) =>
     http.get<any, Blob>(`/export/download?file=${encodeURIComponent(file)}`, { responseType: 'blob' }),
+  // Records that a terminal session log was saved to a file. The file is built in
+  // the browser from lines already displayed, so this call carries a DESCRIPTION
+  // of the export and never the transcript — sending the session back to be
+  // stored would create the very second copy the audit row exists to track.
+  recordTranscriptExport: (body: { connectionId: number; filename: string; lines: number; dropped: number; database?: string }) =>
+    http.post<any, Envelope<any>>('/terminal/transcript-export', body).then(ok),
   scriptScan: (content: string, filename: string, connectionId = 0) =>
     http.post<any, Envelope<ScriptScanResp>>('/scripts/scan', { content, filename, connectionId }).then(ok),
   scriptExecute: (content: string, filename: string, connectionId: number, mfaCode = '', uploadId = 0, database = '') =>

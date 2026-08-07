@@ -974,3 +974,41 @@ func firstWord(s string) string {
 	return strings.ToUpper(f[0])
 }
 
+// RecordTranscriptExport audits a terminal session log being saved to a file.
+//
+// The file itself is assembled in the browser out of lines that were already
+// displayed to this user, so no new data is read here and there is nothing to
+// gate. What there is, is a copy of production query output now sitting outside
+// the gateway — and /export already records exactly that. Leaving the terminal
+// path silent would mean the audit trail could account for one route out of the
+// console and not the other, while both carry the same rows.
+//
+// Access is still checked: the caller must be able to reach the instance they
+// claim to have exported, or the audit trail could be seeded with rows about
+// instances they cannot see.
+func (s *Services) RecordTranscriptExport(u *model.User, req dto.TranscriptExportReq) error {
+	conn, err := s.Repo.GetConnection(req.ConnectionID)
+	if err != nil {
+		return ErrNotFound
+	}
+	if !s.canAccessConn(u, conn) {
+		return ErrForbidden
+	}
+	if req.Database != "" {
+		conn.Database = req.Database
+	}
+	name := filepath.Base(strings.ReplaceAll(strings.TrimSpace(req.Filename), "\\", "/"))
+	if name == "" || name == "." || name == "/" {
+		name = "session.log"
+	}
+	// The audited "command" describes the export. It is not SQL, and the leading
+	// marker keeps it from being mistaken for one in the audit list (same shape as
+	// the `\i file` marker script execution uses).
+	label := fmt.Sprintf(`\log %s · %d 行`, name, req.Lines)
+	if req.Dropped > 0 {
+		// Say it here too: the row must not imply the file is the whole session.
+		label += fmt.Sprintf(" · 已丢弃最早 %d 行", req.Dropped)
+	}
+	s.recordAudit(u, conn, label, model.RiskLow, model.ResultExported, "", "")
+	return nil
+}

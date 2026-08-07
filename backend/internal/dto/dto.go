@@ -98,6 +98,22 @@ type ExportResp struct {
 
 // ---- Script scan ----
 
+// TranscriptExportReq records that a terminal session log was written to a file.
+//
+// The FILE is built in the browser from what was already displayed; this request
+// exists only so the act is audited. It therefore carries a description of the
+// export, never the transcript itself — shipping the whole session back to be
+// stored would create the second copy the audit row is meant to keep track of.
+type TranscriptExportReq struct {
+	ConnectionID int64  `json:"connectionId" binding:"required"`
+	Filename     string `json:"filename"`
+	Lines        int    `json:"lines"`
+	// Dropped > 0 means the session outran the client buffer and the file starts
+	// mid-session. Recorded so the audit row does not imply a complete record.
+	Dropped  int    `json:"dropped"`
+	Database string `json:"database"`
+}
+
 type ScriptScanReq struct {
 	ConnectionID int64  `json:"connectionId"`
 	Content      string `json:"content" binding:"required"`

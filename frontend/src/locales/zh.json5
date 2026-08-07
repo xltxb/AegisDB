@@ -40,6 +40,8 @@
   connected: '● 已连接', tryHint: '试试', utf8audit: 'UTF-8 · 审计 ON',
   refreshSession: '重连会话', auditPending: '提交后生成',
   uploadScript: '上传脚本', sampleScript: '示例',
+  logExport: '导出日志', logExportHint: '把本次会话(命令与输出)存成文本文件 · 口令已按审计同规则打码 · 导出会写入审计',
+  logExportAuditFailed: '文件已下载,但导出记录未能写入审计',
   ctxTitle: '执行上下文 · 风险检查', targetInst: '目标实例', dbLabel: '数据库', connRole: '连接角色', gwPolicy: '网关策略',
   idleTitle: '等待命令', idleSub: '输入 SQL 后实时检查',
   lowRiskTitle: '低风险 · 可执行', lowRiskSub: '未命中受限命令',
@@ -94,7 +96,7 @@
   colTime: '时间', colWho: '操作人', colCmd: '命令', colRisk: '风险', colResult: '结果', colAp: '审批单',
   auditFootHint: '点击「全部风险」可按 高危 / 中 / 低 过滤 · 导出含完整命令与审批链',
   allRisk: '全部风险', med: '中', low: '低',
-  rExecuted: '已执行', rPending: '审批中', rRejected: '已拒绝', rWarn: '已告警',
+  rExecuted: '已执行', rPending: '审批中', rRejected: '已拒绝', rWarn: '已告警', rExported: '已导出',
   t24h: '近 24h', t7d: '近 7 天', t30d: '近 30 天', tAll: '全部时间',
   auditFrom: '起始', auditTo: '结束', auditClearRange: '清除时间', auditTotal: '共 {n} 条', auditPageOf: '第 {p} / {n} 页',
   // approval inbox
