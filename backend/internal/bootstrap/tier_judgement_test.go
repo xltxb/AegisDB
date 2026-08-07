@@ -355,3 +355,60 @@ func TestTierDefaults_FollowTheTierRatherThanTheStoredCopy(t *testing.T) {
 	layer, _ = layerOf(c.ID)
 	eq(t, layer, "L3 预发布", "a moved instance reports the layer of where it landed")
 }
+
+// Asking the planner how a write WOULD run is a read. Judging it as the write it
+// wraps meant a DBA could not see the plan for a DELETE without first getting the
+// approval that the DELETE itself needs — and the plan is what decides whether to
+// propose the DELETE at all.
+//
+// EXPLAIN ANALYZE is the opposite case and must stay gated: in PostgreSQL it
+// really performs the statement.
+func TestExplain_PlanIsAReadButAnalyzeStillExecutes(t *testing.T) {
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	prod := app.connIDByEnv(token, "prod")
+
+	// The statement this came up with: an upsert that is gated on prod.
+	upsert := `INSERT INTO t_stats (activity_id, enroll_count) ` +
+		`SELECT r.activity_id, COUNT(*) FROM t_record r WHERE r.rebate_time = '2026-08-06' ` +
+		`GROUP BY r.activity_id ON DUPLICATE KEY UPDATE enroll_count = VALUES(enroll_count)`
+
+	eq(t, app.riskCheck(token, prod, upsert).Action, "approve", "the write itself is still gated")
+	eq(t, app.riskCheck(token, prod, "EXPLAIN "+upsert).Action, "allow", "planning that write is a read")
+
+	// The dictionary layer: DELETE is a dictionary command, but a plan for one
+	// deletes nothing.
+	eq(t, app.riskCheck(token, prod, "DELETE FROM orders WHERE id = 1").Action, "approve", "a real DELETE is gated")
+	eq(t, app.riskCheck(token, prod, "EXPLAIN DELETE FROM orders WHERE id = 1").Action, "allow", "planning a DELETE is a read")
+
+	// Strict mode: a full-table DELETE is the case it exists for; a plan for one
+	// still mutates nothing.
+	eq(t, app.riskCheck(token, prod, "EXPLAIN DELETE FROM orders").Action, "allow", "planning a full-table DELETE is a read")
+
+	// …and every executing form stays exactly as gated as before.
+	for _, sql := range []string{
+		"EXPLAIN ANALYZE " + upsert,
+		"EXPLAIN ANALYZE DELETE FROM orders",
+		"EXPLAIN (ANALYZE) DELETE FROM orders",
+		"EXPLAIN (ANALYZE, BUFFERS) DELETE FROM orders",
+	} {
+		if got := app.riskCheck(token, prod, sql).Action; got == "allow" {
+			t.Errorf("%q EXECUTES the statement and must not be waved through (got %q)", sql, got)
+		}
+	}
+}
+
+// A role denied SELECT must not be able to read a plan either: a plan exposes
+// schema and row-count statistics.
+func TestExplain_StillObeysTheReadGate(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	prod := app.connIDByEnv(admin, "prod")
+
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "allow", "allowed before the change")
+	eq(t, app.do(http.MethodPut, "/api/v1/roles/"+itoa(app.roleIDByCode(admin, "admin"))+"/capabilities", admin,
+		map[string]any{"matrix": map[string]map[string]string{"select": {"prod": "deny"}}}).Code, 0,
+		"deny select on prod")
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "deny",
+		"a role denied SELECT must not read a plan either")
+}

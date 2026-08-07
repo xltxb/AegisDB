@@ -135,33 +135,100 @@ func StripComments(sql string) string {
 }
 
 // ParseVerb returns the effective leading SQL keyword in upper-case, ignoring
-// leading comments/whitespace. A leading PostgreSQL `EXPLAIN [ANALYZE|VERBOSE|
-// (options)]` prefix is unwrapped so the real verb is judged — EXPLAIN ANALYZE
-// actually executes the wrapped statement.
+// leading comments/whitespace. A leading `EXPLAIN [ANALYZE|VERBOSE|(options)]`
+// or Oracle `EXPLAIN PLAN FOR` prefix is unwrapped so the WRAPPED verb is judged,
+// which is what the statement is really about.
+//
+// Whether that wrapped verb is actually performed is a separate question, and
+// the answer is not the same for every EXPLAIN — see PlanOnly.
 func ParseVerb(sql string) string {
+	verb, _ := parseVerbExplain(sql)
+	return verb
+}
+
+// PlanOnly reports whether a statement only produces a query plan and executes
+// nothing.
+//
+// `EXPLAIN <stmt>` plans; `EXPLAIN ANALYZE <stmt>` RUNS the statement and reports
+// what actually happened — in PostgreSQL that means `EXPLAIN ANALYZE DELETE …`
+// really deletes. So the two cannot be judged alike: the first is a read whatever
+// it wraps, the second is exactly as dangerous as its inner verb.
+//
+// ANALYZE also hides inside the option list — `EXPLAIN (ANALYZE) DELETE …` and
+// `EXPLAIN (ANALYZE, BUFFERS) DELETE …` both execute. Missing that form would
+// turn EXPLAIN into a way to run any statement while being judged a read, so the
+// option list is inspected rather than skipped over.
+func PlanOnly(sql string) bool {
+	_, planOnly := parseVerbExplain(sql)
+	return planOnly
+}
+
+// parseVerbExplain returns the effective verb and whether the statement is a
+// plan-only EXPLAIN. Both answers come from one walk of the prefix so they can
+// never disagree about what was found.
+func parseVerbExplain(sql string) (verb string, planOnly bool) {
 	s := strings.TrimSpace(StripComments(sql))
-	verb := firstWord(s)
-	if strings.EqualFold(verb, "EXPLAIN") {
-		rest := strings.TrimSpace(s[len(verb):])
-		for {
-			w := firstWord(rest)
-			if up := strings.ToUpper(w); up == "ANALYZE" || up == "VERBOSE" {
-				rest = strings.TrimSpace(rest[len(w):])
-				continue
-			}
-			break
+	verb = firstWord(s)
+	if !strings.EqualFold(verb, "EXPLAIN") {
+		return strings.ToUpper(verb), false
+	}
+
+	planOnly = true // an EXPLAIN plans, unless an ANALYZE turns up below
+	rest := strings.TrimSpace(s[len(verb):])
+	for {
+		w := firstWord(rest)
+		up := strings.ToUpper(w)
+		if up == "ANALYZE" {
+			planOnly = false
+			rest = strings.TrimSpace(rest[len(w):])
+			continue
 		}
-		if strings.HasPrefix(rest, "(") { // EXPLAIN (ANALYZE, ...) option list
-			if i := strings.Index(rest, ")"); i >= 0 {
-				rest = strings.TrimSpace(rest[i+1:])
-			}
+		if up == "VERBOSE" {
+			rest = strings.TrimSpace(rest[len(w):])
+			continue
 		}
-		if inner := firstWord(rest); inner != "" {
-			verb = inner
+		break
+	}
+	if strings.HasPrefix(rest, "(") { // EXPLAIN (ANALYZE, BUFFERS, …) <stmt>
+		if i := strings.Index(rest, ")"); i >= 0 {
+			// Read the options rather than stepping over them: ANALYZE in here
+			// executes the statement just as the bare keyword does.
+			if explainAnalyzeOptRe.MatchString(rest[:i+1]) {
+				planOnly = false
+			}
+			rest = strings.TrimSpace(rest[i+1:])
 		}
 	}
-	return strings.ToUpper(verb)
+	// Oracle: EXPLAIN PLAN FOR <stmt> — and EXPLAIN PLAN SET STATEMENT_ID = 'x'
+	// [INTO t] FOR <stmt>. Everything up to the FOR is Oracle's own preamble; the
+	// statement being explained follows it and is never executed.
+	if strings.EqualFold(firstWord(rest), "PLAN") {
+		// Search the STRUCTURE: SET STATEMENT_ID = 'plan for q3' carries the word
+		// inside a literal, and cutting there would leave a nonsense verb.
+		// blankQuoted preserves length, so the index maps straight back.
+		if i := explainPlanForRe.FindStringIndex(blankQuoted(rest)); i != nil {
+			rest = strings.TrimSpace(rest[i[1]:])
+		}
+	}
+	if inner := firstWord(rest); inner != "" {
+		verb = inner
+	}
+	return strings.ToUpper(verb), planOnly
 }
+
+var (
+	// ANALYZE anywhere in an EXPLAIN option list.
+	//
+	// Deliberately blunt: `EXPLAIN (ANALYZE FALSE) …` does not execute, and this
+	// still treats it as if it did. The two ways of being wrong are not
+	// comparable — over-gating costs an approval on a statement that would have
+	// been safe, while under-gating runs a DELETE that was judged a read. There
+	// is no lookahead in RE2 to express "ANALYZE not followed by FALSE" anyway,
+	// and a cleverer rule here would be one more thing to get subtly wrong.
+	explainAnalyzeOptRe = regexp.MustCompile(`(?i)\banalyze\b`)
+	// The FOR that separates Oracle's EXPLAIN PLAN preamble from the statement.
+	explainPlanForRe = regexp.MustCompile(`(?i)\bfor\b`)
+)
 
 // firstWord returns the leading [a-z_]+ token (case-insensitive) or "".
 func firstWord(s string) string {
@@ -177,6 +244,11 @@ func firstWord(s string) string {
 // WHERE is matched as a whole word, so an identifier like `elsewhere`/`nowhere`
 // no longer masquerades as a WHERE clause (B7).
 func NoWhere(sql string) bool {
+	// A plan-only EXPLAIN mutates nothing, so there is no unscoped mutation to
+	// guard against — `EXPLAIN DELETE FROM t` deletes no rows.
+	if PlanOnly(sql) {
+		return false
+	}
 	verb := strings.ToLower(ParseVerb(sql))
 	structure := blankQuoted(StripComments(sql))
 	// A CTE can carry the DELETE/UPDATE (`WITH d AS (DELETE ...) SELECT ...`), so
@@ -327,6 +399,11 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 // and reports every statement as safe, without erroring. Callers resolve it via
 // Repo.ScanBaselineTier and refuse to scan when that fails.
 func (e *RiskEngine) ScanStatement(tier, sql string) (string, string, bool) {
+	// Same reasoning as EvaluateFor: a plan-only EXPLAIN executes nothing, so a
+	// script line that merely asks for a plan is not what makes the script risky.
+	if PlanOnly(sql) {
+		return ParseVerb(sql), "safe", false
+	}
 	matched, lvl, err := e.matchCommand(sql, tier)
 	if err != nil {
 		// The dictionary is unreadable; report the statement as high risk rather
@@ -403,6 +480,34 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 	d := DialectFor(engine)
 	verb := d.Verb(sql)
 	cap := d.Capability(verb)
+
+	// A plan-only EXPLAIN performs none of what it wraps, so it is judged as the
+	// read it is — at every layer, not just this one. Asking the planner how a
+	// DELETE would run is how someone decides whether to propose it at all, and
+	// gating that behind the approval the DELETE itself needs means the plan can
+	// only be seen after the decision it was meant to inform.
+	//
+	// The layers below are skipped for the same reason and not as a shortcut: the
+	// dictionary matches the word DELETE in the text, and strict mode looks for a
+	// missing WHERE — both are statements about what a command WILL DO, and this
+	// one does nothing. EXPLAIN ANALYZE is not covered by any of this; PlanOnly
+	// is false for it and it falls through to the ordinary path below.
+	if PlanOnly(sql) {
+		cap = "select"
+		capLevel, err := e.capabilityLevelUnion(roleIDs, cap, tier)
+		if err != nil {
+			return unavailableVerdict(verb, err)
+		}
+		// The read gate still applies: a plan exposes schema and statistics, so a
+		// role denied SELECT here must not read one either.
+		if capLevel == model.LevelDeny {
+			return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
+		}
+		if capLevel == model.LevelApprove {
+			return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "能力矩阵 · 需审批", Command: verb}
+		}
+		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
+	}
 
 	capLevel, err := e.capabilityLevelUnion(roleIDs, cap, tier)
 	if err != nil {
