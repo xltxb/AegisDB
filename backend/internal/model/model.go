@@ -4,13 +4,67 @@ package model
 
 import "time"
 
-// Env values used across capability matrix, risk dictionary and connections.
+// The four built-in tier codes. They are seeded as EnvTier rows (and as
+// identically-named Environment rows), so these constants are now just handles
+// on the built-ins rather than the closed set they used to be — tiers and
+// environments are data, see EnvTier / Environment below.
 const (
 	EnvProd    = "prod"
 	EnvStaging = "staging"
 	EnvGli     = "gli" // 灰度 — mirrors staging's risk/capability tier
 	EnvDev     = "dev"
 )
+
+// EnvTier — a control tier: the unit the RULES are keyed by. RoleCapability and
+// RiskCommand both store one row per (…, tier), and both lookups treat a missing
+// row as permission granted (repository.CapabilityLevel → allow, matchCommand →
+// off). A tier without its rule rows is therefore not a label — it is an
+// unregulated environment, which is why creating one must clone them in the same
+// transaction.
+//
+// The boolean columns exist so the gateway can ask "does this tier require MFA"
+// instead of "is this tier called prod": the four hardcoded == EnvProd tests
+// (forced MFA, danger banner, pending count, script-scan baseline) become
+// property reads, and a second production tier gets the same protection as the
+// first.
+//
+// NOT to be confused with Connection.Tags, which is the data-access scope
+// (which databases a role/user may reach). Nothing here is called a "tag".
+type EnvTier struct {
+	Code        string `gorm:"primaryKey;size:16" json:"code"`
+	DisplayName string `gorm:"size:64;not null" json:"displayName"`
+	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
+
+	RequireMFA      bool `gorm:"not null;default:false" json:"requireMfa"`
+	DangerBanner    bool `gorm:"not null;default:false" json:"dangerBanner"`
+	CountsInPending bool `gorm:"not null;default:false" json:"countsInPending"`
+	// ScanBaseline marks the tier whose dictionary ScanScript judges uploaded
+	// scripts against. Exactly one tier holds it: with none, matchCommand finds
+	// no rows and every script scans clean with no error at all.
+	ScanBaseline bool `gorm:"not null;default:false" json:"scanBaseline"`
+
+	// Derived connection defaults, previously the hardcoded connEnvMeta map.
+	ConnLayer   string `gorm:"size:64" json:"connLayer"`
+	DefaultRole string `gorm:"size:64" json:"defaultRole"`
+}
+
+func (EnvTier) TableName() string { return "tbl_env_tier" }
+
+// Environment — a group of instances, bound to exactly one EnvTier. One tier
+// backs N environments, so a second production cluster (prod-hk, prod-sh) is a
+// new Environment on the existing prod tier: it inherits the full rule set with
+// nothing copied and no window in which it is unregulated.
+//
+// Connection.Env holds an Environment.Code. The four seeded environments are
+// named after their tier, which is what lets existing rows stand unchanged.
+type Environment struct {
+	Code        string `gorm:"primaryKey;size:32" json:"code"`
+	DisplayName string `gorm:"size:64;not null" json:"displayName"`
+	TierCode    string `gorm:"size:16;index:idx_environment_tier;not null" json:"tierCode"`
+	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
+}
+
+func (Environment) TableName() string { return "tbl_environment" }
 
 // Capability matrix levels.
 const (

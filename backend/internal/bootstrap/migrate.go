@@ -45,7 +45,13 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	// dictionary row that is merely ABSENT reads as "allow", so shipping an
 	// environment without backfilling it leaves that environment unregulated
 	// (ED1). Idempotent, so it is safe on every run.
-	return backfillGliEnv(db)
+	if err := backfillGliEnv(db); err != nil {
+		return err
+	}
+	// Same reasoning for the tier/environment split: without these rows no
+	// environment resolves to a tier, and connection edits would be refused
+	// outright on an upgraded install.
+	return backfillEnvTiers(db)
 }
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).

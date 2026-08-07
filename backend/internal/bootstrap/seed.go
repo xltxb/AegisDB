@@ -34,7 +34,67 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 	if err := seedGliEnv(repo); err != nil {
 		return err
 	}
+	if err := backfillEnvTiers(repo.DB()); err != nil {
+		return err
+	}
 	return seedSchema(repo)
+}
+
+// builtinTiers are the four control tiers this product shipped with. The flags
+// reproduce the behaviour that used to be `== model.EnvProd` tests scattered
+// through the gateway, and ConnLayer/DefaultRole are lifted verbatim from the
+// connEnvMeta map they replace, so seeding changes nothing about how an existing
+// deployment behaves.
+var builtinTiers = []model.EnvTier{
+	{Code: model.EnvProd, DisplayName: "生产环境 · PROD", SortOrder: 0,
+		RequireMFA: true, DangerBanner: true, CountsInPending: true, ScanBaseline: true,
+		ConnLayer: "L1 核心 · 写", DefaultRole: "dba_l2"},
+	{Code: model.EnvGli, DisplayName: "灰度 · GLI", SortOrder: 1,
+		ConnLayer: "L2 灰度", DefaultRole: "dba_l2"},
+	{Code: model.EnvStaging, DisplayName: "演练UAT · STAGING", SortOrder: 2,
+		ConnLayer: "L3 演练UAT", DefaultRole: "dba_l2"},
+	{Code: model.EnvDev, DisplayName: "测试 · DEV", SortOrder: 3,
+		ConnLayer: "L4 沙盒", DefaultRole: "developer"},
+}
+
+// backfillEnvTiers initialises the tier/environment split on a database that
+// predates it. Like backfillGliEnv it also runs from the `migrate` path, because
+// production upgrades run `migrate` while `seed` is first-install only.
+//
+// One environment is created per tier, NAMED AFTER IT. That is the whole reason
+// this migration moves no data: every existing tbl_connection.env already holds
+// one of these four strings, so those rows are already valid environment codes,
+// and tbl_role_capability.env / tbl_risk_command.env already hold tier codes.
+//
+// Seeded only when the table is EMPTY, not row-by-row. A per-row backfill would
+// resurrect a tier the operator deliberately deleted on the next restart.
+func backfillEnvTiers(db *gorm.DB) error {
+	var tiers int64
+	if err := db.Model(&model.EnvTier{}).Count(&tiers).Error; err != nil {
+		return err
+	}
+	if tiers == 0 {
+		for _, t := range builtinTiers {
+			if err := db.Create(&t).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	var envs int64
+	if err := db.Model(&model.Environment{}).Count(&envs).Error; err != nil {
+		return err
+	}
+	if envs == 0 {
+		for _, t := range builtinTiers {
+			if err := db.Create(&model.Environment{
+				Code: t.Code, DisplayName: t.DisplayName, TierCode: t.Code, SortOrder: t.SortOrder,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // seedGliEnv backfills the GLI (灰度) connection environment. GLI is a later
@@ -42,6 +102,11 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 // (演练UAT tier) so grey-release instances are gated coherently from day one.
 // Idempotent: clones every staging row to a gli counterpart only when absent,
 // so DBs seeded before GLI existed self-heal on boot (like seedSchema).
+//
+// Superseded by the tier model: a new tier now clones its rules through
+// Repo.CreateEnvTierFrom, which is this function generalised. Kept on the boot
+// path because databases older than GLI still need it — it is a no-op once those
+// rows exist, and dropping it would leave them ungoverned (ED1).
 func seedGliEnv(repo *repository.Repo) error { return backfillGliEnv(repo.DB()) }
 
 // backfillGliEnv is seedGliEnv against a raw handle, so the migration path can

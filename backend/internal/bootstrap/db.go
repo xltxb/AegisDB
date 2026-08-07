@@ -76,4 +76,5 @@ var allModels = []any{
 	&model.WebhookConfig{}, &model.WebhookDelivery{}, &model.SchemaObject{}, &model.Setting{},
 	&model.Notification{}, &model.RoleTag{}, &model.ExportJob{}, &model.ScriptUpload{},
 	&model.AsyncJob{}, &model.UserTag{},
+	&model.EnvTier{}, &model.Environment{},
 }

@@ -29,6 +29,11 @@ func InitDatabase(repo *repository.Repo, cfg *Config, adminEmail, adminPassword,
 	if err := seedGliEnv(repo); err != nil {
 		return fmt.Errorf("seed gli env: %w", err)
 	}
+	// Tier/environment rows, likewise idempotent: an install with none cannot
+	// resolve any environment to its tier and would refuse every connection edit.
+	if err := backfillEnvTiers(repo.DB()); err != nil {
+		return fmt.Errorf("seed env tiers: %w", err)
+	}
 	// admin account
 	u, err := UpsertAdmin(repo, adminEmail, adminPassword, adminName)
 	if err != nil {

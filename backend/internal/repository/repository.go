@@ -475,6 +475,173 @@ func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool, err
 	return out, false, nil
 }
 
+// ------------------------------------------------------- Env tiers / environments
+
+func (r *Repo) ListEnvTiers() ([]model.EnvTier, error) {
+	var ts []model.EnvTier
+	err := r.db.Order("sort_order asc, code asc").Find(&ts).Error
+	return ts, err
+}
+
+func (r *Repo) GetEnvTier(code string) (*model.EnvTier, error) {
+	var t model.EnvTier
+	if err := r.db.First(&t, "code = ?", code).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// ScanBaselineTier returns the tier whose dictionary script scanning judges
+// against. A missing baseline is an error, never a zero value: handing back ""
+// would make matchCommand match nothing and report every uploaded script as
+// clean — the exact silent-failure mode unavailableVerdict exists to prevent.
+func (r *Repo) ScanBaselineTier() (*model.EnvTier, error) {
+	var t model.EnvTier
+	if err := r.db.First(&t, "scan_baseline = ?", true).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *Repo) ListEnvironments() ([]model.Environment, error) {
+	var es []model.Environment
+	err := r.db.Order("sort_order asc, code asc").Find(&es).Error
+	return es, err
+}
+
+func (r *Repo) GetEnvironment(code string) (*model.Environment, error) {
+	var e model.Environment
+	if err := r.db.First(&e, "code = ?", code).Error; err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// CountEnvironmentsOfTier reports how many environments are bound to a tier —
+// the check that stops a tier from being deleted out from under live instances.
+func (r *Repo) CountEnvironmentsOfTier(tierCode string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Environment{}).Where("tier_code = ?", tierCode).Count(&n).Error
+	return n, err
+}
+
+// CountConnectionsInEnvironment reports how many instances live in an
+// environment, so a delete can tell the operator what it is about to move.
+func (r *Repo) CountConnectionsInEnvironment(code string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Connection{}).Where("env = ?", code).Count(&n).Error
+	return n, err
+}
+
+// CreateEnvTierFrom writes a tier AND clones every rule row of the template tier
+// in ONE transaction: each (role × capability) level from tbl_role_capability
+// and each command level from tbl_risk_command.
+//
+// The clone is not a convenience. Both lookups read a missing row as permission
+// granted, so a tier that exists without its rules is an environment where any
+// role may DROP TABLE unreviewed. Committing the tier and copying afterwards
+// would open exactly that window, so a failed copy rolls the tier back with it.
+//
+// This generalises what backfillGliEnv did by hand when GLI was introduced.
+func (r *Repo) CreateEnvTierFrom(t *model.EnvTier, templateCode string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var tmpl model.EnvTier
+		if err := tx.First(&tmpl, "code = ?", templateCode).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(t).Error; err != nil {
+			return err
+		}
+
+		var caps []model.RoleCapability
+		if err := tx.Where("env = ?", templateCode).Find(&caps).Error; err != nil {
+			return err
+		}
+		for _, row := range caps {
+			row.Env = t.Code
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+
+		var cmds []model.RiskCommand
+		if err := tx.Where("env = ?", templateCode).Find(&cmds).Error; err != nil {
+			return err
+		}
+		for _, row := range cmds {
+			row.Env = t.Code
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+
+		// A tier is created without the baseline; moving it is an explicit edit.
+		if t.ScanBaseline {
+			if err := clearOtherBaselines(tx, t.Code); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdateEnvTier saves a tier, keeping the single-baseline invariant: setting the
+// flag clears it everywhere else in the same transaction.
+func (r *Repo) UpdateEnvTier(t *model.EnvTier) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(t).Error; err != nil {
+			return err
+		}
+		if t.ScanBaseline {
+			return clearOtherBaselines(tx, t.Code)
+		}
+		return nil
+	})
+}
+
+func clearOtherBaselines(tx *gorm.DB, keep string) error {
+	return tx.Model(&model.EnvTier{}).
+		Where("code <> ? AND scan_baseline = ?", keep, true).
+		Update("scan_baseline", false).Error
+}
+
+// DeleteEnvTier removes a tier and every rule row keyed by it. Callers must have
+// verified that no environment still binds it (service layer).
+func (r *Repo) DeleteEnvTier(code string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("env = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("env = ?", code).Delete(&model.RiskCommand{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("code = ?", code).Delete(&model.EnvTier{}).Error
+	})
+}
+
+func (r *Repo) CreateEnvironment(e *model.Environment) error { return r.db.Create(e).Error }
+
+func (r *Repo) UpdateEnvironment(e *model.Environment) error { return r.db.Save(e).Error }
+
+// DeleteEnvironmentMoving reassigns every instance of `code` to `moveTo` and then
+// drops the environment, in one transaction — an instance must never be left
+// pointing at an environment that no longer exists, since its tier is what
+// decides whether the instance is regulated at all.
+func (r *Repo) DeleteEnvironmentMoving(code, moveTo string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var dst model.Environment
+		if err := tx.First(&dst, "code = ?", moveTo).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Connection{}).
+			Where("env = ?", code).Update("env", moveTo).Error; err != nil {
+			return err
+		}
+		return tx.Where("code = ?", code).Delete(&model.Environment{}).Error
+	})
+}
+
+
 // ----------------------------------------------------------------- Connections
 
 func (r *Repo) ListConnections() ([]model.Connection, error) {
