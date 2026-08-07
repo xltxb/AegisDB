@@ -54,7 +54,11 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.Risk
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql)
+	tier, err := s.tierCodeOf(conn)
+	if err != nil {
+		return nil, ErrBadRequest // unresolvable tier — see tierOf; never judged as allow
+	}
+	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql)
 	return &dto.RiskCheckResp{
 		Risk:             v.Risk,
 		Action:           v.Action,
@@ -111,10 +115,14 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 // most gating (deny > approve > allow), so a mixed command is governed by its
 // most dangerous part rather than its leading verb.
 func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
+	tier, err := s.tierCodeOf(conn)
+	if err != nil {
+		return gateway.Unavailable(conn.Engine, strings.Join(stmts, ";"), err)
+	}
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	roleIDs := s.Repo.EffectiveRoleIDs(u)
 	for _, st := range stmts {
-		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, conn.Env, st)
+		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, tier, st)
 		if actionRank(v.Action) > actionRank(strict.Action) {
 			strict = v
 		}
@@ -139,7 +147,11 @@ func actionRank(a string) int {
 // this out lets a whole-script execution validate MFA ONCE up front instead of
 // per statement (which forced an empty code on every line — R18).
 func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
-	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql), reason)
+	tier, err := s.tierCodeOf(conn)
+	if err != nil {
+		return s.applyVerdict(u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason)
+	}
+	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql), reason)
 }
 
 // applyVerdict routes a judged command to deny / approve / allow and records the
@@ -199,7 +211,10 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return nil, err
 	}
-	scan := s.ScanScript(filename, content)
+	scan, err := s.ScanScript(filename, content)
+	if err != nil {
+		return nil, err // no scan baseline — see ScanScript; refusing beats "all clear"
+	}
 	risk := model.RiskMid
 	if scan.High > 0 {
 		risk = model.RiskHigh
@@ -216,7 +231,11 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 		}
 	}
 	if worst != "" {
-		if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, worst); v.Action == gateway.ActionDeny {
+		tier, terr := s.tierCodeOf(conn)
+		if terr != nil {
+			return nil, ErrBadRequest // unresolvable tier — see tierOf
+		}
+		if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, worst); v.Action == gateway.ActionDeny {
 			s.recordAudit(u, conn, "\\i "+filename, model.RiskHigh, model.ResultRejected, "", "intercept")
 			return nil, ErrForbidden
 		}
@@ -555,11 +574,27 @@ func sanitizeFilename(name string) string {
 
 // ScanScript scans a .sql script statement-by-statement (dictionary + strict),
 // mirroring the prototype scanner.
-func (s *Services) ScanScript(filename, content string) *dto.ScriptScanResp {
+//
+// A script is scanned against the dictionary of the tier holding ScanBaseline —
+// previously always PROD, now whichever tier the operator designated. It is
+// deliberately one fixed lens rather than the target connection's own tier: the
+// scan happens on upload, before a target is necessarily chosen, and grading a
+// script leniently because it is bound for dev would let the same file move to
+// prod already marked clean.
+//
+// Returns an error when no baseline tier can be read, and the caller MUST
+// surface it. Scanning against an empty tier code matches no dictionary rows and
+// reports every statement — DROP TABLE included — as safe, with no failure
+// anywhere to notice (ED3, same stance as unavailableVerdict).
+func (s *Services) ScanScript(filename, content string) (*dto.ScriptScanResp, error) {
+	base, err := s.Repo.ScanBaselineTier()
+	if err != nil {
+		return nil, fmt.Errorf("no scan baseline tier: %w", err)
+	}
 	stmts := splitStatements(content)
 	out := &dto.ScriptScanResp{Filename: filename, Statements: []dto.ScannedStmt{}}
 	for i, sql := range stmts {
-		cmd, risk, noWhere := s.Engine.ScanStatement(model.EnvProd, sql)
+		cmd, risk, noWhere := s.Engine.ScanStatement(base.Code, sql)
 		out.Statements = append(out.Statements, dto.ScannedStmt{
 			Index: i + 1, SQL: sql, Command: cmd, Risk: risk, NoWhere: noWhere,
 		})
@@ -574,7 +609,7 @@ func (s *Services) ScanScript(filename, content string) *dto.ScriptScanResp {
 	}
 	out.Total = len(out.Statements)
 	out.HasRisky = out.High+out.Mid > 0
-	return out
+	return out, nil
 }
 
 // ExecuteSafeScript runs each statement of an already-scanned all-safe script
@@ -693,16 +728,27 @@ func (s *Services) settingBool(key string, def bool) bool {
 	return def
 }
 
-// checkMFA enforces the TOTP step-up policy for a PROD operation. It returns
-// ErrMFARequired when the caller must present a valid code (or, under the
-// mandatory policy, must first enroll). nil means the op may proceed.
+// checkMFA enforces the TOTP step-up policy for an operation on a tier that
+// demands it. It returns ErrMFARequired when the caller must present a valid
+// code (or, under the mandatory policy, must first enroll). nil means the op may
+// proceed.
+//
+// The trigger is the tier's RequireMFA flag, not the name "prod": a second
+// production tier, or any tier an operator marks, steps up identically.
 //
 // By default MFA is opt-in: an un-enrolled user passes (preserves existing
 // flows). Turning on security.mfaMandatory closes that gap (M4) by blocking any
-// PROD op from a user who has not enrolled MFA.
+// step-up op from a user who has not enrolled MFA.
 func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) error {
-	if u == nil || conn == nil || conn.Env != model.EnvProd || !s.settingBool("security.requireMFA", true) {
+	if u == nil || conn == nil || !s.settingBool("security.requireMFA", true) {
 		return nil // policy inactive for this operation
+	}
+	// An unresolvable tier is treated as demanding the step-up. The op is about
+	// to be refused by the judgement layer anyway (tierOf), and guessing the
+	// laxer answer here is the one direction that could let it through.
+	t, err := s.tierOf(conn)
+	if err == nil && !t.RequireMFA {
+		return nil // this tier does not step up
 	}
 	enrolled := u.MFAEnabled && u.MFASecret != "" // seed flags enabled w/o secret; that isn't enrolled
 	if !enrolled {
@@ -919,3 +965,4 @@ func firstWord(s string) string {
 	}
 	return strings.ToUpper(f[0])
 }
+

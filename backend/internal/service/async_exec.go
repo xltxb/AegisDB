@@ -43,7 +43,11 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 		return nil, err
 	}
 	// Judge (a multi-statement batch is governed by its strictest sub-statement).
-	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, conn.Env, sql)
+	tier, err := s.tierCodeOf(conn)
+	if err != nil {
+		return nil, ErrBadRequest // unresolvable tier — see tierOf; not judged as allow
+	}
+	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql)
 	if stmts := sqlutil.SplitStatements(sql); len(stmts) > 1 {
 		v = s.strictestVerdict(u, conn, stmts)
 	}

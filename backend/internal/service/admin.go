@@ -153,6 +153,35 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 	return out
 }
 
+// withTierDefaults refreshes each connection's display layer and default role
+// from the tier that governs it right now.
+//
+// Both columns are DERIVED from the tier, and they are written when a connection
+// is created or edited — so they drift the moment the tier moves out from under
+// them, which the tier model made possible in three new ways: renaming a tier's
+// layer, rebinding an environment to another tier, and deleting an environment so
+// its instances move to one on a different tier. None of those touch the
+// connection row, and the console would keep showing the layer of a tier that no
+// longer governs the instance.
+//
+// So the stored value is not trusted for display; it is recomputed here, at the
+// one place the console reads instances from. It stays in the column as the
+// fallback for an environment that no longer resolves — there is no tier to ask
+// then, and the last known value beats a blank.
+//
+// Nothing about access control reads these fields; judgement resolves the tier
+// itself (see tierOf).
+func (s *Services) withTierDefaults(conns []model.Connection) []model.Connection {
+	for i := range conns {
+		t, err := s.TierOfEnvironment(conns[i].Env)
+		if err != nil {
+			continue // unresolvable environment — keep the stored value
+		}
+		conns[i].Layer, conns[i].DefaultRole = t.ConnLayer, t.DefaultRole
+	}
+	return conns
+}
+
 // AccessibleConnections returns the connections a user's role may see: all of
 // them when the role has no tags (unrestricted, e.g. admin), otherwise only the
 // connections whose tags intersect the role's granted tags.
@@ -161,6 +190,7 @@ func (s *Services) AccessibleConnections(u *model.User) ([]model.Connection, err
 	if err != nil {
 		return nil, err
 	}
+	all = s.withTierDefaults(all)
 	if u == nil {
 		return all, nil
 	}

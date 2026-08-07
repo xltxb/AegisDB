@@ -285,8 +285,13 @@ func MapVerbToCapability(verb string) string {
 	}
 }
 
-// matchCommand finds the first dictionary command (for env) appearing in the SQL.
-func (e *RiskEngine) matchCommand(sql, env string) (string, string, error) {
+// matchCommand finds the first dictionary command (for tier) appearing in the SQL.
+//
+// `tier` is a control-tier code (model.EnvTier.Code), NOT the connection's
+// environment. The dictionary is keyed by tier, so callers must resolve
+// connection → environment → tier first; passing an environment code straight in
+// finds no rows and returns RiskOff, which reads as "nothing dangerous here".
+func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 	names := make([]string, 0)
 	levelByName := map[string]string{}
 	cmds, err := e.store.RiskCommands()
@@ -294,7 +299,8 @@ func (e *RiskEngine) matchCommand(sql, env string) (string, string, error) {
 		return "", "", err
 	}
 	for _, rc := range cmds {
-		if !strings.EqualFold(rc.Env, env) { // env match is case-insensitive
+		// RiskCommand.Env is the tier code (column kept for compatibility).
+		if !strings.EqualFold(rc.Env, tier) { // match is case-insensitive
 			continue
 		}
 		names = append(names, regexp.QuoteMeta(rc.Command))
@@ -312,11 +318,16 @@ func (e *RiskEngine) matchCommand(sql, env string) (string, string, error) {
 	return name, levelByName[name], nil
 }
 
-// ScanStatement judges a single statement by the dictionary (for env) + strict
+// ScanStatement judges a single statement by the dictionary (for tier) + strict
 // mode only — used by SQL script scanning. Returns (command, risk, noWhere)
 // where risk is high|mid|safe.
-func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
-	matched, lvl, err := e.matchCommand(sql, env)
+//
+// `tier` is the scan baseline tier (model.EnvTier.ScanBaseline). It must be a
+// tier that actually exists: an empty or unknown code matches no dictionary rows
+// and reports every statement as safe, without erroring. Callers resolve it via
+// Repo.ScanBaselineTier and refuse to scan when that fails.
+func (e *RiskEngine) ScanStatement(tier, sql string) (string, string, bool) {
+	matched, lvl, err := e.matchCommand(sql, tier)
 	if err != nil {
 		// The dictionary is unreadable; report the statement as high risk rather
 		// than clearing it (ED3). A script scan that silently downgrades every
@@ -343,14 +354,14 @@ func (e *RiskEngine) ScanStatement(env, sql string) (string, string, bool) {
 // capabilityLevelUnion returns the most permissive capability level across the
 // user's roles (allow ≺ approve ≺ deny). No rows / unknown role default to allow
 // via the store, so a single permissive role is enough to grant the capability.
-func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, env string) (string, error) {
+func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (string, error) {
 	best := model.LevelDeny
 	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 	if len(roleIDs) == 0 {
 		return model.LevelAllow, nil
 	}
 	for _, id := range roleIDs {
-		lvl, err := e.store.CapabilityLevel(id, cap, env)
+		lvl, err := e.store.CapabilityLevel(id, cap, tier)
 		if err != nil {
 			return "", err // unknown level — the caller must not guess (ED3)
 		}
@@ -363,21 +374,24 @@ func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, env string) (str
 
 // Evaluate runs the three-layer judgement (menu guard is enforced by middleware):
 //
-//	① capability matrix (role × capability × env)
-//	② high-risk dictionary (command × env)
+//	① capability matrix (role × capability × tier)
+//	② high-risk dictionary (command × tier)
 //	③ strict mode (DELETE/UPDATE without WHERE)
 //
 // The strictest level wins.
-func (e *RiskEngine) Evaluate(roleID int64, env, sql string) Verdict {
-	return e.EvaluateRoles([]int64{roleID}, env, sql)
+//
+// Both rule layers are keyed by CONTROL TIER, not by the connection's
+// environment — see matchCommand on why the distinction is load bearing.
+func (e *RiskEngine) Evaluate(roleID int64, tier, sql string) Verdict {
+	return e.EvaluateRoles([]int64{roleID}, tier, sql)
 }
 
 // EvaluateRoles is Evaluate for a user holding multiple roles: the capability
 // level (layer ①) is the MOST permissive across all the user's roles, so roles
 // compose as a union. Layers ② (risk dictionary) and ③ (strict mode) are
 // role-independent and unchanged.
-func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
-	return e.EvaluateFor(roleIDs, "", env, sql)
+func (e *RiskEngine) EvaluateRoles(roleIDs []int64, tier, sql string) Verdict {
+	return e.EvaluateFor(roleIDs, "", tier, sql)
 }
 
 // EvaluateFor is EvaluateRoles for a command written in a specific engine's
@@ -385,11 +399,12 @@ func (e *RiskEngine) EvaluateRoles(roleIDs []int64, env, sql string) Verdict {
 // command differs, and that is delegated to the engine's dialect (see
 // dialect.go). An empty engine keeps the SQL dialect, so existing callers and
 // behaviour are unchanged.
-func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, env, sql string) Verdict {
+func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verdict {
 	d := DialectFor(engine)
 	verb := d.Verb(sql)
 	cap := d.Capability(verb)
-	capLevel, err := e.capabilityLevelUnion(roleIDs, cap, env)
+
+	capLevel, err := e.capabilityLevelUnion(roleIDs, cap, tier)
 	if err != nil {
 		return unavailableVerdict(verb, err)
 	}
@@ -397,7 +412,7 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, env, sql string) Verdi
 		return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
 	}
 
-	matched, lvl, err := e.matchCommand(sql, env)
+	matched, lvl, err := e.matchCommand(sql, tier)
 	if err != nil {
 		return unavailableVerdict(verb, err)
 	}
@@ -434,6 +449,16 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, env, sql string) Verdi
 func unavailableVerdict(verb string, err error) Verdict {
 	slog.Error("risk evaluation unavailable — denying command", "verb", verb, "err", err)
 	return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "风险控制暂时不可用 · 已按最严处理", Command: verb}
+}
+
+// Unavailable is unavailableVerdict for callers outside this package that fail
+// BEFORE they can evaluate — specifically, when a connection's environment does
+// not resolve to a control tier. Without a tier there is no key to look rules up
+// by, and both layers read a missing row as permission granted, so the command
+// must be refused rather than judged against nothing (ED3). The verb is parsed
+// here only so the refusal names the command it blocked.
+func Unavailable(engine, sql string, err error) Verdict {
+	return unavailableVerdict(DialectFor(engine).Verb(sql), err)
 }
 
 // deleteOrUpdateRe finds a row-mutating DML verb anywhere in a statement's

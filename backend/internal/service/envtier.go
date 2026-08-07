@@ -266,3 +266,30 @@ func (s *Services) TierOfEnvironment(envCode string) (*model.EnvTier, error) {
 	return s.Repo.GetEnvTier(e.TierCode)
 }
 
+// tierOf resolves the tier governing a connection, following
+// connection → environment → tier.
+//
+// Read straight through to the database on every call, matching how the rules
+// themselves are read (gateway.matchCommand queries per evaluation). A cache
+// here would mean a tier edit takes effect on the rules immediately but on these
+// property checks only after eviction, so the same command could be judged under
+// one tier and step up MFA under another.
+//
+// Every caller must treat an error as a refusal. There is no sensible zero
+// value: a connection whose tier is unknown has no rules keyed to it, and both
+// rule lookups spell "no rows" as "permitted".
+func (s *Services) tierOf(conn *model.Connection) (*model.EnvTier, error) {
+	if conn == nil {
+		return nil, ErrNotFound
+	}
+	return s.TierOfEnvironment(conn.Env)
+}
+
+// tierCodeOf is tierOf for the callers that only need the lookup key.
+func (s *Services) tierCodeOf(conn *model.Connection) (string, error) {
+	t, err := s.tierOf(conn)
+	if err != nil {
+		return "", err
+	}
+	return t.Code, nil
+}

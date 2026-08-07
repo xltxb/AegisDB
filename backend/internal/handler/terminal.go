@@ -295,7 +295,14 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 			filename = req.Filename
 		}
 	}
-	resp.OK(c, h.Svc.ScanScript(filename, content))
+	scan, err := h.Svc.ScanScript(filename, content)
+	if err != nil {
+		// No scan baseline tier: the scan cannot judge anything, and an empty
+		// result would render as a clean bill of health for the script.
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		return
+	}
+	resp.OK(c, scan)
 }
 
 // ScriptExecute godoc
@@ -324,7 +331,13 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		}
 		saved = p
 	}
-	scan := h.Svc.ScanScript(req.Filename, req.Content)
+	scan, err := h.Svc.ScanScript(req.Filename, req.Content)
+	if err != nil {
+		// Refuse the whole execution: without a baseline every statement would
+		// scan as safe and the script would run unreviewed.
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		return
+	}
 	if scan.HasRisky {
 		// whole script must be submitted for approval (created from the scan
 		// result, since the `\i file` wrapper isn't itself risk-matched)
@@ -576,3 +589,4 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			"columns": r.Columns, "data": r.Data, "truncated": r.Truncated})
 	}
 }
+

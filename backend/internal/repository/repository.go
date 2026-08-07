@@ -641,7 +641,6 @@ func (r *Repo) DeleteEnvironmentMoving(code, moveTo string) error {
 	})
 }
 
-
 // ----------------------------------------------------------------- Connections
 
 func (r *Repo) ListConnections() ([]model.Connection, error) {
@@ -706,17 +705,60 @@ func (r *Repo) RiskCommandsGrouped() ([]string, map[string]map[string]string) {
 	return order, grouped
 }
 
-func (r *Repo) UpsertRiskCommand(command string, env map[string]string) error {
+// UpsertRiskCommand writes a dictionary command across EVERY control tier, using
+// the caller's level where one was supplied and defaultRiskLevel elsewhere.
+//
+// The tier list comes from the database, not from the caller. It used to write
+// only the keys the request contained, and the console sent a hardcoded
+// {prod, staging, dev} — so every command an operator added through the UI was
+// missing its GLI row, and a missing row reads as RiskOff. The dictionary looked
+// correct on the page while GLI (法务) instances were ungoverned by it.
+//
+// Trusting the caller to enumerate the tiers is what made that possible, and a
+// tier being data now means any client could fall behind the same way. Rows for
+// tiers the caller omitted are created here rather than left absent, because
+// absent is not neutral — it is permissive.
+func (r *Repo) UpsertRiskCommand(command string, levels map[string]string) error {
 	command = strings.ToUpper(strings.TrimSpace(command))
+	// Normalise the caller's keys the way PatchRiskLevel does, so a request
+	// carrying "PROD" still lands on the prod row instead of creating a second.
+	want := make(map[string]string, len(levels))
+	for k, v := range levels {
+		want[strings.ToLower(strings.TrimSpace(k))] = v
+	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		for e, lvl := range env {
-			row := model.RiskCommand{Command: command, Env: e, Level: lvl}
+		var tiers []model.EnvTier
+		if err := tx.Find(&tiers).Error; err != nil {
+			return err
+		}
+		for _, t := range tiers {
+			lvl, ok := want[t.Code]
+			if !ok || strings.TrimSpace(lvl) == "" {
+				lvl = defaultRiskLevel(t)
+			}
+			row := model.RiskCommand{Command: command, Env: t.Code, Level: lvl}
 			if err := tx.Save(&row).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// defaultRiskLevel decides what a newly added command means on a tier the caller
+// did not mention. Tiers that gate production work — the script-scan baseline
+// and any tier demanding an MFA step-up — get `high`, so a command added to the
+// dictionary is gated there from the moment it exists. Everywhere else it is
+// `off`, matching how the built-in dictionary is seeded.
+//
+// Erring towards `high` is deliberate: the wrong guess costs an approval that
+// was not needed, while the other direction lets a command the operator just
+// classified as dangerous run unreviewed on a production tier.
+func defaultRiskLevel(t model.EnvTier) string {
+	if t.ScanBaseline || t.RequireMFA {
+		return model.RiskHigh
+	}
+	return model.RiskOff
 }
 
 func (r *Repo) PatchRiskLevel(command, env, level string) error {
@@ -1171,14 +1213,21 @@ func (r *Repo) Count(m any) int64 {
 	return n
 }
 
-// CountProdInterceptions counts real risk-rule hits on PROD instances: audit rows
-// that were blocked (rejected) or gated to approval (pending). Backs the rules
-// page's "hits" stat with live data instead of a demo number.
+// CountProdInterceptions counts real risk-rule hits on the instances whose tier
+// is marked CountsInPending: audit rows that were blocked (rejected) or gated to
+// approval (pending). Backs the rules page's "hits" stat with live data instead
+// of a demo number.
+//
+// The instance is joined through to its tier rather than compared against the
+// literal 'prod' — with several production environments (prod-hk, prod-sh) the
+// literal counted only the one that happens to be named after its tier.
 func (r *Repo) CountProdInterceptions() (int64, error) {
 	var n int64
 	err := r.db.Model(&model.AuditLog{}).
 		Joins("JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
-		Where("tbl_connection.env = ? AND tbl_audit_log.result IN ?", "prod", []string{"rejected", "pending"}).
+		Joins("JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
+		Joins("JOIN tbl_env_tier ON tbl_env_tier.code = tbl_environment.tier_code").
+		Where("tbl_env_tier.counts_in_pending = ? AND tbl_audit_log.result IN ?", true, []string{"rejected", "pending"}).
 		Count(&n).Error
 	return n, err
 }
