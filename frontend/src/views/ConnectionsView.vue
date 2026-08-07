@@ -8,8 +8,9 @@ import TagEditModal from '@/components/modals/TagEditModal.vue'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { useEnvTierStore } from '@/stores/envtier'
 import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
-import { engineLabels } from '@/lib/engines'
+import { engineDisplay, engineLabels } from '@/lib/engines'
 import type { Connection } from '@/types'
 
 const auth = useAuthStore()
@@ -18,6 +19,7 @@ const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me
 
 const { t } = useI18n()
 const ui = useUIStore()
+const envtier = useEnvTierStore()
 
 const conns = ref<Connection[]>([])
 const allTags = ref<string[]>([])
@@ -47,14 +49,34 @@ async function setPolicy(c: Connection, policy: string) {
   }
 }
 
-// Computed, not a constant: built once at module scope the labels would stay in
-// whichever language was active at load time.
-const envOpts = computed(() => [
-  { label: t('envProd'), env: 'prod' },
-  { label: t('envGli'), env: 'gli' },
-  { label: t('envStaging'), env: 'staging' },
-  { label: t('envDev'), env: 'dev' },
-])
+// The environments an instance can be placed in. This was the four built-in
+// labels; it comes from the environment list now, so a cluster created in the
+// tiers page is selectable here immediately, with no reload and no code change.
+//
+// Labels stay unique by appending the code when two environments share a display
+// name — the select binds on the LABEL, so a duplicate would make one of them
+// unpickable.
+const envOpts = computed(() => {
+  const seen = new Map<string, number>()
+  for (const e of envtier.environments) seen.set(e.displayName, (seen.get(e.displayName) ?? 0) + 1)
+  return envtier.environments.map((e) => ({
+    env: e.code,
+    label: (seen.get(e.displayName) ?? 0) > 1 ? `${e.displayName} (${e.code})` : e.displayName,
+  }))
+})
+/**
+ * Options for editing ONE instance: the current list, plus the instance's own
+ * environment when that no longer exists.
+ *
+ * Without the extra entry the select falls back to the first option, so opening
+ * an instance whose environment was deleted and pressing save would quietly move
+ * it into production. Surfacing the dangling code instead makes the operator pick
+ * a destination deliberately.
+ */
+function envOptsFor(code: string) {
+  const base = envOpts.value
+  return base.some((o) => o.env === code) ? base : [...base, { env: code, label: code }]
+}
 // Straight from the shared catalogue so the console can only offer engines the
 // gateway can actually drive (see lib/engines). ClickHouse and Redis used to be
 // listed here with no driver behind them: such a connection saves fine and then
@@ -65,7 +87,7 @@ const engineOpts = engineLabels()
 const dbHint = (engine: string) => (/oracle/i.test(engine) ? t('dbHintOracle') : 'orders_db')
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
-const blankDraft = () => ({ name: '', host: '', engine: engineOpts[0], envLabel: t('envProd'), policy: 'strict', username: '', password: '', database: '' })
+const blankDraft = () => ({ name: '', host: '', engine: engineOpts[0], envLabel: envOpts.value[0]?.label ?? '', policy: 'strict', username: '', password: '', database: '' })
 const draft = ref(blankDraft())
 
 // Creating an instance uses the same modal treatment as editing one: the form
@@ -91,7 +113,9 @@ const impFile = ref<HTMLInputElement>()
 const impBusy = ref(false)
 const impDone = ref(0)
 const impFailures = ref<string[]>([])
-const impParsed = computed(() => parseConnectionImport(impText.value))
+// Validate against the environments that actually exist, so a sheet targeting a
+// newly created cluster is accepted here instead of only failing at the server.
+const impParsed = computed(() => parseConnectionImport(impText.value, envtier.environments.map((e) => e.code)))
 
 function openImport() {
   if (!isAdmin.value) return
@@ -157,7 +181,8 @@ function openEdit(c: Connection) {
     name: c.name,
     host: `${c.host}:${c.port}`,
     engine: c.engine,
-    envLabel: envOpts.value.find((o) => o.env === c.env)?.label || envOpts.value[0].label,
+    // Never fall back to the first option — see envOptsFor.
+    envLabel: envOptsFor(c.env).find((o) => o.env === c.env)!.label,
     policy: c.policy,
     username: c.username || '',
     password: '',
@@ -167,7 +192,12 @@ function openEdit(c: Connection) {
 }
 async function saveEdit() {
   if (!editDraft.value.name.trim() || !editDraft.value.host.trim()) return
-  const env = envOpts.value.find((o) => o.label === editDraft.value.envLabel)?.env || 'prod'
+  // A label with no match is the instance's own dangling environment, which
+  // envOptsFor added verbatim — so the label IS the code. Keeping it means an
+  // untouched save leaves the instance where it was; the server refuses it if
+  // that environment is really gone, which is the correct, visible outcome.
+  const env = envOpts.value.find((o) => o.label === editDraft.value.envLabel)?.env
+    ?? editDraft.value.envLabel
   editBusy.value = true
   try {
     // Update, then test-attach to the gateway (best-effort).
@@ -186,10 +216,62 @@ async function saveEdit() {
   }
 }
 
-const prod = computed(() => conns.value.filter((c) => c.env === 'prod'))
-const gli = computed(() => conns.value.filter((c) => c.env === 'gli'))
-const staging = computed(() => conns.value.filter((c) => c.env === 'staging'))
-const dev = computed(() => conns.value.filter((c) => c.env === 'dev'))
+/** Types ordered by the engine catalogue, with anything unrecognised last. */
+function byCatalogueOrder(a: string, b: string): number {
+  const labels = engineLabels()
+  const ia = labels.indexOf(a)
+  const ib = labels.indexOf(b)
+  if (ia === ib) return a.localeCompare(b)
+  if (ia < 0) return 1
+  if (ib < 0) return -1
+  return ia - ib
+}
+
+/**
+ * Instances grouped environment → database type — was four fixed computeds, one
+ * per built-in environment, with no type dimension at all.
+ *
+ * Both levels are needed to answer "what is in this cluster": which engine an
+ * instance speaks decides what its commands mean and which driver reaches it, so
+ * a table that only sorted by environment left that in a column to be scanned for.
+ *
+ * The trailing group collects instances whose environment no longer resolves.
+ * They must stay listed: this page is where an operator would go to move them
+ * somewhere real, and an unlisted instance is one nobody can fix.
+ */
+interface ConnGroup {
+  key: string
+  label: string
+  cls: string
+  count: number
+  types: { key: string; label: string; rows: Connection[] }[]
+}
+const envGroups = computed<ConnGroup[]>(() => {
+  const byEnv: Record<string, Connection[]> = {}
+  for (const c of conns.value) (byEnv[c.env] ||= []).push(c)
+
+  const byType = (rows: Connection[]) => {
+    const m: Record<string, Connection[]> = {}
+    for (const c of rows) (m[engineDisplay(c.engine)] ||= []).push(c)
+    return Object.keys(m).sort(byCatalogueOrder).map((k) => ({ key: k, label: k, rows: m[k] }))
+  }
+
+  const groups: ConnGroup[] = envtier.environments.map((e) => ({
+    key: e.code,
+    label: envtier.envLabel(e.code),
+    cls: envtier.dotForEnv(e.code),
+    count: (byEnv[e.code] ?? []).length,
+    types: byType(byEnv[e.code] ?? []),
+  }))
+  const known = new Set(envtier.environments.map((e) => e.code))
+  for (const k of Object.keys(byEnv).filter((x) => !known.has(x)).sort()) {
+    groups.push({
+      key: k, label: `${k} · ${t('envUnknown')}`, cls: 'muted',
+      count: byEnv[k].length, types: byType(byEnv[k]),
+    })
+  }
+  return groups
+})
 
 async function load() {
   // M14: 加载失败以 toast 呈现，避免静默失败
@@ -200,7 +282,13 @@ async function load() {
     ui.notifyError(e, t('actionFailed'))
   }
 }
-onMounted(async () => { await load(); try { allTags.value = await api.tags() } catch { /* ignore */ } })
+onMounted(async () => {
+  // Environments group the table and fill the form's dropdown, so load them
+  // before the rows render.
+  await envtier.load().catch(() => {})
+  await load()
+  try { allTags.value = await api.tags() } catch { /* ignore */ }
+})
 
 function polMeta(p: string) {
   if (p === 'strict') return { bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
@@ -273,9 +361,14 @@ async function add() {
         <span>{{ $t('colRole') }}</span><span>{{ $t('colPolicy') }}</span><span>{{ $t('colStatus') }}</span>
       </div>
 
-      <template v-for="(group, gi) in [{ rows: prod, cls: 'danger', label: 'prodRow' }, { rows: gli, cls: 'info', label: 'gliRow' }, { rows: staging, cls: 'warn', label: 'stgRow' }, { rows: dev, cls: 'success', label: 'devRow' }]" :key="gi">
-        <div class="grouprow" :class="group.cls"><span class="d" />{{ $t(group.label as any) }}</div>
-        <div v-for="c in group.rows" :key="c.id" class="trow">
+      <template v-for="group in envGroups" :key="group.key">
+        <div class="grouprow" :class="group.cls"><span class="d" />{{ group.label }}<span class="gcnt">{{ group.count }}</span></div>
+        <template v-for="ty in group.types" :key="ty.key">
+        <!-- Second level: database type. The engine decides which driver reaches
+             the instance and how its commands are read, so it groups rather than
+             sitting in a column to be scanned for. -->
+        <div class="typerow">{{ ty.label }}<span class="gcnt">{{ ty.rows.length }}</span></div>
+        <div v-for="c in ty.rows" :key="c.id" class="trow">
           <div>
             <div class="cn">{{ c.name }}</div>
             <div class="cl">{{ c.layer }}</div>
@@ -301,6 +394,8 @@ async function add() {
             <button v-if="isAdmin" class="editbtn" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
           </div>
         </div>
+        </template>
+        <div v-if="!group.types.length" class="typerow empty">{{ $t('connGroupEmpty') }}</div>
       </template>
     </div>
 
@@ -415,9 +510,22 @@ async function add() {
 .grouprow { padding: 9px 18px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); }
 .grouprow.danger { background: rgba(240, 71, 62, 0.06); color: var(--danger-text); }
 .grouprow.info { background: rgba(59, 130, 246, 0.07); color: var(--info-text, #2563eb); }
-.grouprow.warn { background: rgba(245, 165, 36, 0.06); color: var(--warning-text); }
+/* `warn` is the legacy class name; `warning` is what the tier palette emits. */
+.grouprow.warn, .grouprow.warning { background: rgba(245, 165, 36, 0.06); color: var(--warning-text); }
 .grouprow.success { background: rgba(24, 179, 104, 0.06); color: var(--success-text); }
+/* An environment that no longer resolves to a tier — neutral, since no control
+   level can be claimed for it. */
+.grouprow.muted { background: var(--surface-sunken); color: var(--text-faint); }
 .grouprow .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.gcnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
+/* Second-level group: quieter than the environment row, so the environment stays
+   the structure the eye follows down the table. */
+.typerow {
+  padding: 6px 18px 6px 30px; display: flex; align-items: center;
+  font: 600 10.5px var(--font-mono); letter-spacing: 0.04em; color: var(--text-faint);
+  background: var(--surface-sunken);
+}
+.typerow.empty { padding-left: 18px; font-style: italic; }
 .cn { font: 600 13px var(--font-body); color: var(--text-strong); }
 .cl { font: 500 11px var(--font-mono); color: var(--text-faint); }
 .tags { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }

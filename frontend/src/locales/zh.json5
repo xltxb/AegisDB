@@ -32,7 +32,6 @@
   loginNoMenu: '登录成功,但当前角色没有可访问的菜单,请联系管理员', loginMfaLabel: 'MFA 验证码', loginMfaPh: '输入 6 位动态验证码', loginMfaError: 'MFA 验证码错误',
   // terminal
   treeTitle: '数据库分层', search: '搜索实例 / 库 / 表',
-  prodEnv: '生产环境 · PROD', gliEnv: '灰度 · GLI', stagingEnv: '演练UAT · STAGING', devEnv: '测试 · DEV',
   schemaLoading: '加载库表中…', schemaEmpty: '— 无可显示的数据库 —', treeCollapse: '收起数据库分层', treeExpand: '展开数据库分层',
   highTag: '高危', limitedTag: '受限', treeFooter: '3 环境 · 9 实例 · 已接入网关',
   interceptTitle: '命令已被网关拦截 · 禁止直接执行',
@@ -57,7 +56,6 @@
   // db config
   connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
-  prodRow: '生产环境 · PROD · 默认拦截高危命令', gliRow: '灰度 · GLI · 高危命令仅需一级审批', stgRow: '演练UAT · STAGING · 高危命令仅需一级审批', devRow: '测试 · DEV · 自由执行，仅审计',
   online: '在线', maint: '维护',
   formNewConn: '新建连接', formNewConnSub: '接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。',
   connEdit: '编辑', formEditConn: '编辑连接', formEditConnSub: '修改地址 / 引擎 / 环境 / 网关策略 / 凭据，保存后自动重新测试连接。', fPasswordKeep: '留空保持不变', fSaveEdit: '保存修改', connTestSave: '测试保存', connTestSaving: '测试保存中…',
@@ -252,7 +250,7 @@
   etDeleteEnvTitle: '删除环境「{code}」',
   etDeleteEnvWarn: '该环境下有 {n} 个实例,必须先迁移到其他环境。实例若指向不存在的环境,将解析不到分层标签,也就没有任何规则。',
   etMoveTo: '实例迁移至',
-  envUnknown: '环境已删除',
+  envUnknown: '环境已删除', connGroupEmpty: '该环境下暂无实例',
   treeUnknownEnv: '未知环境',
   envProd: 'PROD · 生产环境',
   envGli: 'GLI · 法务环境',
@@ -260,7 +258,7 @@
   envUat: 'UAT · 演练环境',
   envDev: 'DEV · 开发环境',
   dbHintOracle: 'service name 或 sid/ORCL',
-  groupByTier: '按环境分层',
+  groupByEnv: '按环境 · 类型',
   groupByType: '按数据库类型',
   utTitle: '数据访问范围',
   utHint: '按人限定可访问的实例标签。留空则沿用角色授予的范围。',
