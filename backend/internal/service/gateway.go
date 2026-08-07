@@ -257,8 +257,16 @@ func (s *Services) createApproval(u *model.User, conn *model.Connection, sql str
 	apNo := s.nextApNo()
 	auditID := s.nextAuditID()
 	kw := firstWord(sql)
+	// Dual snapshot (see model.Approval): the environment it ran in and the tier
+	// it was judged under. An unresolvable environment leaves the tier blank
+	// rather than failing the ticket — by this point the command has already been
+	// judged, and dropping the approval would leave it neither run nor recorded.
+	tierCode := ""
+	if t, err := s.tierOf(conn); err == nil {
+		tierCode = t.Code
+	}
 	ap := &model.Approval{
-		ApNo: apNo, ConnectionID: conn.ID, Env: conn.Env, Instance: conn.Name,
+		ApNo: apNo, ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode, Instance: conn.Name,
 		Command: sql, Keyword: kw, Database: conn.Database, InitiatorID: u.ID, Initiator: u.Name,
 		Reason: reason, RiskLevel: v.Risk, Status: model.StatusPending, AuditID: auditID,
 	}

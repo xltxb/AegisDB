@@ -165,7 +165,9 @@ type Connection struct {
 	Engine      string    `gorm:"size:32;not null" json:"engine"`
 	Host        string    `gorm:"size:128;not null" json:"host"`
 	Port        int       `gorm:"not null" json:"port"`
-	Env         string    `gorm:"size:16;index:idx_connection_env;not null" json:"env"`
+	// Env holds an Environment.Code, so it must be as wide as one (32). It was
+	// sized 16 back when the only legal values were the four built-in strings.
+	Env         string    `gorm:"size:32;index:idx_connection_env;not null" json:"env"`
 	Policy      string    `gorm:"size:32;not null" json:"policy"` // strict|approve-1|audit-only
 	DefaultRole string    `gorm:"size:64" json:"defaultRole"`
 	Layer       string    `gorm:"size:64" json:"layer"`
@@ -299,7 +301,20 @@ type Approval struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ApNo         string    `gorm:"size:32;uniqueIndex:idx_approval_apno;not null" json:"apNo"`
 	ConnectionID int64     `gorm:"not null" json:"connectionId"`
-	Env          string    `gorm:"size:16;not null" json:"env"`
+	// Env and TierCode are a DUAL SNAPSHOT taken when the ticket was raised: where
+	// it ran (environment) and what it was judged under (control tier). Both are
+	// plain strings with no foreign key, and neither is ever rewritten.
+	//
+	// Two things they answer that a live lookup cannot: an environment may be
+	// rebound to a different tier later, and an instance may be moved to a
+	// different environment — after either, resolving the connection today would
+	// report a control level that was never the one applied. Rewriting them to
+	// match would not be a correction; it would forge the audit trail.
+	//
+	// TierCode is empty on rows written before this split. Callers show it as
+	// unknown rather than inferring one.
+	Env          string    `gorm:"size:32;not null" json:"env"`
+	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Instance     string    `gorm:"size:64;not null" json:"instance"`
 	Command      string    `gorm:"type:text;not null" json:"command"`
 	Keyword      string    `gorm:"size:32" json:"keyword"`
@@ -344,6 +359,13 @@ type AuditLog struct {
 	ActorName    string    `gorm:"size:64" json:"actor"`
 	ConnectionID int64     `json:"connectionId"`
 	Instance     string    `gorm:"size:64" json:"instance"`
+	// The same dual snapshot the approval carries (see Approval.Env / TierCode),
+	// and for the same reason: this row states that a command was judged `high`,
+	// and only the tier in force at that moment explains why. Both are covered by
+	// the chain hash, so neither can be edited after the fact without breaking it.
+	// Empty on rows predating the split.
+	Env          string    `gorm:"size:32" json:"env"`
+	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
 	Command      string    `gorm:"type:text;not null" json:"command"`
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
