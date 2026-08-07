@@ -2,6 +2,8 @@
 {
   // nav / topbar
   navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navDb: '配置', navRules: '规则', navPerms: '权限', navAudit: '审计', navSettings: '设置',
+  // shared form controls
+  selSearchPh: '输入关键词搜索', selNoMatch: '无匹配项',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
   t_asyncjobs: '后台执行', t_asyncjobsSub: '长耗时 SQL 异步跑 · 实时日志',
   asyncTitle: '后台执行(异步)', asyncSub: '提交长耗时 SQL(30–60分钟+),后台跑完不受请求超时影响,过程日志(RAISE NOTICE)实时回显',

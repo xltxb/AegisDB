@@ -1,6 +1,7 @@
 // English locale — ported from the prototype's tr() pairs.
 {
   navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navDb: 'DB', navRules: 'Rules', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
+  selSearchPh: 'Type to search', selNoMatch: 'No match',
   t_export: 'Data export', t_exportSub: 'SQL export · compressed & encrypted', t_uploads: 'Script upload', t_uploadsSub: 'Upload and manage your script files',
   t_asyncjobs: 'Background exec', t_asyncjobsSub: 'Long SQL runs async · live log',
   asyncTitle: 'Background execution (async)', asyncSub: 'Submit long-running SQL (30–60min+); it finishes in the background free of request timeouts, streaming progress (RAISE NOTICE) live',
