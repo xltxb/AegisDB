@@ -10,18 +10,22 @@ import (
 	"velagateway/pkg/resp"
 )
 
-// GLI (灰度) is a first-class connection environment whose risk/capability tier
-// mirrors staging (演练UAT). A high-risk DDL on a GLI instance must therefore be
+// GLI (法务) is a first-class connection environment whose risk/capability tier
+// mirrors staging (预发布). A high-risk DDL on a GLI instance must therefore be
 // gated at the *staging* level: intercepted for approval with risk "mid" — not
 // the PROD "high" hard-block, and not DEV's free execution. This proves the
 // seedGliEnv backfill wired GLI's capability-matrix + risk-dictionary rows.
+//
+// GLI was labelled 灰度 (grey release) until 2026-08-06; it is the 法务 (legal)
+// environment. Only the label was wrong — the tier it mirrors is unchanged, which
+// is why this test still asserts exactly what it always did.
 func TestExec_GliHighRiskIsGatedLikeStaging(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
 
-	// Create a GLI instance (approve-1 policy, like an ordinary grey-release DB).
+	// Create a GLI instance (approve-1 policy).
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "grey-cluster", "engine": "MySQL 8.0", "host": "10.50.0.9:3306",
+		"name": "legal-cluster", "engine": "MySQL 8.0", "host": "10.50.0.9:3306",
 		"env": "gli", "policy": "approve-1",
 	})
 	eq(t, cr.Code, 0, "create GLI connection")
@@ -34,12 +38,12 @@ func TestExec_GliHighRiskIsGatedLikeStaging(t *testing.T) {
 		t.Fatalf("decode connection: %v", err)
 	}
 	eq(t, conn.Env, "gli", "connection env")
-	if conn.Layer != "L2 灰度" {
-		t.Errorf("expected GLI layer label 'L2 灰度', got %q", conn.Layer)
+	if conn.Layer != "L2 法务" {
+		t.Errorf("expected GLI layer label 'L2 法务', got %q", conn.Layer)
 	}
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
-		"connectionId": conn.ID, "sql": "DROP TABLE orders;", "reason": "grey cleanup",
+		"connectionId": conn.ID, "sql": "DROP TABLE orders;", "reason": "legal cleanup",
 	})
 	eq(t, r.Code, resp.CodeIntercepted, "GLI DROP intercepted for approval")
 

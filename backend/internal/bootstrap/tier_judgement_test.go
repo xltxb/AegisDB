@@ -353,5 +353,5 @@ func TestTierDefaults_FollowTheTierRatherThanTheStoredCopy(t *testing.T) {
 	eq(t, app.do(http.MethodDelete, "/api/v1/environments/prod-hk", admin,
 		map[string]any{"moveTo": "staging"}).Code, 0, "delete prod-hk, move to staging")
 	layer, _ = layerOf(c.ID)
-	eq(t, layer, "L3 演练UAT", "a moved instance reports the layer of where it landed")
+	eq(t, layer, "L3 预发布", "a moved instance reports the layer of where it landed")
 }

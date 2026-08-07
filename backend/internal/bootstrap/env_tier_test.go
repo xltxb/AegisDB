@@ -69,7 +69,7 @@ func TestEnvTier_SeedsBuiltinsWithTodaysBehaviour(t *testing.T) {
 	for _, tr := range app.tiers(token) {
 		byCode[tr.Code] = tr
 	}
-	eq(t, len(byCode), 4, "seeded tier count")
+	eq(t, len(byCode), 5, "seeded tier count")
 
 	eq(t, byCode["prod"].RequireMFA, true, "prod forces MFA")
 	eq(t, byCode["prod"].ScanBaseline, true, "prod is the script-scan baseline")
@@ -77,7 +77,10 @@ func TestEnvTier_SeedsBuiltinsWithTodaysBehaviour(t *testing.T) {
 	eq(t, byCode["prod"].ConnLayer, "L1 核心 · 写", "prod layer carried over from connEnvMeta")
 	eq(t, byCode["dev"].DefaultRole, "developer", "dev default role carried over from connEnvMeta")
 
-	for _, code := range []string{"gli", "staging", "dev"} {
+	// Only prod carries the control flags. gli holds real legal data but stays on
+	// the loose profile it has always had — deliberately, so relabelling it 法务
+	// changed no verdict on any live instance.
+	for _, code := range []string{"gli", "staging", "uat", "dev"} {
 		eq(t, byCode[code].RequireMFA, false, code+" must not force MFA")
 		eq(t, byCode[code].ScanBaseline, false, code+" must not be the scan baseline")
 	}
@@ -341,7 +344,10 @@ func TestEnvironment_UnknownCodeStillRejectedOnConnections(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
 
-	for _, bad := range []string{"uat", "pre", "production", ""} {
+	// Plausible-looking near-misses: an operator typing what they call the
+	// environment rather than the code it was registered under. ("uat" used to be
+	// in this list and is a real tier now — the five-tier correction added it.)
+	for _, bad := range []string{"pre", "production", "legal", "预发布", ""} {
 		r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 			"name": "x" + bad, "engine": "MySQL 8.0", "host": "10.0.0.1:3306",
 			"env": bad, "policy": "strict",

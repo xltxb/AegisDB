@@ -51,8 +51,8 @@ func TestConnection_AdminSetsGatewayPolicy(t *testing.T) {
 // ED5: capability levels and dictionary rules are stored per environment, and a
 // lookup that finds no row for an env falls through to "allow". So an
 // environment string nobody seeded is not a harmless label — it is an
-// unregulated environment, reachable by a typo ("uat", "pre", "Prod " with a
-// space). Only the four known environments may be stored.
+// unregulated environment, reachable by a typo ("pre", "legal", "Prod " with a
+// space). Only a registered environment may be stored.
 func TestConnection_RejectsUnknownEnvironment(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
@@ -63,14 +63,14 @@ func TestConnection_RejectsUnknownEnvironment(t *testing.T) {
 			"env": env, "policy": "strict", "username": "u", "password": "p", "database": "d",
 		}
 	}
-	for _, env := range []string{"uat", "pre", "production", ""} {
+	for _, env := range []string{"pre", "production", "legal", ""} {
 		r := app.do(http.MethodPost, "/api/v1/connections", token, body(env))
 		if r.Code == 0 {
 			t.Errorf("connection created with unregulated env %q — no capability or dictionary rows exist for it, so everything is allowed", env)
 		}
 	}
-	// The four known environments still work.
-	for _, env := range []string{"prod", "gli", "staging", "dev"} {
+	// Every seeded environment still works.
+	for _, env := range []string{"prod", "gli", "staging", "uat", "dev"} {
 		eq(t, app.do(http.MethodPost, "/api/v1/connections", token, body(env)).Code, 0, "create env="+env)
 	}
 }

@@ -25,7 +25,8 @@ func InitDatabase(repo *repository.Repo, cfg *Config, adminEmail, adminPassword,
 	} else {
 		slog.Info("reference data already present — skipped")
 	}
-	// GLI (灰度) env rows are backfilled idempotently so existing prod DBs self-heal.
+	// GLI (法务) + UAT (演练) tier rows are backfilled idempotently so existing prod
+	// DBs self-heal.
 	if err := seedGliEnv(repo); err != nil {
 		return fmt.Errorf("seed gli env: %w", err)
 	}

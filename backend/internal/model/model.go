@@ -4,15 +4,18 @@ package model
 
 import "time"
 
-// The four built-in tier codes. They are seeded as EnvTier rows (and as
-// identically-named Environment rows), so these constants are now just handles
-// on the built-ins rather than the closed set they used to be — tiers and
-// environments are data, see EnvTier / Environment below.
+// The five built-in tier codes and what each one MEANS. The code is the lookup
+// key; the meaning lives here and in the seeded display names, because the code
+// alone has misled before — "gli" was documented and seeded as 灰度 (grey
+// release) when it is the 法务 (legal) environment, and "staging" as 演练UAT when
+// it is 预发布. An environment's NAME never decides what kind of environment it
+// is; the tier it binds to does, and the rules hang off the tier.
 const (
-	EnvProd    = "prod"
-	EnvStaging = "staging"
-	EnvGli     = "gli" // 灰度 — mirrors staging's risk/capability tier
-	EnvDev     = "dev"
+	EnvProd    = "prod"    // 生产环境
+	EnvUat     = "uat"     // 演练环境
+	EnvGli     = "gli"     // 法务环境 — control profile mirrors staging's
+	EnvDev     = "dev"     // 开发环境
+	EnvStaging = "staging" // 预发布环境
 )
 
 // EnvTier — a control tier: the unit the RULES are keyed by. RoleCapability and
