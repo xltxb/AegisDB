@@ -1,9 +1,45 @@
 // Front/back contract types (mirror backend dto package).
 
-export type Env = 'prod' | 'gli' | 'staging' | 'dev'
+/**
+ * An environment code — the group an instance belongs to (`prod`, `prod-hk`, …).
+ *
+ * This was a union of the four built-in strings. Environments and tiers are rows
+ * an administrator creates now, so no compile-time set can be complete; anything
+ * that maps a code to a label or colour must therefore handle a code it has
+ * never seen (a deleted environment still appears in history) instead of relying
+ * on the type to rule it out.
+ */
+export type Env = string
+/** A control-tier code — what the rules are keyed by. Also open-ended. */
+export type TierCode = string
 export type CapLevel = 'allow' | 'approve' | 'deny'
 export type RiskLevel = 'high' | 'mid' | 'off' | 'low'
-export type MenuKey = 'terminal' | 'approve' | 'db' | 'rules' | 'perms' | 'audit' | 'settings'
+export type MenuKey = 'terminal' | 'approve' | 'db' | 'rules' | 'envtier' | 'perms' | 'audit' | 'settings'
+
+/**
+ * A control tier: the unit the capability matrix and risk dictionary are keyed
+ * by. The booleans replace what used to be `code === 'prod'` tests in the UI and
+ * the gateway alike.
+ */
+export interface EnvTier {
+  code: TierCode
+  displayName: string
+  sortOrder: number
+  requireMfa: boolean
+  dangerBanner: boolean
+  countsInPending: boolean
+  scanBaseline: boolean
+  connLayer: string
+  defaultRole: string
+}
+
+/** A group of instances, bound to exactly one tier. Many environments per tier. */
+export interface Environment {
+  code: Env
+  displayName: string
+  tierCode: TierCode
+  sortOrder: number
+}
 
 export interface Me {
   id: number
@@ -112,7 +148,7 @@ export interface UserView {
 
 export interface RiskCommandView {
   command: string
-  env: Record<string, string> // prod/staging/dev -> high|mid|off
+  env: Record<TierCode, string> // tier code -> high|mid|off
 }
 
 export interface ApprovalStep {
@@ -127,7 +163,10 @@ export interface Approval {
   id: number
   apNo: string
   connectionId: number
+  /** Where it ran, and what it was judged under — snapshots, never re-resolved. */
   env: string
+  /** Empty on tickets raised before tiers existed; show as unknown, don't infer. */
+  tierCode?: string
   instance: string
   database: string
   command: string

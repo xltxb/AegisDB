@@ -94,6 +94,40 @@ func backfillEnvTiers(db *gorm.DB) error {
 			}
 		}
 	}
+	return backfillEnvTierMenu(db)
+}
+
+// backfillEnvTierMenu grants the new "envtier" menu to whoever already holds
+// "rules".
+//
+// A menu key with no RoleMenu row reads as denied (MenuGuard), so on an upgraded
+// database nobody — not even an administrator — could open the tiers page or
+// call its endpoints, and the only way to grant it would be a page they cannot
+// reach. Tiers and environments were managed from the rules menu before they had
+// a page of their own, so inheriting that grant keeps the same people in charge
+// and gives nobody a permission they did not have.
+//
+// Written only when the key is entirely absent, so a deliberate revocation is
+// not undone on the next restart.
+func backfillEnvTierMenu(db *gorm.DB) error {
+	var existing int64
+	if err := db.Model(&model.RoleMenu{}).Where("menu_key = ?", "envtier").Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	var rules []model.RoleMenu
+	if err := db.Where("menu_key = ?", "rules").Find(&rules).Error; err != nil {
+		return err
+	}
+	for _, r := range rules {
+		if err := db.Create(&model.RoleMenu{
+			RoleID: r.RoleID, MenuKey: "envtier", Enabled: r.Enabled,
+		}).Error; err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -182,16 +216,17 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	}
 
 	// ---- Menus ----
-	menuKeys := []string{"terminal", "approve", "db", "rules", "perms", "audit", "settings"}
-	// Instance config (db), rules, permissions (perms) and settings are all
-	// platform-admin only — non-admins don't even see these pages.
+	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings"}
+	// Instance config (db), rules, tiers/environments (envtier), permissions
+	// (perms) and settings are all platform-admin only — non-admins don't even
+	// see these pages.
 	menuMatrix := map[string][]bool{
-		//        terminal approve  db    rules  perms audit settings
-		"admin": {true, true, true, true, true, true, true},
-		"owner": {true, true, false, false, false, true, false},
-		"l2":    {true, true, false, false, false, true, false},
-		"ro":    {true, false, false, false, false, true, false},
-		"audit": {false, false, false, false, false, true, false},
+		//        terminal approve  db    rules envtier perms audit settings
+		"admin": {true, true, true, true, true, true, true, true},
+		"owner": {true, true, false, false, false, false, true, false},
+		"l2":    {true, true, false, false, false, false, true, false},
+		"ro":    {true, false, false, false, false, false, true, false},
+		"audit": {false, false, false, false, false, false, true, false},
 	}
 	for code, vals := range menuMatrix {
 		for i, k := range menuKeys {

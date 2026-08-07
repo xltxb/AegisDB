@@ -12,9 +12,9 @@ import (
 //
 // Reads are open to any authenticated caller: the console renders instance
 // labels, the database tree and the connection form from these lists, so gating
-// them behind the rules menu would blank out the terminal for everyone else.
-// Every mutation is rules-menu + admin, because a tier decides how strictly its
-// instances are governed.
+// them behind the admin menu would blank out the terminal for everyone else.
+// Every mutation is envtier-menu + admin, because a tier decides how strictly
+// its instances are governed.
 //
 // Failures surface the service message verbatim — "仍有环境绑定该分层标签" tells the
 // operator what to do next, where a generic 400 would not.

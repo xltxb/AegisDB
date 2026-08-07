@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Crown, Shield, UserCog, Code, Eye, SquareTerminal, ClipboardCheck, Database,
-  ShieldAlert, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound,
+  ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound,
 } from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import VButton from '@/components/common/VButton.vue'
@@ -14,11 +14,13 @@ import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { useEnvTierStore } from '@/stores/envtier'
 import type { RoleBrief, RoleDetail, UserView } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
+const envtier = useEnvTierStore()
 // Role/permission + user-credential edits are platform-admin only (backend
 // enforces this too); non-admins see the page read-only.
 // Admin if ANY held role is admin (union), falling back to the primary role code.
@@ -81,12 +83,22 @@ async function doInvite() {
 const roleIcon: Record<string, any> = { crown: Crown, shield: Shield, 'user-cog': UserCog, code: Code, eye: Eye }
 const capKeys = ['select', 'write', 'ddl', 'grant', 'conn', 'approve']
 const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove']
-const envCols = ['prod', 'gli', 'staging', 'dev']
+// One column per control tier, in the tier list's own order. This was the four
+// built-in strings; the matrix is keyed by tier and tiers are rows now, so a
+// hardcoded list would silently omit any tier added later — and an omitted
+// column is an ungoverned cell, since a capability with no row reads as allow.
+const envCols = computed(() => envtier.tierCodes)
+// The grid was four fixed columns. Each tier now needs a minimum width so a long
+// list scrolls rather than squeezing every cell into an unreadable sliver.
+const matrixCols = computed(() => ({
+  gridTemplateColumns: `minmax(150px, 2fr) repeat(${envCols.value.length}, minmax(88px, 1fr))`,
+}))
 const menuDefs = [
   { key: 'terminal', icon: SquareTerminal, label: 'm_terminal' },
   { key: 'approve', icon: ClipboardCheck, label: 'm_approve' },
   { key: 'db', icon: Database, label: 'm_db' },
   { key: 'rules', icon: ShieldAlert, label: 'm_rules' },
+  { key: 'envtier', icon: Layers, label: 'm_envtier' },
   { key: 'perms', icon: UsersRound, label: 'm_perms' },
   { key: 'audit', icon: ScrollText, label: 'm_audit' },
   { key: 'settings', icon: Settings, label: 'm_settings' },
@@ -131,7 +143,12 @@ async function loadUsers() {
   try { users.value = await api.users(); publishSub() } catch (e) { ui.notifyError(e, '加载失败') }
 }
 
-onMounted(async () => { await loadRoles(); await loadUsers(); try { allTags.value = await api.tags() } catch { /* ignore */ } })
+onMounted(async () => {
+  // Tiers decide the matrix columns, so load them before anything renders cells.
+  await envtier.load().catch(() => {})
+  await loadRoles(); await loadUsers()
+  try { allTags.value = await api.tags() } catch { /* ignore */ }
+})
 
 function cellLevel(cap: string, env: string): string {
   return detail.value?.matrix?.[cap]?.[env] || 'allow'
@@ -346,12 +363,16 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
         </div>
         <div class="mhint">{{ detail.layer }} · {{ detail.members.length }} {{ $t('membersTitle') }} · {{ $t('matrixHint') }}</div>
 
-        <div class="mtable">
-          <div class="mth"><span>{{ $t('colCap') }}</span><span class="ctr">PROD</span><span class="ctr">GLI</span><span class="ctr">STAGING</span><span class="ctr">DEV</span></div>
-          <div v-for="(cap, i) in capKeys" :key="cap" class="mtr">
-            <span class="cap">{{ $t(capLabels[i] as any) }}</span>
-            <div v-for="env in envCols" :key="env" class="cellwrap">
-              <div class="cell" :style="{ color: sym[cellLevel(cap, env)].c }" @click="cycleCell(cap, env)">{{ sym[cellLevel(cap, env)].s }}</div>
+        <!-- Scrolls inside its own box once the tier count outgrows the width;
+             the page body must never scroll sideways. -->
+        <div class="mtable scx">
+          <div class="mgrid" :style="matrixCols">
+            <div class="mth"><span>{{ $t('colCap') }}</span><span v-for="env in envCols" :key="env" class="ctr">{{ env }}</span></div>
+            <div v-for="(cap, i) in capKeys" :key="cap" class="mtr">
+              <span class="cap">{{ $t(capLabels[i] as any) }}</span>
+              <div v-for="env in envCols" :key="env" class="cellwrap">
+                <div class="cell" :style="{ color: sym[cellLevel(cap, env)].c }" @click="cycleCell(cap, env)">{{ sym[cellLevel(cap, env)].s }}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -594,8 +615,14 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .mhead :deep(.vbtn) { margin-left: auto; }
 .roflag { margin-left: auto; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
 .mhint { font: 500 12px var(--font-body); color: var(--text-muted); margin-bottom: 18px; }
-.mtable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
-.mth, .mtr { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap: 10px; }
+/* overflow-y:hidden keeps the rounded corners clipping (the old `overflow:hidden`
+   did that) while .scx supplies the horizontal scroll. */
+.mtable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow-y: hidden; background: var(--surface-card); }
+/* min-width:max-content keeps the rows at their natural width so .mtable's
+   overflow-x is what scrolls; without it the grid compresses instead. */
+.mgrid { min-width: max-content; }
+/* Column template is set inline from the tier count — see matrixCols. */
+.mth, .mtr { display: grid; gap: 10px; }
 .mth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; }
 .ctr { text-align: center; }
 .mtr { padding: 9px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }

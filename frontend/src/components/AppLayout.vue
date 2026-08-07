@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, UsersRound,
+  Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
   CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck,
 } from 'lucide-vue-next'
@@ -28,6 +28,7 @@ const navItems = [
   { key: 'approve', path: '/approvals', icon: ClipboardCheck, label: 'navAppr', badge: true },
   { key: 'db', path: '/connections', icon: Database, label: 'navDb' },
   { key: 'rules', path: '/risk-rules', icon: ShieldAlert, label: 'navRules' },
+  { key: 'envtier', path: '/env-tiers', icon: Layers, label: 'navEnvTier' },
   { key: 'perms', path: '/permissions', icon: UsersRound, label: 'navPerms' },
   { key: 'audit', path: '/audit', icon: ScrollText, label: 'navAudit' },
   // Settings is a menu item too; the seeded menu grants it to admins only.

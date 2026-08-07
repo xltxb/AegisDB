@@ -8,15 +8,20 @@ import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
+import { useEnvTierStore } from '@/stores/envtier'
 import type { RiskCommandView } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
+const envtier = useEnvTierStore()
 // Rule configuration is platform-admin only (backend enforces it too).
 const isAdmin = computed(() => auth.me?.roleCode === 'admin')
 const cmds = ref<RiskCommandView[]>([])
-const env = ref<'prod' | 'gli' | 'staging' | 'dev'>('prod')
+// The dictionary is keyed by control tier, and tiers are rows an administrator
+// creates — so the visible tab set comes from the store, not from a union type.
+// `env` here (and in the API) is a TIER code; the column name is historical.
+const env = ref<string>('prod')
 const draft = ref('')
 const ruleForm = ref(false)
 const strictMode = ref(false)
@@ -28,8 +33,11 @@ const rfTriggers = ref([
   { name: 'DELETE', on: false }, { name: 'GRANT', on: false },
 ])
 const rfTrigDraft = ref('')
-const rfEnv = ref<'prod' | 'gli' | 'staging' | 'dev'>('prod')
+const rfEnv = ref<string>('prod')
 const rfAction = ref<'block' | 'approve' | 'alert'>('block')
+
+/** Tier codes in display order — the tabs, the segmented control and the cards. */
+const tierCodes = computed(() => envtier.tierCodes)
 
 function openRule() {
   rfName.value = ''
@@ -38,7 +46,7 @@ function openRule() {
     { name: 'DELETE', on: false }, { name: 'GRANT', on: false },
   ]
   rfTrigDraft.value = ''
-  rfEnv.value = 'prod'
+  rfEnv.value = tierCodes.value[0] ?? 'prod'
   rfAction.value = 'block'
   ruleForm.value = true
 }
@@ -68,6 +76,11 @@ async function createRule() {
 }
 
 async function load() {
+  // Tiers first: they are the tab set, and `env` must point at one that exists.
+  try {
+    await envtier.load()
+    if (!envtier.tierCodes.includes(env.value)) env.value = envtier.tierCodes[0] ?? env.value
+  } catch { /* tabs fall back to the current selection */ }
   // M14: 加载失败以 toast 呈现，避免静默失败
   try {
     cmds.value = await api.riskCommands()
@@ -127,9 +140,18 @@ async function addCmd() {
   const name = draft.value.trim().toUpperCase().replace(/[^A-Z_ ]/g, '')
   if (!name) return
   if (cmds.value.some((c) => c.command === name)) { draft.value = ''; return }
+  // Send NO levels. This used to be a literal { prod, staging, dev } map, which
+  // omitted gli — and the server wrote only the keys it was given, so every
+  // command added here was missing its gli row, and a missing row reads as `off`.
+  // The dictionary looked complete on this page while grey-release instances
+  // ignored it entirely.
+  //
+  // The server now expands across every tier it knows about and picks a default
+  // per tier, which is the only version that cannot fall behind a tier this page
+  // has not heard of.
   // M14: 新增命令失败以 toast 呈现
   try {
-    cmds.value = await api.upsertRiskCommand(name, { prod: 'high', staging: 'high', dev: 'off' })
+    cmds.value = await api.upsertRiskCommand(name, {})
     draft.value = ''
   } catch (e) {
     ui.notifyError(e, '操作失败')
@@ -173,7 +195,7 @@ const policies = computed(() => {
   })
 
   const midAny = cmds.value
-    .filter((c) => ['prod', 'gli', 'staging', 'dev'].some((e) => c.env[e] === 'mid'))
+    .filter((c) => tierCodes.value.some((e) => c.env[e] === 'mid'))
     .map((c) => c.command)
   if (midAny.length) {
     cards.push({
@@ -202,8 +224,9 @@ const policies = computed(() => {
       <div class="dhead">
         <div class="dic"><ListX :size="17" color="var(--danger)" /></div>
         <div class="grow"><div class="dt">{{ $t('dictTitle') }}</div><div class="ds">{{ $t('dictSub') }}</div></div>
-        <div class="envtabs">
-          <div v-for="e in (['prod', 'gli', 'staging', 'dev'] as const)" :key="e" class="et" :class="{ active: env === e }" @click="env = e">{{ e.toUpperCase() }}</div>
+        <!-- One tab per tier; scrolls sideways once they outgrow the header. -->
+        <div class="envtabs scx">
+          <div v-for="e in tierCodes" :key="e" class="et" :class="{ active: env === e }" :title="envtier.tierLabel(e, t)" @click="env = e">{{ e.toUpperCase() }}</div>
         </div>
       </div>
       <div class="chips">
@@ -268,8 +291,8 @@ const policies = computed(() => {
           <div class="rf2">
             <div>
               <div class="fl">{{ $t('rfEnv') }}</div>
-              <div class="seg">
-                <div v-for="e in (['prod', 'gli', 'staging', 'dev'] as const)" :key="e" class="si" :class="{ active: rfEnv === e }" @click="rfEnv = e">{{ e.toUpperCase() }}</div>
+              <div class="seg scx">
+                <div v-for="e in tierCodes" :key="e" class="si" :class="{ active: rfEnv === e }" :title="envtier.tierLabel(e, t)" @click="rfEnv = e">{{ e.toUpperCase() }}</div>
               </div>
             </div>
             <div>

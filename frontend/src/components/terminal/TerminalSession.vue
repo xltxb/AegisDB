@@ -12,6 +12,7 @@ import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
 import { useAuthStore } from '@/stores/auth'
+import { useEnvTierStore } from '@/stores/envtier'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
@@ -36,7 +37,11 @@ const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:ws
 
 const { t } = useI18n()
 const auth = useAuthStore()
+const envtier = useEnvTierStore()
 const router = useRouter()
+// The caution banner's severity comes from the connection's tier. A failed load
+// leaves every tier unresolved, which cautionLine treats as "unknown, warn".
+envtier.load().catch(() => {})
 
 const risk = ref<'idle' | 'safe' | 'high'>('idle')
 const wsStatus = ref<WsStatus>('connecting')
@@ -153,13 +158,25 @@ function promptText() {
 function promptLen() { return props.conn.name.length + (targetDb.value ? targetDb.value.length + 1 : 0) + 3 }
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
 
-// A prominent, env-coloured "you are operating on X" caution printed into the
-// terminal itself (bold; red for PROD with an explicit "proceed with caution").
+// A prominent, tier-coloured "you are operating on X" caution printed into the
+// terminal itself (bold; red with an explicit "proceed with caution" on a tier
+// that carries the danger banner).
+//
+// The trigger is the tier's dangerBanner flag, not the name "prod". A second
+// production environment is exactly as dangerous as the first, and the red line
+// is the last warning before someone types DROP — keying it off a name means the
+// clusters an operator is least familiar with get the mildest warning.
+//
+// The label still shows the ENVIRONMENT (prod-hk), because that is where the
+// command lands; only the severity comes from the tier.
 function cautionLine() {
   const cn = props.conn
   const env = cn.env.toUpperCase()
-  if (cn.env === 'prod') return ANSI.bold + ANSI.red + t('termCautionProd', { env, name: cn.name }) + ANSI.reset
-  if (cn.env === 'staging') return ANSI.bold + ANSI.yellow + t('termCautionStaging', { env, name: cn.name }) + ANSI.reset
+  const tier = envtier.tierOf(cn.env)
+  if (tier?.dangerBanner) return ANSI.bold + ANSI.red + t('termCautionProd', { env, name: cn.name }) + ANSI.reset
+  // An unresolved environment gets the middle warning rather than the mildest:
+  // no tier means the instance's control level is unknown, not benign.
+  if (!tier || tier.requireMfa) return ANSI.bold + ANSI.yellow + t('termCautionStaging', { env, name: cn.name }) + ANSI.reset
   return ANSI.bold + ANSI.green + t('termCautionOther', { env, name: cn.name }) + ANSI.reset
 }
 
@@ -800,6 +817,9 @@ async function runScript() {
   border: 1px solid var(--accent-subtle-border); background: var(--accent-subtle); border-radius: 8px;
   color: var(--accent-text); font: 600 11px var(--font-mono); cursor: pointer;
 }
+/* Nothing printed yet — the control stays visible (so it is discoverable) but
+   inert, rather than appearing and disappearing as the session starts. */
+.upload.off { opacity: 0.45; cursor: not-allowed; }
 .hidden-file { display: none; }
 .sample { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid var(--border-default); background: var(--surface-card); border-radius: 8px; color: var(--text-body); cursor: pointer; }
 .sample:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }

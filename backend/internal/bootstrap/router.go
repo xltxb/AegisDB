@@ -111,17 +111,17 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 
 		// control tiers & environments — reads are open to any authenticated caller
 		// (the terminal tree, instance labels and the connection form all render
-		// from them); mutations are rules-menu + admin, since a tier decides how
+		// from them); mutations are envtier-menu + admin, since a tier decides how
 		// strictly its instances are governed.
 		a.GET("/env-tiers", h.ListEnvTiers)
-		a.POST("/env-tiers", menu("rules"), admin, h.CreateEnvTier)
-		a.PUT("/env-tiers/:code", menu("rules"), admin, h.UpdateEnvTier)
-		a.DELETE("/env-tiers/:code", menu("rules"), admin, h.DeleteEnvTier)
+		a.POST("/env-tiers", menu("envtier"), admin, h.CreateEnvTier)
+		a.PUT("/env-tiers/:code", menu("envtier"), admin, h.UpdateEnvTier)
+		a.DELETE("/env-tiers/:code", menu("envtier"), admin, h.DeleteEnvTier)
 		a.GET("/environments", h.ListEnvironments)
-		a.GET("/environments/usage", menu("rules"), h.EnvironmentUsage)
-		a.POST("/environments", menu("rules"), admin, h.CreateEnvironment)
-		a.PUT("/environments/:code", menu("rules"), admin, h.UpdateEnvironment)
-		a.DELETE("/environments/:code", menu("rules"), admin, h.DeleteEnvironment)
+		a.GET("/environments/usage", menu("envtier"), h.EnvironmentUsage)
+		a.POST("/environments", menu("envtier"), admin, h.CreateEnvironment)
+		a.PUT("/environments/:code", menu("envtier"), admin, h.UpdateEnvironment)
+		a.DELETE("/environments/:code", menu("envtier"), admin, h.DeleteEnvironment)
 
 		// roles & permissions — read is perms-menu; every mutation is admin-only
 		// (prevents privilege escalation by non-admin perms holders like the DBA lead)
