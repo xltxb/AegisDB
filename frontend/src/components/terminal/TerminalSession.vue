@@ -112,6 +112,12 @@ const out = (line = '') => {
 }
 const outLines = (arr: string[]) => arr.forEach((l) => out(l))
 
+// truncHint is printed under a table whose cells did not fit the terminal width.
+// The full values are already in hand — only the display was cut — so the line's
+// job is to say so and name the command that shows them whole. Without it the
+// trailing `…` reads as "this is all there is".
+const truncHint = (n: number) => c(ANSI.gray, t('resultTruncatedHint', { n, bs: '\\' }))
+
 /**
  * Save the session log as a file.
  *
@@ -591,7 +597,7 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     // Grid mode shows the data in the HTML panel; the terminal keeps only the
     // summary. \G / \x are explicit terminal-display choices, still honoured.
     if (pendingVertical.value || expandedMode.value) outLines(renderVertical(m.columns, data))
-    else if (!props.gridView) outLines(renderTable(buildTable(m.columns, data), term.cols))
+    else if (!props.gridView) outLines(renderTable(buildTable(m.columns, data), term.cols, truncHint))
     const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
     out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: m.ms ?? 0 })))
   } else if (isSelect(pendingSql.value) && rows > 0) {
@@ -599,7 +605,7 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     const tb = synthTable(pendingSql.value, rows)
     emit('result', { columns: tb.columns, rows: tb.rows })
     if (pendingVertical.value || expandedMode.value) outLines(renderVertical(tb.columns, tb.rows))
-    else if (!props.gridView) outLines(renderTable(tb, term.cols))
+    else if (!props.gridView) outLines(renderTable(tb, term.cols, truncHint))
     const shown = tb.rows.length
     const more = shown < rows ? t('termShownFirst', { n: shown }) : ''
     out(c(ANSI.gray, t('termRows', { n: rows, more, ms: m.ms ?? 0 })))

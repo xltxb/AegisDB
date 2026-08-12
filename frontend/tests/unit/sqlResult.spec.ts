@@ -143,3 +143,48 @@ test('renderVertical keeps genuine newlines in a multi-line value', () => {
   expect(evil).not.toContain('\x1b[2K')
   expect(evil).toContain('b')
 })
+
+// A clipped cell ends in `…`, which says a value continues — not that the whole
+// one is still reachable. The data IS all in hand; only the display was cut. The
+// hint is what turns the ellipsis from a dead end into a pointer at \G.
+test('a table that clipped values says so, and how many', () => {
+  const t = {
+    columns: ['id', 'body'],
+    rows: [
+      ['1', 'x'.repeat(300)],
+      ['2', 'y'.repeat(300)],
+      ['3', 'short'],
+    ],
+    numeric: [true, false],
+  }
+  const lines = renderTable(t, 60, (n) => `CUT:${n}`)
+  const last = lines[lines.length - 1]
+  expect(last).toBe('CUT:2') // the two long bodies, not the short one
+})
+
+test('a table that fits adds no hint at all', () => {
+  const t = { columns: ['id'], rows: [['1'], ['2']], numeric: [true] }
+  const lines = renderTable(t, 80, (n) => `CUT:${n}`)
+  expect(lines.some((l) => l.startsWith('CUT:'))).toBe(false)
+})
+
+// Headers are excluded from the count: a clipped column NAME hides no data, and
+// counting it would overstate what \G recovers.
+test('a clipped header is not counted as hidden data', () => {
+  const t = {
+    columns: ['a_very_long_column_name_that_will_not_fit_anywhere'],
+    rows: [['1']],
+    numeric: [false],
+  }
+  const lines = renderTable(t, 20, (n) => `CUT:${n}`)
+  expect(lines.some((l) => l.startsWith('CUT:'))).toBe(false)
+})
+
+// Callers that pass no hint (and the existing ones did not) must be unaffected.
+test('without a hint callback the table is unchanged', () => {
+  const t = { columns: ['body'], rows: [['z'.repeat(300)]], numeric: [false] }
+  const lines = renderTable(t, 40)
+  // The bottom border is the last line (it carries an ANSI colour prefix, so
+  // match on content rather than position within the string).
+  expect(lines[lines.length - 1]).toContain('└')
+})
