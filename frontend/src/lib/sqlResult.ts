@@ -292,7 +292,16 @@ function allocWidths(natural: number[], available: number): number[] {
 // no terminal in hand — and every column falls back to a fixed cap. Callers pass
 // the live value per render, so a resized window is picked up by the next result
 // without any resize plumbing here.
-export function renderTable(t: SynthTable, termCols = 0): string[] {
+/**
+ * Render the result as a bordered table.
+ *
+ * `hint` is called when values had to be cut to fit, with how many. A truncated
+ * cell ends in `…`, which says a value continues but not that the full one is
+ * still reachable — the data is all here, and `\G` prints it whole. Without the
+ * line, the ellipsis reads as "this is all you get" and the way out stays
+ * undiscovered. The caller supplies the text so this module stays free of i18n.
+ */
+export function renderTable(t: SynthTable, termCols = 0, hint?: (n: number) => string): string[] {
   const rawHeads = t.columns.map((h) => sanitizeCell(h))
   const rawCells = t.rows.map((r) => t.columns.map((_, i) => sanitizeCell(r[i] ?? '')))
 
@@ -309,7 +318,15 @@ export function renderTable(t: SynthTable, termCols = 0): string[] {
     : natural.map((w) => Math.min(w, fallbackColWidth))
 
   const heads = rawHeads.map((h, i) => truncateDisp(h, widths[i]))
-  const cells = rawCells.map((r) => r.map((v, i) => truncateDisp(v, widths[i])))
+  // Count the VALUES that lost content. Headers are excluded: a clipped column
+  // name is a nuisance, not hidden data, and counting it would overstate what
+  // `\G` recovers.
+  let cut = 0
+  const cells = rawCells.map((r) => r.map((v, i) => {
+    const s = truncateDisp(v, widths[i])
+    if (s !== v) cut++
+    return s
+  }))
   const g = (s: string) => c(ANSI.gray, s)
   const vert = g('│')
   const bar = (l: string, m: string, r: string) => g(l + widths.map((w) => '─'.repeat(w + 2)).join(m) + r)
@@ -322,5 +339,6 @@ export function renderTable(t: SynthTable, termCols = 0): string[] {
   const out = [bar('┌', '┬', '┐'), rowLine(heads, true), bar('├', '┼', '┤')]
   for (const r of cells) out.push(rowLine(r, false))
   out.push(bar('└', '┴', '┘'))
+  if (cut > 0 && hint) out.push(hint(cut))
   return out
 }

@@ -135,24 +135,37 @@ async function cycle(c: RiskCommandView) {
     ui.notifyError(e, '操作失败')
   }
 }
-async function addCmd() {
+// Adding a command opens a per-tier picker instead of posting immediately.
+//
+// The operator names the level on EVERY tier, because the alternative is the
+// server guessing — and a guess here is not visible anywhere afterwards. Tiers
+// left at 放行 still get a row: absent and `off` mean the same thing to the
+// engine, but only one of them shows up on this page as a decision somebody made.
+const addOpen = ref(false)
+const addLevels = ref<Record<string, string>>({})
+
+function openAdd() {
   if (!isAdmin.value) return
   const name = draft.value.trim().toUpperCase().replace(/[^A-Z_ ]/g, '')
   if (!name) return
   if (cmds.value.some((c) => c.command === name)) { draft.value = ''; return }
-  // Send NO levels. This used to be a literal { prod, staging, dev } map, which
-  // omitted gli — and the server wrote only the keys it was given, so every
-  // command added here was missing its gli row, and a missing row reads as `off`.
-  // The dictionary looked complete on this page while grey-release instances
-  // ignored it entirely.
-  //
-  // The server now expands across every tier it knows about and picks a default
-  // per tier, which is the only version that cannot fall behind a tier this page
-  // has not heard of.
-  // M14: 新增命令失败以 toast 呈现
+  // Prefilled with the same shape the server would have chosen, so the common
+  // case is one confirmation rather than a form — but every value is on screen
+  // and changeable before anything is written.
+  const pre: Record<string, string> = {}
+  for (const t of envtier.tiers) pre[t.code] = t.scanBaseline || t.requireMfa ? 'high' : 'off'
+  addLevels.value = pre
+  addOpen.value = true
+}
+
+async function confirmAdd() {
+  if (!isAdmin.value) return
+  const name = draft.value.trim().toUpperCase().replace(/[^A-Z_ ]/g, '')
+  if (!name) return
   try {
-    cmds.value = await api.upsertRiskCommand(name, {})
+    cmds.value = await api.upsertRiskCommand(name, { ...addLevels.value })
     draft.value = ''
+    addOpen.value = false
   } catch (e) {
     ui.notifyError(e, '操作失败')
   }
@@ -236,8 +249,27 @@ const policies = computed(() => {
           <span v-if="isAdmin" class="cx" title="移除" @click="removeCmd(c)"><X :size="12" /></span>
         </div>
         <div v-if="isAdmin" class="addchip">
-          <input v-model="draft" :placeholder="$t('addCmdPh')" @keyup.enter="addCmd" />
-          <span class="addbtn" @click="addCmd"><Plus :size="14" /></span>
+          <input v-model="draft" :placeholder="$t('addCmdPh')" @keyup.enter="openAdd" />
+          <span class="addbtn" @click="openAdd"><Plus :size="14" /></span>
+        </div>
+        <!-- Every tier is listed, including the ones being left alone: a command
+             that does not apply somewhere is a decision, and it should be visible
+             as one rather than inferred from a missing row. -->
+        <div v-if="addOpen" class="addpanel">
+          <div class="apt">{{ $t('addCmdScope', { cmd: draft.trim().toUpperCase() }) }}</div>
+          <div class="aprow" v-for="e in tierCodes" :key="e">
+            <span class="apc">{{ e.toUpperCase() }}</span>
+            <span class="apn">{{ envtier.tierLabel(e, t) }}</span>
+            <div class="apseg">
+              <span v-for="lv in ['high', 'mid', 'off']" :key="lv"
+                    :class="{ on: addLevels[e] === lv, ['lv-' + lv]: true }"
+                    @click="addLevels[e] = lv">{{ $t('lv_' + lv) }}</span>
+            </div>
+          </div>
+          <div class="apfoot">
+            <VButton variant="secondary" height="30px" @click="addOpen = false">{{ $t('btnCancel') }}</VButton>
+            <VButton variant="primary" height="30px" @click="confirmAdd">{{ $t('addCmdConfirm') }}</VButton>
+          </div>
         </div>
       </div>
     </div>
@@ -315,6 +347,17 @@ const policies = computed(() => {
 </template>
 
 <style scoped>
+.addpanel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-sunken); }
+.apt { font: 600 12px var(--font-body); color: var(--text-strong); margin-bottom: 10px; }
+.aprow { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.apc { min-width: 92px; font: 600 11px var(--font-mono); color: var(--text-body); }
+.apn { flex: 1; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.apseg { display: flex; gap: 4px; }
+.apseg span { padding: 3px 10px; border: 1px solid var(--border-subtle); border-radius: 7px; font: 600 10.5px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.apseg span.on.lv-high { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-text); }
+.apseg span.on.lv-mid { background: var(--warning-subtle); color: var(--warning-text); border-color: var(--warning-text); }
+.apseg span.on.lv-off { background: var(--surface-card); color: var(--text-body); border-color: var(--border-strong); }
+.apfoot { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .head .roflag { margin-left: auto; }

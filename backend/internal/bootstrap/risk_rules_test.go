@@ -42,6 +42,20 @@ func TestRiskCommands_PartialUpsertKeepsOtherEnvs(t *testing.T) {
 	// prod is untouched, staging updated
 	eq2(t, app.riskLevel(admin, "DROP", "prod"), "high", "prod DROP must stay high")
 	eq2(t, app.riskLevel(admin, "DROP", "staging"), "high", "staging DROP now high")
+
+	// The check above passes for the wrong reason if the untouched level happens
+	// to equal what a fresh row would default to. Set one DELIBERATELY away from
+	// its default and confirm a partial upsert still leaves it alone: dev defaults
+	// to `off`, so make it `high` first.
+	eq(t, app.do(http.MethodPatch, "/api/v1/risk-commands/DROP", admin,
+		map[string]any{"env": "dev", "level": "high"}).Code, 0, "set dev DROP high")
+	eq2(t, app.riskLevel(admin, "DROP", "dev"), "high", "dev DROP is now high")
+
+	eq(t, app.do(http.MethodPost, "/api/v1/risk-commands", admin,
+		map[string]any{"command": "DROP", "env": map[string]string{"staging": "mid"}}).Code, 0, "upsert staging again")
+	eq2(t, app.riskLevel(admin, "DROP", "dev"), "high",
+		"an untouched tier keeps its level — the default must not be written over it")
+	eq2(t, app.riskLevel(admin, "DROP", "staging"), "mid", "the named tier did change")
 }
 
 func eq2(t *testing.T, got, want, msg string) {

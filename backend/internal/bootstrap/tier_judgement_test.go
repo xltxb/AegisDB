@@ -412,3 +412,50 @@ func TestExplain_StillObeysTheReadGate(t *testing.T) {
 	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "deny",
 		"a role denied SELECT must not read a plan either")
 }
+
+// Reading a plan is its own permission. A plan discloses schema and row-count
+// statistics for a statement the role may be forbidden to run, so an estate that
+// must control that has to be able to — without also revoking SELECT, which is
+// what folding EXPLAIN into `select` forced.
+func TestExplain_HasItsOwnCapabilityDimension(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	prod := app.connIDByEnv(admin, "prod")
+	roleID := itoa(app.roleIDByCode(admin, "admin"))
+
+	// Seeded allow: nothing changes until someone tightens it.
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "allow", "plans readable by default")
+
+	// Deny only the plan dimension.
+	eq(t, app.do(http.MethodPut, "/api/v1/roles/"+roleID+"/capabilities", admin,
+		map[string]any{"matrix": map[string]map[string]string{"explain": {"prod": "deny"}}}).Code, 0,
+		"deny explain on prod")
+
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "deny", "the plan is now refused")
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN DELETE FROM orders").Action, "deny", "…for any statement")
+	// …and reading data is untouched, which is the whole point of the split.
+	eq(t, app.riskCheck(admin, prod, "SELECT * FROM orders").Action, "allow", "SELECT is unaffected")
+
+	// It is per tier, like every other capability.
+	dev := app.connIDByEnv(admin, "dev")
+	eq(t, app.riskCheck(admin, dev, "EXPLAIN SELECT 1").Action, "allow", "other tiers are unaffected")
+}
+
+// Splitting a permission must not hand out what the original one refused.
+// `explain` seeds allow everywhere, so if the plan were judged on that dimension
+// ALONE, introducing it would have given a role denied SELECT the ability to read
+// plans of the tables it may not read. Both gates apply; the stricter wins.
+func TestExplain_DenyingSelectStillDeniesThePlan(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	prod := app.connIDByEnv(admin, "prod")
+	roleID := itoa(app.roleIDByCode(admin, "admin"))
+
+	// explain stays at its seeded allow; only the read gate is closed.
+	eq(t, app.do(http.MethodPut, "/api/v1/roles/"+roleID+"/capabilities", admin,
+		map[string]any{"matrix": map[string]map[string]string{"select": {"prod": "deny"}}}).Code, 0,
+		"deny select on prod")
+
+	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "deny",
+		"a role that may not read the data may not read its plan either")
+}

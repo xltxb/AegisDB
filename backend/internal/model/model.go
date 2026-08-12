@@ -325,6 +325,18 @@ type Approval struct {
 	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Instance     string    `gorm:"size:64;not null" json:"instance"`
 	Command      string    `gorm:"type:text;not null" json:"command"`
+	// A script approval keeps the script in the file the initiator uploaded and
+	// records a REFERENCE to it, not its body: Command then holds a bounded,
+	// readable excerpt. The body of a real migration runs to megabytes, and
+	// `command` is TEXT — 64KB on MySQL — so storing it outright simply failed;
+	// it also dragged that payload through every approvals-list page.
+	//
+	// ScriptSHA256 is the digest of exactly the bytes that were scanned and
+	// reviewed. Execution re-reads the file and refuses unless it still hashes to
+	// this, because between review and approval the file on disk can change and
+	// nothing else would notice.
+	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
+	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
 	Keyword      string    `gorm:"size:32" json:"keyword"`
 	Database     string    `gorm:"column:db_name;size:128" json:"database"` // selected target database
 	InitiatorID  int64     `gorm:"index:idx_approval_initiator;not null" json:"initiatorId"`
