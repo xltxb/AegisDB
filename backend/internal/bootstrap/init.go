@@ -25,9 +25,15 @@ func InitDatabase(repo *repository.Repo, cfg *Config, adminEmail, adminPassword,
 	} else {
 		slog.Info("reference data already present — skipped")
 	}
-	// GLI (灰度) env rows are backfilled idempotently so existing prod DBs self-heal.
+	// GLI (法务) + UAT (演练) tier rows are backfilled idempotently so existing prod
+	// DBs self-heal.
 	if err := seedGliEnv(repo); err != nil {
 		return fmt.Errorf("seed gli env: %w", err)
+	}
+	// Tier/environment rows, likewise idempotent: an install with none cannot
+	// resolve any environment to its tier and would refuse every connection edit.
+	if err := backfillEnvTiers(repo.DB()); err != nil {
+		return fmt.Errorf("seed env tiers: %w", err)
 	}
 	// admin account
 	u, err := UpsertAdmin(repo, adminEmail, adminPassword, adminName)

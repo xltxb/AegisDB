@@ -65,6 +65,67 @@ test('ordinary text, including CJK and emoji, still renders', () => {
   expect(lines.join('\n')).toContain('张三 🎉')
 })
 
+// A fixed 60-column cap made `SHOW GRANTS` unreadable: every row is a long,
+// near-identical string that differs only in its tail, so all seventeen rendered
+// as the same `…t_dws_bp_order_user_kind_…` on a terminal with room to spare.
+// Given the terminal width, a single column must get the whole terminal.
+test('a lone wide column uses the terminal width instead of a fixed cap', () => {
+  const grants = [
+    'GRANT SELECT ON `c66_dws_report`.`t_dws_bp_order_user_kind_daily`',
+    'GRANT SELECT ON `c66_dws_report`.`t_dws_bp_order_user_kind_month`',
+  ]
+  const t = { columns: ['Grants for archery@%'], rows: grants.map((g) => [g]), numeric: [false] } as any
+  const body = renderTable(t, 200).join('\n')
+  for (const g of grants) expect(body).toContain(g)
+
+  // Without a terminal width the caller gets the old fixed cap — still bounded.
+  const capped = renderTable(t).join('\n')
+  expect(capped).not.toContain(grants[0])
+  expect(capped).toContain('…')
+})
+
+// Every rendered line must be exactly as wide as the frame, or the box art tears
+// and a wrapped row shifts everything below it.
+test('rows stay aligned and inside the terminal at any width', () => {
+  const visibleWidth = (s: string) => {
+    const plain = s.replace(/\x1b\[[0-9;]*m/g, '')
+    let w = 0
+    for (const ch of plain) {
+      const cp = ch.codePointAt(0) || 0
+      w += (cp >= 0x2e80 && cp <= 0xa4cf) || (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0xff00 && cp <= 0xff60) ? 2 : 1
+    }
+    return w
+  }
+  const t = {
+    columns: ['id', 'long_column_name_here', '名称'],
+    rows: [
+      ['1', 'x'.repeat(300), '张三'],
+      ['22', 'short', '李四说了一段很长的话用来把这一列撑开'],
+    ],
+    numeric: [true, false, false],
+  } as any
+  for (const cols of [200, 120, 80, 40]) {
+    const lines = renderTable(t, cols)
+    const widths = new Set(lines.map(visibleWidth))
+    expect(widths.size, `ragged frame at ${cols} cols`).toBe(1)
+    expect([...widths][0], `overflowed ${cols} cols`).toBeLessThanOrEqual(cols)
+  }
+})
+
+// The water-fill must not spend the terminal evenly: narrow columns settle at
+// their natural width so the column that actually varies gets what is left.
+test('space a narrow column does not need goes to the wide one', () => {
+  const t = {
+    columns: ['id', 'stmt'],
+    rows: [['1', 'GRANT SELECT ON `db`.`' + 'a'.repeat(200) + '`']],
+    numeric: [true, false],
+  } as any
+  const line = renderTable(t, 100)[3] // 0 top bar, 1 header, 2 divider, 3 first row
+  const [, idCell, stmtCell] = line.replace(/\x1b\[[0-9;]*m/g, '').split('│')
+  expect(idCell.trim()).toBe('1') // narrow column not padded out to an equal share
+  expect(stmtCell.length).toBeGreaterThan(80) // …the rest went to the wide one
+})
+
 // Vertical (\G) display exists for values a horizontal table cannot show — a
 // SHOW CREATE TABLE body, a JSON blob. Their real newlines are the point, so
 // sanitising must remove control characters WITHOUT flattening the value into

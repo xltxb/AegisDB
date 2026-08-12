@@ -4,13 +4,70 @@ package model
 
 import "time"
 
-// Env values used across capability matrix, risk dictionary and connections.
+// The five built-in tier codes and what each one MEANS. The code is the lookup
+// key; the meaning lives here and in the seeded display names, because the code
+// alone has misled before — "gli" was documented and seeded as 灰度 (grey
+// release) when it is the 法务 (legal) environment, and "staging" as 演练UAT when
+// it is 预发布. An environment's NAME never decides what kind of environment it
+// is; the tier it binds to does, and the rules hang off the tier.
 const (
-	EnvProd    = "prod"
-	EnvStaging = "staging"
-	EnvGli     = "gli" // 灰度 — mirrors staging's risk/capability tier
-	EnvDev     = "dev"
+	EnvProd    = "prod"    // 生产环境
+	EnvUat     = "uat"     // 演练环境
+	EnvGli     = "gli"     // 法务环境 — control profile mirrors staging's
+	EnvDev     = "dev"     // 开发环境
+	EnvStaging = "staging" // 预发布环境
 )
+
+// EnvTier — a control tier: the unit the RULES are keyed by. RoleCapability and
+// RiskCommand both store one row per (…, tier), and both lookups treat a missing
+// row as permission granted (repository.CapabilityLevel → allow, matchCommand →
+// off). A tier without its rule rows is therefore not a label — it is an
+// unregulated environment, which is why creating one must clone them in the same
+// transaction.
+//
+// The boolean columns exist so the gateway can ask "does this tier require MFA"
+// instead of "is this tier called prod": the four hardcoded == EnvProd tests
+// (forced MFA, danger banner, pending count, script-scan baseline) become
+// property reads, and a second production tier gets the same protection as the
+// first.
+//
+// NOT to be confused with Connection.Tags, which is the data-access scope
+// (which databases a role/user may reach). Nothing here is called a "tag".
+type EnvTier struct {
+	Code        string `gorm:"primaryKey;size:16" json:"code"`
+	DisplayName string `gorm:"size:64;not null" json:"displayName"`
+	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
+
+	RequireMFA      bool `gorm:"not null;default:false" json:"requireMfa"`
+	DangerBanner    bool `gorm:"not null;default:false" json:"dangerBanner"`
+	CountsInPending bool `gorm:"not null;default:false" json:"countsInPending"`
+	// ScanBaseline marks the tier whose dictionary ScanScript judges uploaded
+	// scripts against. Exactly one tier holds it: with none, matchCommand finds
+	// no rows and every script scans clean with no error at all.
+	ScanBaseline bool `gorm:"not null;default:false" json:"scanBaseline"`
+
+	// Derived connection defaults, previously the hardcoded connEnvMeta map.
+	ConnLayer   string `gorm:"size:64" json:"connLayer"`
+	DefaultRole string `gorm:"size:64" json:"defaultRole"`
+}
+
+func (EnvTier) TableName() string { return "tbl_env_tier" }
+
+// Environment — a group of instances, bound to exactly one EnvTier. One tier
+// backs N environments, so a second production cluster (prod-hk, prod-sh) is a
+// new Environment on the existing prod tier: it inherits the full rule set with
+// nothing copied and no window in which it is unregulated.
+//
+// Connection.Env holds an Environment.Code. The four seeded environments are
+// named after their tier, which is what lets existing rows stand unchanged.
+type Environment struct {
+	Code        string `gorm:"primaryKey;size:32" json:"code"`
+	DisplayName string `gorm:"size:64;not null" json:"displayName"`
+	TierCode    string `gorm:"size:16;index:idx_environment_tier;not null" json:"tierCode"`
+	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
+}
+
+func (Environment) TableName() string { return "tbl_environment" }
 
 // Capability matrix levels.
 const (
@@ -38,6 +95,11 @@ const (
 	ResultPending  = "pending"
 	ResultRejected = "rejected"
 	ResultWarn     = "warn"
+	// ResultExported records data leaving the console as a file. The rows were
+	// already shown to this user, so nothing new was read — but a copy now exists
+	// outside the gateway, and /export already records that. A terminal that wrote
+	// the same data to disk without a trace would be the hole in the pair.
+	ResultExported = "exported"
 )
 
 // Role — a tiered RBAC role (L0..L3).
@@ -111,7 +173,9 @@ type Connection struct {
 	Engine      string    `gorm:"size:32;not null" json:"engine"`
 	Host        string    `gorm:"size:128;not null" json:"host"`
 	Port        int       `gorm:"not null" json:"port"`
-	Env         string    `gorm:"size:16;index:idx_connection_env;not null" json:"env"`
+	// Env holds an Environment.Code, so it must be as wide as one (32). It was
+	// sized 16 back when the only legal values were the four built-in strings.
+	Env         string    `gorm:"size:32;index:idx_connection_env;not null" json:"env"`
 	Policy      string    `gorm:"size:32;not null" json:"policy"` // strict|approve-1|audit-only
 	DefaultRole string    `gorm:"size:64" json:"defaultRole"`
 	Layer       string    `gorm:"size:64" json:"layer"`
@@ -245,7 +309,20 @@ type Approval struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ApNo         string    `gorm:"size:32;uniqueIndex:idx_approval_apno;not null" json:"apNo"`
 	ConnectionID int64     `gorm:"not null" json:"connectionId"`
-	Env          string    `gorm:"size:16;not null" json:"env"`
+	// Env and TierCode are a DUAL SNAPSHOT taken when the ticket was raised: where
+	// it ran (environment) and what it was judged under (control tier). Both are
+	// plain strings with no foreign key, and neither is ever rewritten.
+	//
+	// Two things they answer that a live lookup cannot: an environment may be
+	// rebound to a different tier later, and an instance may be moved to a
+	// different environment — after either, resolving the connection today would
+	// report a control level that was never the one applied. Rewriting them to
+	// match would not be a correction; it would forge the audit trail.
+	//
+	// TierCode is empty on rows written before this split. Callers show it as
+	// unknown rather than inferring one.
+	Env          string    `gorm:"size:32;not null" json:"env"`
+	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Instance     string    `gorm:"size:64;not null" json:"instance"`
 	Command      string    `gorm:"type:text;not null" json:"command"`
 	Keyword      string    `gorm:"size:32" json:"keyword"`
@@ -290,6 +367,13 @@ type AuditLog struct {
 	ActorName    string    `gorm:"size:64" json:"actor"`
 	ConnectionID int64     `json:"connectionId"`
 	Instance     string    `gorm:"size:64" json:"instance"`
+	// The same dual snapshot the approval carries (see Approval.Env / TierCode),
+	// and for the same reason: this row states that a command was judged `high`,
+	// and only the tier in force at that moment explains why. Both are covered by
+	// the chain hash, so neither can be edited after the fact without breaking it.
+	// Empty on rows predating the split.
+	Env          string    `gorm:"size:32" json:"env"`
+	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
 	Command      string    `gorm:"type:text;not null" json:"command"`
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low

@@ -3,12 +3,17 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose } from 'lucide-vue-next'
 import api from '@/api'
-import { engineDisplay } from '@/lib/engines'
+import { engineDisplay, engineLabels } from '@/lib/engines'
+import { useEnvTierStore } from '@/stores/envtier'
 import type { Connection, ConnectionSchema } from '@/types'
 
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
 const emit = defineEmits<{ select: [number]; selectDb: [number, string]; collapse: [] }>()
 const { t } = useI18n()
+const envtier = useEnvTierStore()
+// Tiers/environments drive the section structure; a failed load leaves the lists
+// empty and every instance falls into the unresolved group rather than vanishing.
+envtier.load().catch(() => {})
 
 // Schema (db → tables) for the selected instance, introspected live from the
 // gateway. Real introspection can take a moment and may fail (bad creds / network),
@@ -29,7 +34,12 @@ watch(() => props.selectedId, async (id) => {
 }, { immediate: true })
 
 const search = ref('')
-const collapsed = ref<Record<string, boolean>>({ gli: true, staging: true, dev: true })
+// Starts EMPTY. It used to seed { gli, staging, dev } — three environment codes
+// written into the component, which is exactly what the tier model removes. The
+// defaults are set from the loaded environments instead (see the watch below),
+// and a key that never gets one reads as expanded: a group nothing could file
+// (an environment that no longer resolves) is the one worth showing open.
+const collapsed = ref<Record<string, boolean>>({})
 
 // Per-database expand state (collapsed by default so a cluster with many databases
 // stays scannable). Keyed by connection:database so switching instances resets it.
@@ -79,13 +89,6 @@ async function loadDbTables(cid: number, name: string) {
   finally { dbLoading.value[dbKey(cid, name)] = false }
 }
 
-const envMeta: Record<string, { label: string; dot: string }> = {
-  prod: { label: 'prodEnv', dot: 'danger' },
-  gli: { label: 'gliEnv', dot: 'info' },
-  staging: { label: 'stagingEnv', dot: 'warning' },
-  dev: { label: 'devEnv', dot: 'success' },
-}
-
 // risk tag derived from policy
 function tag(c: Connection) {
   if (c.policy === 'strict') return { text: 'highTag', cls: 'danger' }
@@ -93,44 +96,141 @@ function tag(c: Connection) {
   return null
 }
 
-// The tree groups by deployment tier by default — that is the axis that decides
-// how dangerous a command is. An estate with several engines is easier to
-// navigate by type, so the grouping axis is switchable; the keys differ per mode,
-// which is why sections are driven by `sections` rather than a fixed env list.
+// The tree groups environment → database type → instance. Those are the two
+// questions an operator answers before touching anything ("which cluster", "which
+// engine"), and an estate with several engines per cluster cannot be navigated by
+// name alone. The axis is still switchable to a flat by-type view, which answers
+// a different question: every instance of one engine, across all environments.
 type GroupMode = 'env' | 'type'
 const groupMode = ref<GroupMode>('env')
 
+/** A second-level bucket: one database type, or the whole group in type mode. */
+interface TreeChild { key: string; label: string; conns: Connection[] }
+/** A first-level section: one environment, or an engine type. */
+interface TreeGroup {
+  key: string
+  label: string
+  dot: string
+  /** The tier governing this environment, shown on hover — see below. */
+  hint: string
+  count: number
+  /** true → render the children's instances without their own sub-header. */
+  flat: boolean
+  children: TreeChild[]
+}
+
+// Search matches the instance name, its environment, or its database type. With
+// several production environments and several engines in each, the name alone no
+// longer says where an instance lives or what it is — "hk" and "postgres" are both
+// realistic ways to look for one.
 const matching = computed(() => {
   const q = search.value.trim().toLowerCase()
-  return q ? props.connections.filter((c) => c.name.toLowerCase().includes(q)) : props.connections.slice()
+  if (!q) return props.connections.slice()
+  return props.connections.filter((c) =>
+    c.name.toLowerCase().includes(q) ||
+    c.env.toLowerCase().includes(q) ||
+    envtier.envLabel(c.env).toLowerCase().includes(q) ||
+    engineDisplay(c.engine).toLowerCase().includes(q))
 })
 
-const grouped = computed<Record<string, Connection[]>>(() => {
-  const out: Record<string, Connection[]> = {}
-  if (groupMode.value === 'env') {
-    for (const k of ['prod', 'gli', 'staging', 'dev']) out[k] = []
-    for (const c of matching.value) if (out[c.env]) out[c.env].push(c)
-    return out
+/** Types ordered by the engine catalogue, with anything unrecognised last. */
+function byCatalogueOrder(a: string, b: string): number {
+  const labels = engineLabels()
+  const ia = labels.indexOf(a)
+  const ib = labels.indexOf(b)
+  if (ia === ib) return a.localeCompare(b)
+  if (ia < 0) return 1
+  if (ib < 0) return -1
+  return ia - ib
+}
+
+/** Bucket a set of instances by database type, in catalogue order. */
+function typeChildren(conns: Connection[]): TreeChild[] {
+  const byType: Record<string, Connection[]> = {}
+  for (const c of conns) (byType[engineDisplay(c.engine)] ||= []).push(c)
+  return Object.keys(byType).sort(byCatalogueOrder)
+    .map((k) => ({ key: k, label: k, conns: byType[k] }))
+}
+
+/**
+ * Sections in display order.
+ *
+ * The top level is the ENVIRONMENT, not the control tier. The tier still decides
+ * how the instance is governed, and it still supplies the environment row's
+ * colour — losing the "which of these is production" cue was the one thing this
+ * layout could not afford — but it no longer occupies a level of its own. Its
+ * name is on the row's tooltip for when the colour is not enough.
+ *
+ * The last group is the catch-all for instances whose environment no longer
+ * resolves. Without it they would simply not be listed — the instance would still
+ * exist and still be reachable, just invisible here, which is the worst of the
+ * available outcomes.
+ */
+const groups = computed<TreeGroup[]>(() => {
+  if (groupMode.value === 'type') {
+    const byType: Record<string, Connection[]> = {}
+    for (const c of matching.value) (byType[engineDisplay(c.engine)] ||= []).push(c)
+    return Object.keys(byType).sort(byCatalogueOrder).map((k) => ({
+      key: k, label: k, dot: 'info', hint: '', count: byType[k].length, flat: true,
+      children: [{ key: k, label: k, conns: byType[k] }],
+    }))
   }
-  for (const c of matching.value) {
-    const k = engineDisplay(c.engine)
-    ;(out[k] ||= []).push(c)
+
+  const byEnv: Record<string, Connection[]> = {}
+  for (const c of matching.value) (byEnv[c.env] ||= []).push(c)
+
+  const out: TreeGroup[] = []
+  const claimed = new Set<string>()
+  // Environments in their own display order, which follows their tier's — so the
+  // production clusters still come first.
+  for (const tier of envtier.tiers) {
+    for (const e of envtier.envsByTier[tier.code] ?? []) {
+      claimed.add(e.code)
+      const conns = byEnv[e.code] ?? []
+      out.push({
+        key: e.code,
+        label: envtier.envLabel(e.code),
+        dot: envtier.dotForEnv(e.code),
+        hint: envtier.tierLabel(tier.code, t as any),
+        count: conns.length,
+        flat: false,
+        children: typeChildren(conns),
+      })
+    }
+  }
+
+  const orphans = Object.keys(byEnv).filter((k) => !claimed.has(k)).sort()
+  for (const k of orphans) {
+    out.push({
+      key: k,
+      label: k,
+      dot: 'muted',
+      hint: t('treeUnknownEnv'),
+      count: byEnv[k].length,
+      flat: false,
+      children: typeChildren(byEnv[k]),
+    })
   }
   return out
 })
 
-// Section keys in display order: fixed for tiers, alphabetical for types.
-const sections = computed(() =>
-  groupMode.value === 'env' ? ['prod', 'gli', 'staging', 'dev'] : Object.keys(grouped.value).sort(),
-)
-const sectionLabel = (k: string) => (groupMode.value === 'env' ? t(envMeta[k].label as any) : k)
-const sectionDot = (k: string) => (groupMode.value === 'env' ? envMeta[k].dot : 'info')
-
 const searching = computed(() => search.value.trim().length > 0)
 function toggle(key: string) { collapsed.value[key] = !collapsed.value[key] }
-// Type sections start expanded (there is no "most dangerous" one to default to).
+// Searching expands everything: a hit two levels down is useless if the levels
+// above it stay shut.
 function isOpen(key: string) { return searching.value || !collapsed.value[key] }
 function setGroupMode(m: GroupMode) { groupMode.value = m }
+
+// Environments on the FIRST tier start expanded, the rest collapsed. That is the
+// old "prod open, everything else closed" default, restated for a world where
+// the top level is environments: every production cluster is open, so adding a
+// second one does not push the first out of view or bury it behind a chevron.
+watch([() => envtier.tiers, () => envtier.environments], () => {
+  const first = envtier.tiers[0]?.code
+  for (const e of envtier.environments) {
+    if (!(e.code in collapsed.value)) collapsed.value[e.code] = e.tierCode !== first
+  }
+}, { immediate: true, deep: true })
 
 // Per-instance collapse of its database list. Clicking an instance selects it and
 // expands the list; clicking the already-selected instance collapses/expands it.
@@ -148,19 +248,33 @@ function clickInst(id: number) {
       <div class="eyebrow">{{ $t('treeTitle') }}<PanelLeftClose class="collapse" :size="15" :title="$t('treeCollapse')" @click="emit('collapse')" /></div>
       <div class="searchbox"><Search :size="14" color="var(--text-faint)" /><input v-model="search" :placeholder="$t('search')" /></div>
       <div class="gmode">
-        <button :class="{ on: groupMode === 'env' }" @click="setGroupMode('env')">{{ $t('groupByTier') }}</button>
+        <button :class="{ on: groupMode === 'env' }" @click="setGroupMode('env')">{{ $t('groupByEnv') }}</button>
         <button :class="{ on: groupMode === 'type' }" @click="setGroupMode('type')">{{ $t('groupByType') }}</button>
       </div>
     </div>
     <div class="scy body">
-      <template v-for="key in sections" :key="key">
-        <div class="env" :class="{ muted: groupMode === 'env' && key !== 'prod' }" @click="toggle(key)">
-          <component :is="isOpen(key) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
-          <span class="d" :class="sectionDot(key)" />{{ sectionLabel(key) }}
-          <span class="cnt">{{ grouped[key].length }}</span>
+      <template v-for="g in groups" :key="g.key">
+        <!-- First level: the environment. The dot carries its TIER colour — the
+             tier no longer has a row of its own, and losing the "which of these
+             is production" cue was the one thing this layout could not afford.
+             The tier name is on the tooltip for when the colour is not enough. -->
+        <div class="env" :class="{ muted: g.dot !== 'danger' }" :title="g.hint" @click="toggle(g.key)">
+          <component :is="isOpen(g.key) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
+          <span class="d" :class="g.dot" />{{ g.label }}
+          <span class="cnt">{{ g.count }}</span>
         </div>
-        <div v-if="isOpen(key)" class="ind">
-          <template v-for="c in grouped[key]" :key="c.id">
+        <template v-if="isOpen(g.key)">
+        <div v-if="!g.children.length" class="ind"><div class="empty">{{ $t('treeNoMatch') }}</div></div>
+        <template v-for="ch in g.children" :key="ch.key">
+        <!-- Second level: database type. Always shown, even for a single type —
+             which engine an instance speaks decides what its commands may even
+             mean, so it is worth a line rather than being inferred from a name. -->
+        <div v-if="!g.flat" class="envsub" @click="toggle(g.key + ':' + ch.key)">
+          <component :is="isOpen(g.key + ':' + ch.key) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" />
+          {{ ch.label }}<span class="cnt">{{ ch.conns.length }}</span>
+        </div>
+        <div v-if="g.flat || isOpen(g.key + ':' + ch.key)" class="ind" :class="{ ind1: !g.flat }">
+          <template v-for="c in ch.conns" :key="c.id">
             <div class="inst" :class="{ active: c.id === selectedId }" @click="clickInst(c.id)">
               <component :is="instOpen(c.id) ? ChevronDown : ChevronRight" :size="12" color="var(--text-faint)" />
               <Database :size="14" />{{ c.name }}
@@ -203,8 +317,10 @@ function clickInst(id: number) {
               </template>
             </div>
           </template>
-          <div v-if="!grouped[key].length" class="empty">{{ $t('treeNoMatch') }}</div>
+          <div v-if="!ch.conns.length" class="empty">{{ $t('treeNoMatch') }}</div>
         </div>
+        </template>
+        </template>
       </template>
     </div>
     <div class="foot">{{ $t('treeFooter') }}</div>
@@ -237,7 +353,18 @@ function clickInst(id: number) {
 .d.info { background: #3b82f6; }
 .d.warning { background: var(--warning); }
 .d.success { background: var(--success); }
+/* A code that no longer resolves to a tier: neutral on purpose. Reusing a
+   palette colour would assert a control level nobody can vouch for. */
+.d.muted { background: var(--text-faint); }
+/* Second level — environments inside a tier. Deliberately quieter than the tier
+   row so the top level stays the structure you scan. */
+.envsub {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px 5px 14px;
+  font: 600 11px var(--font-mono); color: var(--text-faint); cursor: pointer;
+}
+.envsub:hover { color: var(--text-muted); }
 .ind { padding-left: 14px; }
+.ind.ind1 { padding-left: 26px; }
 .inst {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px;
   font: 600 12px var(--font-mono); color: var(--text-muted); cursor: pointer;

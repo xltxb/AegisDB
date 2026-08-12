@@ -16,23 +16,29 @@ import (
 
 // ---------------------------------------------------------------- Connections
 
-// connEnvMeta maps an env to its display layer and default connection role.
-func connEnvMeta(env string) (layer, role string) {
-	layer = map[string]string{"prod": "L1 核心 · 写", "staging": "L3 演练UAT", "gli": "L2 灰度", "dev": "L4 沙盒"}[env]
-	role = "dba_l2"
-	if env == model.EnvDev {
-		role = "developer"
+// connEnvMeta resolves an environment code to the display layer and default
+// connection role its tier prescribes, and doubles as the validity check: an
+// environment that does not resolve has no tier, and a connection stored against
+// it would be governed by no rules at all (see the ErrBadRequest cases below and
+// the note on model.EnvTier).
+//
+// This replaces a hardcoded env→layer map and the validEnvs whitelist; the
+// values now live in tbl_env_tier, seeded from exactly what that map contained.
+func (s *Services) connEnvMeta(envCode string) (layer, role string, err error) {
+	t, err := s.TierOfEnvironment(envCode)
+	if err != nil {
+		return "", "", ErrBadRequest
 	}
-	return
+	return t.ConnLayer, t.DefaultRole, nil
 }
 
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
 	host, port := splitHostPort(req.Host)
 	env := strings.ToLower(strings.TrimSpace(req.Env))
-	if !validEnvs[env] {
-		return nil, ErrBadRequest // see validEnvs
+	layer, role, err := s.connEnvMeta(env)
+	if err != nil {
+		return nil, err
 	}
-	layer, role := connEnvMeta(env)
 	// Encrypt the DB password at rest (AES-256-GCM). It must stay reversible
 	// because the gateway needs it to open the real connection.
 	encPw, err := crypto.EncryptSecret(req.Password)
@@ -62,10 +68,10 @@ func (s *Services) UpdateConnection(id int64, req dto.ConnectionUpdateReq) (*mod
 		return nil, ErrBadRequest
 	}
 	env := strings.ToLower(strings.TrimSpace(req.Env))
-	if !validEnvs[env] {
-		return nil, ErrBadRequest // see validEnvs
+	layer, role, err := s.connEnvMeta(env)
+	if err != nil {
+		return nil, err
 	}
-	layer, role := connEnvMeta(env)
 	c.Name = strings.TrimSpace(req.Name)
 	c.Engine = strings.TrimSpace(req.Engine)
 	c.Host, c.Port = splitHostPort(req.Host)
@@ -147,6 +153,35 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 	return out
 }
 
+// withTierDefaults refreshes each connection's display layer and default role
+// from the tier that governs it right now.
+//
+// Both columns are DERIVED from the tier, and they are written when a connection
+// is created or edited — so they drift the moment the tier moves out from under
+// them, which the tier model made possible in three new ways: renaming a tier's
+// layer, rebinding an environment to another tier, and deleting an environment so
+// its instances move to one on a different tier. None of those touch the
+// connection row, and the console would keep showing the layer of a tier that no
+// longer governs the instance.
+//
+// So the stored value is not trusted for display; it is recomputed here, at the
+// one place the console reads instances from. It stays in the column as the
+// fallback for an environment that no longer resolves — there is no tier to ask
+// then, and the last known value beats a blank.
+//
+// Nothing about access control reads these fields; judgement resolves the tier
+// itself (see tierOf).
+func (s *Services) withTierDefaults(conns []model.Connection) []model.Connection {
+	for i := range conns {
+		t, err := s.TierOfEnvironment(conns[i].Env)
+		if err != nil {
+			continue // unresolvable environment — keep the stored value
+		}
+		conns[i].Layer, conns[i].DefaultRole = t.ConnLayer, t.DefaultRole
+	}
+	return conns
+}
+
 // AccessibleConnections returns the connections a user's role may see: all of
 // them when the role has no tags (unrestricted, e.g. admin), otherwise only the
 // connections whose tags intersect the role's granted tags.
@@ -155,6 +190,7 @@ func (s *Services) AccessibleConnections(u *model.User) ([]model.Connection, err
 	if err != nil {
 		return nil, err
 	}
+	all = s.withTierDefaults(all)
 	if u == nil {
 		return all, nil
 	}
@@ -220,15 +256,16 @@ func (s *Services) AllTags() []string { return s.Repo.AllConnectionTags() }
 // validPolicies are the gateway policies a connection may carry.
 var validPolicies = map[string]bool{"strict": true, "approve-1": true, "audit-only": true}
 
-// validEnvs are the environments the risk controls are defined for. Capability
-// levels and dictionary rules are stored per environment and a lookup that finds
-// no row falls through to "allow", so an unrecognised env is not a label — it is
-// an environment with no rules at all. Storing one (e.g. a typo like "uat") would
-// silently create an unregulated instance, so connections are restricted to
-// these four (ED5).
-var validEnvs = map[string]bool{
-	model.EnvProd: true, model.EnvGli: true, model.EnvStaging: true, model.EnvDev: true,
-}
+// The environments a connection may be stored against were a four-entry
+// whitelist here (ED5). The reasoning behind it is unchanged and still load
+// bearing: capability levels and dictionary rules are stored per tier, a lookup
+// that finds no row falls through to "allow", so an unrecognised value is not a
+// label — it is an instance with no rules at all.
+//
+// What changed is only where the accepted set comes from. It is now tbl_environment,
+// and the check is s.connEnvMeta: an environment resolves to its tier or the
+// write is refused. A typo like "uat" still cannot be stored, and an environment
+// can only be created by binding it to a tier that already owns rules.
 
 // SetConnectionPolicy updates a connection's gateway policy (strict | approve-1 |
 // audit-only), rejecting an unknown value.

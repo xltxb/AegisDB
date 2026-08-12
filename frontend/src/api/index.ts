@@ -1,8 +1,8 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, ExecResp, ExportJob, LoginResp, Me, Member,
-  Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp, ScriptUpload,
-  SettingsResp, UserView, WebhookConfig, WebhookDelivery,
+  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, EnvTier, Environment, ExecResp, ExportJob,
+  LoginResp, Me, Member, Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp,
+  ScriptUpload, SettingsResp, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
 
 // auditQS builds the audit query string, omitting empty filters. An absolute
@@ -60,6 +60,12 @@ export const api = {
   exportJobs: () => http.get<any, Envelope<ExportJob[]>>('/export/jobs').then(ok),
   exportDownload: (file: string) =>
     http.get<any, Blob>(`/export/download?file=${encodeURIComponent(file)}`, { responseType: 'blob' }),
+  // Records that a terminal session log was saved to a file. The file is built in
+  // the browser from lines already displayed, so this call carries a DESCRIPTION
+  // of the export and never the transcript — sending the session back to be
+  // stored would create the very second copy the audit row exists to track.
+  recordTranscriptExport: (body: { connectionId: number; filename: string; lines: number; dropped: number; database?: string }) =>
+    http.post<any, Envelope<any>>('/terminal/transcript-export', body).then(ok),
   scriptScan: (content: string, filename: string, connectionId = 0) =>
     http.post<any, Envelope<ScriptScanResp>>('/scripts/scan', { content, filename, connectionId }).then(ok),
   scriptExecute: (content: string, filename: string, connectionId: number, mfaCode = '', uploadId = 0, database = '') =>
@@ -80,6 +86,33 @@ export const api = {
     http.post<any, Envelope<{ secret: string; otpauthUri: string }>>('/auth/mfa/setup').then(ok),
   mfaEnable: (code: string) => http.post<any, Envelope<any>>('/auth/mfa/enable', { code }).then(ok),
   mfaDisable: (code: string) => http.post<any, Envelope<any>>('/auth/mfa/disable', { code }).then(ok),
+
+  // ---- control tiers & environments ----
+  // Reads are open to any signed-in user: the instance tree, connection form and
+  // rule tables all render from them. Writes need the envtier menu + admin.
+  envTiers: () => http.get<any, Envelope<EnvTier[]>>('/env-tiers').then(ok),
+  // A tier MUST be cloned from an existing one — a tier with no rule rows is an
+  // environment where every lookup falls through to allowed.
+  createEnvTier: (body: Partial<EnvTier> & { templateCode: string }) =>
+    http.post<any, Envelope<EnvTier>>('/env-tiers', body).then(ok),
+  updateEnvTier: (code: string, body: Partial<EnvTier>) =>
+    http.put<any, Envelope<EnvTier>>(`/env-tiers/${encodeURIComponent(code)}`, body).then(ok),
+  deleteEnvTier: (code: string) =>
+    http.delete<any, Envelope<any>>(`/env-tiers/${encodeURIComponent(code)}`).then(ok),
+
+  environments: () => http.get<any, Envelope<Environment[]>>('/environments').then(ok),
+  /** instance count per environment — what a delete is about to move. */
+  environmentUsage: () =>
+    http.get<any, Envelope<Record<string, number>>>('/environments/usage').then(ok),
+  createEnvironment: (body: Partial<Environment>) =>
+    http.post<any, Envelope<Environment>>('/environments', body).then(ok),
+  updateEnvironment: (code: string, body: Partial<Environment>) =>
+    http.put<any, Envelope<Environment>>(`/environments/${encodeURIComponent(code)}`, body).then(ok),
+  /** moveTo is mandatory: instances are reassigned, never left dangling. */
+  deleteEnvironment: (code: string, moveTo: string) =>
+    http.delete<any, Envelope<any>>(`/environments/${encodeURIComponent(code)}`, {
+      data: { moveTo },
+    }).then(ok),
 
   // ---- connections ----
   connections: () => http.get<any, Envelope<Connection[]>>('/connections').then(ok),

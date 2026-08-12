@@ -98,6 +98,22 @@ type ExportResp struct {
 
 // ---- Script scan ----
 
+// TranscriptExportReq records that a terminal session log was written to a file.
+//
+// The FILE is built in the browser from what was already displayed; this request
+// exists only so the act is audited. It therefore carries a description of the
+// export, never the transcript itself — shipping the whole session back to be
+// stored would create the second copy the audit row is meant to keep track of.
+type TranscriptExportReq struct {
+	ConnectionID int64  `json:"connectionId" binding:"required"`
+	Filename     string `json:"filename"`
+	Lines        int    `json:"lines"`
+	// Dropped > 0 means the session outran the client buffer and the file starts
+	// mid-session. Recorded so the audit row does not imply a complete record.
+	Dropped  int    `json:"dropped"`
+	Database string `json:"database"`
+}
+
 type ScriptScanReq struct {
 	ConnectionID int64  `json:"connectionId"`
 	Content      string `json:"content" binding:"required"`
@@ -160,6 +176,60 @@ type ConnectionStatusReq struct {
 // RoleTagsReq assigns the DB tags a role (user group) may access.
 type RoleTagsReq struct {
 	Tags []string `json:"tags"`
+}
+
+// EnvTierCreateReq creates a control tier. TemplateCode is required: a tier
+// without rule rows is an environment where every lookup falls through to
+// "allowed", so the rules are cloned from an existing tier in the same
+// transaction that creates it.
+type EnvTierCreateReq struct {
+	Code            string `json:"code"`
+	DisplayName     string `json:"displayName"`
+	TemplateCode    string `json:"templateCode"`
+	SortOrder       int    `json:"sortOrder"`
+	RequireMFA      bool   `json:"requireMfa"`
+	DangerBanner    bool   `json:"dangerBanner"`
+	CountsInPending bool   `json:"countsInPending"`
+	ScanBaseline    bool   `json:"scanBaseline"`
+	ConnLayer       string `json:"connLayer"`
+	DefaultRole     string `json:"defaultRole"`
+}
+
+// EnvTierUpdateReq edits a tier. The code is immutable — it is the key the rule
+// rows and every environment carry.
+type EnvTierUpdateReq struct {
+	DisplayName     string `json:"displayName"`
+	SortOrder       int    `json:"sortOrder"`
+	RequireMFA      bool   `json:"requireMfa"`
+	DangerBanner    bool   `json:"dangerBanner"`
+	CountsInPending bool   `json:"countsInPending"`
+	ScanBaseline    bool   `json:"scanBaseline"`
+	ConnLayer       string `json:"connLayer"`
+	DefaultRole     string `json:"defaultRole"`
+}
+
+// EnvironmentCreateReq adds an instance group on an existing tier. Nothing is
+// cloned — the tier already owns the rules.
+type EnvironmentCreateReq struct {
+	Code        string `json:"code"`
+	DisplayName string `json:"displayName"`
+	TierCode    string `json:"tierCode"`
+	SortOrder   int    `json:"sortOrder"`
+}
+
+// EnvironmentUpdateReq edits an environment, including rebinding it to another
+// tier. Rebinding governs future commands only; history keeps its own snapshot.
+type EnvironmentUpdateReq struct {
+	DisplayName string `json:"displayName"`
+	TierCode    string `json:"tierCode"`
+	SortOrder   int    `json:"sortOrder"`
+}
+
+// EnvironmentDeleteReq removes an environment, moving its instances to MoveTo.
+// The target is mandatory: an instance pointing at a code that no longer exists
+// resolves to no tier, and therefore to no rules at all.
+type EnvironmentDeleteReq struct {
+	MoveTo string `json:"moveTo"`
 }
 
 // ConnectionSchemaResp is the db→table tree of a connection. For a connection with

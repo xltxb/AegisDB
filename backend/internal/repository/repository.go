@@ -475,6 +475,172 @@ func (r *Repo) TagsForRoles(ids []int64) (allow []string, unrestricted bool, err
 	return out, false, nil
 }
 
+// ------------------------------------------------------- Env tiers / environments
+
+func (r *Repo) ListEnvTiers() ([]model.EnvTier, error) {
+	var ts []model.EnvTier
+	err := r.db.Order("sort_order asc, code asc").Find(&ts).Error
+	return ts, err
+}
+
+func (r *Repo) GetEnvTier(code string) (*model.EnvTier, error) {
+	var t model.EnvTier
+	if err := r.db.First(&t, "code = ?", code).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+// ScanBaselineTier returns the tier whose dictionary script scanning judges
+// against. A missing baseline is an error, never a zero value: handing back ""
+// would make matchCommand match nothing and report every uploaded script as
+// clean — the exact silent-failure mode unavailableVerdict exists to prevent.
+func (r *Repo) ScanBaselineTier() (*model.EnvTier, error) {
+	var t model.EnvTier
+	if err := r.db.First(&t, "scan_baseline = ?", true).Error; err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *Repo) ListEnvironments() ([]model.Environment, error) {
+	var es []model.Environment
+	err := r.db.Order("sort_order asc, code asc").Find(&es).Error
+	return es, err
+}
+
+func (r *Repo) GetEnvironment(code string) (*model.Environment, error) {
+	var e model.Environment
+	if err := r.db.First(&e, "code = ?", code).Error; err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+// CountEnvironmentsOfTier reports how many environments are bound to a tier —
+// the check that stops a tier from being deleted out from under live instances.
+func (r *Repo) CountEnvironmentsOfTier(tierCode string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Environment{}).Where("tier_code = ?", tierCode).Count(&n).Error
+	return n, err
+}
+
+// CountConnectionsInEnvironment reports how many instances live in an
+// environment, so a delete can tell the operator what it is about to move.
+func (r *Repo) CountConnectionsInEnvironment(code string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Connection{}).Where("env = ?", code).Count(&n).Error
+	return n, err
+}
+
+// CreateEnvTierFrom writes a tier AND clones every rule row of the template tier
+// in ONE transaction: each (role × capability) level from tbl_role_capability
+// and each command level from tbl_risk_command.
+//
+// The clone is not a convenience. Both lookups read a missing row as permission
+// granted, so a tier that exists without its rules is an environment where any
+// role may DROP TABLE unreviewed. Committing the tier and copying afterwards
+// would open exactly that window, so a failed copy rolls the tier back with it.
+//
+// This generalises what backfillGliEnv did by hand when GLI was introduced.
+func (r *Repo) CreateEnvTierFrom(t *model.EnvTier, templateCode string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var tmpl model.EnvTier
+		if err := tx.First(&tmpl, "code = ?", templateCode).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(t).Error; err != nil {
+			return err
+		}
+
+		var caps []model.RoleCapability
+		if err := tx.Where("env = ?", templateCode).Find(&caps).Error; err != nil {
+			return err
+		}
+		for _, row := range caps {
+			row.Env = t.Code
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+
+		var cmds []model.RiskCommand
+		if err := tx.Where("env = ?", templateCode).Find(&cmds).Error; err != nil {
+			return err
+		}
+		for _, row := range cmds {
+			row.Env = t.Code
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+
+		// A tier is created without the baseline; moving it is an explicit edit.
+		if t.ScanBaseline {
+			if err := clearOtherBaselines(tx, t.Code); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// UpdateEnvTier saves a tier, keeping the single-baseline invariant: setting the
+// flag clears it everywhere else in the same transaction.
+func (r *Repo) UpdateEnvTier(t *model.EnvTier) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(t).Error; err != nil {
+			return err
+		}
+		if t.ScanBaseline {
+			return clearOtherBaselines(tx, t.Code)
+		}
+		return nil
+	})
+}
+
+func clearOtherBaselines(tx *gorm.DB, keep string) error {
+	return tx.Model(&model.EnvTier{}).
+		Where("code <> ? AND scan_baseline = ?", keep, true).
+		Update("scan_baseline", false).Error
+}
+
+// DeleteEnvTier removes a tier and every rule row keyed by it. Callers must have
+// verified that no environment still binds it (service layer).
+func (r *Repo) DeleteEnvTier(code string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("env = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("env = ?", code).Delete(&model.RiskCommand{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("code = ?", code).Delete(&model.EnvTier{}).Error
+	})
+}
+
+func (r *Repo) CreateEnvironment(e *model.Environment) error { return r.db.Create(e).Error }
+
+func (r *Repo) UpdateEnvironment(e *model.Environment) error { return r.db.Save(e).Error }
+
+// DeleteEnvironmentMoving reassigns every instance of `code` to `moveTo` and then
+// drops the environment, in one transaction — an instance must never be left
+// pointing at an environment that no longer exists, since its tier is what
+// decides whether the instance is regulated at all.
+func (r *Repo) DeleteEnvironmentMoving(code, moveTo string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		var dst model.Environment
+		if err := tx.First(&dst, "code = ?", moveTo).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Connection{}).
+			Where("env = ?", code).Update("env", moveTo).Error; err != nil {
+			return err
+		}
+		return tx.Where("code = ?", code).Delete(&model.Environment{}).Error
+	})
+}
+
 // ----------------------------------------------------------------- Connections
 
 func (r *Repo) ListConnections() ([]model.Connection, error) {
@@ -539,17 +705,60 @@ func (r *Repo) RiskCommandsGrouped() ([]string, map[string]map[string]string) {
 	return order, grouped
 }
 
-func (r *Repo) UpsertRiskCommand(command string, env map[string]string) error {
+// UpsertRiskCommand writes a dictionary command across EVERY control tier, using
+// the caller's level where one was supplied and defaultRiskLevel elsewhere.
+//
+// The tier list comes from the database, not from the caller. It used to write
+// only the keys the request contained, and the console sent a hardcoded
+// {prod, staging, dev} — so every command an operator added through the UI was
+// missing its GLI row, and a missing row reads as RiskOff. The dictionary looked
+// correct on the page while GLI (法务) instances were ungoverned by it.
+//
+// Trusting the caller to enumerate the tiers is what made that possible, and a
+// tier being data now means any client could fall behind the same way. Rows for
+// tiers the caller omitted are created here rather than left absent, because
+// absent is not neutral — it is permissive.
+func (r *Repo) UpsertRiskCommand(command string, levels map[string]string) error {
 	command = strings.ToUpper(strings.TrimSpace(command))
+	// Normalise the caller's keys the way PatchRiskLevel does, so a request
+	// carrying "PROD" still lands on the prod row instead of creating a second.
+	want := make(map[string]string, len(levels))
+	for k, v := range levels {
+		want[strings.ToLower(strings.TrimSpace(k))] = v
+	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		for e, lvl := range env {
-			row := model.RiskCommand{Command: command, Env: e, Level: lvl}
+		var tiers []model.EnvTier
+		if err := tx.Find(&tiers).Error; err != nil {
+			return err
+		}
+		for _, t := range tiers {
+			lvl, ok := want[t.Code]
+			if !ok || strings.TrimSpace(lvl) == "" {
+				lvl = defaultRiskLevel(t)
+			}
+			row := model.RiskCommand{Command: command, Env: t.Code, Level: lvl}
 			if err := tx.Save(&row).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// defaultRiskLevel decides what a newly added command means on a tier the caller
+// did not mention. Tiers that gate production work — the script-scan baseline
+// and any tier demanding an MFA step-up — get `high`, so a command added to the
+// dictionary is gated there from the moment it exists. Everywhere else it is
+// `off`, matching how the built-in dictionary is seeded.
+//
+// Erring towards `high` is deliberate: the wrong guess costs an approval that
+// was not needed, while the other direction lets a command the operator just
+// classified as dangerous run unreviewed on a production tier.
+func defaultRiskLevel(t model.EnvTier) string {
+	if t.ScanBaseline || t.RequireMFA {
+		return model.RiskHigh
+	}
+	return model.RiskOff
 }
 
 func (r *Repo) PatchRiskLevel(command, env, level string) error {
@@ -1004,14 +1213,21 @@ func (r *Repo) Count(m any) int64 {
 	return n
 }
 
-// CountProdInterceptions counts real risk-rule hits on PROD instances: audit rows
-// that were blocked (rejected) or gated to approval (pending). Backs the rules
-// page's "hits" stat with live data instead of a demo number.
+// CountProdInterceptions counts real risk-rule hits on the instances whose tier
+// is marked CountsInPending: audit rows that were blocked (rejected) or gated to
+// approval (pending). Backs the rules page's "hits" stat with live data instead
+// of a demo number.
+//
+// The instance is joined through to its tier rather than compared against the
+// literal 'prod' — with several production environments (prod-hk, prod-sh) the
+// literal counted only the one that happens to be named after its tier.
 func (r *Repo) CountProdInterceptions() (int64, error) {
 	var n int64
 	err := r.db.Model(&model.AuditLog{}).
 		Joins("JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
-		Where("tbl_connection.env = ? AND tbl_audit_log.result IN ?", "prod", []string{"rejected", "pending"}).
+		Joins("JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
+		Joins("JOIN tbl_env_tier ON tbl_env_tier.code = tbl_environment.tier_code").
+		Where("tbl_env_tier.counts_in_pending = ? AND tbl_audit_log.result IN ?", true, []string{"rejected", "pending"}).
 		Count(&n).Error
 	return n, err
 }

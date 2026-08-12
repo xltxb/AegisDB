@@ -183,6 +183,13 @@ function chainText(a: Approval) {
           <div class="dgrid">
             <div><span class="ml">{{ $t('apInitiator') }}</span><div class="who"><span class="ava">{{ detail.initiator.slice(0, 2).toUpperCase() }}</span>{{ detail.initiator }}</div></div>
             <div><span class="ml">{{ $t('apTarget') }}</span><div class="tgt">{{ detail.env.toUpperCase() }} · {{ detail.instance }}<template v-if="detail.database"> · {{ detail.database }}</template></div></div>
+            <!-- The tier the command was JUDGED under, snapshotted when the ticket
+                 was raised. Shown separately from the environment because the two
+                 can diverge later, and this is the one that explains the verdict.
+                 Blank on tickets predating tiers — reported as unknown rather than
+                 resolved from today's binding, which would be a guess about the
+                 past presented as a fact. -->
+            <div><span class="ml">{{ $t('apTier') }}</span><div class="tgt">{{ detail.tierCode ? detail.tierCode.toUpperCase() : $t('apTierUnknown') }}</div></div>
           </div>
           <div class="ml">{{ $t('apReason') }}</div><div class="rt">{{ detail.reason || '—' }}</div>
           <div class="ml">{{ $t('apChain') }}</div>

@@ -1,0 +1,208 @@
+# PRD · 环境与分层标签解耦(标签绑定制)
+
+Status: done(01–04 全部实现;上线前需确认 webhook 契约,见 issues/03)
+
+> 本文由 2026-08-04 两轮需求分析收敛而成。实现拆单见本目录 `issues/01..04`。
+> 决策记录见文末「已定决策」。
+
+> **2026-08-06 语义纠正**:本文以下所有把 `gli` 写作「灰度」、`staging` 写作「演练UAT」的地方**都是错的**。
+> 正确含义见文末「内置分层标签的含义」。代码从未错 —— 错的一直只是标签。
+
+## Problem Statement
+
+实例分层(`prod` / `gli` / `staging` / `dev`)当前是**写死的四个字符串**,同时承担了两个互相冲突的职责:
+
+1. **管控等级** —— 能力矩阵(`tbl_role_capability`)与高危命令字典(`tbl_risk_command`)都按它分行,风险判定按它查表。
+2. **实例分组** —— 实例归属、左侧树分组、审计/审批记录里的归属快照。
+
+两个职责挤在一个字段上,导致「我要再加一个生产集群」这种诉求无法表达:新增 `prod-hk` 必须新造一个分层,而新分层没有规则行 —— 而本仓库两条查找路径都是**查无此行即放行**:
+
+- `repository.go:258` 能力矩阵无行 → `LevelAllow`(注释原文:*no rule configured for this cell = allow*)
+- `gateway/risk.go:297-303` 风险字典无该 env 的行 → `RiskOff`
+
+所以「加一个分层」在当前模型下等价于「造一个任何人可以直接 DROP TABLE 且无需审批的环境」。`service/admin.go:229` 的 `validEnvs` 白名单(注释 ED5)正是为堵死这条路而存在,代价是分层彻底不可扩展。
+
+**既有证据**:上一次新增分层(GLI)留下了 `bootstrap/seed.go:40-86` 的 `seedGliEnv` —— 一段把 staging 的能力矩阵行与风险字典行整体克隆给 gli 的一次性回填代码。本需求本质上就是把这段一次性代码变成可重复的产品能力。
+
+## Solution
+
+把一个字段拆成两层概念:
+
+- **分层标签 tier** —— 管控等级,规则的载体。能力矩阵与风险字典按 tier 分行。
+- **环境 environment** —— 实例分组。一个 tier 可绑定 **N 个**环境。
+
+```
+tbl_env_tier      prod / gli / staging / dev / …   ← 规则按它存
+      │ 1:N
+tbl_environment   prod-hk / prod-sh / uat-结算 / … ← 实例按它归属
+      │ 1:N
+tbl_connection
+```
+
+新建 `prod-hk` 环境绑到 `prod` 标签,**不复制任何规则行**,立即拥有完整的 prod 管控,也不存在「空规则窗口期」。
+
+### 命名冲突(必读)
+
+`Connection.Tags` 字段**已经存在**,含义是**数据访问范围标签**(`router.go:105,119,133`、`TagEditModal.vue`、`seed.go:156` roleTags),决定角色/用户能访问哪些库。与本需求的「分层标签」完全无关。
+
+**实现中一律用 `tier` 指代分层标签,禁止复用 `tag` 一词**,避免与既有 Tags 语义相撞。中文文案里可称「分层标签」。
+
+### 迁移成本:近乎为零
+
+只要默认环境的 code 与标签 code 同名(`prod` 环境绑 `prod` 标签):
+
+| 表 | 处理 |
+|---|---|
+| `tbl_connection.env` | 现有值 `"prod"` 直接就是合法 environment code → **不回填** |
+| `tbl_role_capability.env` | 现有值就是 tier code,列语义从「环境」变「标签」→ **不动数据** |
+| `tbl_risk_command.env` | 同上 → **不动数据** |
+
+整个迁移 = 新增两张表 + 插入 8 行种子(4 标签 + 4 同名环境)。`seedGliEnv` 可从启动路径退役为历史迁移。
+
+## 核心产出:每一处 `conn.Env` 归属哪一层
+
+实施时最容易出错的地方 —— 同一个字段,一半调用点该换 tier,另一半该换 environment。
+
+### → 换成 tier(规则判定 / 管控强度)
+
+| 位置 | 用途 |
+|---|---|
+| `service/gateway.go:57,117,142,219` | `EvaluateFor` 三层判定 |
+| `service/async_exec.go:46`、`service/export.go:138` | 同上 |
+| `gateway/risk.go:392,400` | 能力矩阵 + 风险字典查表 |
+| `service/gateway.go:704` | 强制 MFA(`conn.Env != model.EnvProd`) |
+| `service/gateway.go:562` | 脚本扫描基准(`ScanStatement(model.EnvProd, …)`) |
+| `repository/repository.go:1014` | 待审批统计(`tbl_connection.env = 'prod'`) |
+| `service/admin.go:21` `connEnvMeta` | 显示层级名 + 默认连接角色 |
+| `components/terminal/TerminalSession.vue:161` | 终端红色高危警告 |
+
+### → 换成 environment(归属 / 展示 / 快照)
+
+| 位置 | 用途 |
+|---|---|
+| `service/async_exec.go:63`、`service/export.go:151` | `conn.Env + "-" + conn.Name` 拼实例显示名 |
+| `service/gateway.go:242` | `Approval.Env` 审批记录快照 |
+| `service/webhook.go:147` | 飞书卡片 payload `"env"` |
+| `components/terminal/DbTree.vue` | 左侧树分组 |
+| 前端各处 `${c.env}-${c.name}` | 实例显示名(含 `ExportView` 可搜索选择器) |
+
+注:实例显示名会自然从 `prod-tongcha` 变为 `prod-hk-tongcha` —— 这正是多生产环境的意义。
+
+## 数据模型
+
+```
+tbl_env_tier                      分层标签 = 管控等级
+  code              PK size:16    prod / gli / staging / dev / …
+  display_name      size:64
+  sort_order        int           UI 排序(prod 在最前)
+  require_mfa       bool          ← 替 gateway.go:704 的 == EnvProd
+  danger_banner     bool          ← 替 TerminalSession.vue:161
+  counts_in_pending bool          ← 替 repository.go:1014
+  scan_baseline     bool          ← 替 gateway.go:562;全局唯一
+  conn_layer        size:64       ← 替 connEnvMeta 的 "L1 核心 · 写"
+  default_role      size:64       ← 替 connEnvMeta 的 dba_l2 / developer
+
+tbl_environment                   环境 = 实例分组
+  code              PK size:32    prod-hk / prod-sh / uat-结算
+  display_name      size:64
+  tier_code         size:16 idx   → tbl_env_tier.code
+  sort_order        int
+
+tbl_connection.env  → tbl_environment.code(列不改名,语义变为环境)
+tbl_role_capability.env / tbl_risk_command.env → tier code(语义变,数据不动)
+```
+
+`conn_layer` / `default_role` 挂在 tier 上,用于替换 `service/admin.go:21` 的硬编码映射。注意 `admin.go:69` 当前会在切换分层时**覆盖**实例的 `Layer` 与 `DefaultRole`,这个派生关系必须跟着搬进 tier 表。
+
+## Scope
+
+**In**
+
+- `tbl_env_tier` / `tbl_environment` 两张表 + 迁移 + 种子(4 tier + 4 同名 environment)
+- tier CRUD(新增时**必须**克隆模板 tier 的全套规则行,单事务)
+- environment CRUD(新增零克隆;删除时实例强制迁移到指定环境,单事务)
+- 消除 8 处 tier 硬编码判定,改读属性位
+- 审计/审批记录**双快照**:environment code + 当时的 tier code
+- `UpsertRiskCommand` 改为**服务端按全部 tier 展开**(根治下述 bug)
+- 前端:tier/environment 管理页、规则两页列动态化、DbTree 两级分组、连接编辑的环境切换、未知 tier/environment 兜底显示
+- 回归测试:克隆事务、空规则防护、删除迁移、双快照、bug 复现用例
+
+**Out(后续)**
+
+- 环境级别的额外属性(地域、机房、联系人)
+- tier 属性位的更细粒度(如按 tier 配审批链层数)
+- 历史记录的 tier 快照回填(旧数据 tier 快照留空,按 environment 反查并标注「推断值」)
+
+## 必须一并修的现存 bug
+
+`views/RiskRulesView.vue:132` 新增高危命令时只写 `{prod, staging, dev}` —— **漏 gli**;而 `repository.go:542` `UpsertRiskCommand` 只写入 map 里给出的 key。
+
+**后果**:管理员在后台新增的任何高危命令,对灰度实例完全不生效(无行 → `RiskOff` → 放行)。加 GLI 时改了 seed 的回填,却漏了运行时这条路径。
+
+分层可自定义后,这个 bug 会从「漏一个」放大为「漏全部新 tier」,因此必须在本需求内根治:**写入路径由服务端按当前全部 tier 展开,不由前端传 map**。
+
+## 风险与防护
+
+| 风险 | 防护 |
+|---|---|
+| 新 tier 无规则行 = 无管控实例 | 建 tier 必须选模板并在**同一事务**内克隆完能力矩阵 + 风险字典;克隆失败整体回滚 |
+| 删除持有 `scan_baseline` 的 tier → 脚本扫描器**静默失效**(任何脚本都报无风险) | `scan_baseline` 全局唯一且非空;删除持有者时强制转移,拒绝裸删 |
+| 删除 environment 后历史记录悬空 | 记录为字符串快照,不设物理外键;前端遇未知 code 降级显示原文 + 中性配色(当前 `DbTree.vue:126` `t(envMeta[k].label)` 遇未知 key 会抛异常) |
+| 切换实例环境污染审计链 | **历史快照不可回溯修改**;切换只影响此后的新记录 |
+| tier 全删光 | 至少保留一个 tier 与一个 environment,否则无法建连接且 `scan_baseline` 无处安放 |
+
+## 已知 trade-off
+
+分层显示名从 i18n key(`envProd` / `envGli` / …)变为库内字符串后,**自定义 tier / environment 的名字无法国际化**,中英界面显示同一字面值。内置四个 tier 保留 i18n 回退,自定义的只能用管理员输入值。
+
+## 已定决策(2026-08-04)
+
+| # | 决策 | 结论 |
+|---|---|---|
+| 1 | 新建 tier 的初始规则来源 | **从现有 tier 克隆**(选模板),与 `seedGliEnv` 既有做法一致 |
+| 2 | prod 的 4 处特殊语义如何泛化 | **tier 属性位**,代码判断属性而非名字 |
+| 3 | 删除时的处理 | **允许删,实例强制迁移**(删 environment→实例迁移;删 tier→要求无 environment 绑定) |
+| 4 | tier 本身是否可新增 | **可新增**,保留克隆事务 + 空规则防护 |
+| 5 | 审计/审批历史快照 | **environment 与 tier 双存**,可解释「当时为何要审批」 |
+| 6 | DbTree 分组 | ~~tier 一级、environment 二级~~ → **已于 2026-08-06 推翻,见下** |
+
+### 决策 6 的修订(2026-08-06)
+
+实际层级定为 **environment 一级 → 数据库类型 二级 → instance 三级**,tier 退出树的层级。
+
+起因是一个本单未预见的维度:估算里默认一个环境一种数据库,而实际上同一个集群会同时跑 MySQL / PostgreSQL / Oracle,「哪个引擎」决定了命令怎么被解析、用哪个驱动连,和「哪个集群」是并列的导航问题,不是列里扫一眼的属性。四层(tier → env → type → instance)嵌套过深,取舍后砍掉 tier 这一级。
+
+**原决策的理由并没有作废** —— 「顶层看得出哪些是生产」仍然成立,只是换了载体:环境行的颜色点取自它绑定的 tier(`dotForEnv`),tier 名放在该行的 hover tooltip 上。危险度提示一点没丢,少的只是一行标题。
+
+连带影响:`tierSectionLabel` / `BUILTIN_SECTION_LABEL` 与 `prodEnv`/`gliEnv`/`stagingEnv`/`devEnv`、`prodRow`/`gliRow`/`stgRow`/`devRow` 八个 i18n key 随之失效,已删除。
+
+## 待定(2026-08-06 已全部定案)
+
+- ~~谁能管理 tier / environment~~ → **独立一级菜单** `envtier`(仅 admin)。升级旧库时按「已有 `rules` 者获得 `envtier`」回填,否则无人能进入该页面。
+- ~~新增高危命令时各 tier 的默认等级~~ → **按属性位分档**:持 `scan_baseline` 或 `require_mfa` 的 tier 默认 `high`,其余 `off`。猜错方向的代价不对称:多一次审批 vs 刚被标为高危的命令在生产 tier 免审执行。实现于 `repository.defaultRiskLevel`。
+- ~~`tbl_environment` 主键~~ → **用 code**,`tbl_connection.env` 零回填如期成立。
+
+## 内置分层标签的含义(2026-08-06 定案)
+
+**环境的名字不决定它是什么环境,分层标签决定**;规则只挂在标签上,不挂在环境名上。这一点模型本来就是对的 —— 错的是标签写的字。
+
+| code | 含义 | 此前被错写为 |
+|---|---|---|
+| `prod` | 生产环境 | — |
+| `uat` | 演练环境 | **本次新增**(演练此前没有自己的标签) |
+| `gli` | **法务环境** | 灰度 · GLI |
+| `dev` | 开发环境 | 测试 · DEV |
+| `staging` | **预发布环境** | 演练UAT · STAGING |
+
+这五个写死在库里(`builtinTiers` + 迁移 `0014`)。
+
+**只有标签错了,code 从来没错**,所以这次纠正不搬任何一行规则、不动任何一个连接 —— 只改显示名 + 补一个标签。已定的两件事:
+
+- `gli` 的管控档位**保持宽松档不变**(不强制 MFA / 无红色警告 / 不计入待审批)。法务库确实是真实数据,但收紧会立刻改变线上实例的判定结果,那是运维的决定,分层页现在可以做;本次纠正只改名。
+- `uat` 的规则**从 staging 克隆** —— staging 当年正是顶着「演练UAT」这个名字持有那套规则,克隆它等于把演练规则交还给真正的演练标签。
+
+升级已有库时,只替换**本产品自己写下的**旧标签(见 `wrongBuiltinNames`);管理员改过名的标签保持原样 —— 修自己的错不是覆盖别人决定的理由。
+
+## 遗留(需人确认后上线)
+
+`webhook.go` payload 的 `env` 字段取值范围已从四个固定值扩大为任意 environment code。新增的 `tier` 字段向后兼容,风险只在 `env`:若审批魔方对该字段做过枚举校验,新建环境后的审批单会被下游拒收。详见 `issues/03-dual-snapshot.md`。

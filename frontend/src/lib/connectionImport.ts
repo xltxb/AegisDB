@@ -11,7 +11,15 @@
 // credential encryption). This is the earlier, friendlier gate, not a substitute:
 // it reports the offending LINE so a long sheet can be corrected in one pass.
 
-/** Environments the risk controls are defined for; mirrors the backend's validEnvs. */
+/**
+ * The environments accepted when no list is supplied — the four built-ins.
+ *
+ * Environments are rows an administrator creates, so the real list is whatever
+ * `tbl_environment` holds; callers pass it in (see parseConnectionImport). This
+ * constant is only the fallback for a caller that has none loaded, and it stays
+ * deliberately narrow: accepting anything would move the first real check to the
+ * server, after some rows of the sheet had already been created.
+ */
 export const IMPORT_ENVS = ['prod', 'gli', 'staging', 'dev'] as const
 /** Gateway policies an instance may carry; mirrors the backend's validPolicies. */
 export const IMPORT_POLICIES = ['strict', 'approve-1', 'audit-only'] as const
@@ -75,9 +83,16 @@ function splitCsvLine(line: string): string[] {
   return out.map((f) => f.trim())
 }
 
-export function parseConnectionImport(text: string): ImportParse {
+/**
+ * @param envs the environment codes an instance may be placed in. Pass the live
+ *   list; omitting it falls back to the four built-ins (IMPORT_ENVS). An empty
+ *   array is treated as "not loaded" and falls back too, so a failed fetch
+ *   cannot turn into a sheet that rejects every row.
+ */
+export function parseConnectionImport(text: string, envs?: readonly string[]): ImportParse {
   const errors: ImportError[] = []
   const rows: ImportRow[] = []
+  const validEnvs: readonly string[] = envs && envs.length ? envs : IMPORT_ENVS
 
   const rawLines = text.split(/\r?\n/)
   const firstIdx = rawLines.findIndex((l) => l.trim() !== '')
@@ -115,8 +130,8 @@ export function parseConnectionImport(text: string): ImportParse {
       errors.push({ line, message: `第 ${line} 行缺少: ${blank.join(', ')}` })
       continue
     }
-    if (!(IMPORT_ENVS as readonly string[]).includes(row.env)) {
-      errors.push({ line, message: `第 ${line} 行环境 "${row.env}" 无效,仅支持: ${IMPORT_ENVS.join(' / ')}` })
+    if (!validEnvs.includes(row.env)) {
+      errors.push({ line, message: `第 ${line} 行环境 "${row.env}" 无效,仅支持: ${validEnvs.join(' / ')}` })
       continue
     }
     if (!(IMPORT_POLICIES as readonly string[]).includes(row.policy)) {

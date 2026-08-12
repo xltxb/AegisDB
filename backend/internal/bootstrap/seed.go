@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"gorm.io/gorm"
 
@@ -34,50 +36,262 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 	if err := seedGliEnv(repo); err != nil {
 		return err
 	}
+	if err := backfillEnvTiers(repo.DB()); err != nil {
+		return err
+	}
 	return seedSchema(repo)
 }
 
-// seedGliEnv backfills the GLI (灰度) connection environment. GLI is a later
-// addition; its capability-matrix and risk-dictionary rows mirror staging
-// (演练UAT tier) so grey-release instances are gated coherently from day one.
-// Idempotent: clones every staging row to a gli counterpart only when absent,
-// so DBs seeded before GLI existed self-heal on boot (like seedSchema).
+// builtinTiers are the five control tiers this product ships with. The tier —
+// not the environment's name — is what says which KIND of environment an
+// instance sits in, and it is what every rule row is keyed by.
+//
+// The flags reproduce the behaviour that used to be `== model.EnvProd` tests
+// scattered through the gateway. Only prod carries them: gli holds real legal
+// data but is deliberately left on the same (loose) control profile it has
+// always had, so this correction changes no verdict on any existing instance.
+//
+// The display names were WRONG until 2026-08-06 — gli was seeded as 灰度 and
+// staging as 演练UAT — and the wrong names had spread into comments, tests and
+// the migration. The names here are the authority; see 0014 for the upgrade.
+//
+// ConnLayer/DefaultRole are display defaults only (nothing about access control
+// reads them) and are editable per tier in the console, so the layer strings
+// below are a starting point rather than a claim about anyone's L-numbering.
+var builtinTiers = []model.EnvTier{
+	{Code: model.EnvProd, DisplayName: "生产环境 · PROD", SortOrder: 0,
+		RequireMFA: true, DangerBanner: true, CountsInPending: true, ScanBaseline: true,
+		ConnLayer: "L1 核心 · 写", DefaultRole: "dba_l2"},
+	{Code: model.EnvGli, DisplayName: "法务环境 · GLI", SortOrder: 1,
+		ConnLayer: "L2 法务", DefaultRole: "dba_l2"},
+	{Code: model.EnvStaging, DisplayName: "预发布环境 · STAGING", SortOrder: 2,
+		ConnLayer: "L3 预发布", DefaultRole: "dba_l2"},
+	{Code: model.EnvUat, DisplayName: "演练环境 · UAT", SortOrder: 3,
+		ConnLayer: "L3 演练", DefaultRole: "dba_l2"},
+	{Code: model.EnvDev, DisplayName: "开发环境 · DEV", SortOrder: 4,
+		ConnLayer: "L4 沙盒", DefaultRole: "developer"},
+}
+
+// backfillEnvTiers initialises the tier/environment split on a database that
+// predates it. Like backfillGliEnv it also runs from the `migrate` path, because
+// production upgrades run `migrate` while `seed` is first-install only.
+//
+// One environment is created per tier, NAMED AFTER IT. That is the whole reason
+// this migration moves no data: every existing tbl_connection.env already holds
+// one of these four strings, so those rows are already valid environment codes,
+// and tbl_role_capability.env / tbl_risk_command.env already hold tier codes.
+//
+// Seeded only when the table is EMPTY, not row-by-row. A per-row backfill would
+// resurrect a tier the operator deliberately deleted on the next restart.
+func backfillEnvTiers(db *gorm.DB) error {
+	var tiers int64
+	if err := db.Model(&model.EnvTier{}).Count(&tiers).Error; err != nil {
+		return err
+	}
+	if tiers == 0 {
+		for _, t := range builtinTiers {
+			if err := db.Create(&t).Error; err != nil {
+				return err
+			}
+		}
+	}
+
+	var envs int64
+	if err := db.Model(&model.Environment{}).Count(&envs).Error; err != nil {
+		return err
+	}
+	if envs == 0 {
+		for _, t := range builtinTiers {
+			if err := db.Create(&model.Environment{
+				Code: t.Code, DisplayName: t.DisplayName, TierCode: t.Code, SortOrder: t.SortOrder,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	if err := correctBuiltinTiers(db); err != nil {
+		return err
+	}
+	return backfillEnvTierMenu(db)
+}
+
+// wrongBuiltinNames are the display names this product shipped with before the
+// five-tier correction. They are kept ONLY so an upgrade can recognise a label it
+// wrote itself and replace it — see correctBuiltinTiers.
+var wrongBuiltinNames = map[string][]string{
+	model.EnvGli:     {"灰度 · GLI"},
+	model.EnvStaging: {"演练UAT · STAGING"},
+	model.EnvDev:     {"测试 · DEV"},
+}
+
+// wrongBuiltinLayers are the matching ConnLayer strings, for the same purpose.
+var wrongBuiltinLayers = map[string][]string{
+	model.EnvGli:     {"L2 灰度"},
+	model.EnvStaging: {"L3 演练UAT"},
+}
+
+// correctBuiltinTiers repairs a database seeded before the five-tier correction:
+// it adds the missing uat tier and replaces the two mislabelled names.
+//
+// The labels were not cosmetic errors. "gli" was seeded, documented and tested as
+// 灰度 (grey release) when it is the 法务 (legal) environment, and "staging" as
+// 演练UAT when it is 预发布 — so anyone reading the console was told the wrong
+// thing about which instances they were about to touch. The CODES were right all
+// along, which is why no rule row or connection needs to move: an environment's
+// name never decided anything, the tier did.
+//
+// Only a label this code wrote itself is replaced (see wrongBuiltinNames). An
+// operator who has renamed a tier keeps their name — overwriting a deliberate
+// edit to fix our own mistake would be its own kind of wrong.
+func correctBuiltinTiers(db *gorm.DB) error {
+	for _, want := range builtinTiers {
+		var cur model.EnvTier
+		err := db.First(&cur, "code = ?", want.Code).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A built-in that does not exist yet — uat on any pre-correction
+			// database. Create it, give it an environment, and clone its rules;
+			// a tier without rule rows is an environment nothing governs.
+			if err := db.Create(&want).Error; err != nil {
+				return err
+			}
+			if err := db.Create(&model.Environment{
+				Code: want.Code, DisplayName: want.DisplayName, TierCode: want.Code, SortOrder: want.SortOrder,
+			}).Error; err != nil {
+				return err
+			}
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		updates := map[string]any{}
+		if slices.Contains(wrongBuiltinNames[want.Code], cur.DisplayName) {
+			updates["display_name"] = want.DisplayName
+		}
+		if slices.Contains(wrongBuiltinLayers[want.Code], cur.ConnLayer) {
+			updates["conn_layer"] = want.ConnLayer
+		}
+		if len(updates) > 0 {
+			if err := db.Model(&model.EnvTier{}).Where("code = ?", want.Code).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+		// The identically-named environment carries the same label, and was
+		// created from it — correct it on the same terms.
+		var env model.Environment
+		if err := db.First(&env, "code = ?", want.Code).Error; err == nil {
+			if slices.Contains(wrongBuiltinNames[want.Code], env.DisplayName) {
+				if err := db.Model(&model.Environment{}).Where("code = ?", want.Code).
+					Update("display_name", want.DisplayName).Error; err != nil {
+					return err
+				}
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+	}
+	// uat's rule rows, whether it was just created here or on a fresh seed.
+	return mirrorTierRules(db, model.EnvStaging, model.EnvUat)
+}
+
+// backfillEnvTierMenu grants the new "envtier" menu to whoever already holds
+// "rules".
+//
+// A menu key with no RoleMenu row reads as denied (MenuGuard), so on an upgraded
+// database nobody — not even an administrator — could open the tiers page or
+// call its endpoints, and the only way to grant it would be a page they cannot
+// reach. Tiers and environments were managed from the rules menu before they had
+// a page of their own, so inheriting that grant keeps the same people in charge
+// and gives nobody a permission they did not have.
+//
+// Written only when the key is entirely absent, so a deliberate revocation is
+// not undone on the next restart.
+func backfillEnvTierMenu(db *gorm.DB) error {
+	var existing int64
+	if err := db.Model(&model.RoleMenu{}).Where("menu_key = ?", "envtier").Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	var rules []model.RoleMenu
+	if err := db.Where("menu_key = ?", "rules").Find(&rules).Error; err != nil {
+		return err
+	}
+	for _, r := range rules {
+		if err := db.Create(&model.RoleMenu{
+			RoleID: r.RoleID, MenuKey: "envtier", Enabled: r.Enabled,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// seedGliEnv backfills the tiers whose rules are cloned from staging: GLI (法务)
+// and, since the five-tier correction, UAT (演练). Both are later additions whose
+// capability-matrix and risk-dictionary rows mirror staging's, so their instances
+// are gated coherently from day one. Idempotent: clones a staging row only when
+// the counterpart is absent, so DBs seeded before either existed self-heal on
+// boot (like seedSchema).
+//
+// GLI was documented here as 灰度 (grey release) until 2026-08-06. It is the 法务
+// (legal) environment; only the label was wrong, never the code.
+//
+// Superseded by the tier model: a new tier now clones its rules through
+// Repo.CreateEnvTierFrom, which is this function generalised. Kept on the boot
+// path because databases older than GLI still need it — it is a no-op once those
+// rows exist, and dropping it would leave them ungoverned (ED1).
 func seedGliEnv(repo *repository.Repo) error { return backfillGliEnv(repo.DB()) }
 
 // backfillGliEnv is seedGliEnv against a raw handle, so the migration path can
 // run it too (see Migrate).
 func backfillGliEnv(db *gorm.DB) error {
-	// Capability matrix: mirror each staging (role × capability) level to gli.
+	if err := mirrorTierRules(db, model.EnvStaging, model.EnvGli); err != nil {
+		return err
+	}
+	// UAT (演练) arrived with the five-tier correction and is seeded the same way,
+	// from the same source: staging is where the rehearsal rules already lived
+	// (it used to be LABELLED 演练UAT), so cloning it hands those rules to the tier
+	// that now carries that meaning.
+	return mirrorTierRules(db, model.EnvStaging, model.EnvUat)
+}
+
+// mirrorTierRules copies every capability-matrix and risk-dictionary row from one
+// tier to another, writing only the rows the destination is missing.
+//
+// Row-by-row rather than a bulk insert because it must be safe to re-run: a rule
+// an operator has since edited on the destination stays edited. Only ABSENT rows
+// are created, and an absent row is the thing that matters — both lookups read
+// one as permission granted, so a half-populated tier is an unregulated one.
+func mirrorTierRules(db *gorm.DB, src, dst string) error {
 	var caps []model.RoleCapability
-	if err := db.Where("env = ?", model.EnvStaging).Find(&caps).Error; err != nil {
+	if err := db.Where("env = ?", src).Find(&caps).Error; err != nil {
 		return err
 	}
 	for _, row := range caps {
 		var n int64
 		db.Model(&model.RoleCapability{}).
-			Where("role_id = ? AND capability = ? AND env = ?", row.RoleID, row.Capability, model.EnvGli).
+			Where("role_id = ? AND capability = ? AND env = ?", row.RoleID, row.Capability, dst).
 			Count(&n)
 		if n == 0 {
 			if err := db.Create(&model.RoleCapability{
-				RoleID: row.RoleID, Capability: row.Capability, Env: model.EnvGli, Level: row.Level,
+				RoleID: row.RoleID, Capability: row.Capability, Env: dst, Level: row.Level,
 			}).Error; err != nil {
 				return err
 			}
 		}
 	}
 
-	// Risk dictionary: mirror each staging command level to gli.
 	var cmds []model.RiskCommand
-	if err := db.Where("env = ?", model.EnvStaging).Find(&cmds).Error; err != nil {
+	if err := db.Where("env = ?", src).Find(&cmds).Error; err != nil {
 		return err
 	}
 	for _, r := range cmds {
 		var n int64
-		db.Model(&model.RiskCommand{}).
-			Where("command = ? AND env = ?", r.Command, model.EnvGli).
-			Count(&n)
+		db.Model(&model.RiskCommand{}).Where("command = ? AND env = ?", r.Command, dst).Count(&n)
 		if n == 0 {
-			if err := db.Create(&model.RiskCommand{Command: r.Command, Env: model.EnvGli, Level: r.Level}).Error; err != nil {
+			if err := db.Create(&model.RiskCommand{Command: r.Command, Env: dst, Level: r.Level}).Error; err != nil {
 				return err
 			}
 		}
@@ -117,16 +331,17 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	}
 
 	// ---- Menus ----
-	menuKeys := []string{"terminal", "approve", "db", "rules", "perms", "audit", "settings"}
-	// Instance config (db), rules, permissions (perms) and settings are all
-	// platform-admin only — non-admins don't even see these pages.
+	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings"}
+	// Instance config (db), rules, tiers/environments (envtier), permissions
+	// (perms) and settings are all platform-admin only — non-admins don't even
+	// see these pages.
 	menuMatrix := map[string][]bool{
-		//        terminal approve  db    rules  perms audit settings
-		"admin": {true, true, true, true, true, true, true},
-		"owner": {true, true, false, false, false, true, false},
-		"l2":    {true, true, false, false, false, true, false},
-		"ro":    {true, false, false, false, false, true, false},
-		"audit": {false, false, false, false, false, true, false},
+		//        terminal approve  db    rules envtier perms audit settings
+		"admin": {true, true, true, true, true, true, true, true},
+		"owner": {true, true, false, false, false, false, true, false},
+		"l2":    {true, true, false, false, false, false, true, false},
+		"ro":    {true, false, false, false, false, false, true, false},
+		"audit": {false, false, false, false, false, false, true, false},
 	}
 	for code, vals := range menuMatrix {
 		for i, k := range menuKeys {
@@ -206,7 +421,7 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.mfaGraceMinutes": 30,
 		"security.ipAllowlist":    "",
 		"notify.larkChannel":      "",
-		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/gli 灰度。
+		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/uat 小范围验证。
 		// token / callbackSecret 为敏感值:保存时加密落库、GetSettings 不回传明文。
 		"approval.external.enabled":         false,
 		"approval.external.baseURL":         "",

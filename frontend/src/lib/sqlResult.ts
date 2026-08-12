@@ -228,22 +228,88 @@ export function renderVertical(columns: string[], rows: string[][]): string[] {
   return out
 }
 
-// maxColWidth caps a single column's display width so one huge value (e.g. a long
-// text/JSON cell) can't blow up the layout — use \G / \x for full wide values.
-const maxColWidth = 60
+// fallbackColWidth caps a single column when the caller does not know how wide
+// the terminal is — one huge value (a long text/JSON cell) must not blow up the
+// layout. Use \G / \x to see wide values in full.
+const fallbackColWidth = 60
+
+// minColWidth is the floor a column keeps even when the table cannot fit: below
+// this a cell is all ellipsis and carries no information. A table with enough
+// columns to hit the floor overflows the terminal and wraps — unavoidable, and
+// preferable to rendering columns that say nothing.
+const minColWidth = 8
+
+// allocWidths distributes `available` display columns across cells whose natural
+// (untruncated) widths are given.
+//
+// Truncating every column at one fixed number wastes the terminal: `SHOW GRANTS`
+// returns a single column of near-identical strings that differ only in their
+// tail, so a 60-column cap on a 200-column terminal renders seventeen rows that
+// all read `…t_dws_bp_order_user_kind_…` — the data is on screen and still
+// unreadable.
+//
+// So this is a water-fill instead: narrow columns are settled at their natural
+// width first, and the space they did not need is redistributed among the
+// columns that are still too wide. Each pass recomputes the equal share over the
+// unsettled columns, so a table of one wide column plus several narrow ones
+// spends nearly the whole terminal on the column that actually varies.
+function allocWidths(natural: number[], available: number): number[] {
+  const n = natural.length
+  if (n === 0) return []
+  if (natural.reduce((a, b) => a + b, 0) <= available) return natural.slice()
+
+  const out = new Array<number>(n).fill(0)
+  let budget = available
+  let unsettled = natural.map((_, i) => i)
+  while (unsettled.length > 0) {
+    const share = Math.floor(budget / unsettled.length)
+    const fits = unsettled.filter((i) => natural[i] <= share)
+    if (fits.length === 0) {
+      // Every remaining column wants more than its share: split what is left
+      // evenly and hand the indivisible remainder to the leftmost columns.
+      let extra = budget - share * unsettled.length
+      for (const i of unsettled) out[i] = share + (extra-- > 0 ? 1 : 0)
+      break
+    }
+    for (const i of fits) {
+      out[i] = natural[i]
+      budget -= natural[i]
+    }
+    unsettled = unsettled.filter((i) => natural[i] > share)
+  }
+  // Lift columns squeezed under the floor — but never past what they actually
+  // need, or a 2-wide `id` would be padded to 8 and push the frame off screen.
+  return out.map((w, i) => Math.max(w, Math.min(natural[i], minColWidth)))
+}
 
 // renderTable produces a fully-boxed, aligned, ANSI-coloured grid (┌┬┐ / ├┼┤ /
 // └┴┘). Widths are measured in display columns (CJK-aware) so mixed ASCII/CJK
-// rows stay aligned; cells are single-lined and truncated at maxColWidth.
-export function renderTable(t: SynthTable): string[] {
-  const clean = (s: string) => (s ?? '').replace(/[\r\n\t]+/g, ' ')
-  const heads = t.columns.map((h) => truncateDisp(sanitizeCell(h), maxColWidth))
-  const cells = t.rows.map((r) => t.columns.map((_, i) => truncateDisp(sanitizeCell(r[i] ?? ''), maxColWidth)))
-  const widths = heads.map((h, i) => {
+// rows stay aligned; cells are single-lined.
+//
+// termCols is the terminal's current width. Given it, the table may spend the
+// whole terminal and truncates only what genuinely does not fit (a table that
+// already fits stays at its natural width); omit it — tests, or any caller with
+// no terminal in hand — and every column falls back to a fixed cap. Callers pass
+// the live value per render, so a resized window is picked up by the next result
+// without any resize plumbing here.
+export function renderTable(t: SynthTable, termCols = 0): string[] {
+  const rawHeads = t.columns.map((h) => sanitizeCell(h))
+  const rawCells = t.rows.map((r) => t.columns.map((_, i) => sanitizeCell(r[i] ?? '')))
+
+  // Frame overhead: one '│' per column plus a trailing one, and a space of
+  // padding on each side of every cell — 3 cells per column, plus 1.
+  const overhead = t.columns.length * 3 + 1
+  const natural = rawHeads.map((h, i) => {
     let w = dispWidth(h)
-    for (const r of cells) w = Math.max(w, dispWidth(r[i]))
+    for (const r of rawCells) w = Math.max(w, dispWidth(r[i]))
     return w
   })
+  const widths = termCols > 0
+    ? allocWidths(natural, termCols - overhead)
+    : natural.map((w) => Math.min(w, fallbackColWidth))
+
+  const heads = rawHeads.map((h, i) => truncateDisp(h, widths[i]))
+  const cells = rawCells.map((r) => r.map((v, i) => truncateDisp(v, widths[i])))
   const g = (s: string) => c(ANSI.gray, s)
   const vert = g('│')
   const bar = (l: string, m: string, r: string) => g(l + widths.map((w) => '─'.repeat(w + 2)).join(m) + r)

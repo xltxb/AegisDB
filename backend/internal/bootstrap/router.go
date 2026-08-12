@@ -85,6 +85,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/async-jobs", menu("terminal"), h.ListAsyncJobs)
 		a.GET("/async-jobs/:id", menu("terminal"), h.GetAsyncJob)
 		a.GET("/scripts/config", menu("terminal"), h.ScriptConfig)
+		// Terminal session log export — audit only; the file is built in the
+		// browser from lines already shown, so there is nothing here to gate.
+		a.POST("/terminal/transcript-export", menu("terminal"), h.TranscriptExport)
 		a.POST("/scripts/scan", menu("terminal"), h.ScriptScan)
 		a.POST("/scripts/execute", menu("terminal"), h.ScriptExecute)
 		// upload-file management (per-user: list / upload / download / delete)
@@ -108,6 +111,20 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)
 		a.PATCH("/connections/:id", menu("db"), admin, h.PatchConnection)
 		a.GET("/connections/:id/schema", menu("terminal"), h.GetConnectionSchema)
+
+		// control tiers & environments — reads are open to any authenticated caller
+		// (the terminal tree, instance labels and the connection form all render
+		// from them); mutations are envtier-menu + admin, since a tier decides how
+		// strictly its instances are governed.
+		a.GET("/env-tiers", h.ListEnvTiers)
+		a.POST("/env-tiers", menu("envtier"), admin, h.CreateEnvTier)
+		a.PUT("/env-tiers/:code", menu("envtier"), admin, h.UpdateEnvTier)
+		a.DELETE("/env-tiers/:code", menu("envtier"), admin, h.DeleteEnvTier)
+		a.GET("/environments", h.ListEnvironments)
+		a.GET("/environments/usage", menu("envtier"), h.EnvironmentUsage)
+		a.POST("/environments", menu("envtier"), admin, h.CreateEnvironment)
+		a.PUT("/environments/:code", menu("envtier"), admin, h.UpdateEnvironment)
+		a.DELETE("/environments/:code", menu("envtier"), admin, h.DeleteEnvironment)
 
 		// roles & permissions — read is perms-menu; every mutation is admin-only
 		// (prevents privilege escalation by non-admin perms holders like the DBA lead)

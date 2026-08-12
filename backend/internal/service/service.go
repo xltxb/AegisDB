@@ -144,6 +144,16 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 	// never re-executed, so redaction here is safe; it also flows into the webhook
 	// payload, which carries this same audit object.
 	command = sqlutil.RedactSecrets(command)
+	// Resolve the control tier BEFORE taking the lock — it is a database read, and
+	// auditMu serialises every audit writer in the process. An instance whose
+	// environment no longer resolves leaves the snapshot empty rather than
+	// blocking the write: losing the audit row would be the worse outcome.
+	tierCode := ""
+	if conn != nil {
+		if t, err := s.tierOf(conn); err == nil {
+			tierCode = t.Code
+		}
+	}
 	s.auditMu.Lock()
 	defer s.auditMu.Unlock()
 	now := time.Now()
@@ -160,16 +170,23 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 			Result:     result,
 			ApprovalNo: apNo,
 			Operator:   operator,
+			TierCode:   tierCode,
 			PrevHash:   prev,
 		}
 		if conn != nil {
 			a.ConnectionID = conn.ID
 			a.Instance = conn.Name
 			a.Database = conn.Database
+			a.Env = conn.Env
 		}
 		payload, _ := json.Marshal(map[string]any{
 			"time": now.Format(time.RFC3339), "actor": actor.Name, "instance": a.Instance,
 			"database": a.Database, "command": command, "risk": risk, "result": result, "ap": apNo, "operator": operator,
+			// Part of the hash from here on: a snapshot that could be edited without
+			// breaking the chain would not be evidence of anything. Rows written
+			// before this change hashed a payload without these keys and keep their
+			// original hashes — nothing recomputes historical rows.
+			"env": a.Env, "tier": tierCode,
 		})
 		a.Hash = crypto.ChainHash(prev, payload)
 		if err = s.Repo.InsertAudit(a); err == nil {

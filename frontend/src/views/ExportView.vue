@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { DatabaseZap, KeyRound, Download, Copy, Check, Eye, EyeOff, FolderCog, TriangleAlert, Loader, CircleCheck, CircleX, Clock } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
+import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
 import { CODE_OK, CODE_EXPORT_PATH_UNSET } from '@/api/http'
 import type { Connection, ExportJob } from '@/types'
@@ -45,7 +46,22 @@ async function loadDbs(id: number) {
     else if (dbOptions.value.length) db.value = dbOptions.value[0]
   } catch { /* leave on default */ }
 }
-function onConnChange() { loadDbs(connId.value) }
+// The instance picker is a searchable VSelect, which works on display labels, so
+// the selection round-trips through `env-name` (the same label the terminal and
+// the async-exec page use). A deployment can carry hundreds of instances; the
+// label is what an operator actually types to find one.
+const connLabel = (c: Connection) => `${c.env}-${c.name}`
+const connLabels = computed(() => conns.value.map(connLabel))
+const selectedLabel = computed({
+  get: () => {
+    const c = conns.value.find((x) => x.id === connId.value)
+    return c ? connLabel(c) : ''
+  },
+  set: (l: string) => {
+    const c = conns.value.find((x) => connLabel(x) === l)
+    if (c) { connId.value = c.id; loadDbs(c.id) }
+  },
+})
 
 onMounted(async () => {
   try {
@@ -133,11 +149,9 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
           </div>
 
           <div class="grid2">
-            <div>
+            <div class="pick">
               <div class="lbl">{{ $t('exportConn') }}</div>
-              <select v-model.number="connId" class="sel" @change="onConnChange">
-                <option v-for="c in conns" :key="c.id" :value="c.id">{{ c.env }}-{{ c.name }}</option>
-              </select>
+              <VSelect v-model="selectedLabel" :options="connLabels" searchable height="38px" />
             </div>
             <div>
               <div class="lbl">{{ $t('exportDb') }}</div>
@@ -214,6 +228,10 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .grid2 .lbl:first-child, .grid2 > div > .lbl { margin-top: 0; }
 .sel { margin-top: 7px; width: 100%; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); color: var(--text-strong); font: 600 12.5px var(--font-mono); outline: none; cursor: pointer; }
 .sel:focus { border-color: var(--accent-text); }
+/* Match the searchable instance picker to the native <select> beside it — same
+   offset, height, radius and type, so the two form a single row. */
+.pick :deep(.vsel) { margin-top: 7px; }
+.pick :deep(.control) { border-radius: 9px; font: 600 12.5px var(--font-mono); color: var(--text-strong); }
 .nameinput { margin-top: 7px; width: 100%; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); color: var(--text-strong); font: 500 12.5px var(--font-mono); outline: none; }
 .nameinput:focus { border-color: var(--accent-text); }
 .prodwarn { margin-top: 8px; display: flex; align-items: center; gap: 6px; font: 700 11.5px var(--font-mono); color: var(--danger-text); }

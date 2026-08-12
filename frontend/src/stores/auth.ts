@@ -9,6 +9,7 @@ const ROUTE_ORDER: { key: string; path: string }[] = [
   { key: 'approve', path: '/approvals' },
   { key: 'db', path: '/connections' },
   { key: 'rules', path: '/risk-rules' },
+  { key: 'envtier', path: '/env-tiers' },
   { key: 'perms', path: '/permissions' },
   { key: 'audit', path: '/audit' },
   { key: 'settings', path: '/settings' },

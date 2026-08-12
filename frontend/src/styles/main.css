@@ -52,6 +52,16 @@ select {
 .scy::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
 .scy::-webkit-scrollbar-track { background: transparent; }
 
+/* Horizontal counterpart, for tables whose column count is data-driven (the
+   capability matrix and risk dictionary carry one column per control tier). The
+   WIDE ELEMENT scrolls, never the page body — a body that scrolls sideways moves
+   the nav and the header along with it. */
+.scx { overflow-x: auto; }
+.scx::-webkit-scrollbar { width: 9px; height: 9px; }
+.scx::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; }
+.scx::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+.scx::-webkit-scrollbar-track { background: transparent; }
+
 /* hover helper used across cards/cells */
 .hov { transition: all 0.15s ease; }
 .hov:hover { background: var(--surface-sunken); }

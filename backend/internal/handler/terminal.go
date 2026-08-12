@@ -295,7 +295,14 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 			filename = req.Filename
 		}
 	}
-	resp.OK(c, h.Svc.ScanScript(filename, content))
+	scan, err := h.Svc.ScanScript(filename, content)
+	if err != nil {
+		// No scan baseline tier: the scan cannot judge anything, and an empty
+		// result would render as a clean bill of health for the script.
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		return
+	}
+	resp.OK(c, scan)
 }
 
 // ScriptExecute godoc
@@ -324,7 +331,13 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		}
 		saved = p
 	}
-	scan := h.Svc.ScanScript(req.Filename, req.Content)
+	scan, err := h.Svc.ScanScript(req.Filename, req.Content)
+	if err != nil {
+		// Refuse the whole execution: without a baseline every statement would
+		// scan as safe and the script would run unreviewed.
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		return
+	}
 	if scan.HasRisky {
 		// whole script must be submitted for approval (created from the scan
 		// result, since the `\i file` wrapper isn't itself risk-matched)
@@ -575,4 +588,29 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		send(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
 			"columns": r.Columns, "data": r.Data, "truncated": r.Truncated})
 	}
+}
+
+// TranscriptExport godoc
+// @Summary 记录终端会话日志导出(仅审计,文件在浏览器生成)
+// @Router  /terminal/transcript-export [post]
+func (h *Handler) TranscriptExport(c *gin.Context) {
+	var req dto.TranscriptExportReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	err := h.Svc.RecordTranscriptExport(middleware.CurrentUser(c), req)
+	if err == service.ErrNotFound {
+		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
+		return
+	}
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "无权访问该实例")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeInternalError, "记录失败")
+		return
+	}
+	resp.OK(c, gin.H{"recorded": true})
 }

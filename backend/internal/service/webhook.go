@@ -144,7 +144,16 @@ func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, 
 		"callback_url":     callbackURL,
 		"messages":         []map[string]string{{"role": "user", "content": summary}},
 		"payload": map[string]any{
-			"env": ap.Env, "instance": ap.Instance, "database": ap.Database,
+			// `env` keeps its meaning — where the command ran — but its value range
+			// widens from the four fixed strings to any environment code an operator
+			// creates (prod-hk, prod-sh, …). A downstream that validates it as a
+			// closed enum will start rejecting tickets; see the contract note in
+			// .scratch/env-tier-model/issues/03-dual-snapshot.md.
+			//
+			// `tier` is new and additive: the control level the command was judged
+			// under, which is what actually explains why it needed approval.
+			"env": ap.Env, "tier": ap.TierCode,
+			"instance": ap.Instance, "database": ap.Database,
 			"command": ap.Command, "risk": ap.RiskLevel, "initiator": ap.Initiator,
 			"reason": ap.Reason, "apNo": ap.ApNo,
 		},
@@ -435,7 +444,7 @@ func (d *Dispatcher) TestLark() (bool, string) {
 	}
 	secret, consoleURL := d.setStr("notify.larkSecret"), d.setStr("notify.consoleURL")
 	sample := &model.Approval{
-		ApNo: "AP-TEST", Instance: "order-cluster", Env: "prod", RiskLevel: "high",
+		ApNo: "AP-TEST", Instance: "order-cluster", Env: "prod", TierCode: "prod", RiskLevel: "high",
 		Initiator: "Vela", Command: "DROP TABLE orders_2024_q3;", Reason: "测试飞书审批卡片推送",
 	}
 	ok, msg := d.postLark(webhook, secret, larkApprovalCard(sample, consoleURL))

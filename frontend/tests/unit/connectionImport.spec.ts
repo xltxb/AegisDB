@@ -47,6 +47,35 @@ test('an unknown environment is rejected with its line number', () => {
   expect(errors[0].message).toContain('uat')
 })
 
+// Environments are rows an administrator creates, so the accepted set is passed
+// in from the live list. Hardcoding it meant a sheet targeting a newly created
+// cluster was rejected here even though the server would have accepted it.
+test('the accepted environments come from the caller', () => {
+  const sheet = [HEADER, 'hk,mysql,prod-hk,h:3306,strict,d,u,p'].join('\n')
+
+  // Not a built-in: refused when the caller offers only the built-ins…
+  expect(parseConnectionImport(sheet).errors).toHaveLength(1)
+  // …and accepted once the environment exists.
+  const withHk = parseConnectionImport(sheet, ['prod', 'prod-hk', 'dev'])
+  expect(withHk.errors).toEqual([])
+  expect(withHk.rows[0]).toMatchObject({ name: 'hk', env: 'prod-hk' })
+
+  // A built-in that is NOT in the supplied list is refused — the list is the
+  // authority, not an addition to a permanent baseline.
+  expect(parseConnectionImport([HEADER, 'x,mysql,staging,h:3306,strict,d,u,p'].join('\n'),
+    ['prod', 'prod-hk']).errors).toHaveLength(1)
+})
+
+// A failed fetch leaves the list empty. Validating against nothing would reject
+// every row of a perfectly good sheet, so an empty list means "not loaded" and
+// falls back to the built-ins; the server still has the final say.
+test('an empty environment list falls back to the built-ins', () => {
+  const { rows, errors } = parseConnectionImport(
+    [HEADER, 'x,mysql,prod,h:3306,strict,d,u,p'].join('\n'), [])
+  expect(errors).toEqual([])
+  expect(rows).toHaveLength(1)
+})
+
 test('an unknown gateway policy is rejected', () => {
   const { errors } = parseConnectionImport([HEADER, 'x,mysql,dev,h:3306,wide-open,d,u,p'].join('\n'))
   expect(errors).toHaveLength(1)
