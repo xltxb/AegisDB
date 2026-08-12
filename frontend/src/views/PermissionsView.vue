@@ -81,8 +81,8 @@ async function doInvite() {
 }
 
 const roleIcon: Record<string, any> = { crown: Crown, shield: Shield, 'user-cog': UserCog, code: Code, eye: Eye }
-const capKeys = ['select', 'write', 'ddl', 'grant', 'conn', 'approve']
-const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove']
+const capKeys = ['select', 'write', 'ddl', 'grant', 'conn', 'approve', 'explain']
+const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove', 'capExplain']
 // One column per control tier, in the tier list's own order. This was the four
 // built-in strings; the matrix is keyed by tier and tiers are rows now, so a
 // hardcoded list would silently omit any tier added later — and an omitted

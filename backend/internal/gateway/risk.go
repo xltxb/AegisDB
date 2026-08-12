@@ -493,13 +493,27 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 	// one does nothing. EXPLAIN ANALYZE is not covered by any of this; PlanOnly
 	// is false for it and it falls through to the ordinary path below.
 	if PlanOnly(sql) {
-		cap = "select"
-		capLevel, err := e.capabilityLevelUnion(roleIDs, cap, tier)
+		// A plan is gated by BOTH `select` and `explain`, whichever is stricter.
+		//
+		// `explain` is its own dimension because reading a plan and reading data
+		// are different permissions — a plan discloses schema and row-count
+		// statistics for a statement the role may be forbidden to run — so an
+		// estate that must control it can, without revoking SELECT.
+		//
+		// But the read gate has to keep applying, or introducing the dimension
+		// would have LOOSENED things: `explain` seeds `allow` everywhere, so a role
+		// deliberately denied SELECT on this tier would have gained the ability to
+		// read plans of the very tables it may not read. Separating a permission
+		// must not hand out what the original one refused.
+		readLevel, err := e.capabilityLevelUnion(roleIDs, "select", tier)
 		if err != nil {
 			return unavailableVerdict(verb, err)
 		}
-		// The read gate still applies: a plan exposes schema and statistics, so a
-		// role denied SELECT here must not read one either.
+		planLevel, err := e.capabilityLevelUnion(roleIDs, "explain", tier)
+		if err != nil {
+			return unavailableVerdict(verb, err)
+		}
+		capLevel := stricterLevel(readLevel, planLevel)
 		if capLevel == model.LevelDeny {
 			return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
 		}
@@ -569,3 +583,14 @@ func Unavailable(engine, sql string, err error) Verdict {
 // deleteOrUpdateRe finds a row-mutating DML verb anywhere in a statement's
 // structure — used to recognise a CTE that carries the mutation.
 var deleteOrUpdateRe = regexp.MustCompile(`(?i)\b(delete|update)\b`)
+
+// stricterLevel returns whichever capability level gates more (allow ≺ approve ≺
+// deny). Used where two dimensions both apply and neither may be talked over by
+// the other — see the plan-only branch of EvaluateFor.
+func stricterLevel(a, b string) string {
+	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}

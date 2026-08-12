@@ -350,14 +350,25 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	}
 
 	// ---- Capability matrix (caps × [prod,staging,dev]) ----
-	caps := []string{"select", "write", "ddl", "grant", "conn", "approve"}
+	//
+	// "explain" is a dimension of its own rather than part of "select". A
+	// plan-only EXPLAIN executes nothing, but it still exposes a statement's
+	// schema and row-count statistics — including for statements the role is
+	// forbidden to run — so whether a role may read a plan is a separate question
+	// from whether it may read data. It is listed last so the rows above keep
+	// their positions in the matrices below.
+	//
+	// Seeded "allow" everywhere, which is exactly the behaviour before it existed.
+	// The dimension is here so an operator CAN restrict it, not so the product
+	// decides for them.
+	caps := []string{"select", "write", "ddl", "grant", "conn", "approve", "explain"}
 	envs := []string{"prod", "staging", "dev"}
 	matrices := map[string][][]string{
-		"admin": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "deny"}},
-		"owner": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}},
-		"l2":    {{"allow", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}},
-		"ro":    {{"allow", "allow", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}},
-		"audit": {{"allow", "allow", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}},
+		"admin": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "deny"}, {"allow", "allow", "allow"}},
+		"owner": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}},
+		"l2":    {{"allow", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
+		"ro":    {{"allow", "allow", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
+		"audit": {{"allow", "allow", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
 	}
 	for code, rows := range matrices {
 		for ci, capName := range caps {
