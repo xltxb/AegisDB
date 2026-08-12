@@ -30,11 +30,11 @@ func (v Verdict) RequiresApproval() bool { return v.Action == ActionApprove }
 
 // Store supplies the engine with capability-matrix and risk-dictionary data.
 type Store interface {
-	// CapabilityLevel returns allow|approve|deny for role×capability×env. A row
+	// CapabilityLevel returns allow|approve|deny for role×capability×TIER. A row
 	// that simply does not exist means allow; a non-nil error means the level is
 	// UNKNOWN and must not be confused with it (ED3).
-	CapabilityLevel(roleID int64, capability, env string) (string, error)
-	// RiskCommands returns the full high-risk dictionary (all envs). An error
+	CapabilityLevel(roleID int64, capability, tier string) (string, error)
+	// RiskCommands returns the full high-risk dictionary (all tiers). An error
 	// means the dictionary is unavailable, not that it is empty.
 	RiskCommands() ([]model.RiskCommand, error)
 }
@@ -371,8 +371,7 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 		return "", "", err
 	}
 	for _, rc := range cmds {
-		// RiskCommand.Env is the tier code (column kept for compatibility).
-		if !strings.EqualFold(rc.Env, tier) { // match is case-insensitive
+		if !strings.EqualFold(rc.TierCode, tier) { // match is case-insensitive
 			continue
 		}
 		names = append(names, regexp.QuoteMeta(rc.Command))

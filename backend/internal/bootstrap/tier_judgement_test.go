@@ -172,13 +172,13 @@ func TestRiskCommands_UpsertReachesEveryTierIncludingOnesTheCallerOmitted(t *tes
 	// Exactly the map the old console sent: gli absent, prod-hk absent.
 	eq(t, app.do(http.MethodPost, "/api/v1/risk-commands", admin, map[string]any{
 		"command": "SHUTDOWN",
-		"env":     map[string]string{"prod": "high", "staging": "mid", "dev": "off"},
+		"tiers":   map[string]string{"prod": "high", "staging": "mid", "dev": "off"},
 	}).Code, 0, "add a dictionary command")
 
 	for _, tier := range []string{"prod", "gli", "staging", "dev", "prod-hk"} {
 		var n int64
 		app.repo.DB().Model(&model.RiskCommand{}).
-			Where("command = ? AND env = ?", "SHUTDOWN", tier).Count(&n)
+			Where("command = ? AND tier_code = ?", "SHUTDOWN", tier).Count(&n)
 		if n != 1 {
 			t.Errorf("tier %q has %d rows for SHUTDOWN, want exactly 1 — a missing row reads as off", tier, n)
 		}
@@ -221,7 +221,7 @@ func TestScriptScan_FollowsTheScanBaselineTier(t *testing.T) {
 
 	// Give dev its own harmless view of DROP, then make dev the baseline.
 	eq(t, app.do(http.MethodPatch, "/api/v1/risk-commands/DROP", admin,
-		map[string]any{"env": "dev", "level": "off"}).Code, 0, "set DROP off on dev")
+		map[string]any{"tier": "dev", "level": "off"}).Code, 0, "set DROP off on dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/env-tiers/dev", admin, map[string]any{
 		"displayName": "测试 · DEV", "scanBaseline": true,
 		"connLayer": "L4 沙盒", "defaultRole": "developer",

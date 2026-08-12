@@ -1,0 +1,21 @@
+-- 0016: the rule tables' `env` column is a TIER code — name it that way.
+--
+-- tbl_role_capability.env and tbl_risk_command.env have held an EnvTier.Code ever
+-- since tiers and environments were split (0012). The column kept its old name so
+-- that migration could move no data, and the name has been lying ever since: the
+-- API returned {"env": {"prod": "high", "gli": "mid", …}} and every reader
+-- reasonably concluded that rules were bound to environments.
+--
+-- They are not, and the difference matters. prod-hk and prod-sh are environments
+-- on the prod TIER; they own no rule rows at all and are governed by prod's. A
+-- reader who believes the rules are per environment will go looking for prod-hk's
+-- rows, find none, and draw exactly the wrong conclusion about whether that
+-- cluster is regulated.
+--
+-- Renaming only. No row moves, no value changes: the data was always tier codes.
+--
+-- Both columns are part of their table's PRIMARY KEY. MySQL 8.0's RENAME COLUMN
+-- carries the key and index definitions across, which is why this is one
+-- statement rather than a rebuild (docker-compose pins mysql:8.0).
+ALTER TABLE tbl_role_capability RENAME COLUMN env TO tier_code;
+ALTER TABLE tbl_risk_command    RENAME COLUMN env TO tier_code;

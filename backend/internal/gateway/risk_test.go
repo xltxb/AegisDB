@@ -47,7 +47,7 @@ func TestMapVerbToCapability_CaseInsensitive(t *testing.T) {
 // lower-case connection env and any-case SQL. Regression for env being compared
 // with '!=' (case-sensitive) which silently skipped the rule.
 func TestEvaluate_DictionaryMatchCaseInsensitive(t *testing.T) {
-	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", Env: "PROD", Level: model.RiskHigh}}}
+	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
 	e := NewRiskEngine(store, false)
 
 	for _, sql := range []string{"drop table x", "DROP TABLE x", "DrOp TaBlE x"} {
@@ -66,7 +66,7 @@ func TestEvaluate_DictionaryMatchCaseInsensitive(t *testing.T) {
 // by the server, so the engine must NOT treat it as a harmless read. Regression
 // for StripComments deleting the comment body and letting DROP fall to allow.
 func TestEvaluate_ExecutableCommentNotBypassed(t *testing.T) {
-	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", Env: "PROD", Level: model.RiskHigh}}}
+	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
 	e := NewRiskEngine(store, false)
 
 	for _, sql := range []string{
@@ -85,7 +85,7 @@ func TestEvaluate_ExecutableCommentNotBypassed(t *testing.T) {
 // DROP/DELETE must be judged on its real verb, not treated as a read. Regression
 // for ParseVerb returning EXPLAIN → mapped to select → allow.
 func TestEvaluate_ExplainAnalyzeUsesRealVerb(t *testing.T) {
-	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", Env: "PROD", Level: model.RiskHigh}}}
+	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
 	e := NewRiskEngine(store, true) // strict mode on (catches no-WHERE DML too)
 
 	// dictionary-matched DROP behind EXPLAIN ANALYZE

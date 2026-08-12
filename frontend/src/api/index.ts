@@ -183,10 +183,10 @@ export const api = {
 
   // ---- risk commands ----
   riskCommands: () => http.get<any, Envelope<RiskCommandView[]>>('/risk-commands').then(ok),
-  upsertRiskCommand: (command: string, env: Record<string, string>) =>
-    http.post<any, Envelope<RiskCommandView[]>>('/risk-commands', { command, env }).then(ok),
-  patchRiskCommand: (name: string, env: string, level: string) =>
-    http.patch<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`, { env, level }).then(ok),
+  upsertRiskCommand: (command: string, tiers: Record<string, string>) =>
+    http.post<any, Envelope<RiskCommandView[]>>('/risk-commands', { command, tiers }).then(ok),
+  patchRiskCommand: (name: string, tier: string, level: string) =>
+    http.patch<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`, { tier, level }).then(ok),
   deleteRiskCommand: (name: string) =>
     http.delete<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`).then(ok),
 

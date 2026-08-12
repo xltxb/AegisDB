@@ -77,16 +77,16 @@ func TestMigrate_BackfillsGliEnvironmentRules(t *testing.T) {
 	db := app.repo.DB()
 
 	// Simulate a database installed before GLI existed.
-	db.Where("env = ?", model.EnvGli).Delete(&model.RoleCapability{})
-	db.Where("env = ?", model.EnvGli).Delete(&model.RiskCommand{})
+	db.Where("tier_code = ?", model.EnvGli).Delete(&model.RoleCapability{})
+	db.Where("tier_code = ?", model.EnvGli).Delete(&model.RiskCommand{})
 
 	if err := Migrate(app.cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 
 	var caps, cmds int64
-	db.Model(&model.RoleCapability{}).Where("env = ?", model.EnvGli).Count(&caps)
-	db.Model(&model.RiskCommand{}).Where("env = ?", model.EnvGli).Count(&cmds)
+	db.Model(&model.RoleCapability{}).Where("tier_code = ?", model.EnvGli).Count(&caps)
+	db.Model(&model.RiskCommand{}).Where("tier_code = ?", model.EnvGli).Count(&cmds)
 	if caps == 0 || cmds == 0 {
 		t.Errorf("after migrate GLI is unregulated: capability rows=%d dictionary rows=%d", caps, cmds)
 	}

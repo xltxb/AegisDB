@@ -268,7 +268,7 @@ func (h *Handler) UpsertRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	if err := h.Repo.UpsertRiskCommand(req.Command, req.Env); err != nil {
+	if err := h.Repo.UpsertRiskCommand(req.Command, req.Tiers); err != nil {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
@@ -282,7 +282,7 @@ func (h *Handler) PatchRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	if err := h.Repo.PatchRiskLevel(name, req.Env, req.Level); err != nil {
+	if err := h.Repo.PatchRiskLevel(name, req.Tier, req.Level); err != nil {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}

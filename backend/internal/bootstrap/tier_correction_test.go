@@ -80,8 +80,8 @@ func TestBuiltinTiers_UpgradeRelabelsAndAddsUat(t *testing.T) {
 	db.Model(&model.Environment{}).Where("code = ?", "gli").Update("display_name", "灰度 · GLI")
 	db.Where("code = ?", "uat").Delete(&model.EnvTier{})
 	db.Where("code = ?", "uat").Delete(&model.Environment{})
-	db.Where("env = ?", "uat").Delete(&model.RoleCapability{})
-	db.Where("env = ?", "uat").Delete(&model.RiskCommand{})
+	db.Where("tier_code = ?", "uat").Delete(&model.RoleCapability{})
+	db.Where("tier_code = ?", "uat").Delete(&model.RiskCommand{})
 
 	if err := Migrate(app.cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)

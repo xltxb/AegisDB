@@ -93,7 +93,7 @@ func TestRiskDictionary_HotReload(t *testing.T) {
 	}
 
 	r := app.do(http.MethodPatch, "/api/v1/risk-commands/DROP", token, map[string]any{
-		"env": "dev", "level": "high",
+		"tier": "dev", "level": "high",
 	})
 	eq(t, r.Code, 0, "patch risk command response code")
 

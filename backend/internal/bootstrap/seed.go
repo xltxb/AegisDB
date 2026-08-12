@@ -144,7 +144,7 @@ func backfillExplainCapability(db *gorm.DB) error {
 		for _, t := range tiers {
 			var n int64
 			if err := db.Model(&model.RoleCapability{}).
-				Where("role_id = ? AND capability = ? AND env = ?", r.ID, "explain", t.Code).
+				Where("role_id = ? AND capability = ? AND tier_code = ?", r.ID, "explain", t.Code).
 				Count(&n).Error; err != nil {
 				return err
 			}
@@ -152,7 +152,7 @@ func backfillExplainCapability(db *gorm.DB) error {
 				continue
 			}
 			if err := db.Create(&model.RoleCapability{
-				RoleID: r.ID, Capability: "explain", Env: t.Code, Level: model.LevelAllow,
+				RoleID: r.ID, Capability: "explain", TierCode: t.Code, Level: model.LevelAllow,
 			}).Error; err != nil {
 				return err
 			}
@@ -312,17 +312,17 @@ func backfillGliEnv(db *gorm.DB) error {
 // one as permission granted, so a half-populated tier is an unregulated one.
 func mirrorTierRules(db *gorm.DB, src, dst string) error {
 	var caps []model.RoleCapability
-	if err := db.Where("env = ?", src).Find(&caps).Error; err != nil {
+	if err := db.Where("tier_code = ?", src).Find(&caps).Error; err != nil {
 		return err
 	}
 	for _, row := range caps {
 		var n int64
 		db.Model(&model.RoleCapability{}).
-			Where("role_id = ? AND capability = ? AND env = ?", row.RoleID, row.Capability, dst).
+			Where("role_id = ? AND capability = ? AND tier_code = ?", row.RoleID, row.Capability, dst).
 			Count(&n)
 		if n == 0 {
 			if err := db.Create(&model.RoleCapability{
-				RoleID: row.RoleID, Capability: row.Capability, Env: dst, Level: row.Level,
+				RoleID: row.RoleID, Capability: row.Capability, TierCode: dst, Level: row.Level,
 			}).Error; err != nil {
 				return err
 			}
@@ -330,14 +330,14 @@ func mirrorTierRules(db *gorm.DB, src, dst string) error {
 	}
 
 	var cmds []model.RiskCommand
-	if err := db.Where("env = ?", src).Find(&cmds).Error; err != nil {
+	if err := db.Where("tier_code = ?", src).Find(&cmds).Error; err != nil {
 		return err
 	}
 	for _, r := range cmds {
 		var n int64
-		db.Model(&model.RiskCommand{}).Where("command = ? AND env = ?", r.Command, dst).Count(&n)
+		db.Model(&model.RiskCommand{}).Where("command = ? AND tier_code = ?", r.Command, dst).Count(&n)
 		if n == 0 {
-			if err := db.Create(&model.RiskCommand{Command: r.Command, Env: dst, Level: r.Level}).Error; err != nil {
+			if err := db.Create(&model.RiskCommand{Command: r.Command, TierCode: dst, Level: r.Level}).Error; err != nil {
 				return err
 			}
 		}
@@ -419,7 +419,7 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	for code, rows := range matrices {
 		for ci, capName := range caps {
 			for ei, env := range envs {
-				create(&model.RoleCapability{RoleID: roleID[code], Capability: capName, Env: env, Level: rows[ci][ei]})
+				create(&model.RoleCapability{RoleID: roleID[code], Capability: capName, TierCode: env, Level: rows[ci][ei]})
 			}
 		}
 	}
@@ -447,9 +447,9 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		{"GRANT", "mid", "mid", "off"}, {"REVOKE", "mid", "mid", "off"},
 	}
 	for _, d := range dict {
-		create(&model.RiskCommand{Command: d.cmd, Env: "prod", Level: d.prod})
-		create(&model.RiskCommand{Command: d.cmd, Env: "staging", Level: d.staging})
-		create(&model.RiskCommand{Command: d.cmd, Env: "dev", Level: d.dev})
+		create(&model.RiskCommand{Command: d.cmd, TierCode: "prod", Level: d.prod})
+		create(&model.RiskCommand{Command: d.cmd, TierCode: "staging", Level: d.staging})
+		create(&model.RiskCommand{Command: d.cmd, TierCode: "dev", Level: d.dev})
 	}
 
 	// ---- Webhook + settings ----

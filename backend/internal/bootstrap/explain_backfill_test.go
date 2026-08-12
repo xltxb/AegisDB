@@ -21,7 +21,7 @@ func explainRows(t *testing.T, app *testApp) map[string]string {
 	}
 	out := map[string]string{}
 	for _, r := range rows {
-		out[itoa(r.RoleID)+"/"+r.Env] = r.Level
+		out[itoa(r.RoleID)+"/"+r.TierCode] = r.Level
 	}
 	return out
 }
@@ -77,7 +77,7 @@ func TestExplainBackfill_DoesNotOverwriteAnOperatorsChoice(t *testing.T) {
 		t.Fatalf("read role: %v", err)
 	}
 	if err := db.Model(&model.RoleCapability{}).
-		Where("role_id = ? AND capability = ? AND env = ?", role.ID, "explain", "prod").
+		Where("role_id = ? AND capability = ? AND tier_code = ?", role.ID, "explain", "prod").
 		Update("level", model.LevelDeny).Error; err != nil {
 		t.Fatalf("deny explain: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestExplainBackfill_DoesNotOverwriteAnOperatorsChoice(t *testing.T) {
 	}
 
 	var row model.RoleCapability
-	if err := db.First(&row, "role_id = ? AND capability = ? AND env = ?", role.ID, "explain", "prod").Error; err != nil {
+	if err := db.First(&row, "role_id = ? AND capability = ? AND tier_code = ?", role.ID, "explain", "prod").Error; err != nil {
 		t.Fatalf("read back: %v", err)
 	}
 	eq(t, row.Level, model.LevelDeny, "a deliberate deny must survive the backfill")
@@ -105,7 +105,7 @@ func TestExplainBackfill_ANewTierGetsExplainRowsFromItsTemplate(t *testing.T) {
 
 	var n int64
 	app.repo.DB().Model(&model.RoleCapability{}).
-		Where("capability = ? AND env = ?", "explain", "prod-hk").Count(&n)
+		Where("capability = ? AND tier_code = ?", "explain", "prod-hk").Count(&n)
 	if n == 0 {
 		t.Error("a new tier has no explain rows — the clone is what makes a tier governed from the start")
 	}

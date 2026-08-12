@@ -511,7 +511,7 @@ func (s *Services) RiskDictView() []dto.RiskCommandView {
 	order, grouped := s.Repo.RiskCommandsGrouped()
 	out := []dto.RiskCommandView{}
 	for _, cmd := range order {
-		out = append(out, dto.RiskCommandView{Command: cmd, Env: grouped[cmd]})
+		out = append(out, dto.RiskCommandView{Command: cmd, Tiers: grouped[cmd]})
 	}
 	return out
 }

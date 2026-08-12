@@ -305,12 +305,16 @@ type MemberReq struct {
 // ---- Risk commands ----
 
 type RiskCommandUpsertReq struct {
-	Command string            `json:"command" binding:"required"`
-	Env     map[string]string `json:"env" binding:"required"` // prod/staging/dev -> high|mid|off
+	Command string `json:"command" binding:"required"`
+	// Keyed by TIER code, not environment: the dictionary is per control tier, and
+	// prod-hk inherits prod's rows rather than owning any. Levels the caller omits
+	// are left as they are on tiers that already have a row, and filled with a
+	// default on tiers that have none — see Repo.UpsertRiskCommand.
+	Tiers map[string]string `json:"tiers" binding:"required"` // tier -> high|mid|off
 }
 
 type RiskCommandPatchReq struct {
-	Env   string `json:"env" binding:"required"`
+	Tier  string `json:"tier" binding:"required"` // tier code
 	Level string `json:"level" binding:"required"`
 }
 
@@ -375,8 +379,10 @@ type UserView struct {
 }
 
 type RiskCommandView struct {
-	Command string            `json:"command"`
-	Env     map[string]string `json:"env"` // prod/staging/dev -> high|mid|off
+	Command string `json:"command"`
+	// tier code -> high|mid|off. Named for what it holds: the previous name said
+	// `env` and every reader concluded rules were bound to environments.
+	Tiers map[string]string `json:"tiers"`
 }
 
 // AsyncSubmitResp is the result of submitting a long-running SQL for background

@@ -53,8 +53,8 @@ func (a *testApp) environments(token string) []envRow {
 func (a *testApp) countRuleRows(tier string) (caps, cmds int64) {
 	a.t.Helper()
 	db := a.repo.DB()
-	db.Model(&model.RoleCapability{}).Where("env = ?", tier).Count(&caps)
-	db.Model(&model.RiskCommand{}).Where("env = ?", tier).Count(&cmds)
+	db.Model(&model.RoleCapability{}).Where("tier_code = ?", tier).Count(&caps)
+	db.Model(&model.RiskCommand{}).Where("tier_code = ?", tier).Count(&cmds)
 	return
 }
 

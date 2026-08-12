@@ -29,8 +29,8 @@ const meta = computed(() => {
 const env = computed(() => props.conn?.env || 'prod')
 const prodChips = computed(() =>
   props.riskCommands
-    .filter((c) => c.env[env.value] && c.env[env.value] !== 'off')
-    .map((c) => ({ name: c.command, high: c.env[env.value] === 'high' })),
+    .filter((c) => c.tiers[env.value] && c.tiers[env.value] !== 'off')
+    .map((c) => ({ name: c.command, high: c.tiers[env.value] === 'high' })),
 )
 const chainView = computed(() => {
   const me = auth.me
