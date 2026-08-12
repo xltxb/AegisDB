@@ -112,7 +112,53 @@ func backfillEnvTiers(db *gorm.DB) error {
 	if err := correctBuiltinTiers(db); err != nil {
 		return err
 	}
+	if err := backfillExplainCapability(db); err != nil {
+		return err
+	}
 	return backfillEnvTierMenu(db)
+}
+
+// backfillExplainCapability writes the `explain` row for every role × tier that
+// has none.
+//
+// A missing capability row reads as `allow`, so behaviour is identical either
+// way — this is about what the permissions page can show. Without the rows it
+// renders the default rather than a stored value, so an administrator looking at
+// the matrix cannot tell "nobody has decided this" from "somebody chose allow",
+// and the first save would be writing values they never actually reviewed.
+//
+// Per cell, and only where absent: a level an operator has set is never touched.
+// Deleting a row means "fall back to the default", and the default is what gets
+// written back — same meaning, now visible. Tiers created later get their rows
+// from the template clone (Repo.CreateEnvTierFrom), not from here.
+func backfillExplainCapability(db *gorm.DB) error {
+	var roles []model.Role
+	if err := db.Find(&roles).Error; err != nil {
+		return err
+	}
+	var tiers []model.EnvTier
+	if err := db.Find(&tiers).Error; err != nil {
+		return err
+	}
+	for _, r := range roles {
+		for _, t := range tiers {
+			var n int64
+			if err := db.Model(&model.RoleCapability{}).
+				Where("role_id = ? AND capability = ? AND env = ?", r.ID, "explain", t.Code).
+				Count(&n).Error; err != nil {
+				return err
+			}
+			if n > 0 {
+				continue
+			}
+			if err := db.Create(&model.RoleCapability{
+				RoleID: r.ID, Capability: "explain", Env: t.Code, Level: model.LevelAllow,
+			}).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // wrongBuiltinNames are the display names this product shipped with before the
