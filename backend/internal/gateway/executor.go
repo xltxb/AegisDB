@@ -38,20 +38,36 @@ func NewExecutor() *Executor { return &Executor{} }
 // engine) it opens the target DB and runs the statement; otherwise it returns a
 // simulated result (demo instances are unreachable in dev; timeout is ignored).
 func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration) ExecResult {
+	// Ms is MEASURED here, around the call itself, for every path.
+	//
+	// A real run never set it, so the console reported every query as "0ms"; the
+	// simulated one reported rand.Intn(40)+4 — an invented latency printed in the
+	// same place, in the same format, as a measurement. A number nobody measured
+	// is worse than no number, because it is indistinguishable from one that was.
+	//
+	// It times the execution, not the request: judgement, approval routing and
+	// the audit write are the gateway's own overhead and do not belong in a figure
+	// an operator reads as "how long the database took".
+	started := time.Now()
+	elapsed := func() int { return int(time.Since(started).Milliseconds()) }
+
 	if RealExecSupported(conn) {
 		res, err := RealRun(conn, sql, timeout)
 		if err != nil {
-			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err}
+			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err, Ms: elapsed()}
 		}
+		res.Ms = elapsed()
 		return res
 	}
-	ms := rand.Intn(40) + 4
+	// Simulated: the ROW COUNT is still synthetic (there is no database to ask),
+	// but the duration is the real time this took. The output text no longer
+	// carries it — the console renders Ms uniformly for both paths.
 	if IsRead(sql) {
 		rows := rand.Intn(9000) + 200
-		return ExecResult{Output: fmt.Sprintf("+ %s rows · %dms", thousands(rows), ms), Rows: rows, Ms: ms}
+		return ExecResult{Output: fmt.Sprintf("+ %s rows", thousands(rows)), Rows: rows, Ms: elapsed()}
 	}
 	affected := rand.Intn(5)
-	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响 · %dms", affected, ms), Rows: affected, Ms: ms}
+	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", affected), Rows: affected, Ms: elapsed()}
 }
 
 // Test simulates "test connection & attach to gateway".

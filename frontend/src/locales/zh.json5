@@ -313,6 +313,7 @@
   termTruncated: ' · 已截断,显示前 {n}',
   termShownFirst: ' · 显示前 {n}',
   termRows: '({n} 行{more} · {ms}ms)',
+  termTook: ' · 耗时 {ms}ms',
   termExecOk: '✓ 执行成功',
   termIntercepted: '⚠ 命令被拦截,需审批',
   termHitRuleLine: '  命中规则  {rule}',

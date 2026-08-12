@@ -297,6 +297,7 @@
   termTruncated: ' · truncated, first {n}',
   termShownFirst: ' · first {n}',
   termRows: '({n} rows{more} · {ms}ms)',
+  termTook: ' · took {ms}ms',
   termExecOk: '✓ Executed successfully',
   termIntercepted: '⚠ Command intercepted, approval required',
   termHitRuleLine: '  matched rule  {rule}',
