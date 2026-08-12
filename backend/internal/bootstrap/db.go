@@ -87,6 +87,6 @@ var allModels = []any{
 	&model.Approval{}, &model.ApprovalStep{}, &model.AuditLog{},
 	&model.WebhookConfig{}, &model.WebhookDelivery{}, &model.SchemaObject{}, &model.Setting{},
 	&model.Notification{}, &model.RoleTag{}, &model.ExportJob{}, &model.ScriptUpload{},
-	&model.AsyncJob{}, &model.UserTag{},
+	&model.AsyncJob{}, &model.UserTag{}, &model.TerminalSnippet{},
 	&model.EnvTier{}, &model.Environment{},
 }

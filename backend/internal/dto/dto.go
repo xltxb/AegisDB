@@ -114,6 +114,15 @@ type TranscriptExportReq struct {
 	Database string `json:"database"`
 }
 
+// SnippetReq creates or updates one terminal snippet. Slot is the hotkey 1-9,
+// or 0 for "saved but unbound" — so it is NOT `binding:"required"`, which would
+// reject the zero value and make unbinding a hotkey impossible to express.
+type SnippetReq struct {
+	Name string `json:"name"`
+	Body string `json:"body"`
+	Slot int    `json:"slot"`
+}
+
 type ScriptScanReq struct {
 	ConnectionID int64 `json:"connectionId"`
 	// Content is optional when UploadID names an already-uploaded script: the

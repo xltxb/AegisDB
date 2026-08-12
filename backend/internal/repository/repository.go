@@ -1202,6 +1202,66 @@ func (r *Repo) DeleteScriptUpload(id int64) error {
 	return r.db.Delete(&model.ScriptUpload{}, id).Error
 }
 
+// ------------------------------------------------------- terminal snippets
+
+// ListSnippets returns one user's snippets, bound hotkeys first (1-9 in order)
+// and the unbound ones after, so the list reads in the order the keys are pressed.
+func (r *Repo) ListSnippets(userID int64) ([]model.TerminalSnippet, error) {
+	var ss []model.TerminalSnippet
+	err := r.db.Where("user_id = ?", userID).
+		Order("CASE WHEN slot > 0 THEN 0 ELSE 1 END, slot, id desc").Find(&ss).Error
+	return ss, err
+}
+
+func (r *Repo) GetSnippet(id int64) (*model.TerminalSnippet, error) {
+	var s model.TerminalSnippet
+	if err := r.db.First(&s, id).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *Repo) CountSnippets(userID int64) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.TerminalSnippet{}).Where("user_id = ?", userID).Count(&n).Error
+	return n, err
+}
+
+// SaveSnippet creates or updates one snippet, releasing whichever OTHER snippet
+// of the same user held the hotkey being claimed.
+//
+// The release and the write are one transaction. Done as two calls, a failure
+// between them leaves the user with either two snippets answering to one key or
+// none — and the hotkey would then run whichever row the database happened to
+// return first, which is not a thing anyone can debug from the UI. Slot 0 means
+// unbound and never displaces anything: it is the value most rows hold.
+func (r *Repo) SaveSnippet(s *model.TerminalSnippet) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if s.Slot > 0 {
+			q := tx.Model(&model.TerminalSnippet{}).
+				Where("user_id = ? AND slot = ?", s.UserID, s.Slot)
+			if s.ID > 0 {
+				q = q.Where("id <> ?", s.ID)
+			}
+			if err := q.Update("slot", 0).Error; err != nil {
+				return err
+			}
+		}
+		// Select the columns explicitly: Slot's zero value is meaningful (unbound),
+		// and GORM's Updates() skips zero-valued fields on a struct — so clearing a
+		// hotkey by saving slot 0 would silently keep the old binding.
+		if s.ID > 0 {
+			return tx.Model(&model.TerminalSnippet{ID: s.ID}).
+				Select("name", "body", "slot", "updated_at").Updates(s).Error
+		}
+		return tx.Create(s).Error
+	})
+}
+
+func (r *Repo) DeleteSnippet(id int64) error {
+	return r.db.Delete(&model.TerminalSnippet{}, id).Error
+}
+
 func (r *Repo) GetSetting(k string) (string, error) {
 	var s model.Setting
 	if err := r.db.First(&s, "k = ?", k).Error; err != nil {

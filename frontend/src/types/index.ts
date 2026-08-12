@@ -284,6 +284,31 @@ export interface ScriptUpload {
   createdAt: string
 }
 
+/**
+ * A saved terminal script bound to a hotkey. Owned by its author — the API only
+ * ever returns the caller's own.
+ *
+ * There is no risk/approval field on purpose. A snippet is text, not a stored
+ * verdict: firing the hotkey submits `body` through the normal exec path, so it
+ * is judged against the instance it lands on, when it lands there.
+ */
+export interface TerminalSnippet {
+  id: number
+  userId: number
+  name: string
+  body: string
+  slot: number // 1-9 = Alt+N, 0 = saved but unbound
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SnippetLimits {
+  maxBytes: number
+  maxName: number
+  maxSlot: number
+  max: number
+}
+
 export interface Notification {
   id: number
   userId: number

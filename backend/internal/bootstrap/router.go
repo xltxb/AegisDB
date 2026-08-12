@@ -97,6 +97,16 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/scripts/uploads/:id/content", menu("terminal"), h.ScriptUploadContent)
 		a.DELETE("/scripts/uploads/:id", menu("terminal"), h.ScriptUploadDelete)
 
+		// terminal snippets — per-user saved scripts on hotkeys 1-9. There is no
+		// execute route: the hotkey submits the snippet's text through /risk/check
+		// and /terminal/exec above, so it is judged against the instance it is
+		// aimed at when it fires rather than when it was saved.
+		a.GET("/snippets", menu("terminal"), h.Snippets)
+		a.GET("/snippets/limits", menu("terminal"), h.SnippetLimits)
+		a.POST("/snippets", menu("terminal"), h.SnippetSave)
+		a.PUT("/snippets/:id", menu("terminal"), h.SnippetSave)
+		a.DELETE("/snippets/:id", menu("terminal"), h.SnippetDelete)
+
 		// data export (SQL → compressed+encrypted archive on the server)
 		a.GET("/export/config", menu("terminal"), h.ExportConfig)
 		a.POST("/export", menu("terminal"), h.ExportData)

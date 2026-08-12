@@ -2,7 +2,7 @@ import http, { ok, type Envelope } from './http'
 import type {
   Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, EnvTier, Environment, ExecResp, ExportJob,
   LoginResp, Me, Member, Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp,
-  ScriptUpload, SettingsResp, UserView, WebhookConfig, WebhookDelivery,
+  ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
 
 // auditQS builds the audit query string, omitting empty filters. An absolute
@@ -93,6 +93,21 @@ export const api = {
     http.get<any, Blob>(`/scripts/uploads/${id}/download`, { responseType: 'blob' }),
   scriptUploadContent: (id: number) =>
     http.get<any, Envelope<{ content: string; filename: string }>>(`/scripts/uploads/${id}/content`).then(ok),
+
+  // ---- terminal snippets (per-user, hotkeys Alt+1…9) ----
+  // No execute endpoint: a hotkey feeds the snippet's text to the line editor,
+  // which submits it through riskCheck + exec like anything typed. Adding a
+  // "run this snippet" route would be adding a second way into the gateway that
+  // the first one's judgement doesn't cover.
+  snippets: () => http.get<any, Envelope<TerminalSnippet[]>>('/snippets').then(ok),
+  snippetLimits: () => http.get<any, Envelope<SnippetLimits>>('/snippets/limits').then(ok),
+  // raw envelope: the caller shows the server's message, which names the actual
+  // problem (name too long, body over the byte cap, hotkey out of range).
+  snippetSave: (id: number, body: { name: string; body: string; slot: number }) =>
+    id > 0
+      ? http.put<any, Envelope<TerminalSnippet>>(`/snippets/${id}`, body)
+      : http.post<any, Envelope<TerminalSnippet>>('/snippets', body),
+  snippetDelete: (id: number) => http.delete<any, Envelope<any>>(`/snippets/${id}`).then(ok),
 
   // ---- MFA (TOTP) ----
   mfaSetup: () =>
