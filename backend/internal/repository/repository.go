@@ -732,12 +732,30 @@ func (r *Repo) UpsertRiskCommand(command string, levels map[string]string) error
 			return err
 		}
 		for _, t := range tiers {
-			lvl, ok := want[t.Code]
-			if !ok || strings.TrimSpace(lvl) == "" {
-				lvl = defaultRiskLevel(t)
+			if lvl, ok := want[t.Code]; ok && strings.TrimSpace(lvl) != "" {
+				if err := tx.Save(&model.RiskCommand{Command: command, Env: t.Code, Level: lvl}).Error; err != nil {
+					return err
+				}
+				continue
 			}
-			row := model.RiskCommand{Command: command, Env: t.Code, Level: lvl}
-			if err := tx.Save(&row).Error; err != nil {
+			// No level given for this tier. A row that ALREADY exists is left
+			// exactly as it is: editing one tier from the rules page must not
+			// silently rewrite the others, or setting staging to `high` would drag
+			// PROD's own level along with it (R11).
+			//
+			// Only a tier with no row at all gets one, because that is the case
+			// that is not neutral: absent reads as `off`, so the command an
+			// operator just added would not apply there and the page would give no
+			// sign of it.
+			var existing int64
+			if err := tx.Model(&model.RiskCommand{}).
+				Where("command = ? AND env = ?", command, t.Code).Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing > 0 {
+				continue
+			}
+			if err := tx.Save(&model.RiskCommand{Command: command, Env: t.Code, Level: defaultRiskLevel(t)}).Error; err != nil {
 				return err
 			}
 		}
