@@ -49,10 +49,22 @@ func OpenDB(cfg *Config) (*gorm.DB, error) {
 	}
 
 	if shouldAutoMigrate(cfg.Database.Driver, cfg.Database.AutoMigrate) {
-		if err := db.AutoMigrate(allModels...); err != nil {
-			return nil, fmt.Errorf("auto-migrate: %w", err)
+		// Go through autoMigrate, NOT db.AutoMigrate directly. This used to call
+		// GORM itself, so there were two places that migrated the schema and any
+		// step added to the other one was silently missing here — which is exactly
+		// what happened to the env→tier_code rename: boot skipped it, AutoMigrate
+		// added an empty tier_code beside the populated env, and every rule lookup
+		// came back empty. Both lookups read empty as permission granted, so the
+		// gateway came up healthy and ungoverned.
+		if err := autoMigrate(db); err != nil {
+			// Nobody can close a handle they were never handed. Release the pool
+			// here or a failed boot leaves the connection (and, on sqlite, a lock
+			// on the database file) held for the life of the process.
+			if sqlDB, derr := db.DB(); derr == nil {
+				_ = sqlDB.Close()
+			}
+			return nil, err
 		}
-		slog.Info("schema migrated", "driver", cfg.Database.Driver)
 	} else if cfg.Database.AutoMigrate && cfg.Database.Driver == "mysql" {
 		slog.Warn("ignoring auto_migrate for mysql: schema is owned by SQL migrations — run `server migrate`/`server init`")
 	}

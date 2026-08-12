@@ -156,12 +156,19 @@ type RoleMember struct {
 
 func (RoleMember) TableName() string { return "tbl_role_member" }
 
-// RoleCapability — capability × env → level (composite PK).
+// RoleCapability — capability × TIER → level (composite PK).
+//
+// TierCode holds an EnvTier.Code, never an Environment.Code. The column was
+// called `env` until 2026-08-12, from before tiers and environments were separate
+// things; the name outlived the meaning and read as though rules were bound to
+// environments. They never were — prod-hk and prod-sh are governed by the rows of
+// the prod TIER they bind to, which is what makes adding a production cluster
+// copy nothing.
 type RoleCapability struct {
 	RoleID     int64  `gorm:"primaryKey" json:"roleId"`
-	Capability string `gorm:"primaryKey;size:32" json:"capability"` // select|write|ddl|grant|conn|approve
-	Env        string `gorm:"primaryKey;size:16" json:"env"`        // prod|staging|dev
-	Level      string `gorm:"size:16;not null" json:"level"`        // allow|approve|deny
+	Capability string `gorm:"primaryKey;size:32" json:"capability"` // select|write|ddl|grant|conn|approve|explain
+	TierCode   string `gorm:"primaryKey;size:16;column:tier_code" json:"tierCode"`
+	Level      string `gorm:"size:16;not null" json:"level"` // allow|approve|deny
 }
 
 func (RoleCapability) TableName() string { return "tbl_role_capability" }
@@ -295,11 +302,16 @@ type RoleTag struct {
 
 func (RoleTag) TableName() string { return "tbl_role_tag" }
 
-// RiskCommand — high-risk command dictionary entry (command × env → level).
+// RiskCommand — high-risk command dictionary entry (command × TIER → level).
+//
+// TierCode holds an EnvTier.Code. See RoleCapability for why the column stopped
+// being called `env`: matchCommand looks a command up by TIER, and a lookup keyed
+// by an environment code would find no rows — which reads as RiskOff, i.e.
+// permitted.
 type RiskCommand struct {
-	Command string `gorm:"primaryKey;size:32" json:"command"`
-	Env     string `gorm:"primaryKey;size:16" json:"env"`
-	Level   string `gorm:"size:16;not null;default:high" json:"level"` // high|mid|off
+	Command  string `gorm:"primaryKey;size:32" json:"command"`
+	TierCode string `gorm:"primaryKey;size:16;column:tier_code" json:"tierCode"`
+	Level    string `gorm:"size:16;not null;default:high" json:"level"` // high|mid|off
 }
 
 func (RiskCommand) TableName() string { return "tbl_risk_command" }

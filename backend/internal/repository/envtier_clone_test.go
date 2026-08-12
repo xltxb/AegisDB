@@ -40,8 +40,8 @@ func seedTemplate(t *testing.T, db *gorm.DB, code string) {
 		}
 	}
 	must(db.Create(&model.EnvTier{Code: code, DisplayName: code}).Error)
-	must(db.Create(&model.RoleCapability{RoleID: 1, Capability: "ddl", Env: code, Level: "approve"}).Error)
-	must(db.Create(&model.RiskCommand{Command: "DROP", Env: code, Level: "high"}).Error)
+	must(db.Create(&model.RoleCapability{RoleID: 1, Capability: "ddl", TierCode: code, Level: "approve"}).Error)
+	must(db.Create(&model.RiskCommand{Command: "DROP", TierCode: code, Level: "high"}).Error)
 }
 
 // A half-cloned tier is the worst possible outcome: it exists, instances can be
@@ -56,7 +56,7 @@ func TestCreateEnvTierFrom_RollsBackWhenCloneFails(t *testing.T) {
 	seedTemplate(t, db, "prod")
 
 	// A stray row occupying (DROP, prod-hk) — the clone will collide with it.
-	if err := db.Create(&model.RiskCommand{Command: "DROP", Env: "prod-hk", Level: "off"}).Error; err != nil {
+	if err := db.Create(&model.RiskCommand{Command: "DROP", TierCode: "prod-hk", Level: "off"}).Error; err != nil {
 		t.Fatalf("seed stray row: %v", err)
 	}
 
@@ -73,7 +73,7 @@ func TestCreateEnvTierFrom_RollsBackWhenCloneFails(t *testing.T) {
 	}
 	// …and neither may the partially copied capability rows.
 	var caps int64
-	db.Model(&model.RoleCapability{}).Where("env = ?", "prod-hk").Count(&caps)
+	db.Model(&model.RoleCapability{}).Where("tier_code = ?", "prod-hk").Count(&caps)
 	if caps != 0 {
 		t.Errorf("failed clone left %d capability rows behind", caps)
 	}
@@ -105,12 +105,12 @@ func TestCreateEnvTierFrom_ClonesExactlyTheTemplateRows(t *testing.T) {
 	}
 
 	var caps []model.RoleCapability
-	db.Where("env = ?", "prod-hk").Find(&caps)
+	db.Where("tier_code = ?", "prod-hk").Find(&caps)
 	if len(caps) != 1 || caps[0].Level != "approve" || caps[0].Capability != "ddl" {
 		t.Errorf("capability rows not cloned faithfully: %+v", caps)
 	}
 	var cmds []model.RiskCommand
-	db.Where("env = ?", "prod-hk").Find(&cmds)
+	db.Where("tier_code = ?", "prod-hk").Find(&cmds)
 	if len(cmds) != 1 || cmds[0].Command != "DROP" || cmds[0].Level != "high" {
 		t.Errorf("dictionary rows not cloned faithfully: %+v", cmds)
 	}

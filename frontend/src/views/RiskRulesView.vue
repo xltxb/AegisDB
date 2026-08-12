@@ -103,7 +103,7 @@ const hits = ref(0)
 const coverage = computed(() => {
   const total = cmds.value.length
   if (!total) return 0
-  const gated = cmds.value.filter((c) => c.env.prod !== 'off').length
+  const gated = cmds.value.filter((c) => c.tiers.prod !== 'off').length
   return Math.round((gated / total) * 1000) / 10
 })
 
@@ -127,7 +127,7 @@ const nextLevel: Record<string, string> = { high: 'mid', mid: 'off', off: 'high'
 
 async function cycle(c: RiskCommandView) {
   if (!isAdmin.value) return
-  const cur = c.env[env.value] || 'off'
+  const cur = c.tiers[env.value] || 'off'
   // M14: 切换等级失败以 toast 呈现
   try {
     cmds.value = await api.patchRiskCommand(c.command, env.value, nextLevel[cur])
@@ -190,7 +190,7 @@ const policies = computed(() => {
     tagBg: string; tagC: string; expr: string; toggle?: boolean; on?: boolean
   }[] = []
 
-  const highProd = cmds.value.filter((c) => c.env.prod === 'high').map((c) => c.command)
+  const highProd = cmds.value.filter((c) => c.tiers.prod === 'high').map((c) => c.command)
   if (highProd.length) {
     cards.push({
       key: 'pHigh', label: t('pHigh'), tag: t('actBlockAppr'), border: 'var(--danger)',
@@ -208,7 +208,7 @@ const policies = computed(() => {
   })
 
   const midAny = cmds.value
-    .filter((c) => tierCodes.value.some((e) => c.env[e] === 'mid'))
+    .filter((c) => tierCodes.value.some((e) => c.tiers[e] === 'mid'))
     .map((c) => c.command)
   if (midAny.length) {
     cards.push({
@@ -243,9 +243,9 @@ const policies = computed(() => {
         </div>
       </div>
       <div class="chips">
-        <div v-for="c in cmds" :key="c.command" class="chip" :style="{ background: lvlMeta(c.env[env]).bg, color: lvlMeta(c.env[env]).c, opacity: c.env[env] === 'off' ? 0.5 : 1 }">
+        <div v-for="c in cmds" :key="c.command" class="chip" :style="{ background: lvlMeta(c.tiers[env]).bg, color: lvlMeta(c.tiers[env]).c, opacity: c.tiers[env] === 'off' ? 0.5 : 1 }">
           <span class="cname">{{ c.command }}</span>
-          <span class="ctag" :title="isAdmin ? '切换等级' : ''" :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="cycle(c)">{{ lvlMeta(c.env[env]).tag }}</span>
+          <span class="ctag" :title="isAdmin ? '切换等级' : ''" :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="cycle(c)">{{ lvlMeta(c.tiers[env]).tag }}</span>
           <span v-if="isAdmin" class="cx" title="移除" @click="removeCmd(c)"><X :size="12" /></span>
         </div>
         <div v-if="isAdmin" class="addchip">
@@ -276,8 +276,8 @@ const policies = computed(() => {
 
     <!-- stats -->
     <div class="stats">
-      <div class="stat"><div class="n danger">{{ cmds.filter((c) => c.env.prod === 'high').length }}</div><div class="l">{{ $t('statBlock') }}</div></div>
-      <div class="stat"><div class="n warn">{{ cmds.filter((c) => c.env.prod === 'mid').length }}</div><div class="l">{{ $t('statAlert') }}</div></div>
+      <div class="stat"><div class="n danger">{{ cmds.filter((c) => c.tiers.prod === 'high').length }}</div><div class="l">{{ $t('statBlock') }}</div></div>
+      <div class="stat"><div class="n warn">{{ cmds.filter((c) => c.tiers.prod === 'mid').length }}</div><div class="l">{{ $t('statAlert') }}</div></div>
       <div class="stat"><div class="n grad">{{ hits }}</div><div class="l">{{ $t('statHits') }}</div></div>
       <div class="stat"><div class="n">{{ coverage }}%</div><div class="l">{{ $t('statCover') }}</div></div>
     </div>

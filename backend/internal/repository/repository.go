@@ -248,13 +248,15 @@ func (r *Repo) SetMenus(roleID int64, menus map[string]bool) error {
 
 // ----------------------------------------------------------------- Capabilities
 
-// CapabilityLevel implements gateway.Store: role × capability × env -> level (default allow).
-func (r *Repo) CapabilityLevel(roleID int64, capability, env string) (string, error) {
+// CapabilityLevel implements gateway.Store: role × capability × TIER -> level
+// (default allow). `tier` is an EnvTier.Code — passing an environment code finds
+// no row, and no row reads as allow.
+func (r *Repo) CapabilityLevel(roleID int64, capability, tier string) (string, error) {
 	var row model.RoleCapability
-	// Case-insensitive on capability/env so matching is consistent across the
+	// Case-insensitive on capability/tier so matching is consistent across the
 	// SQLite (dev) and MySQL (prod) drivers regardless of stored/input casing.
-	err := r.db.Where("role_id = ? AND LOWER(capability) = ? AND LOWER(env) = ?",
-		roleID, strings.ToLower(strings.TrimSpace(capability)), strings.ToLower(strings.TrimSpace(env))).First(&row).Error
+	err := r.db.Where("role_id = ? AND LOWER(capability) = ? AND LOWER(tier_code) = ?",
+		roleID, strings.ToLower(strings.TrimSpace(capability)), strings.ToLower(strings.TrimSpace(tier))).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return model.LevelAllow, nil // no rule configured for this cell = allow
 	}
@@ -266,7 +268,7 @@ func (r *Repo) CapabilityLevel(roleID int64, capability, env string) (string, er
 	return row.Level, nil
 }
 
-// MatrixForRole returns capability -> env -> level.
+// MatrixForRole returns capability -> tier -> level.
 func (r *Repo) MatrixForRole(roleID int64) (map[string]map[string]string, error) {
 	var rows []model.RoleCapability
 	if err := r.db.Where("role_id = ?", roleID).Find(&rows).Error; err != nil {
@@ -277,16 +279,16 @@ func (r *Repo) MatrixForRole(roleID int64) (map[string]map[string]string, error)
 		if out[c.Capability] == nil {
 			out[c.Capability] = map[string]string{}
 		}
-		out[c.Capability][c.Env] = c.Level
+		out[c.Capability][c.TierCode] = c.Level
 	}
 	return out, nil
 }
 
 func (r *Repo) SetMatrix(roleID int64, matrix map[string]map[string]string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		for cap, envs := range matrix {
-			for env, level := range envs {
-				row := model.RoleCapability{RoleID: roleID, Capability: cap, Env: env, Level: level}
+		for cap, tiers := range matrix {
+			for tier, level := range tiers {
+				row := model.RoleCapability{RoleID: roleID, Capability: cap, TierCode: tier, Level: level}
 				if err := tx.Save(&row).Error; err != nil {
 					return err
 				}
@@ -426,7 +428,7 @@ func (r *Repo) MenusForRoles(ids []int64) (map[string]bool, error) {
 var levelRank = map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 
 // MatrixForRoles merges several roles' capability matrices, keeping the MOST
-// permissive level per capability×env cell (union semantics for the /me view).
+// permissive level per capability×tier cell (union semantics for the /me view).
 func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error) {
 	out := map[string]map[string]string{}
 	for _, id := range ids {
@@ -434,13 +436,13 @@ func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error)
 		if err != nil {
 			return nil, err
 		}
-		for cap, envs := range m {
+		for cap, tiers := range m {
 			if out[cap] == nil {
 				out[cap] = map[string]string{}
 			}
-			for env, level := range envs {
-				if cur, ok := out[cap][env]; !ok || levelRank[level] < levelRank[cur] {
-					out[cap][env] = level
+			for tier, level := range tiers {
+				if cur, ok := out[cap][tier]; !ok || levelRank[level] < levelRank[cur] {
+					out[cap][tier] = level
 				}
 			}
 		}
@@ -554,22 +556,22 @@ func (r *Repo) CreateEnvTierFrom(t *model.EnvTier, templateCode string) error {
 		}
 
 		var caps []model.RoleCapability
-		if err := tx.Where("env = ?", templateCode).Find(&caps).Error; err != nil {
+		if err := tx.Where("tier_code = ?", templateCode).Find(&caps).Error; err != nil {
 			return err
 		}
 		for _, row := range caps {
-			row.Env = t.Code
+			row.TierCode = t.Code
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
 		}
 
 		var cmds []model.RiskCommand
-		if err := tx.Where("env = ?", templateCode).Find(&cmds).Error; err != nil {
+		if err := tx.Where("tier_code = ?", templateCode).Find(&cmds).Error; err != nil {
 			return err
 		}
 		for _, row := range cmds {
-			row.Env = t.Code
+			row.TierCode = t.Code
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}
@@ -609,10 +611,10 @@ func clearOtherBaselines(tx *gorm.DB, keep string) error {
 // verified that no environment still binds it (service layer).
 func (r *Repo) DeleteEnvTier(code string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("env = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
+		if err := tx.Where("tier_code = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Where("env = ?", code).Delete(&model.RiskCommand{}).Error; err != nil {
+		if err := tx.Where("tier_code = ?", code).Delete(&model.RiskCommand{}).Error; err != nil {
 			return err
 		}
 		return tx.Where("code = ?", code).Delete(&model.EnvTier{}).Error
@@ -674,7 +676,7 @@ func (r *Repo) RiskCommands() ([]model.RiskCommand, error) {
 	return rc, nil
 }
 
-// RiskCommandsGrouped returns command -> env -> level, preserving insertion order of commands.
+// RiskCommandsGrouped returns command -> TIER -> level, preserving insertion order of commands.
 func (r *Repo) RiskCommandsGrouped() ([]string, map[string]map[string]string) {
 	rows, err := r.RiskCommands()
 	if err != nil {
@@ -689,7 +691,7 @@ func (r *Repo) RiskCommandsGrouped() ([]string, map[string]map[string]string) {
 			grouped[c.Command] = map[string]string{}
 			order = append(order, c.Command)
 		}
-		grouped[c.Command][c.Env] = c.Level
+		grouped[c.Command][c.TierCode] = c.Level
 	}
 	sort.SliceStable(order, func(i, j int) bool {
 		pi, oki := priority[order[i]]
@@ -733,7 +735,7 @@ func (r *Repo) UpsertRiskCommand(command string, levels map[string]string) error
 		}
 		for _, t := range tiers {
 			if lvl, ok := want[t.Code]; ok && strings.TrimSpace(lvl) != "" {
-				if err := tx.Save(&model.RiskCommand{Command: command, Env: t.Code, Level: lvl}).Error; err != nil {
+				if err := tx.Save(&model.RiskCommand{Command: command, TierCode: t.Code, Level: lvl}).Error; err != nil {
 					return err
 				}
 				continue
@@ -749,13 +751,13 @@ func (r *Repo) UpsertRiskCommand(command string, levels map[string]string) error
 			// sign of it.
 			var existing int64
 			if err := tx.Model(&model.RiskCommand{}).
-				Where("command = ? AND env = ?", command, t.Code).Count(&existing).Error; err != nil {
+				Where("command = ? AND tier_code = ?", command, t.Code).Count(&existing).Error; err != nil {
 				return err
 			}
 			if existing > 0 {
 				continue
 			}
-			if err := tx.Save(&model.RiskCommand{Command: command, Env: t.Code, Level: defaultRiskLevel(t)}).Error; err != nil {
+			if err := tx.Save(&model.RiskCommand{Command: command, TierCode: t.Code, Level: defaultRiskLevel(t)}).Error; err != nil {
 				return err
 			}
 		}
@@ -779,11 +781,11 @@ func defaultRiskLevel(t model.EnvTier) string {
 	return model.RiskOff
 }
 
-func (r *Repo) PatchRiskLevel(command, env, level string) error {
-	// normalize like UpsertRiskCommand so keys stay canonical (command upper, env lower)
+func (r *Repo) PatchRiskLevel(command, tier, level string) error {
+	// normalize like UpsertRiskCommand so keys stay canonical (command upper, tier lower)
 	command = strings.ToUpper(strings.TrimSpace(command))
-	env = strings.ToLower(strings.TrimSpace(env))
-	row := model.RiskCommand{Command: command, Env: env, Level: level}
+	tier = strings.ToLower(strings.TrimSpace(tier))
+	row := model.RiskCommand{Command: command, TierCode: tier, Level: level}
 	return r.db.Save(&row).Error
 }
 

@@ -19,7 +19,7 @@ func TestAdminOnly_OwnerCannotEditConfig(t *testing.T) {
 
 	// risk rules (dictionary)
 	eq(t, app.do(http.MethodPost, "/api/v1/risk-commands", owner, map[string]any{
-		"command": "FOOBAR", "env": map[string]string{"prod": "high", "staging": "off", "dev": "off"},
+		"command": "FOOBAR", "tiers": map[string]string{"prod": "high", "staging": "off", "dev": "off"},
 	}).Code, 40300, "owner blocked: risk command")
 
 	// system settings
@@ -27,6 +27,6 @@ func TestAdminOnly_OwnerCannotEditConfig(t *testing.T) {
 
 	// admin CAN edit the rule dictionary
 	eq(t, app.do(http.MethodPost, "/api/v1/risk-commands", admin, map[string]any{
-		"command": "FOOBAR", "env": map[string]string{"prod": "high", "staging": "off", "dev": "off"},
+		"command": "FOOBAR", "tiers": map[string]string{"prod": "high", "staging": "off", "dev": "off"},
 	}).Code, 0, "admin can edit rules")
 }

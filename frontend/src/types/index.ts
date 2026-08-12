@@ -148,7 +148,9 @@ export interface UserView {
 
 export interface RiskCommandView {
   command: string
-  env: Record<TierCode, string> // tier code -> high|mid|off
+  /** tier code -> high|mid|off. Rules are keyed by CONTROL TIER: prod-hk owns
+   *  no rows of its own and is governed by the prod tier it binds to. */
+  tiers: Record<TierCode, string>
 }
 
 export interface ApprovalStep {

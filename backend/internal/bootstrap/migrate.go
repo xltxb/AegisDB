@@ -11,6 +11,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"velagateway/internal/model"
 	"velagateway/migrations"
 	"velagateway/pkg/sqlutil"
 )
@@ -56,10 +57,75 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).
 func autoMigrate(db *gorm.DB) error {
+	if err := renameRuleTierColumns(db); err != nil {
+		return err
+	}
 	if err := db.AutoMigrate(allModels...); err != nil {
 		return fmt.Errorf("auto-migrate: %w", err)
 	}
 	slog.Info("schema migrated (auto-migrate)")
+	return nil
+}
+
+// renameRuleTierColumns renames `env` to `tier_code` on the two rule tables,
+// BEFORE AutoMigrate looks at them.
+//
+// The order is the whole point. AutoMigrate does not rename anything: shown a
+// model whose field no longer matches the column, it ADDS `tier_code` and leaves
+// `env` in place, still holding the data and still part of the primary key. Every
+// rule lookup would then read an empty column and find nothing — and both lookups
+// spell "no rows" as permission granted. The database would come up looking
+// healthy with every instance ungoverned.
+//
+// MySQL takes the equivalent step through migration 0016. This path is dev and
+// test (sqlite), where the schema comes from the models.
+func renameRuleTierColumns(db *gorm.DB) error {
+	m := db.Migrator()
+	for _, tbl := range []struct {
+		model any
+		name  string
+	}{
+		{&model.RoleCapability{}, "tbl_role_capability"},
+		{&model.RiskCommand{}, "tbl_risk_command"},
+	} {
+		if !m.HasTable(tbl.model) {
+			continue // fresh database: AutoMigrate creates it with the right name
+		}
+		// Read the real column list rather than asking about a field the model no
+		// longer has. Migrator.HasColumn resolves names through the model schema
+		// first, which makes it an unreliable way to ask "is the OLD column still
+		// there" — precisely the question here.
+		cols, err := m.ColumnTypes(tbl.model)
+		if err != nil {
+			return fmt.Errorf("read columns of %s: %w", tbl.name, err)
+		}
+		var hasEnv, hasTier bool
+		for _, c := range cols {
+			switch c.Name() {
+			case "env":
+				hasEnv = true
+			case "tier_code":
+				hasTier = true
+			}
+		}
+		if !hasEnv {
+			continue // already renamed, or created new
+		}
+		if hasTier {
+			// Half-migrated: a build that added tier_code without moving the data.
+			// tier_code is empty, env still holds the tier codes, and `env` is part
+			// of the primary key so it cannot simply be dropped. Refuse rather than
+			// start — every rule lookup would read the empty column and find
+			// nothing, and nothing is how this system spells "allowed".
+			return fmt.Errorf(
+				"%s has both `env` and `tier_code`: the schema is half-migrated and rule lookups would read an empty column "+
+					"(which reads as PERMITTED). Restore this database from backup and start again with this build", tbl.name)
+		}
+		if err := db.Exec("ALTER TABLE " + tbl.name + " RENAME COLUMN env TO tier_code").Error; err != nil {
+			return fmt.Errorf("rename %s.env → tier_code: %w", tbl.name, err)
+		}
+		slog.Info("renamed rule column env → tier_code", "table", tbl.name)
+	}
 	return nil
 }
 

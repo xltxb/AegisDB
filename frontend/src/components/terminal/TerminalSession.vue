@@ -118,6 +118,12 @@ const outLines = (arr: string[]) => arr.forEach((l) => out(l))
 // trailing `…` reads as "this is all there is".
 const truncHint = (n: number) => c(ANSI.gray, t('resultTruncatedHint', { n, bs: '\\' }))
 
+// The duration is measured in whole milliseconds, so anything faster than one
+// rounds to zero — which is true but reads as a broken timer. `<1` says the same
+// thing without inviting that reading. It comes up constantly on a simulated
+// connection, where no database is contacted at all.
+const msLabel = (ms?: number) => (ms && ms > 0 ? String(ms) : '<1')
+
 /**
  * Save the session log as a file.
  *
@@ -599,7 +605,7 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     if (pendingVertical.value || expandedMode.value) outLines(renderVertical(m.columns, data))
     else if (!props.gridView) outLines(renderTable(buildTable(m.columns, data), term.cols, truncHint))
     const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
-    out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: m.ms ?? 0 })))
+    out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: msLabel(m.ms) })))
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)
@@ -608,12 +614,15 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     else if (!props.gridView) outLines(renderTable(tb, term.cols, truncHint))
     const shown = tb.rows.length
     const more = shown < rows ? t('termShownFirst', { n: shown }) : ''
-    out(c(ANSI.gray, t('termRows', { n: rows, more, ms: m.ms ?? 0 })))
+    out(c(ANSI.gray, t('termRows', { n: rows, more, ms: msLabel(m.ms) })))
   } else if (m.text) {
+    // A write reports through `text`, so the timing has to be appended here —
+    // the reads above get it from termRows. A notice ("· 目标实例处于维护态") is
+    // not an execution and gets no duration: nothing ran to be timed.
     const notice = m.text.trimStart().startsWith('·')
-    out(notice ? c(ANSI.yellow, m.text) : c(ANSI.green, '✓ ' + m.text))
+    out(notice ? c(ANSI.yellow, m.text) : c(ANSI.green, '✓ ' + m.text) + c(ANSI.gray, t('termTook', { ms: msLabel(m.ms) })))
   } else {
-    out(c(ANSI.green, t('termExecOk')))
+    out(c(ANSI.green, t('termExecOk')) + c(ANSI.gray, t('termTook', { ms: msLabel(m.ms) })))
   }
   risk.value = 'safe'
 }
