@@ -294,6 +294,17 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 		if req.Filename != "" {
 			filename = req.Filename
 		}
+		// Same as /scripts/execute: an already-uploaded script is read here rather
+		// than re-sent. Scanning something other than the file the caller named
+		// would report on a script nobody is going to run.
+		if req.UploadID > 0 {
+			c2, name, rerr := h.Svc.ReadUploadedScriptFor(middleware.CurrentUser(c), req.UploadID)
+			if rerr != nil {
+				resp.Fail(c, resp.CodeForbidden, "脚本文件不可用或不属于当前用户")
+				return
+			}
+			content, filename = c2, name
+		}
 	}
 	scan, err := h.Svc.ScanScript(filename, content)
 	if err != nil {
@@ -318,7 +329,34 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 	// must NOT be saved again — reuse its existing path. A fresh upload is saved.
 	var saved string
 	if req.UploadID > 0 {
-		saved, _, _ = h.Svc.ScriptUploadFile(middleware.CurrentUser(c), req.UploadID)
+		// Read the body from disk and IGNORE whatever the request carried.
+		//
+		// Two reasons. The script is already on this machine, so making the client
+		// re-send megabytes is pointless. And until now the saved path and the
+		// executed text came from different places with nothing checking they
+		// agreed — the ticket could reference one file while a different body was
+		// scanned, approved and run.
+		//
+		// Ownership is checked here, against the CALLER, before anything is read.
+		// Only an upload id is accepted; a client-supplied path would be an
+		// arbitrary file read.
+		var ferr error
+		saved, _, ferr = h.Svc.ScriptUploadFile(middleware.CurrentUser(c), req.UploadID)
+		if ferr != nil {
+			resp.Fail(c, resp.CodeForbidden, "脚本文件不可用或不属于当前用户")
+			return
+		}
+		content, name, rerr := h.Svc.ReadUploadedScriptFor(middleware.CurrentUser(c), req.UploadID)
+		if rerr != nil {
+			resp.Fail(c, resp.CodeBadRequest, "读取脚本失败:"+rerr.Error())
+			return
+		}
+		req.Content, req.Filename = content, name
+	} else if strings.TrimSpace(req.Content) == "" {
+		// Content stopped being a required field so an upload id could stand in for
+		// it; with neither, there is nothing to scan and nothing to run.
+		resp.Fail(c, resp.CodeBadRequest, "请提供脚本内容或已上传脚本的 uploadId")
+		return
 	} else {
 		p, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
 		if err == service.ErrScriptPathUnset {
@@ -341,13 +379,17 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 	if scan.HasRisky {
 		// whole script must be submitted for approval (created from the scan
 		// result, since the `\i file` wrapper isn't itself risk-matched)
-		r, err := h.Svc.SubmitScriptForApproval(middleware.CurrentUser(c), req.ConnectionID, scan.Filename, req.Content, "脚本含高危语句,整脚本提交审批", req.MfaCode, req.Database)
+		r, err := h.Svc.SubmitScriptForApproval(middleware.CurrentUser(c), req.ConnectionID, scan.Filename, req.Content, "脚本含高危语句,整脚本提交审批", req.MfaCode, req.Database, req.UploadID)
 		if err == service.ErrMFARequired {
 			resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 			return
 		}
 		if err != nil {
-			resp.Fail(c, resp.CodeBadRequest, "提交失败")
+			// Carry the reason. This branch used to report a bare "提交失败", so a
+			// storage-level refusal (a script too large for the command column, say)
+			// reached the operator as an unexplained failure with nothing to act on
+			// — the sibling branch below has always included it.
+			resp.Fail(c, resp.CodeBadRequest, "提交失败:"+err.Error())
 			return
 		}
 		resp.FailData(c, resp.CodeIntercepted, "脚本含高危语句,已提交审批", gin.H{"exec": r, "savedPath": saved})

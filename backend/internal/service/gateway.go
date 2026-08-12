@@ -193,7 +193,7 @@ func execResultStatus(res gateway.ExecResult) string {
 // approval is created directly from the scan result (role-level hard denies
 // still block). This is what makes a risky-script submission appear in the
 // approval channel.
-func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename, content, reason, mfaCode, database string) (*dto.ExecResp, error) {
+func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename, content, reason, mfaCode, database string, uploadID int64) (*dto.ExecResp, error) {
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
 		return nil, ErrNotFound
@@ -242,8 +242,16 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	}
 	rule := "脚本含高危语句 · 需审批"
 	av := gateway.Verdict{Action: gateway.ActionApprove, Risk: risk, Rule: rule}
+
+	// The ticket carries an excerpt and a digest, not the script. See script_ref.go
+	// — the body would not fit in `command` on MySQL, and the file it came from is
+	// already on disk. uploadID == 0 (a script that was never saved) keeps the old
+	// behaviour of storing the body, which is the only thing available then.
 	label := "\\i " + filename + "\n" + strings.TrimSpace(content)
-	ap, auditID, err := s.createApproval(u, conn, label, av, reason)
+	if uploadID > 0 {
+		label = scriptExcerpt(filename, content, scan.Total, scan.High, scan.Mid)
+	}
+	ap, auditID, err := s.createApprovalForScript(u, conn, label, av, reason, uploadID, scriptDigest(content))
 	if err != nil {
 		return nil, err
 	}
@@ -254,6 +262,13 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 // createApproval builds an approval ticket + chain steps (default approvers from
 // the DBA-owner role) and links a fresh audit id.
 func (s *Services) createApproval(u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string) (*model.Approval, string, error) {
+	return s.createApprovalForScript(u, conn, sql, v, reason, 0, "")
+}
+
+// createApprovalForScript is createApproval for a ticket whose body lives in an
+// uploaded file. uploadID == 0 means the body is `sql` itself, which is every
+// ordinary command.
+func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string, uploadID int64, sha string) (*model.Approval, string, error) {
 	apNo := s.nextApNo()
 	auditID := s.nextAuditID()
 	kw := firstWord(sql)
@@ -269,6 +284,7 @@ func (s *Services) createApproval(u *model.User, conn *model.Connection, sql str
 		ApNo: apNo, ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode, Instance: conn.Name,
 		Command: sql, Keyword: kw, Database: conn.Database, InitiatorID: u.ID, Initiator: u.Name,
 		Reason: reason, RiskLevel: v.Risk, Status: model.StatusPending, AuditID: auditID,
+		ScriptUploadID: uploadID, ScriptSHA256: sha,
 	}
 	steps := s.defaultChainSteps()
 	if len(steps) > 0 {
@@ -389,7 +405,16 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		var res gateway.ExecResult
 		result, title := model.ResultExecuted, "审批已通过并执行"
 		if conn != nil {
-			res = s.Executor.Run(conn, ap.Command, s.execTimeout()) // gateway runs it on behalf of the initiator
+			// A script approval carries a reference, not a body: re-read the file,
+			// verify it still hashes to what was reviewed, re-judge every statement
+			// and run them one at a time (see runApprovedScript). Handing ap.Command
+			// to the executor here would send an excerpt — and, before the reference
+			// model, sent `\i file` plus the whole script as a single statement.
+			if ap.ScriptUploadID > 0 {
+				res = s.runApprovedScript(ap, conn)
+			} else {
+				res = s.Executor.Run(conn, ap.Command, s.execTimeout()) // gateway runs it on behalf of the initiator
+			}
 			result = execResultStatus(res)
 		} else {
 			// The target connection was deleted/unavailable — nothing ran. Report

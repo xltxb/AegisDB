@@ -18,6 +18,11 @@ function auditQS(q: AuditQuery): string {
   return p.toString()
 }
 
+// Script scan/execute are bounded by the server side cap on script size (32MB),
+// not by this. It is the ceiling on how long the browser will wait for work it
+// knows is slow.
+const SCRIPT_TIMEOUT_MS = 120000
+
 export const api = {
   // ---- auth ----
   login: (email: string, password: string, mfaCode = '') =>
@@ -66,10 +71,18 @@ export const api = {
   // stored would create the very second copy the audit row exists to track.
   recordTranscriptExport: (body: { connectionId: number; filename: string; lines: number; dropped: number; database?: string }) =>
     http.post<any, Envelope<any>>('/terminal/transcript-export', body).then(ok),
-  scriptScan: (content: string, filename: string, connectionId = 0) =>
-    http.post<any, Envelope<ScriptScanResp>>('/scripts/scan', { content, filename, connectionId }).then(ok),
+  // Scanning is linear in the script: every statement is split, matched against
+  // the dictionary and judged. A 6MB migration takes ~16s server-side, which the
+  // default 15s client timeout aborts — leaving the operator with a network error
+  // while the approval ticket it created goes on existing. These two get room to
+  // finish; everything else keeps the shorter timeout, where a slow response is a
+  // symptom rather than the expected cost.
+  scriptScan: (content: string, filename: string, connectionId = 0, uploadId = 0) =>
+    http.post<any, Envelope<ScriptScanResp>>('/scripts/scan', { content, filename, connectionId, uploadId },
+      { timeout: SCRIPT_TIMEOUT_MS }).then(ok),
   scriptExecute: (content: string, filename: string, connectionId: number, mfaCode = '', uploadId = 0, database = '') =>
-    http.post<any, Envelope<any>>('/scripts/execute', { content, filename, connectionId, mfaCode, uploadId, database }),
+    http.post<any, Envelope<any>>('/scripts/execute', { content, filename, connectionId, mfaCode, uploadId, database },
+      { timeout: SCRIPT_TIMEOUT_MS }),
   // ---- uploaded script files (per-user) ----
   scriptUploads: () => http.get<any, Envelope<ScriptUpload[]>>('/scripts/uploads').then(ok),
   // raw envelope so callers can detect 42600 (path unset).

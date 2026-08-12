@@ -115,8 +115,12 @@ type TranscriptExportReq struct {
 }
 
 type ScriptScanReq struct {
-	ConnectionID int64  `json:"connectionId"`
-	Content      string `json:"content" binding:"required"`
+	ConnectionID int64 `json:"connectionId"`
+	// Content is optional when UploadID names an already-uploaded script: the
+	// gateway reads that file itself and ignores anything sent here. It was
+	// `binding:"required"`, which made "the file is already on the server" an
+	// impossible request to express.
+	Content      string `json:"content"`
 	Filename     string `json:"filename"`
 	MfaCode      string `json:"mfaCode"`
 	UploadID     int64  `json:"uploadId"` // >0 = already-uploaded script; don't save again

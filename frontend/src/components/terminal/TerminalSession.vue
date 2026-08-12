@@ -694,7 +694,9 @@ const scUploadId = ref(0)
 async function scanScript(text: string, filename: string, uploadId = 0) {
   scUploadId.value = uploadId
   try {
-    scScan.value = await api.scriptScan(text, filename, props.conn.id)
+    // With an uploadId the server reads the file itself; sending `text` as well
+    // would be the second copy that can disagree with it.
+    scScan.value = await api.scriptScan(uploadId > 0 ? '' : text, filename, props.conn.id, uploadId)
     scSubmitted.value = false
     scOpen.value = true
   } catch (e: any) {
@@ -727,8 +729,10 @@ async function togglePick(e: MouseEvent) {
 async function runUploaded(u: ScriptUpload) {
   pickOpen.value = false
   try {
-    const { content, filename } = await api.scriptUploadContent(u.id)
-    await scanScript(content, filename, u.id) // already uploaded → don't re-save on execute
+    // The file is on the server and the gateway reads it there. Fetching the body
+    // only to post it straight back moved a 6MB script across the wire three
+    // times — and the copy the client held was never what got judged anyway.
+    await scanScript('', u.filename, u.id) // already uploaded → don't re-save on execute
   } catch { editor.printAbove([c(ANSI.red, t('termUploadLoadFail'))]) }
 }
 
@@ -745,7 +749,12 @@ INSERT INTO audit_log(evt) VALUES('migrate');`
 
 async function runScript() {
   if (!scScan.value) return
-  const content = scScan.value.statements.map((s) => s.sql + ';').join('\n')
+  // Reassembling the script out of the scan result only means anything while the
+  // client is the one holding it. For an uploaded script the server re-reads the
+  // file, so send nothing and let it.
+  const content = scUploadId.value > 0
+    ? ''
+    : scScan.value.statements.map((s) => s.sql + ';').join('\n')
   try {
     const env = await api.scriptExecute(content, scScan.value.filename, props.conn.id, '', scUploadId.value, targetDb.value)
     if (env.code === CODE_SCRIPT_PATH_UNSET) {
