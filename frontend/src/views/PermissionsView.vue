@@ -366,9 +366,12 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
         <!-- Scrolls inside its own box once the tier count outgrows the width;
              the page body must never scroll sideways. -->
         <div class="mtable scx">
-          <div class="mgrid" :style="matrixCols">
-            <div class="mth"><span>{{ $t('colCap') }}</span><span v-for="env in envCols" :key="env" class="ctr">{{ env }}</span></div>
-            <div v-for="(cap, i) in capKeys" :key="cap" class="mtr">
+          <!-- The template goes on each ROW: they are the grids. Binding it to the
+               wrapper instead left the rows with no columns at all, so every cell
+               stacked vertically in one implicit column. -->
+          <div class="mgrid">
+            <div class="mth" :style="matrixCols"><span>{{ $t('colCap') }}</span><span v-for="env in envCols" :key="env" class="ctr">{{ env }}</span></div>
+            <div v-for="(cap, i) in capKeys" :key="cap" class="mtr" :style="matrixCols">
               <span class="cap">{{ $t(capLabels[i] as any) }}</span>
               <div v-for="env in envCols" :key="env" class="cellwrap">
                 <div class="cell" :style="{ color: sym[cellLevel(cap, env)].c }" @click="cycleCell(cap, env)">{{ sym[cellLevel(cap, env)].s }}</div>
@@ -621,7 +624,12 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 /* min-width:max-content keeps the rows at their natural width so .mtable's
    overflow-x is what scrolls; without it the grid compresses instead. */
 .mgrid { min-width: max-content; }
-/* Column template is set inline from the tier count — see matrixCols. */
+/* Column template is set inline from the tier count — see matrixCols — and it is
+   set on the ROWS, which are the grids. It sat on .mgrid for a while, which is a
+   plain block: the declaration was simply ignored there, and the rows, left with
+   no template, collapsed to one implicit column and stacked every cell. Nothing
+   errors when grid-template-columns lands on a non-grid, which is why that looked
+   fine in review. */
 .mth, .mtr { display: grid; gap: 10px; }
 .mth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; }
 .ctr { text-align: center; }
