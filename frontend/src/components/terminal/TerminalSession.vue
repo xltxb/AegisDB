@@ -144,7 +144,10 @@ async function exportLog() {
     exportedAt: new Date(),
   }
   const name = transcript.filename(meta)
-  const blob = new Blob([transcript.render(meta)], { type: 'text/plain;charset=utf-8' })
+  // renderFile, not render: the file carries a byte order mark so the editor it
+  // is opened in knows it is UTF-8 rather than guessing the ANSI code page and
+  // showing every Chinese line as mojibake.
+  const blob = new Blob([transcript.renderFile(meta)], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url

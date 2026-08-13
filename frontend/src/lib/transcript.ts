@@ -81,6 +81,17 @@ export interface TranscriptMeta {
 export const MAX_ENTRIES = 5000
 
 /**
+ * The UTF-8 byte order mark, written at the start of every exported file.
+ *
+ * It is how a text file states which encoding it is in. Without it a reader has
+ * to guess, and on a Chinese Windows the guess is GBK — which is the whole of
+ * the "exports open as mojibake" bug. The backend's CSV exports carry the same
+ * mark (service/export.go, handler/admin.go); these three are the only files
+ * this system hands to a desktop application, and they should agree.
+ */
+export const UTF8_BOM = '\ufeff'
+
+/**
  * A session recording. Entries go in as they happen; `render` turns them into the
  * text file.
  */
@@ -152,6 +163,25 @@ export class Transcript {
       }
     }
     return lines.join('\n') + '\n'
+  }
+
+  /**
+   * The same text, prefixed with the byte order mark — what actually goes into
+   * the downloaded file.
+   *
+   * The transcript is almost entirely Chinese: its headings, its notices, and
+   * whatever the target database returned. Handed a UTF-8 file with no mark,
+   * Notepad and most editors on a Chinese Windows fall back to the ANSI code
+   * page (GBK) and open every one of those lines as mojibake. Nothing is wrong
+   * with the file — the reader guessed — but the operator has an unreadable
+   * transcript and no way to tell why.
+   *
+   * Separate from render() so the rendering stays the plain text the tests
+   * compare against, and so the mark is added exactly once, where the file is
+   * made.
+   */
+  renderFile(meta: TranscriptMeta): string {
+    return UTF8_BOM + this.render(meta)
   }
 
   /** Suggested filename: instance + timestamp, safe on every filesystem. */

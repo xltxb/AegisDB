@@ -141,3 +141,31 @@ test('each parsed row remembers its source line', () => {
     ].join('\n'))
   expect(rows.map((r) => r.line)).toEqual([2, 4])
 })
+
+// A sheet saved by Excel as "CSV UTF-8" — the option someone has to pick for
+// Chinese to survive at all — begins with a byte order mark, glued to the first
+// column name. `name` would then read as `\ufeffname` and the importer would
+// reject a file that plainly has the column.
+//
+// It does not, and the reason is worth pinning: splitCsvLine trims every field,
+// and JS trim() counts U+FEFF as whitespace, so the mark is absorbed. That is
+// incidental — a future rewrite that splits without trimming, or trims with an
+// explicit character class, would break this with no other symptom. Hence the
+// test, which guards the behaviour rather than the mechanism. The downloaded
+// template now carries the mark deliberately (ConnectionsView), so this is the
+// normal round trip and not an edge case.
+test('a sheet saved by Excel as UTF-8 CSV still imports', () => {
+  const BOM = '\ufeff'
+  const csv = [
+    'name,engine,env,host',
+    '订单主库,mysql,prod,10.20.3.12:3306',
+  ].join('\n')
+
+  const withMark = parseConnectionImport(BOM + csv)
+  expect(withMark.errors).toEqual([])
+  expect(withMark.rows).toHaveLength(1)
+  expect(withMark.rows[0].name).toBe('订单主库')
+
+  // …and identically without one, so a sheet from any other tool reads the same.
+  expect(parseConnectionImport(csv).rows).toEqual(withMark.rows)
+})
