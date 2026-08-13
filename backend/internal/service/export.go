@@ -357,9 +357,28 @@ type partWriter struct {
 	bytes                 int64
 }
 
+// utf8BOM prefixes every CSV part.
+//
+// Excel on a non-English Windows does not detect UTF-8: shown a CSV with no byte
+// order mark it decodes the bytes with the system ANSI code page (GBK on a
+// Chinese install), so every Chinese value in the export opens as mojibake.
+// Nothing is wrong with the file — the reader guessed — but the operator has a
+// broken export and no way to tell why. The mark is how a CSV says which
+// encoding it is in, and it is what the audit export already writes (handler/
+// admin.go), so the two agree.
+//
+// The cost is that a strict parser reads the first header name with the mark
+// still attached unless it asks for utf-8-sig. That is the accepted trade: these
+// files are opened in a spreadsheet, and every spreadsheet handles the mark
+// while none of them detect its absence.
+const utf8BOM = "\uFEFF"
+
 func (p *partWriter) startPart() error {
 	p.idx++
 	p.buf.Reset()
+	// Before the csv.Writer, so the mark lands at byte 0 of the file. Each part is
+	// a standalone .csv opened on its own, so each one needs its own.
+	p.buf.WriteString(utf8BOM)
 	p.w = csv.NewWriter(&p.buf)
 	p.started = true
 	// Sanitize the header too — a user-chosen column alias (SELECT x AS "=EVIL")

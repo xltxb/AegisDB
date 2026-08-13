@@ -10,6 +10,7 @@ import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
 import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
+import { UTF8_BOM } from '@/lib/transcript'
 import { engineDisplay, engineLabels } from '@/lib/engines'
 import type { Connection } from '@/types'
 
@@ -133,7 +134,11 @@ async function pickImportFile(e: Event) {
 }
 
 function downloadTemplate() {
-  const url = URL.createObjectURL(new Blob([IMPORT_TEMPLATE], { type: 'text/csv;charset=utf-8' }))
+  // The template itself is ASCII, but it exists to be filled in — with Chinese
+  // instance names, in Excel. Opened without a byte order mark Excel treats it as
+  // ANSI and saves it back that way, and the importer then reads GBK bytes as
+  // UTF-8. Shipping the mark makes the whole round trip UTF-8.
+  const url = URL.createObjectURL(new Blob([UTF8_BOM + IMPORT_TEMPLATE], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
   a.download = 'connections-template.csv'

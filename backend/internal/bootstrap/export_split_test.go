@@ -72,8 +72,11 @@ func TestExport_SplitsIntoParts(t *testing.T) {
 			t.Fatalf("decrypt %s: %v", f, err)
 		}
 		lines := strings.Split(strings.TrimRight(string(csv), "\n"), "\n")
-		if len(lines) == 0 || !strings.HasPrefix(lines[0], "id,note") {
-			t.Errorf("part %s missing header, first line %q", f, lines[0])
+		// EVERY part carries the byte order mark, not just the first: each one is a
+		// standalone .csv opened on its own, and a part without it opens as mojibake
+		// in Excel on a Chinese Windows while its siblings read fine.
+		if len(lines) == 0 || !strings.HasPrefix(lines[0], "\uFEFFid,note") {
+			t.Errorf("part %s missing BOM+header, first line %q", f, lines[0])
 		}
 		data += len(lines) - 1 // minus the header row
 	}

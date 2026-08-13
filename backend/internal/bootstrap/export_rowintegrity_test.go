@@ -87,8 +87,12 @@ func TestExport_PartsPreserveCompleteRows(t *testing.T) {
 		if rerr != nil {
 			t.Fatalf("part %s is not valid CSV (a row was broken?): %v", f, rerr)
 		}
-		if len(recs) == 0 || recs[0][0] != "id" {
-			t.Fatalf("part %s missing header, got %v", f, recs)
+		// The mark arrives attached to the first header field: Go's csv reader does
+		// not strip it, and neither does pandas without utf-8-sig. That is the known
+		// price of the mark, written down here rather than discovered by whoever
+		// next parses one of these files.
+		if len(recs) == 0 || recs[0][0] != "\uFEFFid" {
+			t.Fatalf("part %s missing BOM+header, got %v", f, recs)
 		}
 		for _, rec := range recs[1:] { // skip the repeated header
 			if len(rec) != 2 {

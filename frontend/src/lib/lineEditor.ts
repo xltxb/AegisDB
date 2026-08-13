@@ -70,6 +70,18 @@ export class LineEditor {
     if (!this.busy) this.redraw()
   }
 
+  /** Type `text` as if it had been pasted: echoed at the prompt, then submitted
+   *  by the newline it ends with, statement by statement for a batch.
+   *
+   *  Used by the snippet hotkeys, and going through the same door as a paste is
+   *  the point of it. There is no path here that hands a statement to the server
+   *  without onSubmit seeing it, so a snippet cannot end up running against a
+   *  connection without the risk check the caller does in onSubmit. */
+  feed(text: string) {
+    if (!text) return
+    this.onData(text)
+  }
+
   /** Abandon the remainder of a pasted batch.
    *
    *  A paste of several statements runs one at a time, with the rest stashed

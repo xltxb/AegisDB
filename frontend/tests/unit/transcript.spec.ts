@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { MAX_ENTRIES, Transcript, redactSecrets, stripAnsi } from '../../src/lib/transcript'
+import { MAX_ENTRIES, Transcript, UTF8_BOM, redactSecrets, stripAnsi } from '../../src/lib/transcript'
 
 // A transcript is a file that leaves the building. Two of these tests exist
 // because of that and not because of anything about formatting: credentials must
@@ -120,4 +120,37 @@ test('an empty session reports itself as empty so the control can be disabled', 
   tr.clear()
   expect(tr.isEmpty).toBe(true)
   expect(tr.droppedCount).toBe(0)
+})
+
+// The exported file opened as mojibake on a Chinese Windows.
+//
+// The bytes were always correct UTF-8 — the editor guessed. With no byte order
+// mark, Notepad and most editors on a Chinese install fall back to the ANSI code
+// page (GBK), and a transcript whose headings and output are almost entirely
+// Chinese becomes unreadable with nothing in the file to fix.
+test('the downloaded file starts with the UTF-8 byte order mark', () => {
+  const tr = new Transcript()
+  tr.command('SELECT 1;', AT)
+  const file = tr.renderFile(META)
+  expect(file.charCodeAt(0)).toBe(0xfeff)
+  expect(file.startsWith(UTF8_BOM + '# Vela')).toBe(true)
+})
+
+test('the mark is added once, and only where the file is made', () => {
+  // render() stays the plain text every other test compares against; a mark in
+  // the middle of a file is data, not an encoding declaration.
+  const tr = new Transcript()
+  tr.command('SELECT 1;', AT)
+  expect(tr.render(META).charCodeAt(0)).not.toBe(0xfeff)
+  expect(tr.renderFile(META).split(UTF8_BOM)).toHaveLength(2)
+})
+
+test('Chinese content survives into the file unchanged', () => {
+  const tr = new Transcript()
+  tr.command("SELECT * FROM orders WHERE 状态 = '已支付';", AT)
+  tr.output('· 目标实例处于维护态', AT)
+  const file = tr.renderFile(META)
+  expect(file).toContain("SELECT * FROM orders WHERE 状态 = '已支付';")
+  expect(file).toContain('· 目标实例处于维护态')
+  expect(file).toContain('# Vela 数据库网关 · 终端会话日志')
 })

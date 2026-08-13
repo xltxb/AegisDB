@@ -40,6 +40,10 @@ Thumbs.db
 
 # Test residue: export_default_test exercises the default (relative) export dir
 /backend/internal/bootstrap/export/
+# The same directory for a server run from backend/ — it holds real export
+# archives. Encrypted, but they are extracts of whatever was queried, and the
+# password travels beside them in the job row; nothing here belongs in a commit.
+/backend/export/
 /vela-web-*.zip
 # Test residue: script-upload tests write under the package dir
 /backend/internal/bootstrap/uploads/

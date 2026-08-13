@@ -278,6 +278,46 @@ type ScriptUpload struct {
 
 func (ScriptUpload) TableName() string { return "tbl_script_upload" }
 
+// TerminalSnippet is a short SQL script the operator writes in the terminal and
+// binds to a hotkey, so a query they run twenty times a day is one keystroke.
+// Owned by its author; nobody else lists, runs or edits it.
+//
+// Slot is the hotkey number 1-9, or 0 for "saved but not bound". A user's bound
+// slots are unique — binding a slot that is taken releases the other snippet
+// rather than failing, because two snippets answering to the same key would make
+// the key mean whichever row the database returned first.
+//
+// A snippet is NOT a stored decision about whether something may run. It holds
+// text and nothing else: pressing the hotkey submits that text through the same
+// path as typing it, so the capability matrix, the dictionary and strict mode all
+// judge it against the instance it is actually aimed at, at the moment it is
+// fired. Judging at save time would freeze a verdict reached on some other
+// instance under some earlier version of the rules.
+type TerminalSnippet struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID    int64     `gorm:"index:idx_snippet_user;not null" json:"userId"`
+	Name      string    `gorm:"size:64;not null" json:"name"`
+	Body      string    `gorm:"type:text;not null" json:"body"`
+	Slot      int       `gorm:"not null;default:0" json:"slot"` // 1-9 hotkey, 0 = unbound
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func (TerminalSnippet) TableName() string { return "tbl_terminal_snippet" }
+
+// Snippet limits. The body cap is deliberately small: this is a shortcut, not a
+// migration. Anything bigger belongs in an uploaded file, which is streamed and
+// re-read server-side instead of being carried in a row (see service/script_ref).
+// The cap counts BYTES, not characters — the column is MySQL TEXT (65,535 bytes)
+// and a Chinese comment costs three bytes a character, so a character-based cap
+// would accept a snippet the column then truncates.
+const (
+	MaxSnippetBytes = 8192
+	MaxSnippetName  = 64
+	MaxSnippetSlot  = 9
+	MaxSnippets     = 50 // per user; keeps the list (and the picker) finite
+)
+
 // RoleTag grants a role (user group) access to connections carrying the tag.
 // A role with no tags is unrestricted (sees every connection).
 // UserTag scopes ONE user's data access, overriding the role-derived scope.

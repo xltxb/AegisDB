@@ -2,19 +2,22 @@
 import { ref, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download } from 'lucide-vue-next'
+import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download, Command } from 'lucide-vue-next'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import ApprovalModal from '@/components/modals/ApprovalModal.vue'
 import ScriptScanModal from '@/components/modals/ScriptScanModal.vue'
+import SnippetModal from '@/components/modals/SnippetModal.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
+import { useSnippetStore } from '@/stores/snippets'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
+import { needsArming, slotFromEvent, slotLabel, snippetPreview, snippetSubmitText } from '@/lib/snippet'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
 import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
 import { Transcript } from '@/lib/transcript'
@@ -141,7 +144,10 @@ async function exportLog() {
     exportedAt: new Date(),
   }
   const name = transcript.filename(meta)
-  const blob = new Blob([transcript.render(meta)], { type: 'text/plain;charset=utf-8' })
+  // renderFile, not render: the file carries a byte order mark so the editor it
+  // is opened in knows it is UTF-8 rather than guessing the ANSI code page and
+  // showing every Chinese line as mojibake.
+  const blob = new Blob([transcript.renderFile(meta)], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -268,6 +274,19 @@ onMounted(() => {
   term.loadAddon(fit)
   term.open(termEl.value!)
 
+  // Snippet hotkeys. The handler runs before xterm interprets the key: returning
+  // false stops it being written to the shell as an escape sequence (Alt+1 would
+  // otherwise arrive as `\x1b1`), and preventDefault keeps the browser out of it.
+  // Only the FOCUSED terminal sees the event, so background tabs stay inert.
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown') return true
+    const slot = slotFromEvent(e)
+    if (slot === null) return true
+    e.preventDefault()
+    runSlot(slot)
+    return false
+  })
+
   // Select-to-copy: mirror the terminal selection into the clipboard automatically,
   // like a native terminal. Mouse/keyboard selection is a user gesture, so
   // writeText is allowed; silently no-op when the clipboard API is unavailable
@@ -350,6 +369,7 @@ onUnmounted(() => {
   ro?.disconnect()
   ws?.close()
   term?.dispose()
+  if (armTimer) clearTimeout(armTimer)
 })
 
 // ---- command dispatch ----
@@ -689,6 +709,77 @@ function refreshSession() {
   ws.reconnect()
 }
 
+// ---- snippets on hotkeys Alt+1…9 ----
+//
+// The hotkey TYPES; it does not execute. The snippet's text is fed to the line
+// editor exactly as a paste is, so it leaves through handleSubmit and gets the
+// risk check, the approval prompt and the MFA step-up like anything else — judged
+// against the connection this tab is on, at the moment the key is pressed. There
+// is deliberately no server-side "run snippet" call: that would be a second way
+// into the gateway, and the judgement lives on the first one.
+const snippets = useSnippetStore()
+snippets.load().catch(() => { /* the button still opens; the modal reloads */ })
+const snipOpen = ref(false)
+
+// Hand focus back to xterm on close, or the hotkeys stay dead until the operator
+// clicks the terminal — the same trap the MFA prompt had.
+function closeSnippets() {
+  snipOpen.value = false
+  nextTick(() => term?.focus())
+}
+
+// notice puts a line on screen from either state. printAbove rewinds over the
+// input block to redraw it, which is right while the editor is idle and wrong
+// while a statement is running — there the prompt is already gone and the rewind
+// would erase output instead.
+const notice = (line: string) => {
+  if (editor.running) out(line)
+  else editor.printAbove([line])
+}
+
+// A hotkey is fast and it is blind: the same key that is routine on dev is one
+// keystroke away on prod, and muscle memory does not read the prompt. On a tier
+// carrying the danger banner the first press therefore only ARMS the key and
+// says what it would run, on which instance; the second press within the window
+// fires it. Everywhere else it fires immediately.
+//
+// This is not the safety net — the gateway is, and it judges the statement
+// either way. It is there for the case the gateway is right to allow: a snippet
+// that is perfectly legal on prod and simply wasn't meant for prod.
+const ARM_MS = 4000
+let armedSlot = 0
+let armTimer = 0
+function disarm() {
+  armedSlot = 0
+  if (armTimer) { clearTimeout(armTimer); armTimer = 0 }
+}
+
+function runSlot(slot: number) {
+  const s = snippets.bySlot[slot]
+  if (!s) { notice(c(ANSI.gray, t('snipNoBinding', { key: slotLabel(slot) }))); return }
+  // Firing while a statement runs would queue the text behind it and execute
+  // seconds later, against whatever the session looks like by then. A paste does
+  // that because the operator asked for it explicitly; a stray hotkey has not.
+  if (editor.running) { notice(c(ANSI.yellow, '· ' + t('snipBusy'))); return }
+  const text = snippetSubmitText(s.body)
+  if (!text) return
+
+  if (needsArming(envtier.tierOf(props.conn.env)) && armedSlot !== slot) {
+    disarm()
+    armedSlot = slot
+    armTimer = window.setTimeout(() => { armedSlot = 0; armTimer = 0 }, ARM_MS)
+    editor.printAbove([
+      ANSI.bold + ANSI.yellow + t('snipArm', { key: slotLabel(slot), name: s.name, env: props.conn.env.toUpperCase(), inst: props.conn.name }) + ANSI.reset,
+      c(ANSI.gray, '  ' + snippetPreview(s.body, 100)),
+      c(ANSI.gray, t('snipArmHint', { key: slotLabel(slot) })),
+    ])
+    return
+  }
+  disarm()
+  editor.printAbove([c(ANSI.cyan, `${slotLabel(slot)} · ${s.name}`)])
+  editor.feed(text)
+}
+
 // ---- script upload/scan ----
 function onUploadClick() {
   if (!enabled.value) { pathPromptOpen.value = true; return }
@@ -821,6 +912,7 @@ async function runScript() {
             </div>
           </template>
         </Teleport>
+        <div class="upload" :title="$t('snipBtnTitle')" @click="snipOpen = true"><Command :size="13" />{{ $t('snipBtn') }}</div>
         <div class="sample" @click="onSampleClick"><FileCode2 :size="13" />{{ $t('sampleScript') }}</div>
         <!-- Disabled until something has actually been printed: an empty file is
              not a useful thing to hand someone. -->
@@ -849,6 +941,7 @@ async function runScript() {
     />
     <ScriptScanModal :open="scOpen" :scan="scScan" :submitted="scSubmitted" :save-path="scriptSavePath"
       :instance="conn.name" :databases="dbOptions" v-model:target-db="targetDb" @close="scOpen = false" @run="runScript" />
+    <SnippetModal :open="snipOpen" @close="closeSnippets" />
 
     <div v-if="pathPromptOpen" class="mfa-overlay">
       <div class="mfa-mask" @click="pathPromptOpen = false" />
