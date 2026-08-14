@@ -22,10 +22,19 @@ const QUOTED = `(?:'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*")`
 // Mirrors backend/pkg/sqlutil/redact.go. The two must stay in step: this one
 // protects the downloaded file, that one protects the audit row, and they are
 // shown the same command text.
-const RE_IDENTIFIED_BY = new RegExp(`(identified\\s+(?:with\\s+[^\\s'"]+\\s+)?by\\s+(?:password\\s+)?)${QUOTED}`, 'gi')
-const RE_PASSWORD_FN = new RegExp(`(password\\s*\\(\\s*)${QUOTED}(\\s*\\))`, 'gi')
+/** The plugin in IDENTIFIED WITH <plugin>. MySQL takes it bare or quoted, and the
+ *  quoted form is the one its documentation shows — so it is the one people
+ *  paste. Matching only the bare form let the password through in the clear. */
+const AUTH_PLUGIN = `(?:${QUOTED}|[^\\s'"]+)`
+
+// `as` as well as `by`: IDENTIFIED WITH <plugin> AS '<hash>' carries the stored
+// password hash, which is still a credential.
+const RE_IDENTIFIED_BY = new RegExp(`(identified\\s+(?:with\\s+${AUTH_PLUGIN}\\s+)?(?:by|as)\\s+(?:password\\s+)?)${QUOTED}`, 'gi')
+const RE_PASSWORD_FN = new RegExp(`(\\bpassword\\s*\\(\\s*)${QUOTED}(\\s*\\))`, 'gi')
 const RE_SET_PASSWORD = new RegExp(`(set\\s+password\\b.*=\\s*)${QUOTED}`, 'gi')
-const RE_PASSWORD_KV = new RegExp(`((?:encrypted\\s+)?password\\s*=?\\s*)${QUOTED}`, 'gi')
+// \b, or `password` also matches the TAIL of `mysql_native_password` and the mask
+// lands mid-statement — output that reads as redacted with the secret beside it.
+const RE_PASSWORD_KV = new RegExp(`((?:encrypted\\s+)?\\bpassword\\s*=?\\s*)${QUOTED}`, 'gi')
 
 /**
  * Mask credential literals in a SQL command, leaving the rest intact.

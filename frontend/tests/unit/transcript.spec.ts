@@ -154,3 +154,55 @@ test('Chinese content survives into the file unchanged', () => {
   expect(file).toContain('· 目标实例处于维护态')
   expect(file).toContain('# Vela 数据库网关 · 终端会话日志')
 })
+
+// Mirrors backend/pkg/sqlutil/redact_test.go. The transcript is a file that
+// leaves the building, so the browser copy of these patterns has to mask exactly
+// what the Go copy masks — and it did not: the plugin name in
+// IDENTIFIED WITH '<plugin>' BY '<secret>' may be QUOTED, which neither side
+// handled, so the password went into the downloaded log in the clear.
+test('a quoted authentication plugin does not hide the password from masking', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const sql = `create user 'db_opt'@'%' IDENTIFIED WITH 'mysql_native_password' by '${secret}' password expire never`
+  const out = redactSecrets(sql)
+
+  expect(out).not.toContain(secret)
+  expect(out).toContain("by '***'")
+  // The plugin name is not a secret and identifies the auth method — keep it whole.
+  expect(out).toContain("'mysql_native_password'")
+})
+
+test('the double-quoted plugin form and the AS-hash form are masked too', () => {
+  expect(redactSecrets(`CREATE USER a IDENTIFIED WITH "caching_sha2_password" BY 'topsecret'`))
+    .not.toContain('topsecret')
+  expect(redactSecrets(`ALTER USER 'u'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*6BB4837EB7'`))
+    .not.toContain('*6BB4837EB7')
+})
+
+// The mask must not land in the middle of the statement. `password` used to match
+// the tail of `mysql_native_password`, producing output that carried a *** and
+// read as redacted while the real password sat right beside it — which is worse
+// than no mask, because it stops anyone looking twice.
+test('a partial mask never stands in for a real one', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const out = redactSecrets(`CREATE USER x IDENTIFIED WITH 'mysql_native_password' BY '${secret}'`)
+  expect(out).toBe("CREATE USER x IDENTIFIED WITH 'mysql_native_password' BY '***'")
+})
+
+test('masking is idempotent, so a twice-masked line is not chewed up', () => {
+  const once = redactSecrets(`CREATE USER a IDENTIFIED WITH 'mysql_native_password' BY 'hunter2'`)
+  expect(redactSecrets(once)).toBe(once)
+})
+
+test('an identifier that merely ends in "password" is left alone', () => {
+  const sql = 'SELECT mysql_native_password FROM t'
+  expect(redactSecrets(sql)).toBe(sql)
+})
+
+// The whole point of the browser copy: the secret must not reach the file.
+test('the exported session log carries no password', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const tr = new Transcript()
+  tr.command(`create user 'db_opt'@'%' IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
+  tr.output(`ERROR near: IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
+  expect(tr.renderFile(META)).not.toContain(secret)
+})

@@ -425,7 +425,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
 		s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
-			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", operatorName, clip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
+			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", operatorName, safeClip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
@@ -441,7 +441,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
 	s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
 	s.notify(ap.InitiatorID, model.NotifApprovalRejected, "审批被拒绝",
-		fmt.Sprintf("%s 驳回了你的命令：%s", operatorName, clip(ap.Command, 80)), ap.ApNo)
+		fmt.Sprintf("%s 驳回了你的命令：%s", operatorName, safeClip(ap.Command, 80)), ap.ApNo)
 	return nil, nil
 }
 
@@ -474,6 +474,18 @@ func clip(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+// safeClip masks credential literals and THEN shortens — never the other way
+// round, which is the only reason this exists as a function.
+//
+// Redaction matches a complete quoted literal, so it needs the closing quote.
+// Clipping first can cut inside the password, leaving `IDENTIFIED BY 'X8wr^J+iu`
+// — which matches nothing, passes through untouched, and puts most of the secret
+// in whatever the excerpt was for. Use this for every command excerpt shown to a
+// human or sent anywhere.
+func safeClip(command string, n int) string {
+	return clip(sqlutil.RedactSecrets(command), n)
 }
 
 // DefaultUploadDir is the built-in upload directory (relative to the backend's
@@ -721,7 +733,7 @@ func (s *Services) SweepApprovalTimeouts() {
 			}
 			s.recordAudit(initiator, conn, a.Command, a.RiskLevel, model.ResultRejected, a.ApNo, "approve")
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, "审批已超时作废",
-				fmt.Sprintf("超过时限未审批，已自动作废：%s", clip(a.Command, 80)), a.ApNo)
+				fmt.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
 			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
 		case "auto-escalate":
 			// Keep pending for the final approver (owner) but raise an escalation
