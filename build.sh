@@ -63,6 +63,10 @@ cd "$ROOT/backend"
 GOOS="$GOOS_" GOARCH="$GOARCH_" "$GO" build -trimpath \
   -ldflags "-s -w -X main.version=$VERSION" \
   -o "$DIST/$BIN$EXT" ./cmd/server
+# Best-effort locally; the mode that actually ships is set when the archive is
+# written (see "Create tarball"). chmod is a no-op on an NTFS working copy under
+# Git Bash, which is exactly where this bundle gets built.
+chmod 755 "$DIST/$BIN$EXT" 2>/dev/null || true
 
 echo "==> Bundle config, migrations, deploy assets"
 mkdir -p "$DIST/configs"
@@ -96,6 +100,15 @@ set -a; . ./vela.env; set +a
 \`\`\`
 迁移记录在 \`schema_migrations\` 表,已应用的版本会跳过。
 
+### 升级已有环境时(不是首次部署,读这一段)
+
+1. **先备份数据库**,再做任何事。迁移里可能包含列改名 / 结构变更,不是所有步骤都能原地退回。
+2. 顺序是 **停旧进程 → \`migrate\` → 起新进程**。反过来做,新二进制会对着旧表结构跑。
+3. 迁移之后**不要**再回滚到上一个版本的二进制:旧代码按旧列名查询,列已经不在了。
+   这类失败是"关"的方向——规则查不到就拒绝——所以不会变成放行,但会是一场故障。
+   真要回滚,数据库也得一起回滚到备份。
+4. 起来之后用 \`./$BIN$EXT version\` 确认跑的是这一版。
+
 ## 3. 初始化引用数据 + 平台管理员(仅首次)
 \`\`\`
 ./$BIN$EXT init --admin-email you@corp.io --admin-password 'A-Strong-Passw0rd!'
@@ -124,8 +137,33 @@ set -a; . ./vela.env; set +a
 EOF
 
 echo "==> Create tarball"
+#
+# The server binary must extract as 0755. Windows has no execute bit and chmod
+# is a no-op on an NTFS working copy under Git Bash, so a bundle built on a
+# workstation packaged the binary 0644 — the operator extracted it on the target
+# and the first command in the deploy guide failed with "Permission denied". The
+# mode therefore has to be stamped into the ARCHIVE rather than read off the
+# build host's filesystem.
+#
+# Everything else (web assets, config, SQL) is data and stays 0644, so the
+# binary is appended separately with an explicit mode instead of using a blanket
+# --mode over the whole tree. Appending needs an uncompressed archive, hence the
+# build-then-gzip.
 ARCHIVE="vela-gateway-$VERSION-$GOOS_-$GOARCH_.tar.gz"
-tar -C "$DIST" -czf "$ROOT/$ARCHIVE" .
+TARTMP="$ROOT/.vela-bundle.tar"
+rm -f "$TARTMP"
+tar -C "$DIST" -cf "$TARTMP" --exclude="./$BIN$EXT" .
+tar -C "$DIST" -rf "$TARTMP" --mode=0755 "./$BIN$EXT"
+gzip -9 -c "$TARTMP" > "$ROOT/$ARCHIVE"
+rm -f "$TARTMP"
+
+# Verify rather than assume: this is the property the deploy depends on, and it
+# is invisible until someone is on the target box with a broken bundle.
+if ! tar -tvzf "$ROOT/$ARCHIVE" | grep -qE "^-rwxr-xr-x.*\./$BIN$EXT\$"; then
+  echo "FATAL: $BIN$EXT is not 0755 inside the archive — it would not be runnable on the target" >&2
+  tar -tvzf "$ROOT/$ARCHIVE" | grep -E "\./$BIN$EXT\$" >&2
+  exit 1
+fi
 
 echo ""
 echo "==> Done."

@@ -133,8 +133,19 @@ func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, 
 	if err := validateOutboundURL(endpoint); err != nil {
 		return "", err
 	}
+	// Mask credential literals BEFORE anything leaves the building. This request
+	// hands the command to a third-party approval service, which stores it, renders
+	// it into a chat card and keeps it in its own history — the one sink where a
+	// leaked password is furthest outside our control and least revocable. The
+	// approver still sees the statement and the account it creates; only the secret
+	// itself becomes '***', which is not information they need to decide.
+	//
+	// The interactive card built further down already did this. This path did not,
+	// so a CREATE USER … IDENTIFIED BY '…' went out in the clear in both the
+	// summary text and the payload.
+	safeCommand := sqlutil.RedactSecrets(ap.Command)
 	summary := fmt.Sprintf("%s/%s/%s 高危命令待审批:%s · 原因:%s · 风险:%s",
-		ap.Env, ap.Instance, ap.Database, clip(ap.Command, 200), ap.Reason, ap.RiskLevel)
+		ap.Env, ap.Instance, ap.Database, clip(safeCommand, 200), ap.Reason, ap.RiskLevel)
 	body := map[string]any{
 		"user":             userAccount,   // 发起人网关账户
 		"message_id":       "gw-" + ap.ApNo, // 网关生成的确定性ID(幂等)
@@ -154,7 +165,7 @@ func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, 
 			// under, which is what actually explains why it needed approval.
 			"env": ap.Env, "tier": ap.TierCode,
 			"instance": ap.Instance, "database": ap.Database,
-			"command": ap.Command, "risk": ap.RiskLevel, "initiator": ap.Initiator,
+			"command": safeCommand, "risk": ap.RiskLevel, "initiator": ap.Initiator,
 			"reason": ap.Reason, "apNo": ap.ApNo,
 		},
 	}

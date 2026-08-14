@@ -19,22 +19,65 @@
 /** Matches a single- or double-quoted SQL literal — mirrors sqlutil.quotedVal. */
 const QUOTED = `(?:'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*")`
 
-// Mirrors backend/pkg/sqlutil/redact.go. The two must stay in step: this one
-// protects the downloaded file, that one protects the audit row, and they are
-// shown the same command text.
-const RE_IDENTIFIED_BY = new RegExp(`(identified\\s+(?:with\\s+[^\\s'"]+\\s+)?by\\s+(?:password\\s+)?)${QUOTED}`, 'gi')
-const RE_PASSWORD_FN = new RegExp(`(password\\s*\\(\\s*)${QUOTED}(\\s*\\))`, 'gi')
+// Mirrors backend/pkg/sqlutil/redact.go, rule for rule. The two must stay in
+// step: that one protects the audit row and everything sent to the external
+// approval service, this one protects the downloaded session log, and they are
+// shown the same command text. A form covered on one side only is a form that
+// leaks through whichever side was forgotten.
+
+/** An UNQUOTED credential. Oracle takes the password as a bare token —
+ *  `ALTER USER u IDENTIFIED BY NewPass1` is the ordinary spelling — so a rule
+ *  that only understands quoted literals misses Oracle almost entirely. */
+const BARE = `[^\\s;'"()]+`
+const SECRET = `(?:${QUOTED}|${BARE})`
+/** The plugin in IDENTIFIED WITH/VIA <plugin>. MySQL takes it bare or quoted, and
+ *  the quoted form is the one its documentation shows — so it is the one people
+ *  paste. Matching only the bare form let the password through in the clear. */
+const AUTH_PLUGIN = `(?:${QUOTED}|[^\\s'"]+)`
+
+// The IDENTIFIED clause across every engine family the gateway drives:
+//   MySQL/TiDB/PolarDB  IDENTIFIED BY '<pw>' | WITH <plugin> BY|AS '<pw>' | BY PASSWORD '<hash>'
+//   MariaDB             IDENTIFIED VIA <plugin> USING '<pw>'
+//   Oracle              IDENTIFIED BY <pw> [REPLACE <old>] | BY VALUES '<hash>'
+//   GaussDB/openGauss   IDENTIFIED BY '<new>' REPLACE '<old>'
+// REPLACE carries the CURRENT password. It is matched inside this clause rather
+// than on its own because REPLACE is also an ordinary function and statement;
+// only its position after IDENTIFIED BY makes it a secret.
+const RE_IDENTIFIED = new RegExp(
+  `\\bidentified\\s+(?:(?:with|via)\\s+${AUTH_PLUGIN}\\s+)?(?:by|as|using)\\s+(?:(values|password)\\s+)?(${SECRET})(?:(\\s+replace\\s+)(${SECRET}))?`,
+  'gi',
+)
+const RE_PASSWORD_FN = new RegExp(`(\\bpassword\\s*\\(\\s*)${QUOTED}(\\s*\\))`, 'gi')
 const RE_SET_PASSWORD = new RegExp(`(set\\s+password\\b.*=\\s*)${QUOTED}`, 'gi')
-const RE_PASSWORD_KV = new RegExp(`((?:encrypted\\s+)?password\\s*=?\\s*)${QUOTED}`, 'gi')
+// \b, or `password` also matches the TAIL of `mysql_native_password` and the mask
+// lands mid-statement — output that reads as redacted with the secret beside it.
+const RE_PASSWORD_KV = new RegExp(`((?:(?:un)?encrypted\\s+)?\\bpassword\\s*=?\\s*)${QUOTED}`, 'gi')
+
+/** Words that can follow IDENTIFIED BY without being the secret. Masking them
+ *  corrupts the statement and protects nothing: RANDOM PASSWORD asks the server
+ *  to generate one, EXTERNALLY/GLOBALLY delegate authentication entirely, and
+ *  `password` is MariaDB's USING PASSWORD('<pw>') where RE_PASSWORD_FN masks the
+ *  literal inside the call. */
+const IDENTIFIED_KEYWORDS = new Set(['random', 'externally', 'globally', 'none', 'password'])
 
 /**
- * Mask credential literals in a SQL command, leaving the rest intact.
- * Same order as the Go implementation — SET PASSWORD before the looser
- * PASSWORD = form, so the greedy match does not eat the specific one.
+ * Mask credential literals in a SQL command, leaving the rest intact — the
+ * account, the host and the auth plugin all stay readable, because whoever reads
+ * this still has to be able to tell what was done.
+ *
+ * Same order as the Go implementation: the IDENTIFIED clause first (it consumes
+ * the whole clause), then SET PASSWORD before the looser PASSWORD = form so the
+ * greedy match does not eat the specific one.
  */
 export function redactSecrets(sql: string): string {
   return sql
-    .replace(RE_IDENTIFIED_BY, "$1'***'")
+    .replace(RE_IDENTIFIED, (match, _kw, val: string, repSep?: string, oldVal?: string) => {
+      if (IDENTIFIED_KEYWORDS.has(val.replace(/['"]/g, '').toLowerCase())) return match
+      // The value and any REPLACE clause are the tail of the match, so everything
+      // before them is kept verbatim.
+      const tail = val.length + (repSep ? repSep.length + (oldVal?.length ?? 0) : 0)
+      return match.slice(0, match.length - tail) + "'***'" + (repSep ? `${repSep}'***'` : '')
+    })
     .replace(RE_PASSWORD_FN, "$1'***'$2")
     .replace(RE_SET_PASSWORD, "$1'***'")
     .replace(RE_PASSWORD_KV, "$1'***'")

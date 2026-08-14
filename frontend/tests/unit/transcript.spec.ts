@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import fs from 'fs'
+import path from 'path'
 
 import { MAX_ENTRIES, Transcript, UTF8_BOM, redactSecrets, stripAnsi } from '../../src/lib/transcript'
 
@@ -153,4 +155,84 @@ test('Chinese content survives into the file unchanged', () => {
   expect(file).toContain("SELECT * FROM orders WHERE 状态 = '已支付';")
   expect(file).toContain('· 目标实例处于维护态')
   expect(file).toContain('# Vela 数据库网关 · 终端会话日志')
+})
+
+// Mirrors backend/pkg/sqlutil/redact_test.go. The transcript is a file that
+// leaves the building, so the browser copy of these patterns has to mask exactly
+// what the Go copy masks — and it did not: the plugin name in
+// IDENTIFIED WITH '<plugin>' BY '<secret>' may be QUOTED, which neither side
+// handled, so the password went into the downloaded log in the clear.
+test('a quoted authentication plugin does not hide the password from masking', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const sql = `create user 'db_opt'@'%' IDENTIFIED WITH 'mysql_native_password' by '${secret}' password expire never`
+  const out = redactSecrets(sql)
+
+  expect(out).not.toContain(secret)
+  expect(out).toContain("by '***'")
+  // The plugin name is not a secret and identifies the auth method — keep it whole.
+  expect(out).toContain("'mysql_native_password'")
+})
+
+// The mask must not land in the middle of the statement. `password` used to match
+// the tail of `mysql_native_password`, producing output that carried a *** and
+// read as redacted while the real password sat right beside it — which is worse
+// than no mask, because it stops anyone looking twice.
+test('a partial mask never stands in for a real one', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const out = redactSecrets(`CREATE USER x IDENTIFIED WITH 'mysql_native_password' BY '${secret}'`)
+  expect(out).toBe("CREATE USER x IDENTIFIED WITH 'mysql_native_password' BY '***'")
+})
+
+test('masking is idempotent, so a twice-masked line is not chewed up', () => {
+  const once = redactSecrets(`CREATE USER a IDENTIFIED WITH 'mysql_native_password' BY 'hunter2'`)
+  expect(redactSecrets(once)).toBe(once)
+})
+
+test('an identifier that merely ends in "password" is left alone', () => {
+  const sql = 'SELECT mysql_native_password FROM t'
+  expect(redactSecrets(sql)).toBe(sql)
+})
+
+// The whole point of the browser copy: the secret must not reach the file.
+test('the exported session log carries no password', () => {
+  const secret = 'X8wr^J+iu3n!L9cL'
+  const tr = new Transcript()
+  tr.command(`create user 'db_opt'@'%' IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
+  tr.output(`ERROR near: IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
+  expect(tr.renderFile(META)).not.toContain(secret)
+})
+
+// The SAME corpus the Go redactor is tested against
+// (backend/pkg/sqlutil/testdata/credential_syntaxes.json).
+//
+// Two hand-maintained lists is how one side quietly stops covering a form: the
+// Go copy protects the audit row and everything sent to the external approval
+// service, this copy protects the downloaded session log, and both are shown the
+// same command text. Reading one file means adding an engine covers both, or
+// neither — never one.
+const CORPUS = JSON.parse(
+  fs.readFileSync(path.join('..', 'backend', 'pkg', 'sqlutil', 'testdata', 'credential_syntaxes.json'), 'utf8'),
+) as {
+  cases: { engine: string; name: string; sql: string; secrets: string[]; keeps: string[] }[]
+  untouched: string[]
+}
+
+test('the shared corpus is actually loaded — an empty one would pass silently', () => {
+  expect(CORPUS.cases.length).toBeGreaterThan(20)
+  expect(CORPUS.untouched.length).toBeGreaterThan(5)
+})
+
+for (const c of CORPUS.cases) {
+  test(`${c.engine} · ${c.name} — the credential does not reach the exported log`, () => {
+    const out = redactSecrets(c.sql)
+    for (const s of c.secrets) expect(out, `leaked ${s}`).not.toContain(s)
+    expect(out, 'no mask produced').toContain("'***'")
+    // A mask that eats the account, the host or the auth plugin has cost the
+    // reader exactly what they needed to understand what was done.
+    for (const k of c.keeps) expect(out, `lost ${k}`).toContain(k)
+  })
+}
+
+test('statements naming no credential are left byte-for-byte alone', () => {
+  for (const q of CORPUS.untouched) expect(redactSecrets(q)).toBe(q)
 })
