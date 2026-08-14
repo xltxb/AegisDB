@@ -184,16 +184,35 @@ func (s *Services) asyncExecTimeout() time.Duration {
 	return time.Duration(sec) * time.Second
 }
 
+// redactedJob masks credentials in everything a job carries out to a reader.
+//
+// The stored SQL stays verbatim — the worker executes it, exactly as an approval
+// keeps its command for execution after approval — so the masking happens on the
+// way out. Three fields, not one: the statement itself, the streamed log (a
+// driver NOTICE or error quotes the offending statement back), and the error
+// string (same). The log is the easy one to forget, and it is the one a failed
+// CREATE USER lands in.
+//
+// Background jobs are visible to oversight roles as well as their owner, so this
+// is a credential in front of someone who never ran the command.
+func redactedJob(j model.AsyncJob) model.AsyncJob {
+	j.SQL = sqlutil.RedactSecrets(j.SQL)
+	j.Log = sqlutil.RedactSecrets(j.Log)
+	j.Error = sqlutil.RedactSecrets(j.Error)
+	return j
+}
+
 // ListAsyncJobs returns a user's async jobs (newest first).
 func (s *Services) ListAsyncJobs(u *model.User, limit int) []model.AsyncJob {
 	if u == nil {
 		return []model.AsyncJob{}
 	}
 	js, _ := s.Repo.ListAsyncJobs(u.ID, limit)
-	if js == nil {
-		js = []model.AsyncJob{}
+	out := make([]model.AsyncJob, 0, len(js))
+	for _, j := range js {
+		out = append(out, redactedJob(j))
 	}
-	return js
+	return out
 }
 
 // GetAsyncJob returns one job (with its streamed log). A user sees only their own
@@ -206,7 +225,8 @@ func (s *Services) GetAsyncJob(u *model.User, id int64) (*model.AsyncJob, error)
 	if u == nil || (j.UserID != u.ID && !s.canSeeAllActivity(u)) {
 		return nil, ErrForbidden
 	}
-	return j, nil
+	safe := redactedJob(*j) // a copy: the stored SQL must stay runnable
+	return &safe, nil
 }
 
 // asyncAuditRisk returns the verdict recorded when the job was authorised,
