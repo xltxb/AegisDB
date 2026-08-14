@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test'
+import fs from 'fs'
+import path from 'path'
 
 import { MAX_ENTRIES, Transcript, UTF8_BOM, redactSecrets, stripAnsi } from '../../src/lib/transcript'
 
@@ -171,13 +173,6 @@ test('a quoted authentication plugin does not hide the password from masking', (
   expect(out).toContain("'mysql_native_password'")
 })
 
-test('the double-quoted plugin form and the AS-hash form are masked too', () => {
-  expect(redactSecrets(`CREATE USER a IDENTIFIED WITH "caching_sha2_password" BY 'topsecret'`))
-    .not.toContain('topsecret')
-  expect(redactSecrets(`ALTER USER 'u'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*6BB4837EB7'`))
-    .not.toContain('*6BB4837EB7')
-})
-
 // The mask must not land in the middle of the statement. `password` used to match
 // the tail of `mysql_native_password`, producing output that carried a *** and
 // read as redacted while the real password sat right beside it — which is worse
@@ -205,4 +200,39 @@ test('the exported session log carries no password', () => {
   tr.command(`create user 'db_opt'@'%' IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
   tr.output(`ERROR near: IDENTIFIED WITH 'mysql_native_password' by '${secret}'`, AT)
   expect(tr.renderFile(META)).not.toContain(secret)
+})
+
+// The SAME corpus the Go redactor is tested against
+// (backend/pkg/sqlutil/testdata/credential_syntaxes.json).
+//
+// Two hand-maintained lists is how one side quietly stops covering a form: the
+// Go copy protects the audit row and everything sent to the external approval
+// service, this copy protects the downloaded session log, and both are shown the
+// same command text. Reading one file means adding an engine covers both, or
+// neither — never one.
+const CORPUS = JSON.parse(
+  fs.readFileSync(path.join('..', 'backend', 'pkg', 'sqlutil', 'testdata', 'credential_syntaxes.json'), 'utf8'),
+) as {
+  cases: { engine: string; name: string; sql: string; secrets: string[]; keeps: string[] }[]
+  untouched: string[]
+}
+
+test('the shared corpus is actually loaded — an empty one would pass silently', () => {
+  expect(CORPUS.cases.length).toBeGreaterThan(20)
+  expect(CORPUS.untouched.length).toBeGreaterThan(5)
+})
+
+for (const c of CORPUS.cases) {
+  test(`${c.engine} · ${c.name} — the credential does not reach the exported log`, () => {
+    const out = redactSecrets(c.sql)
+    for (const s of c.secrets) expect(out, `leaked ${s}`).not.toContain(s)
+    expect(out, 'no mask produced').toContain("'***'")
+    // A mask that eats the account, the host or the auth plugin has cost the
+    // reader exactly what they needed to understand what was done.
+    for (const k of c.keeps) expect(out, `lost ${k}`).toContain(k)
+  })
+}
+
+test('statements naming no credential are left byte-for-byte alone', () => {
+  for (const q of CORPUS.untouched) expect(redactSecrets(q)).toBe(q)
 })

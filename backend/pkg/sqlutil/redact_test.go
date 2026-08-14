@@ -1,6 +1,9 @@
 package sqlutil
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -106,6 +109,80 @@ func TestRedactSecrets_LeavesNonKeywordsAlone(t *testing.T) {
 	} {
 		if got := RedactSecrets(q); got != q {
 			t.Errorf("non-credential statement changed: %q -> %q", q, got)
+		}
+	}
+}
+
+// What is left has to stay reviewable: an approver decides on the account, the
+// host it may connect from and the authentication method. Only the secret goes.
+func TestRedactSecrets_KeepsWhatTheReviewerNeeds(t *testing.T) {
+	out := RedactSecrets(`CREATE USER 'db_opt'@'10.20.%' IDENTIFIED WITH 'mysql_native_password' BY 'S3cr3t!' PASSWORD EXPIRE NEVER`)
+	for _, want := range []string{"CREATE USER", "'db_opt'@'10.20.%'", "'mysql_native_password'", "PASSWORD EXPIRE NEVER"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("lost %q from the reviewable statement: %s", want, out)
+		}
+	}
+}
+
+// corpus is the shared credential-syntax corpus, read by this suite and by the
+// browser copy of the redactor (frontend/tests/unit/transcript.spec.ts). See the
+// comments in the file itself for why there is only one of it.
+type corpus struct {
+	Cases []struct {
+		Engine, Name, SQL string
+		Secrets, Keeps    []string
+	} `json:"cases"`
+	Untouched []string `json:"untouched"`
+}
+
+func loadCorpus(t *testing.T) corpus {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("testdata", "credential_syntaxes.json"))
+	if err != nil {
+		t.Fatalf("read corpus: %v", err)
+	}
+	var c corpus
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatalf("parse corpus: %v", err)
+	}
+	if len(c.Cases) == 0 || len(c.Untouched) == 0 {
+		t.Fatal("corpus is empty — the shared file is the coverage, so an empty one is a silent pass")
+	}
+	return c
+}
+
+// Every credential syntax of every engine family the gateway can drive. The gaps
+// this closed were all "that engine spells it differently": MariaDB's
+// IDENTIFIED VIA … USING, GaussDB's REPLACE <old password>, and Oracle's
+// unquoted password — which is Oracle's ordinary spelling, so a redactor built
+// only for quoted literals missed Oracle almost entirely.
+func TestRedactSecrets_EveryEngineCredentialSyntax(t *testing.T) {
+	for _, c := range loadCorpus(t).Cases {
+		t.Run(c.Engine+"/"+c.Name, func(t *testing.T) {
+			out := RedactSecrets(c.SQL)
+			for _, s := range c.Secrets {
+				if strings.Contains(out, s) {
+					t.Errorf("%s leaked %q:\n %s", c.Engine, s, out)
+				}
+			}
+			if !strings.Contains(out, "'***'") {
+				t.Errorf("%s produced no mask:\n %s", c.Engine, out)
+			}
+			// A mask that eats the account, the host or the auth plugin has cost the
+			// reviewer exactly what they needed to judge the request.
+			for _, k := range c.Keeps {
+				if !strings.Contains(out, k) {
+					t.Errorf("%s lost %q, the statement is no longer reviewable:\n %s", c.Engine, k, out)
+				}
+			}
+		})
+	}
+}
+
+func TestRedactSecrets_LeavesCredentiallessFormsIntact(t *testing.T) {
+	for _, q := range loadCorpus(t).Untouched {
+		if got := RedactSecrets(q); got != q {
+			t.Errorf("statement with no credential was rewritten:\n in:  %q\n out: %q", q, got)
 		}
 	}
 }
