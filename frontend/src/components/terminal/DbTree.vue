@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose } from 'lucide-vue-next'
+import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X } from 'lucide-vue-next'
 import api from '@/api'
+import ObjectGroups from './ObjectGroups.vue'
 import { engineDisplay, engineLabels } from '@/lib/engines'
 import { useEnvTierStore } from '@/stores/envtier'
-import type { Connection, ConnectionSchema } from '@/types'
+import type { Connection, ConnectionSchema, DbObjects } from '@/types'
 
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
 const emit = defineEmits<{ select: [number]; selectDb: [number, string]; collapse: [] }>()
@@ -49,12 +50,12 @@ const isDbOpen = (cid: number, name: string) => !!dbOpen.value[dbKey(cid, name)]
 function toggleDb(cid: number, name: string) {
   const k = dbKey(cid, name)
   dbOpen.value[k] = !dbOpen.value[k]
-  if (dbOpen.value[k]) loadDbTables(cid, name)
+  if (dbOpen.value[k]) loadDbTables(cid, name).then(() => maybeLoadDbObjects(cid, name))
 }
 // Clicking a database selects it as the target and expands it to reveal its tables.
 function selectDb(cid: number, name: string) {
   dbOpen.value[dbKey(cid, name)] = true
-  loadDbTables(cid, name)
+  loadDbTables(cid, name).then(() => maybeLoadDbObjects(cid, name))
   emit('selectDb', cid, name)
 }
 
@@ -66,7 +67,52 @@ const isSchemaOpen = (cid: number, db: string, sc: string) => !!schemaOpen.value
 function toggleSchema(cid: number, db: string, sc: string) {
   const k = schemaKey(cid, db, sc)
   schemaOpen.value[k] = !schemaOpen.value[k]
+  // Objects live per schema for schema-ful engines — load on first expand.
+  if (schemaOpen.value[k]) ensureObjects(cid, db, sc)
 }
+
+// ---- programmable objects (functions / procedures / packages / triggers) ----
+//
+// Loaded lazily per database (flat engines: MySQL by database, Oracle by owner,
+// SQLite single namespace) or per schema (PostgreSQL family), alongside the
+// tables. The scope string sent to the server is the schema when there is one,
+// else the database/owner name — which is exactly the namespace each engine
+// keys its catalog on.
+const objects = ref<Record<string, DbObjects | null>>({}) // key → loaded set (null = loading)
+const objKey = (cid: number, db: string, sc = '') => `${cid}:${db}:${sc}`
+function objFor(cid: number, db: string, sc = ''): DbObjects | null | undefined {
+  return objects.value[objKey(cid, db, sc)]
+}
+async function ensureObjects(cid: number, db: string, sc = '') {
+  const k = objKey(cid, db, sc)
+  if (k in objects.value) return
+  objects.value[k] = null
+  try {
+    objects.value[k] = await api.connectionObjects(cid, sc || db)
+  } catch (e: any) {
+    objects.value[k] = { functions: [], procedures: [], packages: [], triggers: [], error: e?.message || t('objLoadFail') }
+  }
+}
+// A database that turned out flat (no schema layer) carries its objects itself.
+function maybeLoadDbObjects(cid: number, name: string) {
+  const d = schema.value?.databases.find((x) => x.name === name)
+  if (d && !(d.schemas && d.schemas.length)) ensureObjects(cid, name)
+}
+
+// ---- source viewer ----
+const src = ref({ open: false, name: '', type: '', text: '', loading: false, err: '' })
+async function openSource(cid: number, scope: string, type: string, name: string) {
+  src.value = { open: true, name, type, text: '', loading: true, err: '' }
+  try {
+    const r = await api.objectSource(cid, scope, type, name)
+    src.value.text = r.source
+  } catch (e: any) {
+    src.value.err = e?.message || t('objLoadFail')
+  } finally {
+    src.value.loading = false
+  }
+}
+function closeSource() { src.value.open = false }
 
 // Lazily load a database's contents on first expand. Needed for PostgreSQL, where
 // the top level lists databases (no tables/schemas) introspected on demand; a
@@ -305,13 +351,17 @@ function clickInst(id: number) {
                       <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
                         <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                         <div v-if="!sc.tables.length" class="tbl empty">{{ $t('treeEmptySchema') }}</div>
+                        <ObjectGroups :objects="objFor(c.id, d.name, sc.name)"
+                                      @open="(ty, nm) => openSource(c.id, sc.name, ty, nm)" />
                       </div>
                     </template>
                   </template>
-                  <!-- database → tables (MySQL / SQLite) -->
+                  <!-- database → tables (MySQL / SQLite / Oracle-by-owner) -->
                   <template v-else>
                     <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                     <div v-if="!d.tables.length" class="tbl empty">{{ $t('treeEmptyDb') }}</div>
+                    <ObjectGroups :objects="objFor(c.id, d.name)"
+                                  @open="(ty, nm) => openSource(c.id, d.name, ty, nm)" />
                   </template>
                 </div>
               </template>
@@ -324,6 +374,23 @@ function clickInst(id: number) {
       </template>
     </div>
     <div class="foot">{{ $t('treeFooter') }}</div>
+
+    <!-- source viewer: one programmable object's definition, read-only -->
+    <div v-if="src.open" class="src-overlay">
+      <div class="src-mask" @click="closeSource" />
+      <div class="src-modal">
+        <div class="src-hdr">
+          <div class="src-title">{{ src.name }}</div>
+          <span class="src-type">{{ src.type }}</span>
+          <div class="src-x" @click="closeSource"><X :size="16" /></div>
+        </div>
+        <div class="src-body scy">
+          <div v-if="src.loading" class="shint">{{ $t('treeLoading') }}</div>
+          <div v-else-if="src.err" class="shint err">{{ src.err }}</div>
+          <pre v-else>{{ src.text }}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -389,4 +456,17 @@ function clickInst(id: number) {
 .shint { padding: 5px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .shint.err { color: var(--danger-text); white-space: normal; word-break: break-word; }
 .foot { padding: 12px 14px; border-top: 1px solid var(--border-subtle); font: 500 11px var(--font-mono); color: var(--text-faint); }
+.src-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
+.src-mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+.src-modal {
+  position: relative; width: min(760px, 92vw); max-height: 78vh; display: flex; flex-direction: column;
+  background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden;
+}
+.src-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.src-title { font: 600 13px var(--font-mono); color: var(--text-strong); }
+.src-type { font: 600 10px var(--font-mono); color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.08em; }
+.src-x { margin-left: auto; color: var(--text-faint); cursor: pointer; display: flex; }
+.src-x:hover { color: var(--text-strong); }
+.src-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
+.src-body pre { margin: 0; font: 400 12px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-word; }
 </style>

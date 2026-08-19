@@ -52,6 +52,11 @@ func TestExport_RowCapConfigurableAndFailureLeavesNoOrphans(t *testing.T) {
 		t.Errorf("failed export stranded %d orphaned part file(s) under %s", n, dir)
 	}
 
+	// The tiny part size has done its job (parts flushed before the cap trips).
+	// Restore the default before the uncapped run — at 64 bytes/part the second
+	// job would write thousands of archives and outlast the poll window (flaky).
+	service.SetExportPartSize(100 << 20)
+
 	// Raising the cap (0 = unlimited) lets the same export through.
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
 		"export.maxRows": 0,

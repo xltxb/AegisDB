@@ -331,4 +331,6 @@
   wsConnecting: 'Connecting…', wsDisconnected: 'Disconnected · reconnecting',
   // database tree
   treeLoading: 'Loading…', treeEmptySchema: '— empty schema —', treeEmptyDb: '— empty database —', treeNoMatch: '— no matching instances —',
+  treeFunctions: 'Functions', treeProcedures: 'Procedures', treePackages: 'Packages', treeTriggers: 'Triggers',
+  objViewSource: 'View source', objLoadFail: 'Failed to load',
 }

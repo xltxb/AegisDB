@@ -111,6 +111,36 @@ func (h *Handler) GetConnectionSchema(c *gin.Context) {
 	resp.OK(c, h.Svc.ConnectionSchema(middleware.CurrentUser(c), pathID(c), c.Query("database")))
 }
 
+// GetConnectionObjects lists a database's programmable objects (functions /
+// procedures / packages / triggers) for the terminal tree. `scope` is the
+// database (MySQL), schema (PostgreSQL family) or owner (Oracle).
+func (h *Handler) GetConnectionObjects(c *gin.Context) {
+	resp.OK(c, h.Svc.ConnectionObjects(middleware.CurrentUser(c), pathID(c), c.Query("scope")))
+}
+
+// GetConnectionObjectSource returns one programmable object's source text.
+func (h *Handler) GetConnectionObjectSource(c *gin.Context) {
+	typ, name := c.Query("type"), c.Query("name")
+	if typ == "" || name == "" {
+		resp.Fail(c, resp.CodeBadRequest, "缺少 type / name 参数")
+		return
+	}
+	r, err := h.Svc.ConnectionObjectSource(middleware.CurrentUser(c), pathID(c), c.Query("scope"), typ, name)
+	if err == service.ErrNotFound {
+		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
+		return
+	}
+	if err == service.ErrForbidden {
+		resp.Fail(c, resp.CodeForbidden, "无权访问该连接")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
+	resp.OK(c, r)
+}
+
 // ---------------------------------------------------------------- Roles
 
 func (h *Handler) ListRoles(c *gin.Context) {

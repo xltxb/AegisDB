@@ -347,4 +347,6 @@
   wsConnecting: '连接中…', wsDisconnected: '已断开·重连中',
   // 数据库分层
   treeLoading: '加载中…', treeEmptySchema: '— 空 schema —', treeEmptyDb: '— 空库 —', treeNoMatch: '— 无匹配实例 —',
+  treeFunctions: '函数', treeProcedures: '存储过程', treePackages: '包', treeTriggers: '触发器',
+  objViewSource: '查看源码', objLoadFail: '加载失败',
 }

@@ -270,6 +270,24 @@ type SchemaTableDTO struct {
 	Name string `json:"name"`
 }
 
+// DbObjectsResp lists one database's (or schema's/owner's) programmable objects
+// grouped by kind; kinds an engine lacks stay empty. Error mirrors
+// ConnectionSchemaResp: the reason live introspection failed, for the tree to show.
+type DbObjectsResp struct {
+	Functions  []string `json:"functions"`
+	Procedures []string `json:"procedures"`
+	Packages   []string `json:"packages"`
+	Triggers   []string `json:"triggers"`
+	Error      string   `json:"error,omitempty"`
+}
+
+// ObjectSourceResp carries one programmable object's source text.
+type ObjectSourceResp struct {
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Source string `json:"source"`
+}
+
 // ---- Roles ----
 
 type RoleDetailResp struct {
