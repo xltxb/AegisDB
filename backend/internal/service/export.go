@@ -144,9 +144,13 @@ const DefaultExportDir = "export"
 // operator can't act on ("Error 1406: Data too long for column 'sql'").
 const maxStoredSQLBytes = 15 << 20
 
+// ErrSQLTooLong marks a stored-SQL bound refusal so handlers can surface the
+// wrapped message instead of collapsing it into a generic error.
+var ErrSQLTooLong = errors.New("sql too long")
+
 // storedSQLTooLong is the actionable refusal for SQL past maxStoredSQLBytes.
 func storedSQLTooLong(n int) error {
-	return fmt.Errorf("SQL 过长(%.1fMB,上限 15MB)——请改用脚本上传通道,或缩短语句(如用临时表替代超长 IN 列表)", float64(n)/(1<<20))
+	return fmt.Errorf("SQL 过长(%.1fMB,上限 15MB)——请改用脚本上传通道,或缩短语句(如用临时表替代超长 IN 列表): %w", float64(n)/(1<<20), ErrSQLTooLong)
 }
 
 // ExportSavePath returns the data-export directory: the configured

@@ -78,6 +78,12 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.Risk
 
 // Exec runs the full gateway flow: judge → (deny | approve | allow) → audit.
 func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, database string) (*dto.ExecResp, error) {
+	// Everything on this path may be persisted verbatim (audit command, approval
+	// command — MEDIUMTEXT, migration 0018); refuse past the bound with a message
+	// instead of letting the metadata DB throw "Data too long for column".
+	if len(sql) > maxStoredSQLBytes {
+		return nil, storedSQLTooLong(len(sql))
+	}
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
 		return nil, ErrNotFound
@@ -279,10 +285,15 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	// The ticket carries an excerpt and a digest, not the script. See script_ref.go
 	// — the body would not fit in `command` on MySQL, and the file it came from is
 	// already on disk. uploadID == 0 (a script that was never saved) keeps the old
-	// behaviour of storing the body, which is the only thing available then.
+	// behaviour of storing the body, which is the only thing available then —
+	// ScriptExecute always records the paste as an upload now, so this fallback
+	// only serves legacy callers, and it must refuse a body past the column bound
+	// rather than let the INSERT die on "Data too long for column 'command'".
 	label := "\\i " + filename + "\n" + strings.TrimSpace(content)
 	if uploadID > 0 {
 		label = scriptExcerpt(filename, content, scan.Total, scan.High, scan.Mid)
+	} else if len(label) > maxStoredSQLBytes {
+		return nil, storedSQLTooLong(len(label))
 	}
 	ap, auditID, err := s.createApprovalForScript(u, conn, label, av, reason, uploadID, scriptDigest(content))
 	if err != nil {
@@ -534,16 +545,15 @@ func (s *Services) ScriptSavePath() string {
 	return DefaultUploadDir
 }
 
-// SaveUploadedScript archives an uploaded script under the configured directory,
-// organized into <savePath>/<env-connection>/<YYYY-MM-DD>/<HHMMSS>_<file> so the
-// history is browsable by instance and day. Returns the saved path. Errors with
-// ErrScriptPathUnset when no path is configured — upload is unusable until then.
-func (s *Services) SaveUploadedScript(u *model.User, _ int64, filename, content string) (string, error) {
-	up, err := s.storeScript(u, filename, content, "terminal")
-	if err != nil {
-		return "", err
-	}
-	return up.Path, nil
+// SaveUploadedScript archives a script pasted into the terminal's script panel
+// under the configured directory and returns the OWNED upload record — not just
+// the path. The record's id is what lets the approval ticket reference the file
+// (excerpt + digest) instead of embedding the whole body in `command`: throwing
+// the id away here was why a pasted 100KB script still died with "Data too long
+// for column 'command'" while the upload-picker path had long moved to
+// references. Errors with ErrScriptPathUnset when no path is configured.
+func (s *Services) SaveUploadedScript(u *model.User, _ int64, filename, content string) (*model.ScriptUpload, error) {
+	return s.storeScript(u, filename, content, "terminal")
 }
 
 // UploadScript stores a script file from the upload page and records it under

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"math"
 	"net/http"
 	"path/filepath"
@@ -111,6 +112,12 @@ func (h *Handler) Exec(c *gin.Context) {
 	}
 	if err == service.ErrMFARequired {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
+		return
+	}
+	// Carries its own actionable message — collapsing it into the generic branch
+	// below would report an oversize paste as "连接不存在".
+	if errors.Is(err, service.ErrSQLTooLong) {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
 		return
 	}
 	if err != nil {
@@ -358,7 +365,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "请提供脚本内容或已上传脚本的 uploadId")
 		return
 	} else {
-		p, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
+		up, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
 		if err == service.ErrScriptPathUnset {
 			resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 			return
@@ -367,7 +374,11 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 			resp.Fail(c, resp.CodeInternalError, "脚本保存失败:"+err.Error())
 			return
 		}
-		saved = p
+		saved = up.Path
+		// The paste IS an upload now — carrying its id means a risky script's
+		// approval ticket stores a bounded excerpt + digest referencing this
+		// file, never the whole body (see SubmitScriptForApproval).
+		req.UploadID = up.ID
 	}
 	scan, err := h.Svc.ScanScript(req.Filename, req.Content)
 	if err != nil {
@@ -617,6 +628,10 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		}
 		if err == service.ErrMFARequired {
 			send(gin.H{"type": "mfa_required", "message": "生产操作需要 MFA 二次验证"})
+			continue
+		}
+		if errors.Is(err, service.ErrSQLTooLong) {
+			send(gin.H{"type": "error", "message": err.Error()})
 			continue
 		}
 		if err != nil {
