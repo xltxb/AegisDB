@@ -265,7 +265,9 @@ func pgObjectSource(conn *model.Connection, schema, typ, name string) (string, e
 		return "", err
 	}
 	if len(defs) == 0 {
-		return "", fmt.Errorf("对象不存在")
+		// Name the catalog actually consulted: the PostgreSQL family's catalogs
+		// are per DATABASE, so "not found" here usually means the wrong one.
+		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
 	}
 	return strings.Join(defs, "\n\n"), nil
 }
@@ -316,7 +318,8 @@ func pgTableDDL(conn *model.Connection, schema, name string) (string, error) {
 		return "", err
 	}
 	if len(lines) == 0 {
-		return "", fmt.Errorf("对象不存在")
+		// Same reasoning as pgObjectSource: name the database consulted.
+		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
 	}
 	ddl := fmt.Sprintf("-- 由 information_schema 重建(PostgreSQL 无 SHOW CREATE TABLE)\nCREATE TABLE %s.%s (\n%s\n);",
 		schema, name, strings.Join(lines, ",\n"))

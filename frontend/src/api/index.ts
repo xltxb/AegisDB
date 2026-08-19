@@ -160,13 +160,17 @@ export const api = {
     http.get<any, Envelope<ConnectionSchema>>(
       `/connections/${id}/schema${database ? `?database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
-  connectionObjects: (id: number, scope = '') =>
+  // database targets a specific database on the connection — REQUIRED for the
+  // PostgreSQL family whenever the browsed database isn't the connection's
+  // default one: its catalogs are per database, so omitting it makes the server
+  // introspect the wrong catalog and answer "对象不存在" for everything.
+  connectionObjects: (id: number, scope = '', database = '') =>
     http.get<any, Envelope<DbObjects>>(
-      `/connections/${id}/objects${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`,
+      `/connections/${id}/objects?scope=${encodeURIComponent(scope)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
-  objectSource: (id: number, scope: string, type: string, name: string) =>
+  objectSource: (id: number, scope: string, type: string, name: string, database = '') =>
     http.get<any, Envelope<ObjectSource>>(
-      `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`,
+      `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
 
   // ---- roles ----

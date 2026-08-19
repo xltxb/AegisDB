@@ -129,3 +129,57 @@ func TestObjects_SimulatedConnectionServesDemoSet(t *testing.T) {
 		t.Errorf("simulated source must declare itself, got %q", src.Source)
 	}
 }
+
+// The PostgreSQL family's catalogs are PER database: browsing a database other
+// than the connection's default one and asking for a table's DDL used to
+// introspect the default database's catalog and answer "对象不存在" (issue on
+// conn/…/object-source?scope=public&type=table). The `database` query param
+// must be threaded through to the introspection — proven here with two real
+// SQLite files standing in for two databases on one connection.
+func TestObjects_DatabaseParamTargetsBrowsedDatabase(t *testing.T) {
+	mk := func(file, table string) string {
+		raw, err := sql.Open("sqlite", file)
+		if err != nil {
+			t.Fatalf("open sqlite: %v", err)
+		}
+		if _, err := raw.Exec(`CREATE TABLE ` + table + ` (id INTEGER)`); err != nil {
+			t.Fatalf("create table: %v", err)
+		}
+		raw.Close()
+		return file
+	}
+	dir := t.TempDir()
+	fileA := mk(filepath.Join(dir, "a.db"), "tbl_in_a")
+	fileB := mk(filepath.Join(dir, "b.db"), "tbl_in_b")
+
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
+		"name": "dbparam-sqlite", "engine": "SQLite", "host": "localhost:0",
+		"env": "dev", "policy": "audit-only", "database": fileA,
+	})
+	eq(t, cr.Code, 0, "create connection defaulting to database A")
+	var conn struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(cr.Data, &conn)
+
+	// Without database: the default (A) answers.
+	ra := app.do(http.MethodGet,
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=table&name=tbl_in_a", token, nil)
+	eq(t, ra.Code, 0, "table from default database")
+
+	// With database=B: B's catalog answers — this is the thread the tree pulls
+	// when the browsed database differs from the connection default.
+	rb := app.do(http.MethodGet,
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+
+			"?type=table&name=tbl_in_b&database="+url.QueryEscape(fileB), token, nil)
+	eq(t, rb.Code, 0, "table from the browsed (non-default) database")
+	var src struct {
+		Source string `json:"source"`
+	}
+	_ = json.Unmarshal(rb.Data, &src)
+	if !strings.Contains(src.Source, "tbl_in_b") {
+		t.Errorf("expected B's table DDL, got %q", src.Source)
+	}
+}

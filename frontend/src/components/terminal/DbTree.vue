@@ -89,7 +89,10 @@ async function ensureObjects(cid: number, db: string, sc = '') {
   if (k in objects.value) return
   objects.value[k] = null
   try {
-    objects.value[k] = await api.connectionObjects(cid, sc || db)
+    // Schema-level (PostgreSQL family): scope is the schema and the DATABASE
+    // must ride along — its catalogs are per database, and without it the
+    // server introspects the connection's default one (issue 17 follow-up).
+    objects.value[k] = await api.connectionObjects(cid, sc || db, sc ? db : '')
   } catch (e: any) {
     objects.value[k] = { functions: [], procedures: [], packages: [], triggers: [], error: e?.message || t('objLoadFail') }
   }
@@ -102,10 +105,12 @@ function maybeLoadDbObjects(cid: number, name: string) {
 
 // ---- source viewer ----
 const src = ref({ open: false, name: '', type: '', text: '', loading: false, err: '' })
-async function openSource(cid: number, scope: string, type: string, name: string) {
+// database: pass the browsed database for schema-level opens (PostgreSQL
+// family) — see ensureObjects; flat engines leave it empty.
+async function openSource(cid: number, scope: string, type: string, name: string, database = '') {
   src.value = { open: true, name, type, text: '', loading: true, err: '' }
   try {
-    const r = await api.objectSource(cid, scope, type, name)
+    const r = await api.objectSource(cid, scope, type, name, database)
     src.value.text = r.source
   } catch (e: any) {
     src.value.err = e?.message || t('objLoadFail')
@@ -351,10 +356,10 @@ function clickInst(id: number) {
                       </div>
                       <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
                         <div v-for="tb in sc.tables" :key="tb.name" class="tbl click" :title="$t('objViewDDL')"
-                             @click.stop="openSource(c.id, sc.name, 'table', tb.name)"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                             @click.stop="openSource(c.id, sc.name, 'table', tb.name, d.name)"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                         <div v-if="!sc.tables.length" class="tbl empty">{{ $t('treeEmptySchema') }}</div>
                         <ObjectGroups :objects="objFor(c.id, d.name, sc.name)"
-                                      @open="(ty, nm) => openSource(c.id, sc.name, ty, nm)" />
+                                      @open="(ty, nm) => openSource(c.id, sc.name, ty, nm, d.name)" />
                       </div>
                     </template>
                   </template>

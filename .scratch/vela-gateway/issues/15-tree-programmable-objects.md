@@ -44,3 +44,12 @@ SQLcl 是 Oracle 的 Java 客户端工具,网关是单二进制 Go 服务,不外
 
 - MySQL:SHOW CREATE 需要账号有查看例程定义的权限,否则返回明确报错("账号可能缺少查看权限")。
 - Oracle/DWS:目录视图行为以真实实例为准(DWS 无 prokind 的降级路径已内置)。
+
+## Comments
+
+- 2026-08-19 线上反馈:DWS 连接(conn 48)`object-source?scope=public&type=table&name=g_big_dws_t_…`
+  报"对象不存在"。根因:objects / object-source 两接口没带 `database` 参数,PG 系目录是
+  **按库隔离**的,浏览非默认库时查到了默认库的 information_schema。修复:两接口补
+  `database` 查询参数(语义同 /schema),前端在 schema 级调用时带上所浏览的库名;PG 系
+  "对象不存在"报错现在会写明实际查询的 库+schema。回归:双 SQLite 文件模拟双库,
+  证明 database 参数被贯穿(TestObjects_DatabaseParamTargetsBrowsedDatabase)。
