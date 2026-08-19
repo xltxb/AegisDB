@@ -241,6 +241,8 @@ func simulatedObjectSource(engine, typ, name string) string {
 	head := "-- 模拟连接(未配置真实凭据),以下为演示内容\n"
 	e := strings.ToLower(engine)
 	switch typ {
+	case "table":
+		return head + fmt.Sprintf("CREATE TABLE %s (\n  id BIGINT NOT NULL,\n  name VARCHAR(128),\n  status VARCHAR(16) DEFAULT 'active',\n  created_at TIMESTAMP,\n  PRIMARY KEY (id)\n);\n\nCREATE INDEX idx_%s_status ON %s (status);", name, name, name)
 	case "package":
 		return head + fmt.Sprintf("CREATE OR REPLACE PACKAGE %s AS\n  FUNCTION charge(p_order_id NUMBER) RETURN NUMBER;\n  PROCEDURE settle(p_day DATE);\nEND %s;\n/", name, name)
 	case "trigger":

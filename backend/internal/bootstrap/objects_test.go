@@ -37,6 +37,9 @@ func TestObjects_RealSqliteTriggerListedAndSourced(t *testing.T) {
 	if _, err := raw.Exec(`CREATE TRIGGER trg_orders_touch AFTER UPDATE ON orders BEGIN SELECT 1; END`); err != nil {
 		t.Fatalf("create trigger: %v", err)
 	}
+	if _, err := raw.Exec(`CREATE INDEX idx_orders_status ON orders (status)`); err != nil {
+		t.Fatalf("create index: %v", err)
+	}
 	raw.Close()
 
 	app := newTestApp(t)
@@ -68,6 +71,19 @@ func TestObjects_RealSqliteTriggerListedAndSourced(t *testing.T) {
 	_ = json.Unmarshal(sr.Data, &src)
 	if !strings.Contains(src.Source, "CREATE TRIGGER trg_orders_touch") {
 		t.Errorf("source should carry the stored definition, got %q", src.Source)
+	}
+
+	// Clicking a table in the tree shows its DDL: the stored CREATE TABLE plus
+	// the table's named indexes.
+	tr := app.do(http.MethodGet,
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=table&name=orders", token, nil)
+	eq(t, tr.Code, 0, "table ddl")
+	var tddl struct {
+		Source string `json:"source"`
+	}
+	_ = json.Unmarshal(tr.Data, &tddl)
+	if !strings.Contains(tddl.Source, "CREATE TABLE orders") || !strings.Contains(tddl.Source, "idx_orders_status") {
+		t.Errorf("table DDL should carry the CREATE TABLE and its indexes, got %q", tddl.Source)
 	}
 
 	// An unsafe identifier must be refused before any SQL is built from it.

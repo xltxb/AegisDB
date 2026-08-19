@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X } from 'lucide-vue-next'
 import api from '@/api'
 import ObjectGroups from './ObjectGroups.vue'
+import { highlightSqlHtml } from '@/lib/sqlHighlight'
 import { engineDisplay, engineLabels } from '@/lib/engines'
 import { useEnvTierStore } from '@/stores/envtier'
 import type { Connection, ConnectionSchema, DbObjects } from '@/types'
@@ -349,7 +350,8 @@ function clickInst(id: number) {
                         <FolderOpen :size="12" />{{ sc.name }}<span class="tcnt">{{ sc.tables.length }}</span>
                       </div>
                       <div v-if="isSchemaOpen(c.id, d.name, sc.name)" class="ind4">
-                        <div v-for="tb in sc.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                        <div v-for="tb in sc.tables" :key="tb.name" class="tbl click" :title="$t('objViewDDL')"
+                             @click.stop="openSource(c.id, sc.name, 'table', tb.name)"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                         <div v-if="!sc.tables.length" class="tbl empty">{{ $t('treeEmptySchema') }}</div>
                         <ObjectGroups :objects="objFor(c.id, d.name, sc.name)"
                                       @open="(ty, nm) => openSource(c.id, sc.name, ty, nm)" />
@@ -358,7 +360,8 @@ function clickInst(id: number) {
                   </template>
                   <!-- database → tables (MySQL / SQLite / Oracle-by-owner) -->
                   <template v-else>
-                    <div v-for="tb in d.tables" :key="tb.name" class="tbl"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
+                    <div v-for="tb in d.tables" :key="tb.name" class="tbl click" :title="$t('objViewDDL')"
+                         @click.stop="openSource(c.id, d.name, 'table', tb.name)"><Table2 :size="12" color="var(--text-faint)" />{{ tb.name }}</div>
                     <div v-if="!d.tables.length" class="tbl empty">{{ $t('treeEmptyDb') }}</div>
                     <ObjectGroups :objects="objFor(c.id, d.name)"
                                   @open="(ty, nm) => openSource(c.id, d.name, ty, nm)" />
@@ -387,7 +390,9 @@ function clickInst(id: number) {
         <div class="src-body scy">
           <div v-if="src.loading" class="shint">{{ $t('treeLoading') }}</div>
           <div v-else-if="src.err" class="shint err">{{ src.err }}</div>
-          <pre v-else>{{ src.text }}</pre>
+          <!-- highlightSqlHtml escapes every character before wrapping tokens
+               in classed spans, so v-html on server-returned DDL is safe here -->
+          <pre v-else v-html="highlightSqlHtml(src.text)"></pre>
         </div>
       </div>
     </div>
@@ -451,6 +456,8 @@ function clickInst(id: number) {
 .sch:hover { color: var(--text-body); background: rgba(255, 255, 255, 0.03); }
 .ind4 { padding-left: 16px; }
 .tbl { display: flex; align-items: center; gap: 7px; padding: 4px 8px; font: 400 12px var(--font-mono); color: var(--text-muted); }
+.tbl.click { border-radius: 6px; cursor: pointer; }
+.tbl.click:hover { color: var(--accent-text); background: rgba(255, 255, 255, 0.04); }
 .tbl.sel { border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: var(--text-strong); }
 .empty { padding: 6px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .shint { padding: 5px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
@@ -469,4 +476,10 @@ function clickInst(id: number) {
 .src-x:hover { color: var(--text-strong); }
 .src-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
 .src-body pre { margin: 0; font: 400 12px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-word; }
+/* token colours for the v-html highlighted source (scoped styles need :deep) */
+.src-body :deep(.sqlh-kw) { color: var(--accent-text); font-weight: 600; }
+.src-body :deep(.sqlh-str) { color: var(--warning-text); }
+.src-body :deep(.sqlh-num) { color: #c084fc; }
+.src-body :deep(.sqlh-cmt) { color: var(--text-faint); font-style: italic; }
+.src-body :deep(.sqlh-meta) { color: var(--success); }
 </style>
