@@ -7,7 +7,7 @@
 
 ### Issue tracker
 
-工单与 PRD 以本地 markdown 形式存于 `.scratch/<feature>/`（本仓库无 GitHub/GitLab 远端）。
+工单与 PRD 以本地 markdown 形式存于 `.scratch/<feature>/`（远端是华为云 CodeHub，无 GitHub/GitLab 工单系统）。
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
