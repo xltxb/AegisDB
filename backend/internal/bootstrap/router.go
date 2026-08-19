@@ -2,9 +2,11 @@ package bootstrap
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -199,7 +201,25 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 // any GET that isn't an API/known route (so deep links / refresh work).
 func serveSPA(r *gin.Engine, dir string) {
 	index := filepath.Join(dir, "index.html")
-	if assets := filepath.Join(dir, "assets"); dirExists(assets) {
+	// A misdeployed web dir (missing entirely, or extracted without assets/) used
+	// to fail silently: the fallback below answered every asset request with
+	// index.html and the browser reported a cryptic MIME error. Say so at startup.
+	if !fileExists(index) {
+		slog.Warn("web_dir has no index.html — the SPA cannot be served", "dir", dir)
+	}
+	assets := filepath.Join(dir, "assets")
+	if !dirExists(assets) {
+		slog.Warn("web_dir has no assets/ — the SPA will not load", "dir", dir)
+	} else {
+		// Vite content-hashes every filename under assets/, so a hit may be
+		// cached forever; a new deploy changes the name, never the content.
+		// Registered BEFORE Static so the route's handler chain includes it.
+		r.Use(func(c *gin.Context) {
+			if strings.HasPrefix(c.Request.URL.Path, "/assets/") {
+				c.Header("Cache-Control", "public, max-age=31536000, immutable")
+			}
+			c.Next()
+		})
 		r.Static("/assets", assets)
 	}
 	for _, f := range []string{"favicon.ico", "favicon.svg", "vite.svg"} {
@@ -208,10 +228,26 @@ func serveSPA(r *gin.Engine, dir string) {
 		}
 	}
 	r.NoRoute(func(c *gin.Context) {
-		if c.Request.Method != http.MethodGet || strings.HasPrefix(c.Request.URL.Path, "/api/") {
+		p := c.Request.URL.Path
+		if c.Request.Method != http.MethodGet || strings.HasPrefix(p, "/api/") {
 			c.Status(http.StatusNotFound)
 			return
 		}
+		// A missing FILE must be a 404, never index.html. gin's Static falls
+		// through to NoRoute when the file does not exist, so a stale cached
+		// index.html asking for last release's hashed bundle — or an assets/
+		// dir that never made it onto the box — got index.html served AS the
+		// module script: the browser's "Expected a JavaScript module but got
+		// text/html" with no hint the deploy was broken. Only extension-less
+		// paths are client-side routes eligible for the SPA fallback.
+		if strings.HasPrefix(p, "/assets/") || path.Ext(p) != "" {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		// index.html is the one file that must always revalidate: it carries
+		// this release's hashed asset URLs, and a cached copy after a deploy
+		// points at bundles that no longer exist.
+		c.Header("Cache-Control", "no-cache")
 		c.File(index)
 	})
 }
