@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,11 +55,18 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.Risk
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	tier, err := s.tierCodeOf(conn)
-	if err != nil {
+	if _, err := s.tierCodeOf(conn); err != nil {
 		return nil, ErrBadRequest // unresolvable tier — see tierOf; never judged as allow
 	}
-	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql)
+	// Judge the SPLIT statements, exactly as Exec does. Pre-checking the raw
+	// string keyed the capability matrix on the leading verb only, so a batch
+	// whose risky statement was not first ("SELECT 1; UPDATE …") pre-checked as
+	// allow — the terminal skipped the approval-reason prompt and told the
+	// operator the batch was safe, while Exec then intercepted it anyway.
+	v := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
+	if stmts := sqlutil.SplitStatements(sql); len(stmts) > 0 {
+		v = s.strictestVerdict(u, conn, stmts)
+	}
 	return &dto.RiskCheckResp{
 		Risk:             v.Risk,
 		Action:           v.Action,
@@ -112,8 +120,13 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 }
 
 // strictestVerdict evaluates every statement and returns the one demanding the
-// most gating (deny > approve > allow), so a mixed command is governed by its
-// most dangerous part rather than its leading verb.
+// most gating (deny > approve > allow; within the same action, the higher risk),
+// so a mixed command is governed by its most dangerous part rather than its
+// leading verb. Ranking by action alone let the FIRST approve-ranked statement
+// freeze the verdict: `UPDATE …(mid); DELETE …(high)` produced a ticket graded
+// mid with the DELETE's dictionary rule dropped, so the approver reviewed a
+// high-risk batch under a mid-risk label. Every triggered rule is kept on the
+// verdict, not just the winner's — the ticket must show all of what fired.
 func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
@@ -121,13 +134,33 @@ func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts
 	}
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	roleIDs := s.Repo.EffectiveRoleIDs(u)
+	var rules []string
 	for _, st := range stmts {
 		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, tier, st)
-		if actionRank(v.Action) > actionRank(strict.Action) {
+		if v.Action != gateway.ActionAllow && v.Rule != "" && !slices.Contains(rules, v.Rule) {
+			rules = append(rules, v.Rule)
+		}
+		if actionRank(v.Action) > actionRank(strict.Action) ||
+			(actionRank(v.Action) == actionRank(strict.Action) && riskRank(v.Risk) > riskRank(strict.Risk)) {
 			strict = v
 		}
 	}
+	if len(rules) > 1 {
+		strict.Rule = strings.Join(rules, " + ")
+	}
 	return strict
+}
+
+// riskRank orders risk grades so equal-action verdicts can still escalate.
+func riskRank(r string) int {
+	switch r {
+	case model.RiskHigh:
+		return 2
+	case model.RiskMid:
+		return 1
+	default: // low
+		return 0
+	}
 }
 
 // actionRank orders verdict actions by how much gating they impose.

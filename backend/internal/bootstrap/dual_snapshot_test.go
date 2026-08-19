@@ -24,10 +24,11 @@ import (
 // value did NOT change.
 
 type snapshotRow struct {
-	ApNo     string `json:"apNo"`
-	Env      string `json:"env"`
-	TierCode string `json:"tierCode"`
-	Instance string `json:"instance"`
+	ApNo      string `json:"apNo"`
+	Env       string `json:"env"`
+	TierCode  string `json:"tierCode"`
+	Instance  string `json:"instance"`
+	RiskLevel string `json:"riskLevel"`
 }
 
 func (a *testApp) approvalSnapshot(token, apNo string) snapshotRow {
