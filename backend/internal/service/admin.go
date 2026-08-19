@@ -156,10 +156,13 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 
 // ConnectionObjects lists a database's programmable objects (functions /
 // procedures / packages / triggers) for the terminal tree. scope is the
-// database (MySQL), schema (PostgreSQL family) or owner (Oracle). Same access
-// stance as ConnectionSchema; a simulated (credential-less) connection returns
-// a small synthetic set, consistent with the terminal's synthetic results.
-func (s *Services) ConnectionObjects(u *model.User, connID int64, scope string) dto.DbObjectsResp {
+// database (MySQL), schema (PostgreSQL family) or owner (Oracle); database,
+// when non-empty, targets that database — the PostgreSQL family's catalogs are
+// PER database, so browsing a database other than the connection's default one
+// otherwise introspects the wrong catalog and reports every object missing
+// (same contract as ConnectionSchema). Same access stance as ConnectionSchema;
+// a simulated (credential-less) connection returns a small synthetic set.
+func (s *Services) ConnectionObjects(u *model.User, connID int64, scope, database string) dto.DbObjectsResp {
 	out := dto.DbObjectsResp{Functions: []string{}, Procedures: []string{}, Packages: []string{}, Triggers: []string{}}
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
@@ -169,6 +172,9 @@ func (s *Services) ConnectionObjects(u *model.User, connID int64, scope string) 
 	if !s.canAccessConn(u, conn) {
 		out.Error = "无权访问该连接"
 		return out
+	}
+	if database = strings.TrimSpace(database); database != "" {
+		conn.Database = database
 	}
 	if !gateway.RealExecSupported(conn) {
 		return simulatedObjects(conn.Engine)
@@ -195,14 +201,18 @@ func (s *Services) ConnectionObjects(u *model.User, connID int64, scope string) 
 
 // ConnectionObjectSource returns one programmable object's source text. The
 // read is metadata-only (catalog views), gated by the same connection access
-// check as the schema tree.
-func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, typ, name string) (*dto.ObjectSourceResp, error) {
+// check as the schema tree. database, when non-empty, targets that database —
+// see ConnectionObjects on why the PostgreSQL family needs it.
+func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, typ, name, database string) (*dto.ObjectSourceResp, error) {
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
+	}
+	if database = strings.TrimSpace(database); database != "" {
+		conn.Database = database
 	}
 	if !gateway.RealExecSupported(conn) {
 		return &dto.ObjectSourceResp{Name: name, Type: typ, Source: simulatedObjectSource(conn.Engine, typ, name)}, nil
@@ -241,6 +251,8 @@ func simulatedObjectSource(engine, typ, name string) string {
 	head := "-- 模拟连接(未配置真实凭据),以下为演示内容\n"
 	e := strings.ToLower(engine)
 	switch typ {
+	case "table":
+		return head + fmt.Sprintf("CREATE TABLE %s (\n  id BIGINT NOT NULL,\n  name VARCHAR(128),\n  status VARCHAR(16) DEFAULT 'active',\n  created_at TIMESTAMP,\n  PRIMARY KEY (id)\n);\n\nCREATE INDEX idx_%s_status ON %s (status);", name, name, name)
 	case "package":
 		return head + fmt.Sprintf("CREATE OR REPLACE PACKAGE %s AS\n  FUNCTION charge(p_order_id NUMBER) RETURN NUMBER;\n  PROCEDURE settle(p_day DATE);\nEND %s;\n/", name, name)
 	case "trigger":

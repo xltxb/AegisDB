@@ -22,6 +22,7 @@ import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
 import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
 import { Transcript } from '@/lib/transcript'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
+import { highlightSqlAnsi } from '@/lib/sqlHighlight'
 import type { Connection, Member, ScriptScanResp, ScriptUpload } from '@/types'
 
 // One fully-isolated terminal session bound to a single connection. Each tab
@@ -306,6 +307,7 @@ onMounted(() => {
     contPromptLen: promptLen,
     onSubmit: handleSubmit,
     onInterrupt: () => { /* in-flight result still arrives */ },
+    highlight: highlightSqlAnsi,
   })
 
   ws = new WsTerminal({

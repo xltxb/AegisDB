@@ -22,6 +22,9 @@ export interface LineEditorOpts {
   onSubmit: (stmt: string) => void
   /** called on Ctrl+C so the caller can abort in-flight work */
   onInterrupt?: () => void
+  /** ANSI syntax colouring for the input line. MUST keep the printable length
+   *  unchanged (colours only) — all cursor math runs on the raw buffer. */
+  highlight?: (s: string) => string
 }
 
 export class LineEditor {
@@ -153,7 +156,7 @@ export class LineEditor {
     const cols = this.cols()
     if (this.renderedRow > 0) this.term.write(`\x1b[${this.renderedRow}A`)
     this.term.write('\r\x1b[0J')
-    this.term.write(this.curPrompt() + this.buf)
+    this.term.write(this.curPrompt() + (this.opts.highlight?.(this.buf) ?? this.buf))
 
     const promptLen = this.curPromptLen()
     const end = promptLen + this.buf.length
@@ -190,7 +193,13 @@ export class LineEditor {
     // The row must be unchanged (so the remembered row stays valid) and the text
     // must not land exactly on the right edge, where the terminal holds a pending
     // wrap that redraw() handles explicitly.
-    if (appending && after % cols !== 0 && Math.floor(before / cols) === Math.floor(after / cols)) {
+    //
+    // With syntax highlighting on, a run that contains a token boundary (space,
+    // ';', '(' …) falls through to redraw() so the word just completed gets its
+    // colour; mid-word keystrokes keep the fast path and stay flicker-free — a
+    // keyword only becomes one when it is finished anyway.
+    const boundary = this.opts.highlight && /[^A-Za-z0-9_]/.test(s)
+    if (!boundary && appending && after % cols !== 0 && Math.floor(before / cols) === Math.floor(after / cols)) {
       this.term.write(s)
       return
     }

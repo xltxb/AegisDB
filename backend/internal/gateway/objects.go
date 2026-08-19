@@ -134,6 +134,8 @@ func mysqlObjectSource(conn *model.Connection, database, typ, name string) (stri
 		kw = "PROCEDURE"
 	case "trigger":
 		kw = "TRIGGER"
+	case "table":
+		kw = "TABLE" // SHOW CREATE TABLE also answers for views
 	default:
 		return "", fmt.Errorf("不支持的对象类型 %q", typ)
 	}
@@ -170,12 +172,16 @@ func mysqlObjectSource(conn *model.Connection, database, typ, name string) (stri
 	if err := rows.Scan(ptrs...); err != nil {
 		return "", err
 	}
-	// Column 2 holds the definition for all three SHOW CREATE variants
-	// ("Create Function" / "Create Procedure" / "SQL Original Statement").
-	// It is NULL when the account lacks the privilege to see the body.
-	if len(vals) > 2 {
-		if src := cellString(vals[2]); strings.TrimSpace(src) != "" {
-			return src, nil
+	// The definition column moves between SHOW CREATE variants (index 1 for
+	// TABLE/VIEW, index 2 for FUNCTION/PROCEDURE/TRIGGER), so find it by NAME:
+	// "Create Table" / "Create View" / "Create Function" / "Create Procedure" /
+	// "SQL Original Statement". It is NULL when the account lacks the privilege
+	// to see the body.
+	for i, col := range cols {
+		if strings.HasPrefix(col, "Create ") || col == "SQL Original Statement" {
+			if src := cellString(vals[i]); strings.TrimSpace(src) != "" {
+				return src, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("无法读取对象定义(账号可能缺少查看权限)")
@@ -224,6 +230,9 @@ func pgObjects(conn *model.Connection, schema string) (*DbObjects, error) {
 }
 
 func pgObjectSource(conn *model.Connection, schema, typ, name string) (string, error) {
+	if typ == "table" {
+		return pgTableDDL(conn, schema, name)
+	}
 	if typ != "function" && typ != "procedure" {
 		return "", fmt.Errorf("不支持的对象类型 %q", typ)
 	}
@@ -256,9 +265,77 @@ func pgObjectSource(conn *model.Connection, schema, typ, name string) (string, e
 		return "", err
 	}
 	if len(defs) == 0 {
-		return "", fmt.Errorf("对象不存在")
+		// Name the catalog actually consulted: the PostgreSQL family's catalogs
+		// are per DATABASE, so "not found" here usually means the wrong one.
+		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
 	}
 	return strings.Join(defs, "\n\n"), nil
+}
+
+// pgTableDDL reconstructs a readable CREATE TABLE for the PostgreSQL family.
+// PostgreSQL has no SHOW CREATE TABLE and no server function for it (pg_dump
+// builds the DDL client-side), so this composes the honest equivalent from
+// information_schema plus the real index definitions from pg_indexes.
+func pgTableDDL(conn *model.Connection, schema, name string) (string, error) {
+	db, release, err := openConn(conn)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
+	defer cancel()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT column_name, data_type,
+		        COALESCE(character_maximum_length, -1),
+		        is_nullable, COALESCE(column_default, '')
+		 FROM information_schema.columns
+		 WHERE table_schema = $1 AND table_name = $2 ORDER BY ordinal_position`, schema, name)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	lines := []string{}
+	for rows.Next() {
+		var col, dtype, nullable, def string
+		var maxLen int64
+		if err := rows.Scan(&col, &dtype, &maxLen, &nullable, &def); err != nil {
+			return "", err
+		}
+		l := fmt.Sprintf("  %s %s", col, dtype)
+		if maxLen > 0 {
+			l += fmt.Sprintf("(%d)", maxLen)
+		}
+		if def != "" {
+			l += " DEFAULT " + def
+		}
+		if nullable == "NO" {
+			l += " NOT NULL"
+		}
+		lines = append(lines, l)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(lines) == 0 {
+		// Same reasoning as pgObjectSource: name the database consulted.
+		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
+	}
+	ddl := fmt.Sprintf("-- 由 information_schema 重建(PostgreSQL 无 SHOW CREATE TABLE)\nCREATE TABLE %s.%s (\n%s\n);",
+		schema, name, strings.Join(lines, ",\n"))
+
+	irows, err := db.QueryContext(ctx,
+		`SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2 ORDER BY indexname`, schema, name)
+	if err == nil {
+		defer irows.Close()
+		for irows.Next() {
+			var def string
+			if err := irows.Scan(&def); err == nil {
+				ddl += "\n\n" + def + ";"
+			}
+		}
+	}
+	return ddl, nil
 }
 
 // ---------------------------------------------------------------- Oracle
@@ -301,6 +378,8 @@ func oracleObjects(conn *model.Connection, owner string) (*DbObjects, error) {
 func oracleObjectSource(conn *model.Connection, owner, typ, name string) (string, error) {
 	var types []string
 	switch typ {
+	case "table":
+		return oracleTableDDL(conn, owner, name)
 	case "function":
 		types = []string{"FUNCTION"}
 	case "procedure":
@@ -352,6 +431,59 @@ func oracleObjectSource(conn *model.Connection, owner, typ, name string) (string
 	return strings.Join(parts, "\n/\n\n"), nil
 }
 
+// oracleTableDDL asks DBMS_METADATA for the authoritative DDL (what SQLcl's
+// `ddl` prints); when the account may not run it, fall back to a readable
+// reconstruction from ALL_TAB_COLUMNS.
+func oracleTableDDL(conn *model.Connection, owner, name string) (string, error) {
+	db, release, err := openConn(conn)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
+	defer cancel()
+
+	var ddl string
+	if err := db.QueryRowContext(ctx,
+		`SELECT DBMS_METADATA.GET_DDL('TABLE', :1, :2) FROM dual`, name, owner).Scan(&ddl); err == nil {
+		if strings.TrimSpace(ddl) != "" {
+			return ddl, nil
+		}
+	}
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT column_name, data_type, data_length, nullable
+		 FROM all_tab_columns WHERE owner = :1 AND table_name = :2 ORDER BY column_id`, owner, name)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	lines := []string{}
+	for rows.Next() {
+		var col, dtype, nullable string
+		var dlen int64
+		if err := rows.Scan(&col, &dtype, &dlen, &nullable); err != nil {
+			return "", err
+		}
+		l := fmt.Sprintf("  %s %s", col, dtype)
+		if dlen > 0 && (strings.Contains(dtype, "CHAR") || strings.Contains(dtype, "RAW")) {
+			l += fmt.Sprintf("(%d)", dlen)
+		}
+		if nullable == "N" {
+			l += " NOT NULL"
+		}
+		lines = append(lines, l)
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	if len(lines) == 0 {
+		return "", fmt.Errorf("对象不存在")
+	}
+	return fmt.Sprintf("-- 由 ALL_TAB_COLUMNS 重建(DBMS_METADATA.GET_DDL 不可用)\nCREATE TABLE %s.%s (\n%s\n);",
+		owner, name, strings.Join(lines, ",\n")), nil
+}
+
 // ---------------------------------------------------------------- SQLite
 
 func sqliteObjects(conn *model.Connection) (*DbObjects, error) {
@@ -381,7 +513,7 @@ func sqliteObjects(conn *model.Connection) (*DbObjects, error) {
 }
 
 func sqliteObjectSource(conn *model.Connection, typ, name string) (string, error) {
-	if typ != "trigger" {
+	if typ != "trigger" && typ != "table" {
 		return "", fmt.Errorf("不支持的对象类型 %q", typ)
 	}
 	db, release, err := openConn(conn)
@@ -392,11 +524,30 @@ func sqliteObjectSource(conn *model.Connection, typ, name string) (string, error
 	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
 	defer cancel()
 
+	if typ == "trigger" {
+		var src string
+		if err := db.QueryRowContext(ctx,
+			`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`, name).Scan(&src); err != nil {
+			return "", fmt.Errorf("对象不存在")
+		}
+		return src, nil
+	}
+	// table (or view): the stored CREATE statement plus its named indexes.
 	var src string
-	err = db.QueryRowContext(ctx,
-		`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`, name).Scan(&src)
-	if err != nil {
+	if err := db.QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type IN ('table','view') AND name = ?`, name).Scan(&src); err != nil {
 		return "", fmt.Errorf("对象不存在")
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name`, name)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var idx string
+			if rows.Scan(&idx) == nil && idx != "" {
+				src += ";\n\n" + idx
+			}
+		}
 	}
 	return src, nil
 }

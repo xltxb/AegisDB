@@ -115,7 +115,7 @@ func (h *Handler) GetConnectionSchema(c *gin.Context) {
 // procedures / packages / triggers) for the terminal tree. `scope` is the
 // database (MySQL), schema (PostgreSQL family) or owner (Oracle).
 func (h *Handler) GetConnectionObjects(c *gin.Context) {
-	resp.OK(c, h.Svc.ConnectionObjects(middleware.CurrentUser(c), pathID(c), c.Query("scope")))
+	resp.OK(c, h.Svc.ConnectionObjects(middleware.CurrentUser(c), pathID(c), c.Query("scope"), c.Query("database")))
 }
 
 // GetConnectionObjectSource returns one programmable object's source text.
@@ -125,7 +125,7 @@ func (h *Handler) GetConnectionObjectSource(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "缺少 type / name 参数")
 		return
 	}
-	r, err := h.Svc.ConnectionObjectSource(middleware.CurrentUser(c), pathID(c), c.Query("scope"), typ, name)
+	r, err := h.Svc.ConnectionObjectSource(middleware.CurrentUser(c), pathID(c), c.Query("scope"), typ, name, c.Query("database"))
 	if err == service.ErrNotFound {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
