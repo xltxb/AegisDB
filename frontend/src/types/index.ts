@@ -339,6 +339,22 @@ export interface ConnectionSchema {
   error?: string
 }
 
+/** Programmable objects under one database/schema/owner, grouped by kind. */
+export interface DbObjects {
+  functions: string[]
+  procedures: string[]
+  packages: string[]
+  triggers: string[]
+  error?: string
+}
+
+/** One programmable object's source text. */
+export interface ObjectSource {
+  name: string
+  type: string
+  source: string
+}
+
 export interface WebhookDelivery {
   id: number
   event: string

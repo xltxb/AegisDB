@@ -158,6 +158,9 @@
   ipListLabel: 'Allowed IP / CIDR (one per line)', ipHint: 'Loopback is always allowed to prevent self-lockout.',
   setScriptPath: 'Upload script save path', setScriptPathD: 'Uploaded scripts are archived to this server directory; empty disables upload', setScriptPathPlaceholder: 'e.g. /var/vela/scripts',
   setExportPath: 'Data export save path', setExportPathD: 'Encrypted+compressed exports are archived here; empty disables export', setExportPathPlaceholder: 'e.g. /var/vela/exports',
+  setExportMaxRows: 'Export row cap (per job)', setExportMaxRowsD: 'Job fails beyond this, so an unbounded query cannot fill the disk; 0 = unlimited',
+  setExportMaxBytes: 'Export size cap (bytes, per job)', setExportMaxBytesD: 'Counted on the uncompressed CSV content; 0 = unlimited',
+  setExportTimeout: 'Export exec timeout (seconds)', setExportTimeoutD: 'Whole-job execution budget for one export; the job fails beyond it',
   exportData: 'Export', exportTitle: 'SQL data export', exportSub: 'Run SQL, archive the result compressed+encrypted on the server, then download',
   exportConn: 'Database instance', exportDb: 'Target database', exportDbDefault: 'Connection default', exportPwWarn: 'Shown once — save it now',
   exportSql: 'Export SQL (SELECT)', exportName: 'File name (optional)', exportNamePh: 'default: export',
@@ -328,4 +331,6 @@
   wsConnecting: 'Connecting…', wsDisconnected: 'Disconnected · reconnecting',
   // database tree
   treeLoading: 'Loading…', treeEmptySchema: '— empty schema —', treeEmptyDb: '— empty database —', treeNoMatch: '— no matching instances —',
+  treeFunctions: 'Functions', treeProcedures: 'Procedures', treePackages: 'Packages', treeTriggers: 'Triggers',
+  objViewSource: 'View source', objLoadFail: 'Failed to load',
 }

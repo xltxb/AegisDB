@@ -121,6 +121,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)
 		a.PATCH("/connections/:id", menu("db"), admin, h.PatchConnection)
 		a.GET("/connections/:id/schema", menu("terminal"), h.GetConnectionSchema)
+		a.GET("/connections/:id/objects", menu("terminal"), h.GetConnectionObjects)
+		a.GET("/connections/:id/object-source", menu("terminal"), h.GetConnectionObjectSource)
 
 		// control tiers & environments — reads are open to any authenticated caller
 		// (the terminal tree, instance labels and the connection form all render

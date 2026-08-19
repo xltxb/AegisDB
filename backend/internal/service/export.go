@@ -2,7 +2,9 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -43,7 +45,8 @@ func exportSQLReadOnly(sql string) bool {
 var writesFileRe = regexp.MustCompile(`(?is)\binto\s+(outfile|dumpfile)\b`)
 
 // exportPartSize is the (uncompressed) CSV size at which the export rolls over
-// to a new part file. There is no row limit — large results split into parts.
+// to a new part file — large results split into parts (bounded overall by the
+// row/byte caps below).
 var exportPartSize int64 = 100 << 20 // 100 MiB
 
 // SetExportPartSize overrides the CSV part-size rollover threshold (tests/config).
@@ -55,29 +58,78 @@ func SetExportPartSize(n int64) {
 
 // exportMaxRows caps a single export job's row count so one unbounded query
 // (e.g. a cartesian product) can't fill the disk / exhaust memory (M8). 0 = no
-// limit. Default 5,000,000 rows.
+// limit. Default 5,000,000 rows — the DEFAULT only: the effective cap is the
+// `export.maxRows` setting (系统设置·网关), resolved per job in exportLimits so
+// an admin can raise it for a legitimately large export without a rebuild.
 var exportMaxRows int64 = 5_000_000
 
-// SetExportMaxRows overrides the per-job export row cap (tests/config).
+// SetExportMaxRows overrides the default per-job export row cap (tests).
 func SetExportMaxRows(n int64) { exportMaxRows = n }
 
 // exportMaxBytes caps a job's cumulative raw (uncompressed) CSV content. The row
 // cap alone doesn't bound wide-column results (large BLOB/TEXT), so a few
-// thousand fat rows could still exhaust memory/disk (B2). 0 = no limit. ~2 GiB.
+// thousand fat rows could still exhaust memory/disk (B2). 0 = no limit. ~2 GiB
+// default; effective cap is the `export.maxBytes` setting (see exportLimits).
 var exportMaxBytes int64 = 2_000_000_000
 
-// SetExportMaxBytes overrides the per-job export byte cap (tests/config).
+// SetExportMaxBytes overrides the default per-job export byte cap (tests).
 func SetExportMaxBytes(n int64) { exportMaxBytes = n }
+
+// exportLimits resolves the effective per-job caps: the export.maxRows /
+// export.maxBytes settings when set, else the built-in defaults. Negative
+// values are nonsense and fall back to the default; 0 disables the cap.
+func (s *Services) exportLimits() (maxRows, maxBytes int64) {
+	maxRows = int64(s.settingInt("export.maxRows", int(exportMaxRows)))
+	if maxRows < 0 {
+		maxRows = exportMaxRows
+	}
+	maxBytes = int64(s.settingInt("export.maxBytes", int(exportMaxBytes)))
+	if maxBytes < 0 {
+		maxBytes = exportMaxBytes
+	}
+	return maxRows, maxBytes
+}
+
+// exportExecTimeout is the whole-job execution budget for a real-DB export,
+// configurable via the export.execTimeout setting (seconds). Default 30min —
+// bounded below at 1s so a typo can't make every export fail instantly.
+func (s *Services) exportExecTimeout() time.Duration {
+	sec := s.settingInt("export.execTimeout", 1800)
+	if sec < 1 {
+		sec = 1800
+	}
+	return time.Duration(sec) * time.Second
+}
+
+// exportExecErr translates a streaming-export failure into something the
+// operator can act on. Two cases matter:
+//   - our own deadline fired (RealQueryEach rewraps it so errors.Is works even
+//     when the driver surfaced the killed connection as a transport error);
+//   - the TARGET side dropped the TCP connection mid-stream, which the MySQL
+//     driver reports as a bare "unexpected EOF" — accurate but useless without
+//     the likely causes (server net_write_timeout/wait_timeout, a proxy idle
+//     cutoff, or the statement being killed) and how far the export got.
+func exportExecErr(err error, rows int, timeout time.Duration) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("导出执行超时(%d分钟),已读取 %d 行 — 可在 系统设置·网关 调大导出执行超时,或分批导出", int(timeout.Minutes()), rows)
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "unexpected EOF") || strings.Contains(msg, "invalid connection") ||
+		strings.Contains(msg, "connection reset") || strings.Contains(msg, "broken pipe") {
+		return fmt.Errorf("目标数据库在导出中途断开连接(已读取 %d 行): %v — 常见原因是服务端 net_write_timeout/wait_timeout 过小、中间代理超时或语句被终止,请调大目标库超时参数或分批导出", rows, err)
+	}
+	return err
+}
 
 // exportLimitErr reports a breach of the row or byte cap given a job's running
 // totals (rows already written, cumulative raw bytes). Checked before writing
 // each row so the job fails fast with a clear message instead of after OOM.
-func exportLimitErr(rows int, rawBytes int64) error {
-	if exportMaxRows > 0 && int64(rows) >= exportMaxRows {
-		return fmt.Errorf("导出超过行数上限 %d 行,请缩小查询范围或分批导出", exportMaxRows)
+func exportLimitErr(rows int, rawBytes, maxRows, maxBytes int64) error {
+	if maxRows > 0 && int64(rows) >= maxRows {
+		return fmt.Errorf("导出超过行数上限 %d 行,请缩小查询范围或分批导出(上限可在 系统设置·网关 调整)", maxRows)
 	}
-	if exportMaxBytes > 0 && rawBytes > exportMaxBytes {
-		return fmt.Errorf("导出超过数据量上限 %d 字节,请缩小查询范围或分批导出", exportMaxBytes)
+	if maxBytes > 0 && rawBytes > maxBytes {
+		return fmt.Errorf("导出超过数据量上限 %d 字节,请缩小查询范围或分批导出(上限可在 系统设置·网关 调整)", maxBytes)
 	}
 	return nil
 }
@@ -278,7 +330,11 @@ func (s *Services) failExport(id int64, msg string) {
 // gzip-compressed + AES-256-GCM encrypted with one shared password, archived
 // under <exportPath>/<username>/<name>-<timestamp>-part<n>.csv.gz.enc.
 // Returns the list of part files (all download-able), the password, total rows,
-// and total encrypted size. There is no row limit.
+// and total encrypted size, bounded by the export.maxRows/maxBytes caps.
+// On ANY failure the parts already flushed to disk are deleted: a failed job
+// records no files, so they would be neither downloadable (ownsExportFile
+// matches recorded files only) nor ever cleaned up — a big export failing at
+// the cap otherwise stranded gigabytes of undownloadable archives (B3).
 func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, name string) ([]string, string, int, int64, error) {
 	now := time.Now()
 	dir := s.UserExportDir(u)
@@ -295,22 +351,30 @@ func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, nam
 	}
 	setHeader := func(cols []string) error { pw.header = cols; return nil }
 
+	// A failed job leaves no files behind — see the doc comment (B3).
+	fail := func(err error) ([]string, string, int, int64, error) {
+		pw.discard()
+		return nil, "", 0, 0, err
+	}
+
 	// Enforce the per-job row AND byte caps: reject before writing the row that
 	// would exceed a limit, failing the job with a clear message (M8/B2).
+	maxRows, maxBytes := s.exportLimits()
 	var rawBytes int64
 	writeRow := func(rec []string) error {
 		for _, c := range rec {
 			rawBytes += int64(len(c)) + 1 // +1 approximates the field separator
 		}
-		if err := exportLimitErr(pw.rows, rawBytes); err != nil {
+		if err := exportLimitErr(pw.rows, rawBytes, maxRows, maxBytes); err != nil {
 			return err
 		}
 		return pw.writeRow(rec)
 	}
 
 	if gateway.RealExecSupported(conn) {
-		if err := gateway.RealQueryEach(conn, sql, setHeader, writeRow); err != nil {
-			return nil, "", 0, 0, err // job fails with the real DB error
+		timeout := s.exportExecTimeout()
+		if err := gateway.RealQueryEach(conn, sql, timeout, setHeader, writeRow); err != nil {
+			return fail(exportExecErr(err, pw.rows, timeout)) // translated — see exportExecErr
 		}
 	} else {
 		// simulated demo data (no real target): synthesize a result set
@@ -326,19 +390,19 @@ func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, nam
 				rec[j] = exportCell(col, i)
 			}
 			if err := writeRow(rec); err != nil {
-				return nil, "", 0, 0, err
+				return fail(err)
 			}
 		}
 	}
 	if err := pw.flush(); err != nil { // flush the trailing partial part
-		return nil, "", 0, 0, err
+		return fail(err)
 	}
 	if len(pw.files) == 0 { // empty result → still emit a header-only file
 		if err := pw.startPart(); err != nil {
-			return nil, "", 0, 0, err
+			return fail(err)
 		}
 		if err := pw.flush(); err != nil {
-			return nil, "", 0, 0, err
+			return fail(err)
 		}
 	}
 	return pw.files, pw.password, pw.rows, pw.bytes, nil
@@ -431,6 +495,19 @@ func (p *partWriter) flush() error {
 	p.buf.Reset()
 	p.started = false
 	return nil
+}
+
+// discard removes every part already written to disk. Called when the job
+// fails: nothing references the files any more, so leaving them stranded only
+// eats disk (B3). Removal failures are logged, not fatal — the job is failing
+// with its own, more useful error.
+func (p *partWriter) discard() {
+	for _, f := range p.files {
+		if err := os.Remove(f); err != nil {
+			slog.Warn("failed export: could not remove orphaned part", "file", f, "err", err)
+		}
+	}
+	p.files = nil
 }
 
 // ResolveExportFile validates that a requested download path is inside the

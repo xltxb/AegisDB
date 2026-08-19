@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -151,6 +152,110 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 		out.Databases = append(out.Databases, dto.SchemaDBDTO{Name: name, Tables: byDB[name]})
 	}
 	return out
+}
+
+// ConnectionObjects lists a database's programmable objects (functions /
+// procedures / packages / triggers) for the terminal tree. scope is the
+// database (MySQL), schema (PostgreSQL family) or owner (Oracle). Same access
+// stance as ConnectionSchema; a simulated (credential-less) connection returns
+// a small synthetic set, consistent with the terminal's synthetic results.
+func (s *Services) ConnectionObjects(u *model.User, connID int64, scope string) dto.DbObjectsResp {
+	out := dto.DbObjectsResp{Functions: []string{}, Procedures: []string{}, Packages: []string{}, Triggers: []string{}}
+	conn, err := s.Repo.GetConnection(connID)
+	if err != nil {
+		out.Error = "连接不存在"
+		return out
+	}
+	if !s.canAccessConn(u, conn) {
+		out.Error = "无权访问该连接"
+		return out
+	}
+	if !gateway.RealExecSupported(conn) {
+		return simulatedObjects(conn.Engine)
+	}
+	objs, err := gateway.RealObjects(conn, strings.TrimSpace(scope))
+	if err != nil {
+		out.Error = "无法加载对象列表: " + err.Error()
+		return out
+	}
+	if objs.Functions != nil {
+		out.Functions = objs.Functions
+	}
+	if objs.Procedures != nil {
+		out.Procedures = objs.Procedures
+	}
+	if objs.Packages != nil {
+		out.Packages = objs.Packages
+	}
+	if objs.Triggers != nil {
+		out.Triggers = objs.Triggers
+	}
+	return out
+}
+
+// ConnectionObjectSource returns one programmable object's source text. The
+// read is metadata-only (catalog views), gated by the same connection access
+// check as the schema tree.
+func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, typ, name string) (*dto.ObjectSourceResp, error) {
+	conn, err := s.Repo.GetConnection(connID)
+	if err != nil {
+		return nil, ErrNotFound
+	}
+	if !s.canAccessConn(u, conn) {
+		return nil, ErrForbidden
+	}
+	if !gateway.RealExecSupported(conn) {
+		return &dto.ObjectSourceResp{Name: name, Type: typ, Source: simulatedObjectSource(conn.Engine, typ, name)}, nil
+	}
+	src, err := gateway.RealObjectSource(conn, strings.TrimSpace(scope), typ, name)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取对象源码: %w", err)
+	}
+	return &dto.ObjectSourceResp{Name: name, Type: typ, Source: src}, nil
+}
+
+// simulatedObjects is the demo object set for a credential-less connection,
+// shaped to what the engine family would really have.
+func simulatedObjects(engine string) dto.DbObjectsResp {
+	e := strings.ToLower(engine)
+	out := dto.DbObjectsResp{
+		Functions:  []string{"fn_order_total", "fn_user_level"},
+		Procedures: []string{"sp_archive_orders", "sp_rebuild_index"},
+		Packages:   []string{},
+		Triggers:   []string{"trg_orders_audit"},
+	}
+	switch {
+	case strings.Contains(e, "oracle"):
+		out.Packages = []string{"pkg_billing"}
+		out.Triggers = []string{}
+	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
+		out.Triggers = []string{}
+	case strings.Contains(e, "sqlite"):
+		out = dto.DbObjectsResp{Functions: []string{}, Procedures: []string{}, Packages: []string{}, Triggers: []string{"trg_orders_audit"}}
+	}
+	return out
+}
+
+// simulatedObjectSource synthesises a plausible body for a demo object.
+func simulatedObjectSource(engine, typ, name string) string {
+	head := "-- 模拟连接(未配置真实凭据),以下为演示内容\n"
+	e := strings.ToLower(engine)
+	switch typ {
+	case "package":
+		return head + fmt.Sprintf("CREATE OR REPLACE PACKAGE %s AS\n  FUNCTION charge(p_order_id NUMBER) RETURN NUMBER;\n  PROCEDURE settle(p_day DATE);\nEND %s;\n/", name, name)
+	case "trigger":
+		return head + fmt.Sprintf("CREATE TRIGGER %s AFTER UPDATE ON orders\nFOR EACH ROW\nBEGIN\n  INSERT INTO orders_audit(order_id, changed_at) VALUES (OLD.id, NOW());\nEND", name)
+	case "procedure":
+		if strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss") {
+			return head + fmt.Sprintf("CREATE OR REPLACE PROCEDURE %s()\nLANGUAGE plpgsql\nAS $$\nBEGIN\n  RAISE NOTICE 'archiving…';\nEND;\n$$;", name)
+		}
+		return head + fmt.Sprintf("CREATE PROCEDURE %s()\nBEGIN\n  -- archive rows older than 90 days\n  DELETE FROM orders WHERE created_at < NOW() - INTERVAL 90 DAY;\nEND", name)
+	default: // function
+		if strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss") {
+			return head + fmt.Sprintf("CREATE OR REPLACE FUNCTION %s(uid BIGINT)\nRETURNS INTEGER\nLANGUAGE sql\nAS $$ SELECT 1 $$;", name)
+		}
+		return head + fmt.Sprintf("CREATE FUNCTION %s(uid BIGINT)\nRETURNS INT\nDETERMINISTIC\nBEGIN\n  RETURN 1;\nEND", name)
+	}
 }
 
 // withTierDefaults refreshes each connection's display layer and default role

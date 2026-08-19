@@ -1,8 +1,8 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, EnvTier, Environment, ExecResp, ExportJob,
-  LoginResp, Me, Member, Notification, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail, ScriptScanResp,
-  ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
+  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
+  ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
 
 // auditQS builds the audit query string, omitting empty filters. An absolute
@@ -159,6 +159,14 @@ export const api = {
   connectionSchema: (id: number, database = '') =>
     http.get<any, Envelope<ConnectionSchema>>(
       `/connections/${id}/schema${database ? `?database=${encodeURIComponent(database)}` : ''}`,
+    ).then(ok),
+  connectionObjects: (id: number, scope = '') =>
+    http.get<any, Envelope<DbObjects>>(
+      `/connections/${id}/objects${scope ? `?scope=${encodeURIComponent(scope)}` : ''}`,
+    ).then(ok),
+  objectSource: (id: number, scope: string, type: string, name: string) =>
+    http.get<any, Envelope<ObjectSource>>(
+      `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}`,
     ).then(ok),
 
   // ---- roles ----
