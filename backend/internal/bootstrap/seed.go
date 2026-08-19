@@ -465,6 +465,13 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"gateway.execTimeout":     cfg.Gateway.ExecTimeoutSeconds,
 		"gateway.asyncExecTimeout": 5400, // 后台异步执行上限(秒),默认 90min
 
+		// 单个导出任务的行数/原始字节上限(0=不限;缺省时代码内置同样的默认值,
+		// 所以老库不回填也生效) — service/export.go exportLimits。
+		"export.maxRows":  5_000_000,
+		"export.maxBytes": 2_000_000_000,
+		// 单个导出任务的整体执行超时(秒),默认 30min — service/export.go exportExecTimeout。
+		"export.execTimeout": 1800,
+
 		"approval.onTimeout":      "auto-escalate",
 		"approval.timeoutMinutes": 720,
 		"security.sessionTTL":     "8h",

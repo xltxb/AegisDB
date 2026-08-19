@@ -108,6 +108,9 @@ const ipAllow = ref('')
 const execTimeout = ref(30) // command execution timeout, seconds
 const scriptPath = ref('')
 const exportPath = ref('')
+const exportMaxRows = ref(5000000) // per-job export caps; 0 = unlimited
+const exportMaxBytes = ref(2000000000)
+const exportTimeout = ref(1800) // per-job export execution budget, seconds
 
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
@@ -146,6 +149,9 @@ onMounted(async () => {
     ipAllowEnabled.value = parse<boolean>(g['security.ipAllowEnabled'], false)
     scriptPath.value = parse<string>(g['script.savePath'], '')
     exportPath.value = parse<string>(g['export.savePath'], '')
+    exportMaxRows.value = Number(parse(g['export.maxRows'], 5000000))
+    exportMaxBytes.value = Number(parse(g['export.maxBytes'], 2000000000))
+    exportTimeout.value = Number(parse(g['export.execTimeout'], 1800)) || 1800
     execTimeout.value = Number(parse(g['gateway.execTimeout'], 30)) || 30
     // External approval — secrets (token/callbackSecret) are never returned; keep
     // the fields blank (blank on save == keep unchanged) and just note presence.
@@ -188,6 +194,10 @@ async function save() {
       'gateway.execTimeout': Math.max(1, Math.min(3600, Math.round(Number(execTimeout.value) || 30))),
       'script.savePath': scriptPath.value.trim(),
       'export.savePath': exportPath.value.trim(),
+      // 0 = unlimited; negative input is meaningless, clamp to 0
+      'export.maxRows': Math.max(0, Math.round(Number(exportMaxRows.value) || 0)),
+      'export.maxBytes': Math.max(0, Math.round(Number(exportMaxBytes.value) || 0)),
+      'export.execTimeout': Math.max(1, Math.round(Number(exportTimeout.value) || 1800)),
       'security.sessionTTL': ttlKey,
       'security.requireMFA': mfa.value,
       'security.mfaMandatory': mfaMandatory.value,
@@ -237,7 +247,10 @@ async function save() {
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setStrict') }}</div><div class="rd">{{ $t('setStrictD') }}</div></div><VSwitch :model-value="strict" @update:model-value="toggleStrict" /></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setTimeout') }}</div><div class="rd">{{ $t('setTimeoutD') }}</div></div><div class="w160"><input v-model.number="execTimeout" type="number" min="1" max="3600" class="lkin" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setScriptPath') }}</div><div class="rd">{{ $t('setScriptPathD') }}</div></div><input v-model="scriptPath" class="pathinput" :placeholder="$t('setScriptPathPlaceholder')" /></div>
-        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setExportPath') }}</div><div class="rd">{{ $t('setExportPathD') }}</div></div><input v-model="exportPath" class="pathinput" :placeholder="$t('setExportPathPlaceholder')" /></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportPath') }}</div><div class="rd">{{ $t('setExportPathD') }}</div></div><input v-model="exportPath" class="pathinput" :placeholder="$t('setExportPathPlaceholder')" /></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportMaxRows') }}</div><div class="rd">{{ $t('setExportMaxRowsD') }}</div></div><div class="w160"><input v-model.number="exportMaxRows" type="number" min="0" class="lkin" /></div></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportMaxBytes') }}</div><div class="rd">{{ $t('setExportMaxBytesD') }}</div></div><div class="w160"><input v-model.number="exportMaxBytes" type="number" min="0" class="lkin" /></div></div>
+        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setExportTimeout') }}</div><div class="rd">{{ $t('setExportTimeoutD') }}</div></div><div class="w160"><input v-model.number="exportTimeout" type="number" min="1" class="lkin" /></div></div>
       </section>
 
       <!-- Approval -->

@@ -110,7 +110,16 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 		cfg.Loc = time.Local
 		cfg.Params = map[string]string{"charset": "utf8mb4"}
 		cfg.Timeout = 8 * time.Second
-		cfg.ReadTimeout = 60 * time.Second
+		// NO cfg.ReadTimeout. It is a PER-SOCKET-READ deadline shared by every
+		// caller of this pooled DSN, so the 60s value it used to carry silently
+		// capped any MySQL operation whose server goes quiet for a minute — a big
+		// export's sort phase before the first row, or an async-channel statement
+		// advertised as "30–60min+" — at 60s, regardless of the caller's own
+		// budget. The driver kills the connection mid-packet and the job dies
+		// with a cryptic "unexpected EOF"/"invalid connection". Every call path
+		// already carries a bounded context (QueryContext/ExecContext), which is
+		// the driver's supported cancellation mechanism, so per-operation budgets
+		// belong there; the connect timeout above still bounds dialing.
 		// Prefer TLS to the target DB (encrypt when the server supports it, fall
 		// back to plaintext otherwise) so credentials/results aren't needlessly
 		// sent in the clear. AllowMultiStatements stays false so the approval
@@ -335,46 +344,60 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 
 // RealQueryEach streams the real result set: onHeader is called once with the
 // column names, then onRow once per row (as strings). No row limit — the caller
-// decides how to chunk/write (see the export part-writer).
-func RealQueryEach(conn *model.Connection, query string, onHeader func([]string) error, onRow func([]string) error) error {
+// decides how to chunk/write (see the export part-writer) and supplies the
+// whole-job timeout (was hard-coded 30min here; now that the export row cap is
+// configurable, a legitimate export can outlast any fixed value).
+func RealQueryEach(conn *model.Connection, query string, timeout time.Duration, onHeader func([]string) error, onRow func([]string) error) error {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return err
 	}
 	defer release()
-	// generous timeout for large exports
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	if timeout <= 0 {
+		timeout = 30 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	rows, err := db.QueryContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	cols, err := rows.Columns()
-	if err != nil {
-		return err
-	}
-	if err := onHeader(cols); err != nil {
-		return err
-	}
-	vals := make([]any, len(cols))
-	ptrs := make([]any, len(cols))
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-	rec := make([]string, len(cols))
-	for rows.Next() {
-		if err := rows.Scan(ptrs...); err != nil {
+	err = func() error {
+		rows, err := db.QueryContext(ctx, query)
+		if err != nil {
 			return err
 		}
-		for i, v := range vals {
-			rec[i] = cellString(v)
-		}
-		if err := onRow(rec); err != nil {
+		defer rows.Close()
+		cols, err := rows.Columns()
+		if err != nil {
 			return err
 		}
+		if err := onHeader(cols); err != nil {
+			return err
+		}
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		rec := make([]string, len(cols))
+		for rows.Next() {
+			if err := rows.Scan(ptrs...); err != nil {
+				return err
+			}
+			for i, v := range vals {
+				rec[i] = cellString(v)
+			}
+			if err := onRow(rec); err != nil {
+				return err
+			}
+		}
+		return rows.Err()
+	}()
+	// When OUR deadline fired, the driver may surface the killed connection as a
+	// cryptic transport error ("unexpected EOF", "invalid connection") instead of
+	// the context error, depending on where mid-packet the cut landed. Rewrap so
+	// callers can errors.Is the timeout and report it as one.
+	if err != nil && ctx.Err() != nil {
+		return fmt.Errorf("%w (%v)", ctx.Err(), err)
 	}
-	return rows.Err()
+	return err
 }
 
 // RealRunAsync executes a long-running statement on a dedicated connection with a
