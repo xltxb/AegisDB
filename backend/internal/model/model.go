@@ -213,7 +213,7 @@ type ExportJob struct {
 	ConnectionID int64      `json:"connectionId"`
 	Instance     string     `gorm:"size:96" json:"instance"`
 	Database     string     `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
-	SQL          string     `gorm:"type:text" json:"sql"`
+	SQL          string     `gorm:"type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
 	Name         string     `gorm:"size:128" json:"name"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	Rows         int        `json:"rows"`
@@ -237,7 +237,7 @@ type AsyncJob struct {
 	ConnectionID int64      `json:"connectionId"`
 	Instance     string     `gorm:"size:96" json:"instance"`
 	Database     string     `gorm:"column:db_name;size:128" json:"database"`
-	SQL          string     `gorm:"type:text" json:"sql"`
+	SQL          string     `gorm:"type:mediumtext" json:"sql"` // see migration 0018
 	Reason       string     `gorm:"size:512" json:"reason"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	// Risk is the verdict that authorised this job, captured at submit time. The
@@ -376,7 +376,7 @@ type Approval struct {
 	Env          string    `gorm:"size:32;not null" json:"env"`
 	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Instance     string    `gorm:"size:64;not null" json:"instance"`
-	Command      string    `gorm:"type:text;not null" json:"command"`
+	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // see migration 0018
 	// A script approval keeps the script in the file the initiator uploaded and
 	// records a REFERENCE to it, not its body: Command then holds a bounded,
 	// readable excerpt. The body of a real migration runs to megabytes, and
@@ -439,7 +439,7 @@ type AuditLog struct {
 	Env          string    `gorm:"size:32" json:"env"`
 	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
-	Command      string    `gorm:"type:text;not null" json:"command"`
+	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // full query on purpose (EX5) — see migration 0018
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
 	Result       string    `gorm:"size:16;not null" json:"result"`                       // executed|pending|rejected|warn
 	ApprovalNo   string    `gorm:"size:32" json:"approvalNo"`
