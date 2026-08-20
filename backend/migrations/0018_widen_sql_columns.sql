@@ -9,5 +9,5 @@
 -- service layer refuses anything larger with an actionable message.
 ALTER TABLE tbl_export_job MODIFY `sql` MEDIUMTEXT;
 ALTER TABLE tbl_async_job  MODIFY `sql` MEDIUMTEXT;
-ALTER TABLE tbl_audit      MODIFY command MEDIUMTEXT NOT NULL;
+ALTER TABLE tbl_audit_log  MODIFY command MEDIUMTEXT NOT NULL;
 ALTER TABLE tbl_approval   MODIFY command MEDIUMTEXT NOT NULL;
