@@ -354,6 +354,15 @@ func (s *Services) failExport(id int64, msg string) {
 // matches recorded files only) nor ever cleaned up — a big export failing at
 // the cap otherwise stranded gigabytes of undownloadable archives (B3).
 func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, name string) ([]string, string, int, int64, error) {
+	// Execute the single NORMALISED statement, never the raw text. The raw form
+	// may end with a semicolon (finger habit from the terminal, which strips it
+	// client-side before submitting) or a trailing comment line, and some
+	// drivers refuse that outright — sqlite fails with "not an error (21)", the
+	// PostgreSQL extended protocol is similarly strict. Submission already
+	// proved the split yields exactly one statement (exportSQLReadOnly).
+	if stmts := sqlutil.SplitStatements(sql); len(stmts) == 1 {
+		sql = stmts[0]
+	}
 	now := time.Now()
 	dir := s.UserExportDir(u)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

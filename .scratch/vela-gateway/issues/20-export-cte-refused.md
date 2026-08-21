@@ -37,3 +37,13 @@ Status: ready-for-human（已修复，待线上验证）
   行为已由既有 split/判定测试覆盖)。
 
 后端全量测试通过。无表结构变更。
+
+## Comments
+
+- 2026-08-21 用户澄清:失败语句是**纯多行 SELECT,非 CTE**。补端到端探针(真实 sqlite)后
+  找到第二个独立缺陷:提交环节放行,但 worker 把**原始文本**直接交驱动执行,以分号结尾
+  的多行 SQL(终端手癖;终端前端会剥尾分号,导出页不剥)在部分驱动上被拒——sqlite 报
+  "not an error (21)",pg 扩展协议同样严格。修复:produceExport 执行前用 SplitStatements
+  归一化取单条语句(尾分号/尾注释自然剥离;提交时已证明恰一条)。回归:
+  export_multiline_test.go 五种形态(多行/CRLF/尾分号/分号后注释/行内注释)在真实库上
+  全部 done。CTE 修复(3668ede)是同一报告下的另一真实缺陷,两者都成立。
