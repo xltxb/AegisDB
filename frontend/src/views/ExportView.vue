@@ -184,26 +184,31 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
         </div>
         <div class="jobs">
           <div v-if="!jobs.length" class="jempty">{{ $t('exportNoTasks') }}</div>
+          <!-- One job = three fixed rows, so every card lines up with its
+               neighbours: title+badge | id+time, SQL excerpt, then stats +
+               password + download on ONE footer row. The stats used to sit in
+               the title row behind the badge, so they wrapped differently per
+               card and the download buttons floated at differing heights. -->
           <div v-for="j in jobs" :key="j.id" class="job">
-            <div class="jmain">
-              <div class="jtop">
-                <span class="jinst">{{ j.instance }}<span v-if="j.database" class="jdb"> / {{ j.database }}</span></span>
-                <span class="jbadge" :class="meta(j.status).cls"><component :is="meta(j.status).icon" :size="12" :class="{ spin: j.status === 'running' }" />{{ $t(meta(j.status).t) }}</span>
-                <span v-if="j.status === 'done'" class="jmeta">{{ j.rows }} 行 · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
-                <span class="jtime">#{{ j.id }} · {{ j.createdAt?.slice(5, 16) }}</span>
-              </div>
-              <div class="jsql">{{ j.sql }}</div>
-              <div v-if="j.status === 'done'" class="jpw">
+            <div class="jtop">
+              <span class="jinst">{{ j.instance }}<span v-if="j.database" class="jdb"> / {{ j.database }}</span></span>
+              <span class="jbadge" :class="meta(j.status).cls"><component :is="meta(j.status).icon" :size="12" :class="{ spin: j.status === 'running' }" />{{ $t(meta(j.status).t) }}</span>
+              <span class="jtime">#{{ j.id }} · {{ j.createdAt?.slice(5, 16).replace('T', ' ') }}</span>
+            </div>
+            <div class="jsql" :title="j.sql">{{ j.sql }}</div>
+            <div v-if="j.status === 'done'" class="jfoot">
+              <span class="jmeta">{{ j.rows }} 行 · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
+              <span class="jpw">
                 <KeyRound :size="12" /><span class="pl">{{ $t('exportPassword') }}</span>
                 <code class="pw">{{ shownPw.has(j.id) ? j.password : '••••••••••' }}</code>
                 <button class="copy" title="显示/隐藏" @click="togglePw(j.id)"><component :is="shownPw.has(j.id) ? EyeOff : Eye" :size="14" /></button>
                 <button class="copy" :title="$t('copy')" @click="copyPw(j)"><component :is="copiedId === j.id ? Check : Copy" :size="14" /></button>
-              </div>
-              <div v-else-if="j.status === 'failed'" class="jerr">{{ j.error || $t('exportStFailed') }}</div>
+              </span>
+              <span class="jdl">
+                <VButton variant="secondary" height="32px" @click="download(j)"><Download :size="14" />{{ $t('exportDownload') }}{{ j.parts > 1 ? ` (${j.parts})` : '' }}</VButton>
+              </span>
             </div>
-            <div class="jact">
-              <VButton v-if="j.status === 'done'" variant="secondary" height="34px" @click="download(j)"><Download :size="14" />{{ $t('exportDownload') }}{{ j.parts > 1 ? ` (${j.parts})` : '' }}</VButton>
-            </div>
+            <div v-else-if="j.status === 'failed'" class="jerr">{{ j.error || $t('exportStFailed') }}</div>
           </div>
         </div>
       </section>
@@ -213,7 +218,15 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
-.col { max-width: 760px; display: flex; flex-direction: column; gap: 18px; }
+/* Wide screens: submit form on the left (sticky, so it stays at hand while the
+   job history scrolls), job list filling the rest — the single 760px column
+   left half the viewport blank. Narrow screens fall back to one column. */
+.col { max-width: 1500px; display: grid; grid-template-columns: minmax(380px, 440px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.col > .card:first-child { position: sticky; top: 0; }
+@media (max-width: 1100px) {
+  .col { display: flex; flex-direction: column; max-width: 760px; }
+  .col > .card:first-child { position: static; }
+}
 .card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
@@ -241,27 +254,27 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .acts { margin-top: 16px; display: flex; justify-content: flex-end; }
 .jobs { display: flex; flex-direction: column; }
 .jempty { padding: 30px; text-align: center; font: 500 12.5px var(--font-mono); color: var(--text-faint); }
-.job { display: flex; align-items: center; gap: 14px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); }
+.job { padding: 13px 20px 14px; border-bottom: 1px solid var(--border-subtle); }
 .job:last-child { border-bottom: none; }
-.jmain { flex: 1; min-width: 0; }
-.jtop { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.jinst { font: 600 13px var(--font-mono); color: var(--text-strong); }
+.jtop { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.jinst { font: 600 13px var(--font-mono); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jdb { color: var(--text-faint); font-weight: 500; }
-.jbadge { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
+.jbadge { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
 .jbadge.wait { background: var(--surface-sunken); color: var(--text-muted); }
 .jbadge.run { background: var(--accent-subtle); color: var(--accent-text); }
 .jbadge.ok { background: var(--success-subtle); color: var(--success-text); }
 .jbadge.bad { background: var(--danger-subtle); color: var(--danger-text); }
-.jmeta { font: 500 11px var(--font-mono); color: var(--text-muted); }
-.jtime { margin-left: auto; font: 500 10px var(--font-mono); color: var(--text-faint); }
-.jsql { margin-top: 5px; font: 500 12px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.jpw { margin-top: 8px; display: flex; align-items: center; gap: 7px; }
-.jpw .pl { font: 600 10px var(--font-mono); color: var(--text-faint); }
-.pw { flex: 1; min-width: 0; max-width: 260px; padding: 5px 10px; border-radius: 7px; background: var(--accent-subtle); color: var(--accent-text); font: 800 13px var(--font-mono); letter-spacing: 1px; word-break: break-all; }
+.jmeta { flex-shrink: 0; font: 500 11px var(--font-mono); color: var(--text-muted); }
+.jtime { margin-left: auto; flex-shrink: 0; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
+.jsql { margin-top: 6px; font: 500 12px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jfoot { margin-top: 9px; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.jpw { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-faint); }
+.jpw .pl { font: 600 10px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.pw { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 10px; border-radius: 7px; background: var(--accent-subtle); color: var(--accent-text); font: 800 12.5px var(--font-mono); letter-spacing: 1px; }
 .copy { width: 30px; height: 28px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-sunken); color: var(--text-body); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .copy:hover { color: var(--accent-text); }
-.jerr { margin-top: 6px; font: 600 11.5px var(--font-body); color: var(--danger-text); }
-.jact { flex-shrink: 0; }
+.jerr { margin-top: 7px; font: 600 11.5px var(--font-body); color: var(--danger-text); }
+.jdl { margin-left: auto; flex-shrink: 0; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
