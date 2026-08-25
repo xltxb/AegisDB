@@ -474,7 +474,7 @@ func (s *Services) UsersView() ([]dto.UserView, error) {
 		out = append(out, dto.UserView{
 			ID: u.ID, Name: u.Name, Email: u.Email, Initials: u.Initials, Dept: u.Dept,
 			Roles: roles, RoleIDs: ids, PrimaryRoleID: u.RoleID,
-			Status: u.Status, MFAEnabled: u.MFAEnabled && u.MFASecret != "", LastActive: u.LastActive,
+			Status: u.Status, Kind: u.Kind, MFAEnabled: u.MFAEnabled && u.MFASecret != "", LastActive: u.LastActive,
 		})
 	}
 	return out, nil

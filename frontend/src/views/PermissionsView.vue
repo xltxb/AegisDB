@@ -433,7 +433,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
       <div class="utable">
         <div class="uth"><span>{{ $t('colUser') }}</span><span>{{ $t('colAcct') }}</span><span>{{ $t('colRoles') }}</span><span>{{ $t('colActive') }}</span><span class="r">{{ $t('colStatus') }}</span></div>
         <div v-for="(u, i) in users" :key="u.id" class="utr" :style="{ opacity: u.status === 'disabled' ? 0.5 : 1 }">
-          <div class="ucell"><div class="uava" :class="{ first: i === 0 }">{{ u.initials }}</div><div><div class="un">{{ u.name }}</div><div class="ud">{{ u.dept }}</div></div></div>
+          <div class="ucell"><div class="uava" :class="{ first: i === 0 }">{{ u.initials }}</div><div><div class="un">{{ u.name }}<span v-if="u.kind === 'service'" class="svcbadge">{{ $t('saMark') }}</span></div><div class="ud">{{ u.dept }}</div></div></div>
           <span class="mono mute">{{ u.email }}</span>
           <div class="uroles">
             <span v-for="rn in u.roles" :key="rn" class="urole">{{ rn }}</span>
@@ -681,6 +681,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .ucell { display: flex; align-items: center; gap: 10px; }
 .uava { width: 30px; height: 30px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 11px var(--font-body); color: var(--text-muted); }
 .uava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; }
+.svcbadge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); vertical-align: 1px; }
 .un { font: 600 13px var(--font-body); color: var(--text-strong); }
 .ud { font: 500 10px var(--font-mono); color: var(--text-faint); }
 .mono { font: 500 12px var(--font-mono); }

@@ -401,6 +401,7 @@ type UserView struct {
 	RoleIDs       []int64  `json:"roleIds"`       // every role held (for the multi-role editor)
 	PrimaryRoleID int64    `json:"primaryRoleId"`
 	Status        string   `json:"status"`
+	Kind          string   `json:"kind"`          // human|service — 服务账号在用户列表里要能一眼认出来
 	MFAEnabled    bool     `json:"mfaEnabled"`
 	LastActive    string   `json:"lastActive"`
 }

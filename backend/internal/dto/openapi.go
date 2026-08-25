@@ -15,6 +15,28 @@ type APIClientReq struct {
 	Enabled  *bool    `json:"enabled"`
 }
 
+// ServiceAccountReq creates a machine principal for external integrations
+// (升级单系统、CI/CD 平台). Roles decide what its releases may touch, tags narrow
+// which instances it can even see — the same two axes a human gets.
+type ServiceAccountReq struct {
+	Name    string   `json:"name"`
+	RoleIDs []int64  `json:"roleIds"`
+	Tags    []string `json:"tags"`
+	Dept    string   `json:"dept"` // shown in listings, e.g. "发布平台"; optional
+}
+
+// ServiceAccountView is one service account with what the binding UI needs.
+type ServiceAccountView struct {
+	ID      int64    `json:"id"`
+	Name    string   `json:"name"`
+	Email   string   `json:"email"` // generated identity, not a mailbox
+	Status  string   `json:"status"`
+	Dept    string   `json:"dept"`
+	Roles   []string `json:"roles"`   // role names, for display
+	Tags    []string `json:"tags"`    // directly-granted tags
+	Clients int      `json:"clients"` // how many API credentials bind to it
+}
+
 // APIClientCreated carries the ONE plaintext copy of the credential. It is
 // returned by the create call and never again — the table stores a bcrypt hash.
 type APIClientCreated struct {

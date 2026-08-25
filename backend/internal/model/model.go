@@ -142,12 +142,24 @@ type Role struct {
 func (Role) TableName() string { return "tbl_role" }
 
 // User — an account that belongs to a role.
+// User kinds. A SERVICE account is a principal for machines: it holds roles,
+// tags and audit attribution exactly like a human, but it can never log into
+// the console — its only door is an API client credential bound to it
+// (tbl_api_client.user_id). The kind is what the login path and the MFA
+// mandate key off; everything else (capability matrix, tag scope, audit)
+// deliberately cannot tell the difference.
+const (
+	UserKindHuman   = "human"
+	UserKindService = "service"
+)
+
 type User struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name         string    `gorm:"size:64;not null" json:"name"`
 	Email        string    `gorm:"size:128;uniqueIndex:idx_user_email;not null" json:"email"`
 	RoleID       int64     `gorm:"index:idx_user_role;not null" json:"roleId"`
 	Status       string    `gorm:"size:16;not null;default:active" json:"status"` // active|disabled|invited
+	Kind         string    `gorm:"size:16;not null;default:human" json:"kind"`    // human|service — see UserKind*
 	MFAEnabled   bool      `gorm:"not null;default:false" json:"mfaEnabled"`
 	MFASecret    string    `gorm:"size:64" json:"-"`                                // base32 TOTP secret (never serialized)
 	MFALastCtr   int64     `gorm:"not null;default:0" json:"-"`                     // last consumed TOTP counter (anti-replay, M3)

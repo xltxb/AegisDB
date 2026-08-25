@@ -1086,6 +1086,16 @@ paths:
       tags: [settings]
       summary: '[settings · admin] 测试飞书 / 审批魔方连通性'
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /service-accounts:
+    get:
+      tags: [settings]
+      summary: '[settings] 服务账号列表(机器主体:角色/标签/已绑定凭据数)'
+      responses: { '200': { : '#/components/responses/Ok' } }
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 创建服务账号(kind=service)'
+      description: 对接升级单/CI/CD 系统的机器主体。像人一样持有角色与标签,能力矩阵、标签范围、审计链一视同仁;区别只有两处且都朝收紧方向 —— 控制台登录一律拒绝(口令不存在也设不上),security.mfaMandatory 不约束它(机器无法注册 TOTP,第二因子是 API 凭据的 bcrypt secret + 每凭据 IP 白名单)。身份标识自动生成为 svc-<slug>-<hash>@service.vela,仅作唯一标识,不是邮箱。停用走常规 PATCH /users/{id}(停用即刻切断其所有凭据,已有回归覆盖)。
+      responses: { '200': { description: 'OK / 40001 名称为空、重名、角色缺失' } }
   /api-clients:
     get:
       tags: [settings]

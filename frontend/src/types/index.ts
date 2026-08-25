@@ -142,8 +142,21 @@ export interface UserView {
   roleIds: number[]
   primaryRoleId: number
   status: 'active' | 'disabled' | 'invited'
+  kind?: 'human' | 'service' // 服务账号在列表里要能一眼认出来
   mfaEnabled: boolean
   lastActive: string
+}
+
+// 服务账号 —— 对接升级单/CI/CD 系统的机器主体(kind=service 的用户)。
+export interface ServiceAccount {
+  id: number
+  name: string
+  email: string // 生成的唯一标识,不是邮箱
+  status: string
+  dept: string
+  roles: string[]
+  tags: string[]
+  clients: number // 已绑定的 API 凭据数
 }
 
 export interface RiskCommandView {

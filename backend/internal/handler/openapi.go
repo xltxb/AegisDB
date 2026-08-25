@@ -154,6 +154,31 @@ func (h *Handler) OpenListPipelines(c *gin.Context) {
 	resp.OK(c, out)
 }
 
+// ---------------------------------------------------------------- 服务账号(控制台)
+
+// ListServiceAccounts returns the machine principals the credential UI binds to.
+func (h *Handler) ListServiceAccounts(c *gin.Context) {
+	resp.OK(c, h.Svc.ListServiceAccounts())
+}
+
+// CreateServiceAccount mints a machine principal (kind=service): roles + tags,
+// no password, no console login — its only door is an API credential.
+func (h *Handler) CreateServiceAccount(c *gin.Context) {
+	var req dto.ServiceAccountReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	u, err := h.Svc.CreateServiceAccount(middleware.CurrentUser(c), req)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
+	slog.Info("service account created", "name", u.Name, "email", u.Email,
+		"by", middleware.CurrentUser(c).Name)
+	resp.OK(c, u)
+}
+
 // ---------------------------------------------------------------- 凭据管理(控制台)
 
 // ListAPIClients returns the credentials. There is no secret in the payload —

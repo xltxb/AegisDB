@@ -243,6 +243,13 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/settings/lark/test", menu("settings"), admin, h.TestLark)
 		a.GET("/settings/webhook/deliveries", menu("settings"), h.WebhookDeliveries)
 
+		// 服务账号 — the machine principal an API credential acts as. Creation is
+		// admin-only for the same reason issuing a credential is: together they
+		// are a standing grant of change rights to an external system. Lifecycle
+		// (disable, roles, tags) reuses the ordinary /users management.
+		a.GET("/service-accounts", menu("settings"), h.ListServiceAccounts)
+		a.POST("/service-accounts", menu("settings"), admin, h.CreateServiceAccount)
+
 		// 开放接口凭据 — a credential is a standing right to raise production
 		// changes, so issuing and revoking one is admin-only; viewing the list
 		// (which carries no secret) is settings-menu.

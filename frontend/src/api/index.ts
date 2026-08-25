@@ -1,7 +1,7 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -259,6 +259,10 @@ export const api = {
   // ---- 开放接口凭据 (external API clients) ----
   // The create call returns the ONLY plaintext copy of the secret; there is no
   // "fetch it again" endpoint because the server keeps a bcrypt hash.
+  // 服务账号:凭据背后的机器主体。创建是 admin 行为;停用/角色走常规用户管理。
+  serviceAccounts: () => http.get<any, Envelope<ServiceAccount[]>>('/service-accounts').then(ok),
+  createServiceAccount: (body: { name: string; roleIds: number[]; tags?: string[]; dept?: string }) =>
+    http.post<any, Envelope<UserView>>('/service-accounts', body),
   apiClients: () => http.get<any, Envelope<APIClient[]>>('/api-clients').then(ok),
   createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; enabled?: boolean }) =>
     http.post<any, Envelope<{ client: APIClient; token: string }>>('/api-clients', body),
