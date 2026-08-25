@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { DatabaseZap, KeyRound, Download, Copy, Check, Eye, EyeOff, FolderCog, TriangleAlert, Loader, CircleCheck, CircleX, Clock } from 'lucide-vue-next'
+import { DatabaseZap, KeyRound, Download, Copy, Check, Eye, EyeOff, FolderCog, TriangleAlert, Loader, CircleCheck, CircleX, Clock, Trash2 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
@@ -9,6 +10,7 @@ import { CODE_OK, CODE_EXPORT_PATH_UNSET } from '@/api/http'
 import type { Connection, ExportJob } from '@/types'
 
 const router = useRouter()
+const { t } = useI18n()
 const conns = ref<Connection[]>([])
 const connId = ref<number>(0)
 const db = ref('')                       // target database within the instance ('' = connection default)
@@ -20,6 +22,9 @@ const err = ref('')
 const needPath = ref(false)
 const jobs = ref<ExportJob[]>([])
 const copiedId = ref(0)
+// 服务器上归档保留几天(0=永久)。来自 /export/config,不是前端猜的默认值 ——
+// 提交页要说的保留期,必须和真正执行删除的那个设置是同一个数。
+const retentionDays = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const activeConn = computed(() => conns.value.find((c) => c.id === connId.value) || null)
@@ -69,6 +74,7 @@ onMounted(async () => {
     const first = conns.value.find((c) => c.env === 'prod') ?? conns.value[0]
     if (first) { connId.value = first.id; await loadDbs(first.id) }
   } catch { /* ignore */ }
+  try { retentionDays.value = (await api.exportConfig()).retentionDays ?? 0 } catch { /* 取不到就不提保留期,别编一个 */ }
   await loadJobs()
   timer = setInterval(() => { if (anyActive.value) loadJobs() }, 2000)
 })
@@ -76,8 +82,8 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 
 async function submit() {
   const q = sql.value.trim()
-  if (!connId.value) { err.value = '请选择数据库实例'; return }
-  if (!q) { err.value = '请输入要导出的 SQL'; return }
+  if (!connId.value) { err.value = t('pickInstance'); return }
+  if (!q) { err.value = t('enterExportSql'); return }
   busy.value = true
   err.value = ''
   needPath.value = false
@@ -85,8 +91,8 @@ async function submit() {
     const env = await api.exportData(connId.value, q, name.value.trim(), db.value)
     if (env.code === CODE_EXPORT_PATH_UNSET) { needPath.value = true; return }
     if (env.code === CODE_OK) { await loadJobs(); return } // job queued
-    err.value = env.msg || '提交失败'
-  } catch { err.value = '提交失败' }
+    err.value = env.msg || t('submitFailed')
+  } catch { err.value = t('submitFailed') }
   finally { busy.value = false }
 }
 
@@ -120,7 +126,7 @@ async function download(j: ExportJob) {
       await downloadOne(f)
       await new Promise((r) => setTimeout(r, 250))
     }
-  } catch { err.value = '下载失败' }
+  } catch { err.value = t('downloadFailed') }
 }
 function goSettings() { router.push('/settings') }
 const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB')
@@ -129,6 +135,8 @@ const stMeta: Record<string, { t: string; icon: any; cls: string }> = {
   running: { t: 'exportStRunning', icon: Loader, cls: 'run' },
   done: { t: 'exportStDone', icon: CircleCheck, cls: 'ok' },
   failed: { t: 'exportStFailed', icon: CircleX, cls: 'bad' },
+  // 归档已被保留策略清理:任务行还在,文件没了。
+  expired: { t: 'exportStExpired', icon: Trash2, cls: 'wait' },
 }
 const meta = (s: string) => stMeta[s] || stMeta.pending
 </script>
@@ -170,6 +178,9 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
           <div v-if="err" class="err">{{ err }}</div>
 
           <div class="acts">
+            <!-- 保留期写在提交按钮旁边,而不是藏进帮助文档:导出成功后才知道
+                 "三天后文件没了",那三天就已经被当成永久的了。 -->
+            <span v-if="retentionDays > 0" class="retain"><Clock :size="12" />{{ $t('exportRetentionNote', { d: retentionDays }) }}</span>
             <VButton variant="primary" :disabled="busy" @click="submit">{{ busy ? $t('exportRunning') : $t('exportSubmit') }}</VButton>
           </div>
         </div>
@@ -197,16 +208,21 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
             </div>
             <div class="jsql" :title="j.sql">{{ j.sql }}</div>
             <div v-if="j.status === 'done'" class="jfoot">
-              <span class="jmeta">{{ j.rows }} 行 · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
+              <span class="jmeta">{{ $t('exportRowsN', { n: j.rows }) }} · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
               <span class="jpw">
                 <KeyRound :size="12" /><span class="pl">{{ $t('exportPassword') }}</span>
                 <code class="pw">{{ shownPw.has(j.id) ? j.password : '••••••••••' }}</code>
-                <button class="copy" title="显示/隐藏" @click="togglePw(j.id)"><component :is="shownPw.has(j.id) ? EyeOff : Eye" :size="14" /></button>
+                <button class="copy" :title="$t('tipTogglePw')" @click="togglePw(j.id)"><component :is="shownPw.has(j.id) ? EyeOff : Eye" :size="14" /></button>
                 <button class="copy" :title="$t('copy')" @click="copyPw(j)"><component :is="copiedId === j.id ? Check : Copy" :size="14" /></button>
               </span>
               <span class="jdl">
                 <VButton variant="secondary" height="32px" @click="download(j)"><Download :size="14" />{{ $t('exportDownload') }}{{ j.parts > 1 ? ` (${j.parts})` : '' }}</VButton>
               </span>
+            </div>
+            <!-- 过期:文件被保留策略删了,但导出了什么仍然留在这里 —— 审计问的是这个,不是文件。 -->
+            <div v-else-if="j.status === 'expired'" class="jgone">
+              <span class="jmeta">{{ $t('exportRowsN', { n: j.rows }) }} · {{ kb(j.bytes) }} · {{ j.parts }} {{ $t('exportParts') }}</span>
+              <span class="gtip"><Trash2 :size="12" />{{ $t('exportExpiredHint', { d: retentionDays }) }}</span>
             </div>
             <div v-else-if="j.status === 'failed'" class="jerr">{{ j.error || $t('exportStFailed') }}</div>
           </div>
@@ -227,7 +243,7 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
   .col { display: flex; flex-direction: column; max-width: 760px; }
   .col > .card:first-child { position: static; }
 }
-.card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
+.card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .st { font: 600 14px var(--font-display); color: var(--text-strong); }
@@ -251,7 +267,8 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .sqlarea { margin-top: 7px; width: 100%; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); color: var(--text-strong); padding: 10px 12px; resize: vertical; font: 500 12.5px var(--font-mono); line-height: 1.6; outline: none; }
 .sqlarea:focus { border-color: var(--accent-text); }
 .err { margin-top: 10px; font: 600 12px var(--font-body); color: var(--danger-text); }
-.acts { margin-top: 16px; display: flex; justify-content: flex-end; }
+.acts { margin-top: 16px; display: flex; align-items: center; justify-content: flex-end; gap: 14px; }
+.retain { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-body); color: var(--text-faint); }
 .jobs { display: flex; flex-direction: column; }
 .jempty { padding: 30px; text-align: center; font: 500 12.5px var(--font-mono); color: var(--text-faint); }
 .job { padding: 13px 20px 14px; border-bottom: 1px solid var(--border-subtle); }
@@ -273,6 +290,8 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .pw { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 10px; border-radius: 7px; background: var(--accent-subtle); color: var(--accent-text); font: 800 12.5px var(--font-mono); letter-spacing: 1px; }
 .copy { width: 30px; height: 28px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-sunken); color: var(--text-body); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .copy:hover { color: var(--accent-text); }
+.jgone { margin-top: 9px; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.gtip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 600 11px var(--font-body); color: var(--text-faint); }
 .jerr { margin-top: 7px; font: 600 11.5px var(--font-body); color: var(--danger-text); }
 .jdl { margin-left: auto; flex-shrink: 0; }
 .spin { animation: spin 1s linear infinite; }

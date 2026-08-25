@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Clock, Loader, CircleCheck, CircleX, Hourglass, Play } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -8,6 +9,7 @@ import { CODE_OK, CODE_INTERCEPTED } from '@/api/http'
 import { useUIStore } from '@/stores/ui'
 import type { Connection, AsyncJob } from '@/types'
 
+const { t } = useI18n()
 const ui = useUIStore()
 const conns = ref<Connection[]>([])
 const connId = ref<number>(0)
@@ -68,8 +70,8 @@ onUnmounted(() => { if (timer) clearInterval(timer) })
 
 async function submit() {
   const q = sql.value.trim()
-  if (!connId.value) { err.value = ui.lang === 'en' ? 'Select an instance' : '请选择数据库实例'; return }
-  if (!q) { err.value = ui.lang === 'en' ? 'Enter SQL' : '请输入 SQL'; return }
+  if (!connId.value) { err.value = t('pickInstance'); return }
+  if (!q) { err.value = t('enterSql'); return }
   busy.value = true; err.value = ''
   try {
     const env = await api.execAsync(connId.value, q, db.value, reason.value.trim())
@@ -77,11 +79,11 @@ async function submit() {
       await loadJobs(); openId.value = env.data.jobId; return
     }
     if (env.code === CODE_INTERCEPTED) {
-      err.value = (ui.lang === 'en' ? 'Intercepted — needs approval: ' : '命令被拦截,需审批:') + (env.data?.approvalNo || '')
+      err.value = t('interceptedNeedAppr') + ' ' + (env.data?.approvalNo || '')
       return
     }
-    err.value = env.msg || (ui.lang === 'en' ? 'Submit failed' : '提交失败')
-  } catch (e: any) { err.value = e?.message || (ui.lang === 'en' ? 'Submit failed' : '提交失败') }
+    err.value = env.msg || t('submitFailed')
+  } catch (e: any) { err.value = e?.message || t('submitFailed') }
   finally { busy.value = false }
 }
 
@@ -152,7 +154,7 @@ function fmt(s: string | null) { return s ? new Date(s).toLocaleString('en-GB') 
 .eyebrow { font: 600 15px var(--font-display); color: var(--text-strong); }
 .sub { font: 500 12.5px var(--font-body); color: var(--text-muted); margin-top: 3px; }
 .grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; align-items: start; }
-.card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 16px 18px; }
+.card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 16px 18px; }
 .form .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin: 12px 0 6px; }
 .form .fl:first-child { margin-top: 0; }
 .in { width: 100%; box-sizing: border-box; height: 38px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); padding: 0 12px; font: 500 13px var(--font-mono); color: var(--text-strong); outline: none; }

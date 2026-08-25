@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound,
+  Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound, Rocket, GitBranch, SpellCheck,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
   CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck,
 } from 'lucide-vue-next'
@@ -25,6 +25,12 @@ const navItems = [
   { key: 'export', gate: 'terminal', path: '/export', icon: DatabaseZap, label: 'navExport' },
   { key: 'uploads', gate: 'terminal', path: '/uploads', icon: Upload, label: 'navUploads' },
   { key: 'asyncjobs', gate: 'terminal', path: '/async-jobs', icon: Clock, label: 'navAsync' },
+  // 发布 (CI/CD) — the release list and the flow editor share the pipeline menu.
+  { key: 'releases', gate: 'pipeline', path: '/releases', icon: Rocket, label: 'navReleases' },
+  { key: 'pipelines', gate: 'pipeline', path: '/pipelines', icon: GitBranch, label: 'navPipelines' },
+  // 规范审查 rides the terminal permission: it is a self-check tool first, and a
+  // rule library second (editing it is admin-only server-side).
+  { key: 'sqlreview', gate: 'terminal', path: '/sql-review', icon: SpellCheck, label: 'navSqlReview' },
   { key: 'approve', path: '/approvals', icon: ClipboardCheck, label: 'navAppr', badge: true },
   { key: 'db', path: '/connections', icon: Database, label: 'navDb' },
   { key: 'rules', path: '/risk-rules', icon: ShieldAlert, label: 'navRules' },
@@ -235,7 +241,7 @@ onUnmounted(() => {
             {{ gwOnline ? $t('gwOnline') : $t('gwOffline') }}<span v-if="gwOnline && gwP50 !== null"> · p50 {{ gwP50 }}ms</span>
           </div>
           <div class="pill warn"><Hourglass :size="13" />{{ $t('pending') }} {{ auth.pendingCount }}</div>
-          <div class="pill click" :title="'中 / EN'" @click="ui.toggleLang()">
+          <div class="pill click" :title="$t('langSwitch')" @click="ui.toggleLang()">
             <Languages :size="14" />{{ $t('langLabel') }}
           </div>
           <div class="pill click" :title="$t('themeToggle')" @click="ui.toggleTheme()">
@@ -289,76 +295,110 @@ onUnmounted(() => {
   color: var(--text-body);
   overflow: hidden;
 }
-/* rail */
+/* rail
+   84px, not 74: the labels were 9px mono, which is below the size anything is
+   readable at — they existed to satisfy the layout, not to be read. At 10.5px
+   in the body face they are legible, and the extra 10px is what pays for it.
+   The rail also sits on the CARD surface now, so the page's content area is
+   the recessed plane and the chrome is the raised one, rather than the other
+   way round. */
 .rail {
-  width: 74px;
+  width: 84px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-subtle);
-  background: var(--surface-sunken);
+  background: var(--surface-card);
+  box-shadow: 1px 0 0 var(--border-subtle);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 0;
+  padding: 16px 0 14px;
   overflow: hidden;
-  transition: width var(--dur-med, 0.2s) var(--ease-out, ease), padding var(--dur-med, 0.2s) var(--ease-out, ease);
+  transition: width var(--dur-base) var(--ease-out), padding var(--dur-base) var(--ease-out);
 }
 .logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #3b6ef6, #2dcde6);
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--azure-500), var(--cyan-400));
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 18px -4px rgba(45, 205, 230, 0.6);
+  box-shadow: 0 6px 16px -6px rgba(59, 110, 246, 0.7);
 }
+/* The nav scrolls, the logo and the account button do not.
+   With 14 destinations the rail is taller than a 900px window: it used to just
+   run past the bottom edge, taking the ACCOUNT BUTTON with it — the one control
+   that holds logout and MFA enrolment. Scrolling the middle keeps both ends
+   reachable at any window height. The scrollbar is hidden because the rail is
+   84px wide and a 9px gutter would eat a tenth of it; the list still scrolls by
+   wheel, trackpad and keyboard. */
 .rail-nav {
-  margin-top: 22px;
+  margin-top: 20px;
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   width: 100%;
   align-items: center;
+  scrollbar-width: none;
 }
+.rail-nav::-webkit-scrollbar { display: none; }
 .rail-item {
   position: relative;
-  width: 58px;
-  height: 52px;
-  border-radius: 12px;
+  width: 68px;
+  height: 54px;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: var(--transition-colors);
   color: var(--text-muted);
-  border: 1px solid transparent;
+  border: none;
 }
-.rail-item:hover { color: var(--text-body); }
+.rail-item:hover { background: var(--surface-sunken); color: var(--text-body); }
+.rail-item:active { transform: scale(0.97); transition: transform var(--dur-instant) var(--ease-out); }
 .rail-item.active {
   background: var(--accent-subtle);
   color: var(--accent-text);
-  border-color: var(--accent-subtle-border);
 }
-.rl { font: 600 9px var(--font-mono); }
+/* The brand gradient finally does a job: it marks WHERE YOU ARE. Until now the
+   azure→cyan pair appeared once, on the logo, and never again. */
+.rail-item.active::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 13px;
+  bottom: 13px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--accent), var(--glow-accent));
+}
+.rl { font: 600 10.5px var(--font-body); letter-spacing: 0.01em; }
 .dot {
   position: absolute;
-  top: 5px;
-  right: 9px;
-  min-width: 15px;
-  height: 15px;
-  padding: 0 3px;
+  top: 6px;
+  right: 12px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   background: var(--danger);
   color: #fff;
-  font: 700 9px var(--font-mono);
+  font: 700 9.5px var(--font-mono);
   display: flex;
   align-items: center;
   justify-content: center;
+  /* a ring in the rail surface so the badge reads as ON the icon, not beside it */
+  box-shadow: 0 0 0 2px var(--surface-card);
 }
 .rail-bottom {
   margin-top: auto;
+  flex-shrink: 0;
+  padding-top: 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -385,7 +425,7 @@ onUnmounted(() => {
 .um-tag { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
 .um-tag.on { color: var(--success-text); }
 .usermenu {
-  position: fixed; bottom: 18px; left: 74px; z-index: 401; width: 240px;
+  position: fixed; bottom: 18px; left: 84px; z-index: 401; width: 240px;
   background: var(--surface-overlay, var(--surface-card)); border: 1px solid var(--border-default);
   border-radius: 12px; box-shadow: var(--shadow-xl); padding: 12px;
 }
@@ -402,31 +442,39 @@ onUnmounted(() => {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 14px;
-  height: 54px;
+  gap: 12px;
+  height: 56px;
   flex-shrink: 0;
-  padding: 0 22px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 0 var(--space-6);
   background: var(--topbar-bg);
-  backdrop-filter: blur(8px);
+  box-shadow: 0 1px 0 var(--border-subtle);
 }
-.tb-title { font: 700 16px var(--font-display); color: var(--text-strong); letter-spacing: -0.01em; }
-.tb-sub { font: 500 12px var(--font-mono); color: var(--text-muted); }
-.tb-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.tb-title { font: 700 17px var(--font-display); color: var(--text-strong); letter-spacing: var(--tracking-tight); }
+/* The subtitle is PROSE ("一次变更走完一条流水线"), not data — it was set in
+   JetBrains Mono, which is why every page header read like a log line. Numbers
+   inside it keep the mono face via .v-num. */
+.tb-sub { font: 500 12.5px var(--font-body); color: var(--text-muted); }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+/* Status pills are filled, not outlined: an outline on a light page competes
+   with the card edges around it, and these are meant to be read at a glance. */
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   height: 30px;
   padding: 0 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font: 500 12px var(--font-mono);
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  font: 600 11.5px var(--font-body);
   color: var(--text-muted);
+  transition: var(--transition-colors);
 }
-.pill.warn { background: var(--warning-subtle); color: var(--warning-text); border: none; gap: 6px; padding: 0 11px; font-weight: 600; }
-.pill.off { background: var(--danger-subtle); color: var(--danger-text); border: none; font-weight: 600; }
-.pill.click { border-color: var(--border-default); color: var(--text-body); cursor: pointer; font-weight: 600; gap: 5px; }
+.pill .v-num, .pill .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.pill.warn { background: var(--warning-subtle); color: var(--warning-text); gap: 6px; padding: 0 11px; font-weight: 600; }
+.pill.off { background: var(--danger-subtle); color: var(--danger-text); font-weight: 600; }
+.pill.click { color: var(--text-body); cursor: pointer; font-weight: 600; gap: 5px; }
+.pill.click:hover { background: var(--border-subtle); }
 .content { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* notifications */

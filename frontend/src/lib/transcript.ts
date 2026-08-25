@@ -16,6 +16,8 @@
 //     `IDENTIFIED BY 'hunter2'`, and it would be a strange kind of care that
 //     redacted the tamper-proof copy and shipped the plaintext one.
 
+import { i18n } from '@/locales'
+
 /** Matches a single- or double-quoted SQL literal — mirrors sqlutil.quotedVal. */
 const QUOTED = `(?:'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*")`
 
@@ -181,17 +183,21 @@ export class Transcript {
    * against something else that happened.
    */
   render(meta: TranscriptMeta): string {
+    // The header follows the console's language, like everything else the user
+    // reads. It goes through the i18n instance directly (as the ui store does)
+    // because a lib has no component context to call useI18n() from.
+    const tr = i18n.global.t as (k: string, p?: Record<string, unknown>) => string
     const lines: string[] = []
-    lines.push('# Vela 数据库网关 · 终端会话日志')
-    lines.push(`# 实例: ${meta.instance}${meta.database ? ` · 库: ${meta.database}` : ''}`)
-    if (meta.user) lines.push(`# 操作人: ${meta.user}`)
-    lines.push(`# 导出时间: ${fmt(meta.exportedAt)}`)
-    lines.push(`# 记录条数: ${this.entries.length}`)
+    lines.push(`# ${tr('tsTitle')}`)
+    lines.push(`# ${tr('tsInstance')}: ${meta.instance}${meta.database ? ` · ${tr('tsDb')}: ${meta.database}` : ''}`)
+    if (meta.user) lines.push(`# ${tr('tsUser')}: ${meta.user}`)
+    lines.push(`# ${tr('tsExportedAt')}: ${fmt(meta.exportedAt)}`)
+    lines.push(`# ${tr('tsCount')}: ${this.entries.length}`)
     if (this.dropped > 0) {
       // Stated, not silent. Someone reading this must know the beginning is gone.
-      lines.push(`# 注意: 会话过长, 已丢弃最早的 ${this.dropped} 条记录, 本文件从中途开始`)
+      lines.push(`# ${tr('tsDropped', { n: this.dropped })}`)
     }
-    lines.push('# 口令字面量已按审计同规则打码')
+    lines.push(`# ${tr('tsRedacted')}`)
     lines.push('')
 
     for (const e of this.entries) {

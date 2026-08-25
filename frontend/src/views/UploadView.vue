@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Upload, FileCode2, Download, Trash2, FolderCog } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
@@ -9,6 +10,7 @@ import { CODE_OK, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import type { ScriptUpload } from '@/types'
 
 const router = useRouter()
+const { t } = useI18n()
 const files = ref<ScriptUpload[]>([])
 const busy = ref(false)
 const err = ref('')
@@ -30,8 +32,8 @@ async function uploadFile(file: File) {
     const env = await api.scriptUpload(text, file.name)
     if (env.code === CODE_SCRIPT_PATH_UNSET) { needPath.value = true; return }
     if (env.code === CODE_OK) { await loadList(); return }
-    err.value = env.msg || '上传失败'
-  } catch { err.value = '上传失败' }
+    err.value = env.msg || t('uploadFailed')
+  } catch { err.value = t('uploadFailed') }
   finally { busy.value = false }
 }
 
@@ -55,12 +57,12 @@ async function download(u: ScriptUpload) {
     a.download = u.filename
     a.click()
     URL.revokeObjectURL(url)
-  } catch { err.value = '下载失败' }
+  } catch { err.value = t('downloadFailed') }
 }
 async function remove(u: ScriptUpload) {
   // M15: 删除脚本文件前二次确认
-  if (!confirmAction(`确定删除脚本文件「${u.filename}」吗？此操作不可撤销。`)) return
-  try { await api.scriptUploadDelete(u.id); await loadList() } catch { err.value = '删除失败' }
+  if (!confirmAction(t('upDelConfirm', { name: u.filename }))) return
+  try { await api.scriptUploadDelete(u.id); await loadList() } catch { err.value = t('deleteFailed') }
 }
 function goSettings() { router.push('/settings') }
 const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(2) + ' MB')
@@ -120,7 +122,7 @@ const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixe
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .col { max-width: 720px; display: flex; flex-direction: column; gap: 18px; }
-.card { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
+.card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
 .sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .st { font: 600 14px var(--font-display); color: var(--text-strong); }

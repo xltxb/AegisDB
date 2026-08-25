@@ -76,15 +76,27 @@
   /* ============================================================
      SEMANTIC — Light (default)
      ============================================================ */
-  --surface-page:    var(--slate-50);
+  /* One step cooler than slate-50 so a white card LIFTS off the page instead of
+     needing a border to be seen. That swap is the whole of the light theme's
+     depth problem: with page and card nearly the same white, every surface had
+     to draw a hairline around itself, and eight hairlined blocks on a page all
+     read at the same level. */
+  --surface-page:    #f2f5fa;
   --surface-card:    var(--slate-0);
   --surface-sunken:  var(--slate-100);
   --surface-raised:  var(--slate-0);
   --surface-inverse: var(--slate-900);
   --surface-overlay: rgba(12, 14, 23, 0.45);
-  --topbar-bg:       rgba(255, 255, 255, 0.72); /* light glass — dark topbar text stays legible */
+  /* The topbar is opaque now, not glass. Frosted chrome over a scrolling
+     table reads as a smear, and the blur cost a repaint on every scroll frame
+     for an effect nobody was looking at. It stays a token because "what colour
+     is the topbar" is still one question with one answer per theme. */
+  --topbar-bg:       var(--slate-0);
 
-  --border-subtle:   var(--slate-200);
+  /* Softer than slate-200: once elevation carries the hierarchy, a border is
+     there to separate, not to outline. slate-200 against the new page colour
+     read as a drawn box around everything. */
+  --border-subtle:   #e4e9f2;
   --border-default:  var(--slate-300);
   --border-strong:   var(--slate-400);
 
@@ -130,7 +142,7 @@
   --surface-raised:  #1b2030;
   --surface-inverse: var(--slate-50);
   --surface-overlay: rgba(4, 6, 12, 0.66);
-  --topbar-bg:       rgba(20, 24, 38, 0.55); /* dark glass */
+  --topbar-bg:       #141826;
 
   --border-subtle:   rgba(255, 255, 255, 0.07);
   --border-default:  rgba(255, 255, 255, 0.13);

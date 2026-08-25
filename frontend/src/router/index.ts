@@ -15,6 +15,16 @@ const router = createRouter({
         { path: 'export', name: 'export', component: () => import('@/views/ExportView.vue'), meta: { menuKey: 'export', gate: 'terminal' } },
         { path: 'uploads', name: 'uploads', component: () => import('@/views/UploadView.vue'), meta: { menuKey: 'uploads', gate: 'terminal' } },
         { path: 'async-jobs', name: 'asyncjobs', component: () => import('@/views/AsyncExecView.vue'), meta: { menuKey: 'asyncjobs', gate: 'terminal' } },
+        // 发布流程 (CI/CD). Both pages sit behind the `pipeline` menu: raising a
+        // release ends in an execution, so it is granted to whoever may execute.
+        // Editing the templates is admin-only on the server; the pages hide the
+        // controls rather than guessing.
+        { path: 'releases', name: 'releases', component: () => import('@/views/ReleasesView.vue'), meta: { menuKey: 'releases', gate: 'pipeline' } },
+        { path: 'pipelines', name: 'pipelines', component: () => import('@/views/PipelinesView.vue'), meta: { menuKey: 'pipelines', gate: 'pipeline' } },
+        // 规范审查 gates on `terminal`, not `rules`: the check is a self-service
+        // tool for whoever writes the change, and a review nobody can run before
+        // submitting is a review that only ever arrives as a rejection.
+        { path: 'sql-review', name: 'sql-review', component: () => import('@/views/SqlReviewView.vue'), meta: { menuKey: 'sqlreview', gate: 'terminal' } },
         { path: 'approvals', name: 'approvals', component: () => import('@/views/ApprovalsView.vue'), meta: { menuKey: 'approve' } },
         { path: 'connections', name: 'connections', component: () => import('@/views/ConnectionsView.vue'), meta: { menuKey: 'db' } },
         { path: 'risk-rules', name: 'risk-rules', component: () => import('@/views/RiskRulesView.vue'), meta: { menuKey: 'rules' } },

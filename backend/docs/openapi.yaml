@@ -1,28 +1,150 @@
 openapi: 3.0.3
 info:
   title: DP DB GATEWAY API
-  version: "1.0"
-  description: >
-    数据库管理网关 REST/WS 接口。统一前缀 /api/v1，Bearer Token 鉴权，
-    响应包 { code, msg, data }（code=0 成功，42200 命令被拦截需审批，返回 ap_no）。
+  version: "2.0"
+  description: |
+    数据库管理网关的 HTTP 接口。**每一条**已注册的路由都在本文件里 —— 由
+    `TestOpenAPICoversEveryRoute` 静态守住:新增路由但没写进来,测试直接失败。
+
+    ## 三套鉴权,不要混用
+
+    | 面 | 前缀 | 鉴权 | 谁在调 |
+    |---|---|---|---|
+    | 控制台 | `/api/v1` | `Authorization: Bearer <JWT>` | 登录的人 |
+    | 开放接口 | `/api/v1/open` | `Authorization: Bearer <key>.<secret>` | 外部系统 |
+    | 回调 | `/api/v1/approvals/lark/callback` | 共享密钥(Bearer 或 `?secret=`) | 审批服务 |
+
+    开放接口**不走**控制台的 IP 白名单:那个设置回答的是"哪些办公网可以打开控制台",
+    把 CI runner 的出口段并进去等于为了一台机器放宽控制台的边界。每把凭据自带白名单。
+
+    ## 响应包
+
+    一律 HTTP 200,业务结果在 `code` 里 —— 包括错误。
+
+    ```json
+    { "code": 0, "msg": "ok", "data": { } }
+    ```
+
+    | code | 含义 | 客户端该做什么 |
+    |---|---|---|
+    | `0` | 成功 | 读 `data` |
+    | `40001` | 参数错误 | `msg` 说明了哪里不对,直接展示 |
+    | `40100` | 未登录 / Token 失效 / API 凭据无效 | 重新登录;开放接口检查 key.secret |
+    | `40300` | 无权(菜单、能力矩阵、scope、非本人单据) | 展示 `msg`,不要重试 |
+    | `40301` | 来源 IP 不在白名单 | 联系管理员放行 |
+    | `42200` | 命令被拦截,已转审批 | `data.approvalNo` 是审批单号 |
+    | `42600` | 脚本保存路径未配置 | 引导去【系统设置 · 网关】 |
+    | `42601` | 导出保存路径未配置 | 同上 |
+    | `42800` | 需要二次验证(TOTP) | 弹验证码输入,带 `mfaCode` 重试 |
+    | `42900` | 登录尝试过于频繁 | 退避后再试 |
+    | `50000` | 服务端错误 | 可重试;`msg` 不含内部细节 |
+
+    ## 控制台的三层闸门
+
+    每条控制台写接口要过:**菜单权限** → **能力矩阵(角色 × 能力 × 分层)** → **高危命令字典**。
+    下面每个操作的 `summary` 都标了它要求的守卫,格式 `[菜单 · admin]`:
+
+    - `[terminal]` 需要终端菜单;`[perms · admin]` 需要权限菜单**且**是平台管理员。
+    - 没有标注 = 任何已登录用户可调。
+
+    ## 分层(tier)不是环境(environment)
+
+    规则挂在**分层**上,实例归属**环境**,一个分层承载 N 个环境。凡是参数名为
+    `tierCode` 的地方都不接受环境码 —— 查不到规则行等于放行,传错会让实例失去管控。
+
 servers:
   - url: /api/v1
+
+tags:
+  - name: auth
+    description: 登录、会话、当前用户、TOTP 绑定
+  - name: terminal
+    description: 命令预检与执行(同步 / 异步 / WebSocket)
+  - name: scripts
+    description: SQL 脚本上传、扫描、执行
+  - name: snippets
+    description: 个人快捷脚本(Alt+1…9)
+  - name: export
+    description: 数据导出(压缩加密分卷)
+  - name: connections
+    description: 实例配置与库表元数据
+  - name: tiers
+    description: 控制分层与环境
+  - name: roles
+    description: 角色、菜单、能力矩阵、标签范围
+  - name: users
+    description: 账号与个人数据范围
+  - name: risk-rules
+    description: 高危命令字典(判"危不危险")
+  - name: sql-review
+    description: 规范审查规则库(判"写得对不对")
+  - name: pipelines
+    description: 发布流程模板与发布单(CI/CD)
+  - name: approvals
+    description: 审批单与外部审批回调
+  - name: audit
+    description: 防篡改审计链
+  - name: settings
+    description: 系统设置、Webhook、开放接口凭据
+  - name: open-api
+    description: 外部系统提交 SQL 升级单(key/secret 鉴权)
+
 components:
   securitySchemes:
-    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 控制台会话 Token,由 `/auth/login` 签发。
+    openApiKey:
+      type: http
+      scheme: bearer
+      description: |
+        开放接口凭据,格式 `<key>.<secret>`,在【系统设置 · 开放接口】签发。
+        也接受 `X-Vela-Key` + `X-Vela-Secret` 两个请求头(给保留了 Authorization 的客户端)。
+
   schemas:
     R:
       type: object
+      description: 统一响应包。
+      required: [code, msg]
       properties:
         code: { type: integer, example: 0 }
-        msg: { type: string }
+        msg: { type: string, example: ok }
         data: {}
+
     LoginReq:
       type: object
       required: [email, password]
       properties:
+        email: { type: string, example: linwei@vela.io }
+        password: { type: string, format: password }
+        mfaCode: { type: string, description: 已绑定 TOTP 的账号在第二步提交 }
+
+    MeResp:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
         email: { type: string }
-        password: { type: string }
+        roleId: { type: integer, format: int64, description: 主角色(展示与 JWT 用) }
+        roleCodes:
+          type: array
+          items: { type: string }
+          description: 持有的全部角色码;权限取所有角色的并集
+        canApprove: { type: boolean }
+        mfaEnabled: { type: boolean }
+        menus:
+          type: object
+          additionalProperties: { type: boolean }
+          description: 菜单键 → 是否可见。缺失的键读作"无权"。
+        capabilities:
+          type: object
+          description: 能力 → 分层 → 等级(allow / approve / deny)。
+          additionalProperties:
+            type: object
+            additionalProperties: { type: string }
+
     RiskCheckReq:
       type: object
       required: [connectionId, sql]
@@ -35,216 +157,1100 @@ components:
         risk: { type: string, enum: [high, mid, low] }
         action: { type: string, enum: [allow, approve, deny] }
         requiresApproval: { type: boolean }
-        matchedRule: { type: string }
-        command: { type: string }
+        matchedRule: { type: string, description: 命中的规则;多条以 " + " 连接 }
+        command: { type: string, description: 判定所依据的那条语句(批量时是最严的一条) }
+
     ExecReq:
       type: object
       required: [connectionId, sql]
       properties:
         connectionId: { type: integer, format: int64 }
-        sql: { type: string }
-        reason: { type: string }
-    ScriptScanReq:
+        sql: { type: string, description: 可含多条语句;按最严的一条判定 }
+        reason: { type: string, description: 转审批时写进工单 }
+        mfaCode: { type: string, description: 目标分层要求二次验证时必填 }
+        database: { type: string, description: 实例内的目标库;留空用连接默认库 }
+    ExecResp:
       type: object
-      required: [content]
       properties:
-        content: { type: string }
-        filename: { type: string }
-        connectionId: { type: integer, format: int64 }
-    ConnectionCreateReq:
+        risk: { type: string }
+        output: { type: string }
+        rows: { type: integer }
+        ms: { type: integer, description: 数据库执行耗时(实测,不含网关开销) }
+        columns: { type: array, items: { type: string } }
+        data: { type: array, items: { type: array, items: { type: string } } }
+        truncated: { type: boolean }
+        intercepted: { type: boolean }
+        approvalNo: { type: string }
+
+    ReviewRule:
       type: object
-      required: [name, engine, host, env, policy]
+      description: 规范审查规则库的一行。`code` 是身份 —— 内置规则靠它绑定实现,不可改名。
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string, example: ddl.require.primary.key }
+        name: { type: string }
+        dialect: { type: string, description: '`all` 或逗号分隔方言集,如 `mysql,tidb`', example: 'mysql,tidb' }
+        category: { type: string, enum: [dml, ddl, structure, naming, index, security, perf] }
+        level: { type: string, enum: [error, warn, info], description: error 会卡住发布,warn/info 只记录 }
+        kind: { type: string, enum: [builtin, regex] }
+        enabled: { type: boolean }
+        params: { type: string, description: JSON 字符串;空表示用内置默认 }
+        message: { type: string }
+        sortOrder: { type: integer }
+    ReviewFinding:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        level: { type: string, enum: [error, warn, info] }
+        category: { type: string }
+        stmt: { type: integer, description: 第几条语句(从 1 起) }
+        line: { type: integer }
+        sql: { type: string, description: 语句摘录,口令已打码 }
+        message: { type: string }
+    ReviewResult:
+      type: object
+      properties:
+        dialect: { type: string }
+        statements: { type: integer }
+        errors: { type: integer }
+        warnings: { type: integer }
+        infos: { type: integer }
+        findings: { type: array, items: { $ref: '#/components/schemas/ReviewFinding' } }
+        passed:
+          type: boolean
+          description: 无 error 级命中。**不是**"零命中" —— 警告从不拦截。
+
+    PipelineStage:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        stepOrder: { type: integer }
+        name: { type: string }
+        type: { type: string, enum: [review, approve, backup, execute, verify, manual, notify] }
+        config:
+          type: string
+          description: |
+            按类型解释的 JSON:review `{"failOn":"error|warn|none"}`、
+            backup/verify `{"sql":"…"}`、verify 另可 `{"expect":"empty|nonempty"}`、
+            manual `{"note":"…"}`。
+        onFailure: { type: string, enum: [abort, continue], description: 执行阶段强制 abort }
+    PipelineDetail:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        tierCode: { type: string, description: 空 = 适用全部分层;填值则只对该分层可选 }
+        enabled: { type: boolean }
+        isDefault: { type: boolean, description: 全局唯一;设置新的会清掉旧的 }
+        stages: { type: array, items: { $ref: '#/components/schemas/PipelineStage' } }
+
+    ReleaseStage:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        stepOrder: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, skipped] }
+        log: { type: string, description: 列表接口里为空,详情接口才带 }
+        findings: { type: string, description: 审查阶段的 ReviewResult(JSON 字符串) }
+        approvalId: { type: integer, format: int64 }
+        approvalNo: { type: string }
+        rows: { type: integer }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+    ReleaseView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        relNo: { type: string, example: REL-42 }
+        title: { type: string }
+        pipelineId: { type: integer, format: int64 }
+        pipelineName: { type: string, description: 快照,模板改名不影响历史 }
+        connectionId: { type: integer, format: int64 }
+        instance: { type: string }
+        database: { type: string }
+        env: { type: string, description: 快照:在哪个环境跑的 }
+        tierCode: { type: string, description: 快照:按哪个分层判的 }
+        engine: { type: string }
+        sql: { type: string, description: 口令已打码;列表接口里截断 }
+        reason: { type: string }
+        creator: { type: string }
+        source: { type: string, enum: [console, api] }
+        clientName: { type: string, description: source=api 时的外部系统名 }
+        externalRef: { type: string, description: 外部系统自己的单号 }
+        status: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+        risk: { type: string, enum: [high, mid, low] }
+        error: { type: string }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        stages: { type: array, items: { $ref: '#/components/schemas/ReleaseStage' } }
+    ReleaseReq:
+      type: object
+      required: [connectionId]
+      properties:
+        title: { type: string }
+        pipelineId: { type: integer, format: int64, description: 0 = 用目标分层的默认流程 }
+        connectionId: { type: integer, format: int64 }
+        database: { type: string }
+        sql: { type: string }
+        scriptUploadId: { type: integer, format: int64, description: 与 sql 二选一;按摘要校验后执行 }
+        reason: { type: string }
+        mfaCode: { type: string }
+
+    APIClient:
+      type: object
+      description: 开放接口凭据。响应里**没有**密钥 —— 库里只存 bcrypt 哈希。
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        key: { type: string, example: ak_e1026cc86fe60da7 }
+        userId: { type: integer, format: int64 }
+        userName: { type: string, description: 绑定的服务账号;能力矩阵与审计归属都按它算 }
+        allowIps: { type: string, description: 逗号分隔 IP/CIDR;空 = 不限来源 }
+        scopes: { type: string, example: 'release:create,release:read,review:check' }
+        enabled: { type: boolean }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    APIClientReq:
+      type: object
+      required: [name, userId]
       properties:
         name: { type: string }
-        engine: { type: string }
-        host: { type: string, description: "host:port" }
-        env: { type: string, enum: [prod, staging, dev] }
-        policy: { type: string, enum: [strict, approve-1, audit-only] }
-    RiskCommandUpsertReq:
-      type: object
-      required: [command, env]
-      properties:
-        command: { type: string }
-        env:
-          type: object
-          additionalProperties: { type: string, enum: [high, mid, off] }
-    WebhookConfigReq:
-      type: object
-      properties:
-        endpoint: { type: string }
-        secret: { type: string }
-        events: { type: string, description: "comma-separated: intercept,approve,exec,login" }
-        retryMax: { type: integer }
+        userId: { type: integer, format: int64, description: 必填且不给默认值 —— 不要绑管理员 }
+        allowIps: { type: string }
+        scopes: { type: array, items: { type: string, enum: ['release:create', 'release:read', 'review:check'] } }
         enabled: { type: boolean }
+
+    OpenReleaseReq:
+      type: object
+      description: |
+        外部系统提交的升级单。实例与流程可用**名字**寻址(`instance` / `pipeline`),
+        也可用 id;两者都给时 id 优先。正文三选一:`sql`、`script`(或 `scriptBase64`)、
+        multipart 的 `file` 字段。
+      properties:
+        title: { type: string }
+        externalRef:
+          type: string
+          description: |
+            调用方自己的单号,**幂等键**。同一凭据 + 同一 externalRef 重试会返回第一次
+            创建的那张单,不会重复下发变更(数据库唯一索引兜底,并发重试也安全)。
+        instance: { type: string, example: order-cluster }
+        connectionId: { type: integer, format: int64 }
+        database: { type: string }
+        pipeline: { type: string, example: 标准发布流程 }
+        pipelineId: { type: integer, format: int64 }
+        sql: { type: string }
+        script: { type: string, description: 脚本全文;落盘并记摘要,执行阶段重读校验 }
+        scriptBase64: { type: string, description: 脚本的 base64,避免 JSON 转义出错 }
+        filename: { type: string, default: upgrade.sql }
+        reason: { type: string }
+        mfaCode: { type: string, description: 目标分层要求二次验证且服务账号已绑 TOTP 时才需要 }
+    OpenStage:
+      type: object
+      properties:
+        order: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, skipped] }
+        log: { type: string, description: 只有状态查询接口返回 }
+        approvalNo: { type: string }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    OpenReleaseResp:
+      type: object
+      description: 对外的稳定契约,刻意不等于内部的 ReleaseView。
+      properties:
+        relNo: { type: string, example: REL-42 }
+        title: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+        risk: { type: string }
+        instance: { type: string }
+        database: { type: string }
+        env: { type: string }
+        pipeline: { type: string }
+        externalRef: { type: string }
+        error: { type: string }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        stages: { type: array, items: { $ref: '#/components/schemas/OpenStage' } }
+
+  responses:
+    Ok:
+      description: 成功
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/R' }
+
 security:
   - bearerAuth: []
+
 paths:
+  # ---------------------------------------------------------------- 健康检查
+  /healthz:
+    servers:
+      - url: /
+        description: 不在 /api/v1 前缀下
+    get:
+      tags: [auth]
+      summary: 健康检查(无需鉴权)
+      security: []
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /docs:
+    servers:
+      - url: /
+        description: 不在 /api/v1 前缀下
+    get:
+      tags: [auth]
+      summary: 本文件的可读版(浏览器直接打开)
+      description: |
+        由网关自己渲染 —— 服务端读同一份 `docs/openapi.yaml`,不加载任何外部资源,
+        断网环境照常可用。原始 YAML 在 `/openapi.yaml`。
+      security: []
+      responses: { '200': { description: text/html } }
+
+  # ---------------------------------------------------------------- auth
   /auth/login:
     post:
       tags: [auth]
+      summary: 登录(受 IP 白名单与登录频控约束)
       security: []
       requestBody:
+        required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/LoginReq' } } }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/R' } } } }
+        '200':
+          description: OK / 40100 凭据错误 / 42800 需 MFA 验证码 / 42900 过于频繁
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
   /auth/logout:
-    post: { tags: [auth], responses: { '200': { description: OK } } }
+    post:
+      tags: [auth]
+      summary: 退出登录(作废当前会话代次)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/me:
-    get: { tags: [auth], summary: 当前用户 + menus + capabilities, responses: { '200': { description: OK } } }
+    get:
+      tags: [auth]
+      summary: 当前用户 + 菜单 + 能力矩阵
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/MeResp' } } }
+  /auth/mfa/setup:
+    post:
+      tags: [auth]
+      summary: 生成 TOTP 密钥与二维码 URI(尚未启用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/mfa/enable:
+    post:
+      tags: [auth]
+      summary: 用一次验证码确认并启用 TOTP
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/mfa/disable:
+    post:
+      tags: [auth]
+      summary: 解绑 TOTP(需当前验证码)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /gateway/stats:
+    get:
+      tags: [auth]
+      summary: 网关实测延迟与拦截计数(不挂菜单)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approval-chain:
+    get:
+      tags: [approvals]
+      summary: 默认审批链(终端与风险检查器展示用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /notifications:
+    get:
+      tags: [auth]
+      summary: 站内通知收件箱
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 30 } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /notifications/read:
+    post:
+      tags: [auth]
+      summary: 标记通知已读(ids 为空表示全部)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- terminal
   /risk/check:
     post:
       tags: [terminal]
-      summary: 命令风险预检（三层判定）
+      summary: '[terminal] 三层预检,不执行'
       requestBody:
         content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckReq' } } }
       responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckResp' } } } }
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckResp' } } }
   /terminal/exec:
     post:
       tags: [terminal]
-      summary: 命令执行（WS 不可用时的 REST 回退）
+      summary: '[terminal] 执行命令(WS 不可用时的 REST 回退)'
       requestBody:
         content: { application/json: { schema: { $ref: '#/components/schemas/ExecReq' } } }
       responses:
-        '200': { description: OK / 42200 命令被拦截需审批（返回 ap_no） }
+        '200':
+          description: OK / 42200 已转审批(返回 approvalNo)/ 42800 需二次验证 / 40300 拒绝
+          content: { application/json: { schema: { $ref: '#/components/schemas/ExecResp' } } }
+  /terminal/exec-async:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 后台执行长耗时 SQL,返回任务号后轮询'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /terminal/ws:
     get:
       tags: [terminal]
-      summary: 终端流式执行（WebSocket，token 经 ?token= 鉴权）
+      summary: 终端流式执行(WebSocket,token 走 Sec-WebSocket-Protocol)
       security: []
       responses: { '101': { description: Switching Protocols } }
+  /terminal/transcript-export:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 记录一次会话日志导出(只报描述,不回传日志正文)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /async-jobs:
+    get:
+      tags: [terminal]
+      summary: '[terminal] 我的后台任务(监管角色可见全部)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /async-jobs/{id}:
+    get:
+      tags: [terminal]
+      summary: '[terminal] 后台任务详情 + 流式日志'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- scripts
+  /scripts/config:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 脚本保存路径是否已配置'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /scripts/scan:
     post:
-      tags: [terminal]
-      summary: SQL 脚本扫描（multipart 文件或 JSON content）
-      requestBody:
-        content: { application/json: { schema: { $ref: '#/components/schemas/ScriptScanReq' } } }
-      responses: { '200': { description: OK } }
+      tags: [scripts]
+      summary: '[terminal] 逐语句扫描脚本并判级'
+      responses: { '200': { description: OK。无扫描基准分层时报错而不是"全部通过" } }
   /scripts/execute:
     post:
-      tags: [terminal]
-      summary: 脚本执行（检出高危则整脚本转审批）
-      requestBody:
-        content: { application/json: { schema: { $ref: '#/components/schemas/ScriptScanReq' } } }
-      responses: { '200': { description: OK / 42200 } }
+      tags: [scripts]
+      summary: '[terminal] 执行脚本;检出高危则整脚本转审批'
+      responses: { '200': { description: 'OK / 42200 / 42800' } }
+  /scripts/uploads:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 我上传的脚本(只看自己的)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /scripts/upload:
+    post:
+      tags: [scripts]
+      summary: '[terminal] 上传脚本(multipart 的 file,或 JSON 的 content+filename)'
+      responses: { '200': { description: 'OK / 42600 保存路径未配置' } }
+  /scripts/uploads/{id}/download:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 下载自己的脚本文件'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 文件流 } }
+  /scripts/uploads/{id}/content:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 读取脚本正文(在线查看)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /scripts/uploads/{id}:
+    delete:
+      tags: [scripts]
+      summary: '[terminal] 删除自己的脚本'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- snippets
+  /snippets:
+    get:
+      tags: [snippets]
+      summary: '[terminal] 我的快捷脚本'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [snippets]
+      summary: '[terminal] 新建快捷脚本'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /snippets/limits:
+    get:
+      tags: [snippets]
+      summary: '[terminal] 长度与数量上限(前后端同源,避免写完才被拒)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /snippets/{id}:
+    put:
+      tags: [snippets]
+      summary: '[terminal] 修改快捷脚本(占用已被绑定的槽位会释放原脚本)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [snippets]
+      summary: '[terminal] 删除快捷脚本'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- export
+  /export/config:
+    get:
+      tags: [export]
+      summary: '[terminal] 导出保存路径是否已配置、归档保留几天'
+      description: 'data.enabled/savePath 说明导出是否可用;data.retentionDays 是归档在服务器上的保留天数(0 = 永久保留),前端据此提示用户文件何时被清理。'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /export:
+    post:
+      tags: [export]
+      summary: '[terminal] 提交导出任务(仅限单条只读查询)'
+      responses: { '200': { description: 'OK / 42601 保存路径未配置 / 40001 非只读语句' } }
+  /export/jobs:
+    get:
+      tags: [export]
+      summary: '[terminal] 我的导出任务'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /export/download:
+    get:
+      tags: [export]
+      summary: '[terminal] 下载导出分卷'
+      parameters: [{ name: file, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: 文件流 } }
+
+  # ---------------------------------------------------------------- connections
   /connections:
-    get: { tags: [connections], responses: { '200': { description: OK } } }
+    get:
+      tags: [connections]
+      summary: 实例列表(按调用者的标签范围过滤)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
     post:
       tags: [connections]
-      requestBody:
-        content: { application/json: { schema: { $ref: '#/components/schemas/ConnectionCreateReq' } } }
-      responses: { '200': { description: OK } }
+      summary: '[db · admin] 新建实例'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /connections/{id}:
+    put:
+      tags: [connections]
+      summary: '[db · admin] 编辑实例(留空口令表示保持不变)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
     patch:
       tags: [connections]
-      summary: 状态切换（online/maint）
+      summary: '[db · admin] 局部修改:status / tags / policy'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /connections/{id}/test:
     post:
       tags: [connections]
+      summary: '[db · admin] 测试连通性'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/schema:
+    get:
+      tags: [connections]
+      summary: '[terminal] 库表树'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/objects:
+    get:
+      tags: [connections]
+      summary: '[terminal] 视图 / 函数 / 存储过程 / 触发器等对象'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: database, in: query, schema: { type: string }, description: PostgreSQL 系必传,目录按库隔离 }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/object-source:
+    get:
+      tags: [connections]
+      summary: '[terminal] 单个对象的源码 / 建表 DDL'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: type, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /tags:
+    get:
+      tags: [connections]
+      summary: 全部实例标签(选择器用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- tiers
+  /env-tiers:
+    get:
+      tags: [tiers]
+      summary: 控制分层列表(任何登录用户可读:树、标签、表单都要用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[envtier · admin] 新建分层 —— 必须从模板克隆规则'
+      description: 没有规则行的分层不是标签,是**不受管控的环境**(查无规则行=放行),所以克隆在同一事务里完成。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /env-tiers/{code}:
+    put:
+      tags: [tiers]
+      summary: '[envtier · admin] 修改分层(名称、MFA、危险横幅、扫描基准等)'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[envtier · admin] 删除分层(仍有环境挂靠时拒绝)'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /environments:
+    get:
+      tags: [tiers]
+      summary: 环境列表
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[envtier · admin] 新建环境并绑定到一个分层'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /environments/usage:
+    get:
+      tags: [tiers]
+      summary: '[envtier] 各环境的实例数(删除前提示影响面)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /environments/{code}:
+    put:
+      tags: [tiers]
+      summary: '[envtier · admin] 修改环境(可改绑分层)'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[envtier · admin] 删除环境;moveTo 必填,实例改挂过去而不是悬空'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [moveTo], properties: { moveTo: { type: string } } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- roles & users
   /roles:
-    get: { tags: [roles], responses: { '200': { description: OK } } }
+    get:
+      tags: [roles]
+      summary: '[perms] 角色列表'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /roles/{id}:
     get:
       tags: [roles]
+      summary: '[perms] 角色详情(能力矩阵 + 菜单 + 成员 + 标签)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: 角色详情（矩阵+菜单+成员） } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
     patch:
       tags: [roles]
-      summary: 更新角色（名称/描述/默认连接角色/可审批）
+      summary: '[perms · admin] 改名称 / 描述 / 默认连接角色 / 可审批'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /roles/{id}/menus:
     put:
       tags: [roles]
+      summary: '[perms · admin] 设置菜单权限'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /roles/{id}/capabilities:
     put:
       tags: [roles]
+      summary: '[perms · admin] 设置能力矩阵(能力 × 分层 → allow/approve/deny)'
+      description: |
+        能力维度:`select` `write` `ddl` `grant` `conn` `approve` `explain` `release`。
+        `release` 管的是**能不能发起发布单**,与语句本身能不能跑是两个问题。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/tags:
+    put:
+      tags: [roles]
+      summary: '[perms · admin] 设置角色的数据访问范围(空 = 不限)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /roles/{id}/members:
     post:
       tags: [roles]
+      summary: '[perms · admin] 添加成员'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /roles/{id}/members/{userId}:
     delete:
       tags: [roles]
+      summary: '[perms · admin] 移除成员'
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: userId, in: path, required: true, schema: { type: integer } }
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users:
-    get: { tags: [users], responses: { '200': { description: OK } } }
+    get:
+      tags: [users]
+      summary: '[perms] 用户列表'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [users]
+      summary: '[perms · admin] 管理员建号(设初始密码,直接 active)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/invite:
-    post: { tags: [users], summary: 邀请用户（预分配角色）, responses: { '200': { description: OK } } }
+    post:
+      tags: [users]
+      summary: '[perms · admin] 邀请用户(invited 状态,不能登录)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/{id}:
     patch:
       tags: [users]
-      summary: 启用/停用、改角色
+      summary: '[perms · admin] 改状态 / 角色(停用会立即作废其所有会话)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
-  /risk-commands:
-    get: { tags: [rules], responses: { '200': { description: OK } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/password:
     post:
-      tags: [rules]
-      requestBody:
-        content: { application/json: { schema: { $ref: '#/components/schemas/RiskCommandUpsertReq' } } }
-      responses: { '200': { description: OK } }
+      tags: [users]
+      summary: '[perms · admin] 重置密码(会作废该用户所有会话)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/mfa/reset:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 解绑该用户的 TOTP'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/mfa/bind:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 代为生成并绑定 TOTP(返回密钥与 otpauth URI)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/tags:
+    get:
+      tags: [users]
+      summary: '[perms] 该用户的数据访问范围'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    put:
+      tags: [users]
+      summary: '[perms · admin] 设置个人范围 —— 覆盖角色范围,清空则回落到角色'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- risk rules
+  /risk-commands:
+    get:
+      tags: [risk-rules]
+      summary: '[terminal] 高危命令字典(风险检查器要读)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [risk-rules]
+      summary: '[rules · admin] 新增/覆盖一条命令在各分层的等级'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /risk-commands/{name}:
     patch:
-      tags: [rules]
-      summary: 按环境切换命令等级
+      tags: [risk-rules]
+      summary: '[rules · admin] 改单个分层的等级'
       parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
     delete:
-      tags: [rules]
+      tags: [risk-rules]
+      summary: '[rules · admin] 删除命令(删掉等于全分层放行)'
       parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- sql review
+  /sql-review/rules:
+    get:
+      tags: [sql-review]
+      summary: '[terminal] 规范审查规则库'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ReviewRule' } }
+    post:
+      tags: [sql-review]
+      summary: '[rules · admin] 新建自定义规则(编码自动加 custom. 前缀)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /sql-review/rules/{id}:
+    put:
+      tags: [sql-review]
+      summary: '[rules · admin] 改级别 / 开关 / 参数 / 文案;内置规则的编码与方言不可改'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [sql-review]
+      summary: '[rules · admin] 删除自定义规则 —— 内置规则只能停用'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK / 40001 内置规则不可删除' } }
+  /sql-review/catalog:
+    get:
+      tags: [sql-review]
+      summary: '[terminal] 方言 / 分类 / 级别词表'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /sql-review/check:
+    post:
+      tags: [sql-review]
+      summary: '[terminal] 规范审查(connectionId 优先于 dialect:目标实例决定方言)'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties:
+                connectionId: { type: integer, format: int64 }
+                dialect: { type: string, enum: [mysql, tidb, dws, oracle] }
+                sql: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance: { type: string }
+                  result: { $ref: '#/components/schemas/ReviewResult' }
+
+  # ---------------------------------------------------------------- pipelines
+  /pipelines:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布流程模板(含阶段)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PipelineDetail' } }
+    post:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 新建流程'
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/PipelineDetail' } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /pipelines/{id}:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 单个流程'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    put:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 覆盖式保存 —— 阶段整体替换,运行中的发布单不受影响'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 删除流程(历史发布单保留自己的阶段快照)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /releases:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布单分页'
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all], default: mine }, description: all 需监管角色 }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: OK。列表里阶段的 log/findings 为空,详情接口才带。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ReleaseView' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 提交发布'
+      description: |
+        提交时按当前角色与实例**复判一次**:命中拒绝直接 40300;需审批的变更必须选含
+        审批阶段的流程,否则拒收(不建单)。执行阶段会再判一次 —— 等待期间规则可能变。
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseReq' } } }
+      responses:
+        '200':
+          description: OK / 40300 能力矩阵或 release 能力拒绝 / 42800 需二次验证 / 40001 流程不含审批阶段
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseView' } } }
+  /releases/{id}:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布单详情(各阶段状态、日志、审查结果)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /releases/{id}/abort:
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 终止发布 —— 仅 pending/waiting;running 不可终止'
+      description: 执行中的发布可能已经打到目标库,一个"已终止"的假承诺比没有这个按钮更糟。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /releases/{id}/stages/{stageId}/continue:
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 人工确认阶段继续(发起人不能确认自己的发布)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: stageId, in: path, required: true, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- approvals
   /approvals:
     get:
-      tags: [approval]
-      parameters: [{ name: scope, in: query, schema: { type: string, enum: [mine, all] } }]
-      responses: { '200': { description: OK } }
+      tags: [approvals]
+      summary: '[approve] 审批单分页'
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: ap, in: query, schema: { type: string }, description: 按单号精确查一张,不受分页影响 }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /approvals/{id}/approve:
     post:
-      tags: [approval]
+      tags: [approvals]
+      summary: '[approve] 通过 —— 仅审批链成员;默认不可自批'
+      description: |
+        普通工单通过后由网关代执行。**发布单的审批不执行任何命令** ——
+        执行归发布流水线的执行阶段,否则同一变更会被应用两次。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /approvals/{id}/reject:
     post:
-      tags: [approval]
+      tags: [approvals]
+      summary: '[approve] 驳回'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
-      responses: { '200': { description: OK } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/lark/callback:
+    post:
+      tags: [approvals]
+      summary: 审批魔方回调(共享密钥鉴权,非用户 JWT)
+      security: []
+      description: |
+        密钥走 `Authorization: Bearer`,或回调 URL 上的 `?secret=`(有些厂商只能注册 URL)。
+        另有独立的来源 IP 白名单。鉴权失败一律**失败关闭**,因为它可能触发生产执行。
+      responses: { '200': { description: 'OK / 40300 鉴权失败 / 40001 审批单不存在' } }
+
+  # ---------------------------------------------------------------- audit
   /audit:
     get:
       tags: [audit]
+      summary: '[audit] 审计日志分页'
       parameters:
         - { name: risk, in: query, schema: { type: string, enum: [all, high, mid, low] } }
-        - { name: range, in: query, schema: { type: string, enum: [24h, 7d, 30d] } }
-        - { name: limit, in: query, schema: { type: integer } }
-      responses: { '200': { description: OK } }
+        - { name: range, in: query, schema: { type: string, enum: [today, 7d, 30d] } }
+        - { name: from, in: query, schema: { type: string, format: date-time }, description: 绝对区间优先于 range }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /audit/export:
     get:
       tags: [audit]
-      summary: 导出 CSV（含完整命令与哈希链）
-      parameters:
-        - { name: risk, in: query, schema: { type: string } }
-        - { name: range, in: query, schema: { type: string } }
+      summary: '[audit] 导出 CSV(参数同上)'
       responses: { '200': { description: text/csv } }
+
+  # ---------------------------------------------------------------- settings
   /settings:
-    get: { tags: [settings], responses: { '200': { description: OK } } }
-    put: { tags: [settings], responses: { '200': { description: OK } } }
+    get:
+      tags: [settings]
+      summary: '[settings] 读取系统设置(密钥类只回"是否已配置",不回明文)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    put:
+      tags: [settings]
+      summary: '[settings · admin] 保存设置(运行时生效,免重启)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/webhook:
     put:
       tags: [settings]
-      requestBody:
-        content: { application/json: { schema: { $ref: '#/components/schemas/WebhookConfigReq' } } }
-      responses: { '200': { description: OK } }
+      summary: '[settings · admin] 保存 Webhook(留空 secret 表示保持不变)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/webhook/test:
-    post: { tags: [settings], summary: 发送测试事件, responses: { '200': { description: OK } } }
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 发送测试事件'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/webhook/deliveries:
+    get:
+      tags: [settings]
+      summary: '[settings] 最近的投递结果'
+      parameters: [{ name: limit, in: query, schema: { type: integer, default: 50 } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/lark/test:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 测试飞书 / 审批魔方连通性'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /api-clients:
+    get:
+      tags: [settings]
+      summary: '[settings] 开放接口凭据列表(响应里没有密钥)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/APIClient' } }
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 签发凭据 —— 明文密钥只在此响应里出现一次'
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/APIClientReq' } } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client: { $ref: '#/components/schemas/APIClient' }
+                  token: { type: string, description: '`<key>.<secret>`,直接放进 Authorization', example: ak_xxx.yyy }
+  /api-clients/{id}:
+    put:
+      tags: [settings]
+      summary: '[settings · admin] 改名称 / 服务账号 / scope / IP 白名单 / 启停'
+      description: key 与 secret 不可修改 —— 轮换 = 新签一把 + 吊销旧的,避免正在用的系统毫无征兆地开始 401。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [settings]
+      summary: '[settings · admin] 吊销凭据(使用它的系统立刻调不通)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- open API
+  /open/releases:
+    post:
+      tags: [open-api]
+      summary: '[scope release:create] 提交 SQL 升级单'
+      security:
+        - openApiKey: []
+      description: |
+        JSON 或 multipart/form-data 都接受;后者用 `file` 字段直传 .sql(上限 15MB)。
+        与控制台走**同一条** submitRelease:同样的流程模板、规则库、审批链、执行前复判、审计链。
+        审计行记 `actor=服务账号 / operator=API:<凭据名>`。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpenReleaseReq' }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                externalRef: { type: string }
+                instance: { type: string }
+                database: { type: string }
+                pipeline: { type: string }
+                reason: { type: string }
+                sql: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: |
+            OK(重试同一 externalRef 返回同一张单)/ 40300 服务账号无权 /
+            42800 需二次验证 / 40001 实例或流程不存在、内容为空、流程不含审批阶段
+          content: { application/json: { schema: { $ref: '#/components/schemas/OpenReleaseResp' } } }
+  /open/releases/{relNo}:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 查询升级单状态与各阶段日志'
+      security:
+        - openApiKey: []
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string }, example: REL-42 }]
+      responses:
+        '200':
+          description: OK / 40300 不是本凭据提交的单
+          content: { application/json: { schema: { $ref: '#/components/schemas/OpenReleaseResp' } } }
+  /open/releases/{relNo}/abort:
+    post:
+      tags: [open-api]
+      summary: '[scope release:create] 终止本系统提交的升级单(仅 pending/waiting)'
+      security:
+        - openApiKey: []
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /open/sql-review:
+    post:
+      tags: [open-api]
+      summary: '[scope review:check] 规范审查预检,不建单'
+      security:
+        - openApiKey: []
+      description: CI 合并前的门禁:同一套规则库,只回结果,不产生任何单据。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instance: { type: string }
+                connectionId: { type: integer, format: int64 }
+                dialect: { type: string, enum: [mysql, tidb, dws, oracle] }
+                sql: { type: string }
+                script: { type: string }
+                scriptBase64: { type: string }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                instance: { type: string }
+                dialect: { type: string }
+                sql: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance: { type: string }
+                  result: { $ref: '#/components/schemas/ReviewResult' }
+  /open/instances:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 本凭据可发布的实例(名字即 create 的 instance 参数)'
+      security:
+        - openApiKey: []
+      responses:
+        '200':
+          description: OK。按服务账号的标签范围过滤。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    instance: { type: string }
+                    env: { type: string }
+                    engine: { type: string }
+                    database: { type: string }
+                    status: { type: string, enum: [online, maint] }
+  /open/pipelines:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 可选用的发布流程'
+      security:
+        - openApiKey: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    pipeline: { type: string }
+                    tier: { type: string }
+                    isDefault: { type: boolean }
+                    stages: { type: array, items: { type: string } }

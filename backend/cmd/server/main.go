@@ -104,6 +104,38 @@ func main() {
 		}
 	}()
 
+	// Background: export retention — delete archives older than the configured
+	// window (default 3 days).
+	//
+	// It runs ONCE at startup before the ticker: a gateway that was off over a
+	// weekend would otherwise keep a month of production extracts on disk for
+	// another hour after coming back, and the whole point of the window is that
+	// those files stop existing.
+	go func() {
+		svc.SweepExportRetention()
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			svc.SweepExportRetention()
+		}
+	}()
+
+	// Background: resume release pipelines whose approval has been decided.
+	//
+	// A sweeper rather than a callback, because a decision arrives through four
+	// different doors — the console, the 飞书 card, the 审批魔方 callback and the
+	// timeout expiry — and a hook on one of them would strand releases whose
+	// approval came through another. It polls a row that already records the
+	// outcome, so it works no matter who wrote it. 15s keeps the pipeline feeling
+	// responsive without hammering the metadata DB.
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			svc.ResumeReleaseApprovals()
+		}
+	}()
+
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
 	slog.Info("DP DB GATEWAY listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
 	if cfg.Env == "prod" && !tls {

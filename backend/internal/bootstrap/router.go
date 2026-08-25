@@ -14,6 +14,7 @@ import (
 
 	"velagateway/internal/handler"
 	"velagateway/internal/middleware"
+	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/internal/service"
 	"velagateway/pkg/jwt"
@@ -32,7 +33,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	r.Use(accessLogger(), middleware.Recovery(), middleware.CORS(cfg.Server.CORSOrigins), middleware.Latency())
 
 	r.GET("/healthz", func(c *gin.Context) { resp.OK(c, gin.H{"status": "ok"}) })
-	r.StaticFile("/openapi.yaml", "docs/openapi.yaml") // API contract (backend doc §11)
+	// The contract, two ways: the raw file for tooling, and a rendered page for
+	// people. Both are unauthenticated — the same surface the console's login
+	// page is on, and an API contract nobody can read is a contract nobody follows.
+	r.StaticFile("/openapi.yaml", handler.SpecPath) // API contract (backend doc §11)
+	r.GET("/docs", h.APIDocs)
+	r.GET("/docs/*file", h.APIDocsAsset) // vendored Swagger UI assets, embedded in the binary
 
 	auth := middleware.JWTAuth(jwtMgr, repo)
 	menu := func(key string) gin.HandlerFunc { return middleware.MenuGuard(repo, key) }
@@ -51,6 +57,30 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// execution channel is the most sensitive one (R4). Menu + live session checks
 	// are enforced inside the handler.
 	v1.GET("/terminal/ws", middleware.IPAllowlist(repo), h.TerminalWS)
+
+	// ---- 开放接口 (external systems) ----
+	//
+	// A separate authentication surface, not the user JWT: the caller is a SYSTEM
+	// holding a key/secret bound to a service account (middleware.APIClientAuth).
+	// It deliberately does NOT sit behind the console's IP allowlist — that
+	// setting answers "which offices may open the console", and folding a CI
+	// runner's egress range into it would widen the console's perimeter to grant
+	// a machine access. Each credential carries its own allowlist instead.
+	//
+	// Everything below this line goes through the SAME service layer as the
+	// console: same flow templates, same review rules, same approval chain, same
+	// execute-time re-judgement, same audit chain.
+	open := v1.Group("/open", middleware.APIClientAuth(repo))
+	{
+		open.POST("/releases", middleware.RequireScope(model.ScopeReleaseCreate), h.OpenCreateRelease)
+		open.GET("/releases/:relNo", middleware.RequireScope(model.ScopeReleaseRead), h.OpenGetRelease)
+		open.POST("/releases/:relNo/abort", middleware.RequireScope(model.ScopeReleaseCreate), h.OpenAbortRelease)
+		// Review WITHOUT raising a ticket — the pre-merge gate a CI job runs.
+		open.POST("/sql-review", middleware.RequireScope(model.ScopeReviewCheck), h.OpenReviewCheck)
+		// Discovery: what this credential may target, and which flows it may name.
+		open.GET("/instances", middleware.RequireScope(model.ScopeReleaseRead), h.OpenListInstances)
+		open.GET("/pipelines", middleware.RequireScope(model.ScopeReleaseRead), h.OpenListPipelines)
+	}
 
 	// 审批魔方 approval-result callback: authenticated by a shared secret (Authorization:
 	// Bearer, or ?secret= query) + its own optional source-IP allowlist inside the
@@ -170,6 +200,32 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.PATCH("/risk-commands/:name", menu("rules"), admin, h.PatchRiskCommand)
 		a.DELETE("/risk-commands/:name", menu("rules"), admin, h.DeleteRiskCommand)
 
+		// 数据库规范审查规则库 — the library is READ by terminal operators (the
+		// check endpoint is how a developer self-checks a change before submitting
+		// it, and the console needs the rule list to render the result), while
+		// editing it is rules-menu + admin: a rule's level decides whether a
+		// release is blocked, so lowering one is a policy change.
+		a.GET("/sql-review/rules", menu("terminal"), h.ListReviewRules)
+		a.GET("/sql-review/catalog", menu("terminal"), h.ReviewCatalog)
+		a.POST("/sql-review/check", menu("terminal"), h.ReviewCheck)
+		a.POST("/sql-review/rules", menu("rules"), admin, h.SaveReviewRule)
+		a.PUT("/sql-review/rules/:id", menu("rules"), admin, h.SaveReviewRule)
+		a.DELETE("/sql-review/rules/:id", menu("rules"), admin, h.DeleteReviewRule)
+
+		// 发布流程 (CI/CD) — templates are configuration (admin), releases are work.
+		// A release still executes through the same gate as the terminal, so the
+		// menu grants the ability to RAISE one, not to bypass anything.
+		a.GET("/pipelines", menu("pipeline"), h.ListPipelines)
+		a.GET("/pipelines/:id", menu("pipeline"), h.GetPipeline)
+		a.POST("/pipelines", menu("pipeline"), admin, h.SavePipeline)
+		a.PUT("/pipelines/:id", menu("pipeline"), admin, h.SavePipeline)
+		a.DELETE("/pipelines/:id", menu("pipeline"), admin, h.DeletePipeline)
+		a.GET("/releases", menu("pipeline"), h.ListReleases)
+		a.POST("/releases", menu("pipeline"), h.CreateRelease)
+		a.GET("/releases/:id", menu("pipeline"), h.GetRelease)
+		a.POST("/releases/:id/abort", menu("pipeline"), h.AbortRelease)
+		a.POST("/releases/:id/stages/:stageId/continue", menu("pipeline"), h.ContinueStage)
+
 		// approvals
 		a.GET("/approvals", menu("approve"), h.ListApprovals)
 		a.POST("/approvals/:id/approve", menu("approve"), h.ApproveApproval)
@@ -186,6 +242,14 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/settings/webhook/test", menu("settings"), admin, h.TestWebhook)
 		a.POST("/settings/lark/test", menu("settings"), admin, h.TestLark)
 		a.GET("/settings/webhook/deliveries", menu("settings"), h.WebhookDeliveries)
+
+		// 开放接口凭据 — a credential is a standing right to raise production
+		// changes, so issuing and revoking one is admin-only; viewing the list
+		// (which carries no secret) is settings-menu.
+		a.GET("/api-clients", menu("settings"), h.ListAPIClients)
+		a.POST("/api-clients", menu("settings"), admin, h.CreateAPIClient)
+		a.PUT("/api-clients/:id", menu("settings"), admin, h.UpdateAPIClient)
+		a.DELETE("/api-clients/:id", menu("settings"), admin, h.DeleteAPIClient)
 	}
 
 	// Serve the built SPA (production): static assets + index.html fallback for

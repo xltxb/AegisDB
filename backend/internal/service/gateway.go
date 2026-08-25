@@ -448,7 +448,16 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		_ = s.Repo.DecideActiveStep(ap.ID, model.StatusApproved, now)
 		var res gateway.ExecResult
 		result, title := model.ResultExecuted, "审批已通过并执行"
-		if conn != nil {
+		if ap.ReleaseID > 0 {
+			// A release ticket authorises the pipeline; it does not run anything.
+			// The execute stage owns execution (and re-judges the statement before
+			// applying it), so running the command here as well would apply the same
+			// change twice — the second time to a pipeline that still believes it
+			// has not run. The audit row therefore stays `pending`: approved, not yet
+			// executed, with the execution audited by the stage that performs it.
+			res.Output = "· 已批准,由发布流水线继续执行"
+			result, title = model.ResultPending, "审批已通过,发布流水线继续"
+		} else if conn != nil {
 			// A script approval carries a reference, not a body: re-read the file,
 			// verify it still hashes to what was reviewed, re-judge every statement
 			// and run them one at a time (see runApprovedScript). Handing ap.Command

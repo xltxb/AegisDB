@@ -516,6 +516,18 @@ func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (st
 	return best, nil
 }
 
+// CapabilityFor answers one capability-matrix cell for a set of roles, using the
+// same union rule the judgement layers use (allow ≺ approve ≺ deny).
+//
+// It exists for dimensions that are NOT read off a statement. A release ticket
+// is not SQL — nothing to parse a verb from — but "may this role raise one on
+// this tier" is the same matrix question, and answering it in the service layer
+// would be a second implementation of the union, free to disagree with this one
+// about what a missing row or a multi-role user means.
+func (e *RiskEngine) CapabilityFor(roleIDs []int64, cap, tier string) (string, error) {
+	return e.capabilityLevelUnion(roleIDs, cap, tier)
+}
+
 // Evaluate runs the three-layer judgement (menu guard is enforced by middleware):
 //
 //	① capability matrix (role × capability × tier)

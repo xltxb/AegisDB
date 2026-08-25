@@ -71,7 +71,7 @@ async function createRule() {
     env.value = rfEnv.value
     ruleForm.value = false
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -86,7 +86,7 @@ async function load() {
     cmds.value = await api.riskCommands()
     ui.pageSub = t('subRules', { n: cmds.value.length })
   } catch (e) {
-    ui.notifyError(e, '加载失败')
+    ui.notifyError(e, t('loadFailed'))
   }
   try {
     strictMode.value = (await api.settings()).strictMode
@@ -114,7 +114,7 @@ async function toggleStrict() {
     strictMode.value = !strictMode.value
     await api.saveSettings({ strictMode: strictMode.value })
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -132,7 +132,7 @@ async function cycle(c: RiskCommandView) {
   try {
     cmds.value = await api.patchRiskCommand(c.command, env.value, nextLevel[cur])
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 // Adding a command opens a per-tier picker instead of posting immediately.
@@ -167,18 +167,18 @@ async function confirmAdd() {
     draft.value = ''
     addOpen.value = false
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function removeCmd(c: RiskCommandView) {
   if (!isAdmin.value) return
   // M15: 删除风控规则前二次确认
-  if (!confirmAction(`确定删除风控规则「${c.command}」吗？此操作不可撤销。`)) return
+  if (!confirmAction(t('rrDelConfirm', { name: c.command }))) return
   // M14: 删除失败以 toast 呈现
   try {
     cmds.value = await api.deleteRiskCommand(c.command)
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -245,8 +245,8 @@ const policies = computed(() => {
       <div class="chips">
         <div v-for="c in cmds" :key="c.command" class="chip" :style="{ background: lvlMeta(c.tiers[env]).bg, color: lvlMeta(c.tiers[env]).c, opacity: c.tiers[env] === 'off' ? 0.5 : 1 }">
           <span class="cname">{{ c.command }}</span>
-          <span class="ctag" :title="isAdmin ? '切换等级' : ''" :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="cycle(c)">{{ lvlMeta(c.tiers[env]).tag }}</span>
-          <span v-if="isAdmin" class="cx" title="移除" @click="removeCmd(c)"><X :size="12" /></span>
+          <span class="ctag" :title="isAdmin ? $t('tipCycleLevel') : ''" :style="{ cursor: isAdmin ? 'pointer' : 'default' }" @click="cycle(c)">{{ lvlMeta(c.tiers[env]).tag }}</span>
+          <span v-if="isAdmin" class="cx" :title="$t('tipRemove')" @click="removeCmd(c)"><X :size="12" /></span>
         </div>
         <div v-if="isAdmin" class="addchip">
           <input v-model="draft" :placeholder="$t('addCmdPh')" @keyup.enter="openAdd" />
@@ -365,7 +365,7 @@ const policies = computed(() => {
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
 .sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
 .head :deep(.vbtn) { margin-left: auto; }
-.dict { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); padding: 18px 20px; margin-bottom: 18px; }
+.dict { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 18px 20px; margin-bottom: 18px; }
 .dhead { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .dic { width: 32px; height: 32px; border-radius: 9px; background: var(--danger-subtle); display: flex; align-items: center; justify-content: center; }
 .grow { flex: 1; }
@@ -384,7 +384,7 @@ const policies = computed(() => {
 .addchip input { width: 104px; background: transparent; border: none; outline: none; font: 600 12px var(--font-mono); color: var(--text-body); text-transform: uppercase; }
 .addbtn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent); color: #fff; cursor: pointer; }
 .stats { display: flex; gap: 14px; margin-bottom: 18px; }
-.stat { flex: 1; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-card); padding: 16px 18px; }
+.stat { flex: 1; border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 16px 18px; }
 .stat .n { font: 700 26px var(--font-display); letter-spacing: -0.02em; color: var(--text-strong); }
 .stat .n.danger { color: var(--danger-text); }
 .stat .n.warn { color: var(--warning-text); }

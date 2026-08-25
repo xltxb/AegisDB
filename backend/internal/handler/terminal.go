@@ -425,7 +425,9 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 // @Router  /export/config [get]
 func (h *Handler) ExportConfig(c *gin.Context) {
 	p := h.Svc.ExportSavePath()
-	resp.OK(c, gin.H{"enabled": p != "", "savePath": p})
+	// retentionDays 一并给前端:归档是定时删的,谁要导四千万行,应该在排期之前就知道
+	// 这个文件只在服务器上活几天,而不是下周去下载时才发现它没了。
+	resp.OK(c, gin.H{"enabled": p != "", "savePath": p, "retentionDays": h.Svc.ExportRetentionDays()})
 }
 
 // ExportData godoc
