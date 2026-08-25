@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Crown, Shield, UserCog, Code, Eye, SquareTerminal, ClipboardCheck, Database,
-  ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound,
+  ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound, Rocket,
 } from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import VButton from '@/components/common/VButton.vue'
@@ -59,7 +59,7 @@ async function saveRole() {
     await loadRoles()
     roleForm.value = false
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 function openInvite() {
@@ -76,13 +76,17 @@ async function doInvite() {
     inviteForm.value = false
     await loadUsers()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
 const roleIcon: Record<string, any> = { crown: Crown, shield: Shield, 'user-cog': UserCog, code: Code, eye: Eye }
 const capKeys = ['select', 'write', 'ddl', 'grant', 'conn', 'approve', 'explain']
-const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove', 'capExplain']
+// One row per capability dimension, in the backend's order (model.Capabilities).
+// 'release' is the newest: it gates RAISING a release on a tier, which is a
+// different question from whether the statement inside it may run — the pipeline
+// still asks write/ddl again at execute time.
+const capLabels = ['capSelect', 'capWrite', 'capDdl', 'capGrant', 'capConn', 'capApprove', 'capExplain', 'capRelease']
 // One column per control tier, in the tier list's own order. This was the four
 // built-in strings; the matrix is keyed by tier and tiers are rows now, so a
 // hardcoded list would silently omit any tier added later — and an omitted
@@ -102,6 +106,10 @@ const menuDefs = [
   { key: 'perms', icon: UsersRound, label: 'm_perms' },
   { key: 'audit', icon: ScrollText, label: 'm_audit' },
   { key: 'settings', icon: Settings, label: 'm_settings' },
+  // 发布流程 (CI/CD). The releases and flows pages share this key; the SQL-review
+  // page rides 'terminal' on purpose — self-checking your own change is part of
+  // writing it, not a separate privilege.
+  { key: 'pipeline', icon: Rocket, label: 'm_pipeline' },
 ]
 const sym: Record<string, { s: string; c: string }> = {
   allow: { s: '✓', c: 'var(--success-text)' },
@@ -117,12 +125,12 @@ async function loadRoles() {
     if (roles.value.length && !detail.value) await selectRole(roles.value[0].id)
     publishSub()
   } catch (e) {
-    ui.notifyError(e, '加载失败')
+    ui.notifyError(e, t('loadFailed'))
   }
 }
 async function selectRole(id: number) {
   // M14: 加载失败以 toast 呈现
-  try { detail.value = await api.role(id) } catch (e) { ui.notifyError(e, '加载失败') }
+  try { detail.value = await api.role(id) } catch (e) { ui.notifyError(e, t('loadFailed')) }
 }
 
 // ---- DB access tags (assign databases to this group by tag) ----
@@ -135,12 +143,12 @@ async function saveRoleTags(tags: string[]) {
     detail.value = await api.setRoleTags(detail.value.id, tags)
     tagModalOpen.value = false
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function loadUsers() {
   // M14: 加载失败以 toast 呈现
-  try { users.value = await api.users(); publishSub() } catch (e) { ui.notifyError(e, '加载失败') }
+  try { users.value = await api.users(); publishSub() } catch (e) { ui.notifyError(e, t('loadFailed')) }
 }
 
 onMounted(async () => {
@@ -163,7 +171,7 @@ async function cycleCell(cap: string, env: string) {
   try {
     await api.setCapabilities(detail.value.id, detail.value.matrix)
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function toggleMenu(key: string) {
@@ -173,20 +181,20 @@ async function toggleMenu(key: string) {
   try {
     await api.setMenus(detail.value.id, detail.value.menus)
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function removeMember(userId: number) {
   if (!detail.value) return
   // M15: 移除角色成员前二次确认
   const mb = detail.value.members.find((m) => m.id === userId)
-  if (!confirmAction(`确定要从「${detail.value.name}」移除成员「${mb?.name || userId}」吗？`)) return
+  if (!confirmAction(t('pmRemoveMemberConfirm', { role: detail.value.name, name: mb?.name || userId }))) return
   // M14: 移除失败以 toast 呈现
   try {
     detail.value = await api.removeMember(detail.value.id, userId)
     await loadRoles()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function addMember(userId: number) {
@@ -196,19 +204,19 @@ async function addMember(userId: number) {
     detail.value = await api.addMember(detail.value.id, userId)
     await loadRoles()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 async function toggleUser(u: UserView) {
   if (!isAdmin.value) return
   // M15: 禁用用户前二次确认（启用无需确认）
-  if (u.status !== 'disabled' && !confirmAction(`确定要禁用用户「${u.name}」吗？`)) return
+  if (u.status !== 'disabled' && !confirmAction(t('pmDisableUserConfirm', { name: u.name }))) return
   // M14: 启停失败以 toast 呈现
   try {
     await api.patchUser(u.id, { status: u.status === 'disabled' ? 'active' : 'disabled' })
     await loadUsers()
   } catch (e) {
-    ui.notifyError(e, '操作失败')
+    ui.notifyError(e, t('actionFailed'))
   }
 }
 
@@ -326,7 +334,7 @@ async function bindOtp() {
 async function resetOtp() {
   if (!userModal.value) return
   // M15: 解绑他人 MFA 前二次确认
-  if (!confirmAction(`确定要解绑用户「${userModal.value.name}」的 MFA 吗？`)) return
+  if (!confirmAction(t('pmResetMfaConfirm', { name: userModal.value.name }))) return
   try { await api.resetUserMfa(userModal.value.id); otpBind.value = null; otpQr.value = ''; otpMsg.value = t('otpUnbound'); await loadUsers(); syncModal() }
   catch { otpMsg.value = t('otpFailed') }
 }
@@ -340,7 +348,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
     <div class="vtabs">
       <div class="vt" :class="{ active: view === 'roles' }" @click="view = 'roles'">{{ $t('tabRoleView') }}</div>
       <div class="vt" :class="{ active: view === 'users' }" @click="view = 'users'">{{ $t('tabUserView') }}</div>
-      <div class="vhint">{{ view === 'roles' ? '5 角色 · 分层授权' : users.length + ' 用户 · 点击状态可启停' }}</div>
+      <div class="vhint">{{ view === 'roles' ? $t('pmRolesHint', { n: roles.length }) : $t('pmUsersHint', { n: users.length }) }}</div>
     </div>
 
     <!-- ROLE VIEW -->
@@ -350,7 +358,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
         <div class="rl">
           <div v-for="r in roles" :key="r.id" class="ritem" :class="{ active: detail?.id === r.id }" @click="selectRole(r.id)">
             <div class="rname"><component :is="roleIcon[r.icon] || Shield" :size="15" />{{ r.name }}</div>
-            <div class="rlayer">{{ r.layer }} · {{ r.count }} 人</div>
+            <div class="rlayer">{{ r.layer }} · {{ $t('pmMembersN', { n: r.count }) }}</div>
           </div>
         </div>
       </div>
@@ -403,7 +411,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
           <div v-for="(mb, i) in detail.members" :key="mb.id" class="mchip">
             <div class="mava" :class="{ first: i === 0 }">{{ mb.initials }}</div>
             <span>{{ mb.name }}</span>
-            <span v-if="isAdmin" class="mx" title="移除成员" @click="removeMember(mb.id)"><X :size="12" /></span>
+            <span v-if="isAdmin" class="mx" :title="$t('pmRemoveMember')" @click="removeMember(mb.id)"><X :size="12" /></span>
           </div>
           <div v-if="isAdmin" class="addm" @click="memberForm = true"><UserPlus :size="15" />{{ $t('addMember') }}</div>
         </div>

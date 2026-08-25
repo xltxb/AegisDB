@@ -246,7 +246,7 @@ export interface ExportJob {
   database: string
   sql: string
   name: string
-  status: 'pending' | 'running' | 'done' | 'failed' | string
+  status: 'pending' | 'running' | 'done' | 'failed' | 'expired' | string
   rows: number
   bytes: number
   parts: number
@@ -363,6 +363,171 @@ export interface WebhookDelivery {
   status: string
   attempts: number
   createdAt: string
+}
+
+// ---------------------------------------------------------------- 规范审查
+
+/** A review dialect. Open-ended for the same reason Env is: the server owns the
+ *  list, and a rule may name a dialect this build has never heard of. */
+export type ReviewDialect = string
+export type ReviewLevel = 'error' | 'warn' | 'info'
+
+/** One rule in the 规范审查规则库. `kind` decides what an operator may change:
+ *  a builtin rule's code/scope binds it to a checker, a regex rule is theirs. */
+export interface ReviewRule {
+  id: number
+  code: string
+  name: string
+  dialect: ReviewDialect
+  category: string
+  level: ReviewLevel
+  kind: 'builtin' | 'regex'
+  enabled: boolean
+  params: string
+  message: string
+  sortOrder: number
+}
+
+export interface ReviewFinding {
+  code: string
+  name: string
+  level: ReviewLevel
+  category: string
+  stmt: number
+  line: number
+  sql: string
+  message: string
+}
+
+export interface ReviewResult {
+  dialect: ReviewDialect
+  statements: number
+  errors: number
+  warnings: number
+  infos: number
+  findings: ReviewFinding[]
+  /** No ERROR-level finding — not "no findings". Warnings never block. */
+  passed: boolean
+}
+
+export interface ReviewCheckResp {
+  instance: string
+  result: ReviewResult
+}
+
+export interface ReviewCatalog {
+  dialects: string[]
+  categories: string[]
+  levels: string[]
+}
+
+// ---------------------------------------------------------------- 发布流水线
+
+export type StageType = 'review' | 'approve' | 'backup' | 'execute' | 'verify' | 'manual' | 'notify'
+export type RunStatus = 'pending' | 'running' | 'waiting' | 'success' | 'failed' | 'skipped' | 'aborted'
+
+export interface PipelineStage {
+  id?: number
+  pipelineId?: number
+  stepOrder?: number
+  name: string
+  type: StageType
+  config: string
+  onFailure: 'abort' | 'continue'
+}
+
+export interface Pipeline {
+  id: number
+  name: string
+  description: string
+  /** Empty = every control tier; a value narrows the flow to that tier. */
+  tierCode: string
+  enabled: boolean
+  isDefault: boolean
+  createdBy?: number
+  createdAt?: string
+  updatedAt?: string
+  stages: PipelineStage[]
+}
+
+/** One stage of one run — what the pipeline view draws. */
+export interface ReleaseStage {
+  id: number
+  releaseId: number
+  stepOrder: number
+  name: string
+  type: StageType
+  config: string
+  onFailure: string
+  status: RunStatus
+  log: string
+  /** JSON-encoded ReviewResult on a review stage; empty otherwise. */
+  findings: string
+  approvalId: number
+  approvalNo: string
+  rows: number
+  startedAt: string | null
+  finishedAt: string | null
+}
+
+export interface Release {
+  id: number
+  relNo: string
+  title: string
+  pipelineId: number
+  pipelineName: string
+  connectionId: number
+  instance: string
+  database: string
+  /** Snapshots taken when the run started; never re-resolved. */
+  env: string
+  tierCode: string
+  engine: string
+  sql: string
+  scriptUploadId?: number
+  reason: string
+  creatorId: number
+  creator: string
+  /** Which door the ticket came in by. An API release also carries the external
+   *  system's name and its own ticket id, so the two systems can talk about the
+   *  same change. */
+  source: 'console' | 'api'
+  clientName?: string
+  externalRef?: string
+  status: RunStatus
+  risk: string
+  error: string
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
+  stages: ReleaseStage[]
+}
+
+// ---------------------------------------------------------------- 开放接口
+
+/** One external system's credential. The secret is NOT here and never will be —
+ *  the server stores a bcrypt hash and returns the plaintext once, at creation. */
+export interface APIClient {
+  id: number
+  name: string
+  /** Public half of the credential, safe to display. */
+  key: string
+  userId: number
+  /** The service account this client acts as — its roles decide what the
+   *  credential may release, and the audit trail records it as the actor. */
+  userName: string
+  allowIps: string
+  scopes: string
+  enabled: boolean
+  lastUsedAt: string | null
+  createdAt: string
+}
+
+export interface ReleasePage {
+  items: Release[]
+  total: number
+  page: number
+  pageSize: number
 }
 
 export interface SettingsResp {

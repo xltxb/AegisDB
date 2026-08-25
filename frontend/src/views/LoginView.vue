@@ -66,7 +66,7 @@ async function submit() {
         <div class="logo"><Sailboat :size="22" color="#fff" /></div>
         <div>
           <div class="bn">DP DB GATEWAY</div>
-          <div class="bs">数据库管理网关</div>
+          <div class="bs">{{ $t('loginTitle') }}</div>
         </div>
       </div>
       <div class="title">{{ $t('loginTitle') }}</div>

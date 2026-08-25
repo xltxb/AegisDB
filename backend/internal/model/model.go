@@ -76,6 +76,30 @@ const (
 	LevelDeny    = "deny"
 )
 
+// CapRelease is the capability dimension for RAISING a release (发起发布单),
+// judged per control tier like every other dimension.
+//
+// It is not redundant with the SQL's own capability. `write` and `ddl` answer
+// "may this role change data/structure here at all", and the release runner
+// still asks them at execute time. This one answers a different question — "may
+// this role start a RELEASE against this tier" — which an organisation wants to
+// answer separately: self-service releases in dev, an approval-backed flow in
+// staging, and no externally-raised production changes at all, without having to
+// deny `ddl` on prod (which would also block the terminal and the approval
+// channel that production DBAs depend on).
+//
+// The three levels read as:
+//   - allow   — may raise a release on this tier
+//   - approve — may raise one, but only through a flow that contains an approval
+//     stage, even when the statement itself would have been allowed
+//   - deny    — may not raise a release on this tier at all
+const CapRelease = "release"
+
+// Capabilities is the full set of matrix dimensions, in console display order.
+// The console renders one row per entry; seeding and backfill iterate it, so a
+// dimension added here reaches every role rather than only new installs.
+var Capabilities = []string{"select", "write", "ddl", "grant", "conn", "approve", "explain", CapRelease}
+
 // Risk dictionary levels (per command per env).
 const (
 	RiskHigh = "high"
@@ -202,6 +226,12 @@ const (
 	ExportRunning = "running"
 	ExportDone    = "done"
 	ExportFailed  = "failed"
+	// ExportExpired — the archive was deleted by the retention sweep. The row
+	// STAYS: what was exported, by whom, how many rows and when is the part an
+	// auditor asks about, and it outlives the file by design. Only the pointer to
+	// the bytes (Files) and the archive password go, because a password guarding
+	// something that no longer exists is a liability with no use left.
+	ExportExpired = "expired"
 )
 
 // ExportJob is one asynchronous data-export task. Multiple run in parallel; the
@@ -213,7 +243,7 @@ type ExportJob struct {
 	ConnectionID int64      `json:"connectionId"`
 	Instance     string     `gorm:"size:96" json:"instance"`
 	Database     string     `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
-	SQL          string     `gorm:"type:text" json:"sql"`
+	SQL          string     `gorm:"type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
 	Name         string     `gorm:"size:128" json:"name"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	Rows         int        `json:"rows"`
@@ -237,7 +267,7 @@ type AsyncJob struct {
 	ConnectionID int64      `json:"connectionId"`
 	Instance     string     `gorm:"size:96" json:"instance"`
 	Database     string     `gorm:"column:db_name;size:128" json:"database"`
-	SQL          string     `gorm:"type:text" json:"sql"`
+	SQL          string     `gorm:"type:mediumtext" json:"sql"` // see migration 0018
 	Reason       string     `gorm:"size:512" json:"reason"`
 	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	// Risk is the verdict that authorised this job, captured at submit time. The
@@ -376,7 +406,7 @@ type Approval struct {
 	Env          string    `gorm:"size:32;not null" json:"env"`
 	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Instance     string    `gorm:"size:64;not null" json:"instance"`
-	Command      string    `gorm:"type:text;not null" json:"command"`
+	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // see migration 0018
 	// A script approval keeps the script in the file the initiator uploaded and
 	// records a REFERENCE to it, not its body: Command then holds a bounded,
 	// readable excerpt. The body of a real migration runs to megabytes, and
@@ -401,6 +431,12 @@ type Approval struct {
 	// by the timeout PATCH write-back. Callback correlation uses our ApNo (echoed
 	// back as external_task_id), not this.
 	ExternalTaskID string   `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
+	// ReleaseID links a ticket raised by a release pipeline's approve stage back
+	// to its release. It also SUPPRESSES execution on approval: the pipeline owns
+	// the execute stage, and finalizeApproval running the command as well would
+	// apply the change twice — once unaudited by the pipeline that believes it has
+	// not run yet. Zero for every ordinary ticket, which keeps the old behaviour.
+	ReleaseID int64 `gorm:"not null;default:0;index:idx_approval_release" json:"releaseId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
 	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)
@@ -439,7 +475,7 @@ type AuditLog struct {
 	Env          string    `gorm:"size:32" json:"env"`
 	TierCode     string    `gorm:"size:16" json:"tierCode"`
 	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
-	Command      string    `gorm:"type:text;not null" json:"command"`
+	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // full query on purpose (EX5) — see migration 0018
 	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
 	Result       string    `gorm:"size:16;not null" json:"result"`                       // executed|pending|rejected|warn
 	ApprovalNo   string    `gorm:"size:32" json:"approvalNo"`
@@ -505,11 +541,280 @@ type Setting struct {
 
 func (Setting) TableName() string { return "tbl_setting" }
 
+// ---------------------------------------------------------------- SQL 规范审查
+
+// SQL-review rule levels. `error` blocks a release pipeline, `warn` records the
+// finding and lets it through, `info` is advice only.
+const (
+	ReviewError = "error"
+	ReviewWarn  = "warn"
+	ReviewInfo  = "info"
+)
+
+// Review rule kinds. A builtin rule's logic lives in package review, keyed by
+// Code; a regex rule is one an operator wrote in the console and carries its
+// pattern in Params.
+const (
+	ReviewKindBuiltin = "builtin"
+	ReviewKindRegex   = "regex"
+)
+
+// SQLReviewRule — one entry in the 规范审查规则库.
+//
+// Dialect is a comma-separated set of dialect codes ("mysql,tidb") or "all". It
+// is matched against the dialect derived from the target connection's engine, so
+// an Oracle-only naming rule never fires on a TiDB statement — a review that
+// reports rules the target database cannot violate trains people to ignore it.
+//
+// Level is what the finding COSTS, and it is deliberately per rule rather than
+// per finding: whether a missing table comment stops a release is a policy
+// decision an organisation makes once, not something the checker should decide
+// each time it runs.
+//
+// Params carries the rule's knobs as JSON (a naming pattern, a length cap, a
+// list of forbidden types). Builtin rules ship defaults; an empty Params means
+// "use the built-in default", never "no constraint".
+type SQLReviewRule struct {
+	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code      string    `gorm:"size:64;uniqueIndex:idx_review_code;not null" json:"code"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	Dialect   string    `gorm:"size:64;not null;default:all" json:"dialect"`  // all|mysql|tidb|dws|oracle (comma-separated)
+	Category  string    `gorm:"size:32;not null" json:"category"`             // naming|structure|index|dml|ddl|security|perf
+	Level     string    `gorm:"size:16;not null;default:warn" json:"level"`   // error|warn|info
+	Kind      string    `gorm:"size:16;not null;default:builtin" json:"kind"` // builtin|regex
+	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
+	Params    string    `gorm:"type:text" json:"params"`  // JSON knobs; empty = builtin defaults
+	Message   string    `gorm:"size:512" json:"message"`  // what the operator is told when it fires
+	SortOrder int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func (SQLReviewRule) TableName() string { return "tbl_sql_review_rule" }
+
+// ---------------------------------------------------------------- 开放接口 (API clients)
+
+// APIClient is one external system allowed to raise SQL release tickets through
+// the open API (a DevOps platform, a CI job, a change-management system).
+//
+// It is NOT a login. The credential is a key + secret pair, and the client acts
+// as a SERVICE ACCOUNT (UserID): the capability matrix, the tag scope, the MFA
+// policy and the audit trail are all keyed by a user, so an external caller with
+// no subject would be an execution channel nothing could judge. Giving each
+// integration its own client also makes revocation and attribution per system
+// rather than "someone with the shared secret".
+//
+// SecretHash stores a bcrypt hash — the secret itself is shown once, at creation,
+// and never again; a leaked list of API secrets would be a list of production
+// write credentials.
+type APIClient struct {
+	ID   int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name string `gorm:"size:64;not null" json:"name"`
+	// Key is the public half, safe to log and to show in the console.
+	Key        string `gorm:"size:64;uniqueIndex:idx_apiclient_key;not null" json:"key"`
+	SecretHash string `gorm:"size:255;not null" json:"-"`
+	UserID     int64  `gorm:"not null" json:"userId"`
+	UserName   string `gorm:"size:64" json:"userName"` // display snapshot
+	// AllowIPs is a comma-separated IP/CIDR allowlist for THIS client. Empty means
+	// any source (the secret still gates it) — a deliberate default, because a CI
+	// runner's egress address is often unknown at the time the client is created.
+	AllowIPs string `gorm:"size:512" json:"allowIps"`
+	// Scopes limits what the credential can do: release:create, release:read,
+	// review:check. A read-only integration (a dashboard polling ticket status)
+	// should not hold a credential that can raise a production change.
+	Scopes     string     `gorm:"size:255;not null" json:"scopes"`
+	Enabled    bool       `gorm:"not null;default:true" json:"enabled"`
+	LastUsedAt *time.Time `json:"lastUsedAt"`
+	CreatedBy  int64      `json:"createdBy"`
+	CreatedAt  time.Time  `json:"createdAt"`
+}
+
+func (APIClient) TableName() string { return "tbl_api_client" }
+
+// The scopes an API client can hold.
+const (
+	ScopeReleaseCreate = "release:create"
+	ScopeReleaseRead   = "release:read"
+	ScopeReviewCheck   = "review:check"
+)
+
+// AllScopes is what a client gets when none are named.
+var AllScopes = []string{ScopeReleaseCreate, ScopeReleaseRead, ScopeReviewCheck}
+
+// Release sources — who raised the ticket.
+const (
+	ReleaseSourceConsole = "console"
+	ReleaseSourceAPI     = "api"
+)
+
+// ---------------------------------------------------------------- 发布流水线 (CI/CD)
+
+// Pipeline stage types. Each is a step a release RUN performs; the set is closed
+// because every type needs an executor in service/pipeline.go — an unknown type
+// would either be skipped (a review nobody ran) or crash the runner.
+const (
+	StageReview  = "review"  // 规范审查 — run the rule library against the release SQL
+	StageApprove = "approve" // 人工审批 — raise an approval ticket and wait for it
+	StageBackup  = "backup"  // 备份/回滚点 — run the configured backup SQL
+	StageExecute = "execute" // 执行变更 — run the release SQL against the target
+	StageVerify  = "verify"  // 执行后校验 — run the configured verification query
+	StageManual  = "manual"  // 人工确认 — wait for an operator to continue
+	StageNotify  = "notify"  // 通知 — fire the webhook/Lark event
+)
+
+// Release + stage run states. `waiting` is distinct from `running`: the pipeline
+// is alive but blocked on a HUMAN (an approval ticket, a manual gate), which is
+// what the UI has to draw differently from work in progress.
+const (
+	RunPending = "pending"
+	RunRunning = "running"
+	RunWaiting = "waiting"
+	RunSuccess = "success"
+	RunFailed  = "failed"
+	RunSkipped = "skipped"
+	RunAborted = "aborted"
+)
+
+// Stage failure policy: stop the release, or record the failure and carry on.
+const (
+	OnFailureAbort    = "abort"
+	OnFailureContinue = "continue"
+)
+
+// Pipeline — a customisable release flow: an ordered list of stages a release
+// runs through. Templates are per organisation, not per environment, so the same
+// flow can govern several tiers; TierCode narrows a template to one control tier
+// when a stricter flow is wanted for production.
+type Pipeline struct {
+	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string    `gorm:"size:128;not null" json:"name"`
+	Description string    `gorm:"size:512" json:"description"`
+	// TierCode empty = applies to every control tier. Holds an EnvTier.Code, never
+	// an Environment.Code (see RoleCapability for why that distinction matters).
+	TierCode  string    `gorm:"size:16;index:idx_pipeline_tier" json:"tierCode"`
+	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
+	IsDefault bool      `gorm:"not null;default:false" json:"isDefault"`
+	CreatedBy int64     `json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+func (Pipeline) TableName() string { return "tbl_pipeline" }
+
+// PipelineStage — one stage DEFINITION in a template.
+//
+// Config is per-type JSON: {"failOn":"error"} for review, {"sql":"…"} for
+// backup/verify, {"roleId":2} for approve, {"note":"…"} for manual.
+type PipelineStage struct {
+	ID         int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	PipelineID int64  `gorm:"index:idx_pstage_pipeline;not null" json:"pipelineId"`
+	StepOrder  int    `gorm:"not null" json:"stepOrder"`
+	Name       string `gorm:"size:64;not null" json:"name"`
+	Type       string `gorm:"size:16;not null" json:"type"`
+	Config     string `gorm:"type:text" json:"config"`
+	OnFailure  string `gorm:"size:16;not null;default:abort" json:"onFailure"`
+}
+
+func (PipelineStage) TableName() string { return "tbl_pipeline_stage" }
+
+// Release — one execution of a pipeline against one instance: the CI/CD unit.
+//
+// The pipeline NAME and the stage list are snapshotted into the run
+// (ReleaseStage rows) when it starts, for the same reason Approval snapshots its
+// env/tier: a template edited next month must not rewrite what this release
+// actually did. Env/TierCode are the same dual snapshot.
+//
+// SQL is the change being released. A release whose body is an uploaded script
+// carries ScriptUploadID + ScriptSHA256 instead and re-reads the file at execute
+// time, exactly like a script approval.
+type Release struct {
+	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	RelNo    string `gorm:"size:32;uniqueIndex:idx_release_relno;not null" json:"relNo"`
+	Title    string `gorm:"size:128;not null" json:"title"`
+	PipelineID   int64  `gorm:"not null" json:"pipelineId"`
+	PipelineName string `gorm:"size:128" json:"pipelineName"` // snapshot
+	ConnectionID int64  `gorm:"not null" json:"connectionId"`
+	Instance     string `gorm:"size:96" json:"instance"`
+	Database     string `gorm:"column:db_name;size:128" json:"database"`
+	Env          string `gorm:"size:32" json:"env"`
+	TierCode     string `gorm:"size:16" json:"tierCode"`
+	Engine       string `gorm:"size:32" json:"engine"` // snapshot: which dialect it was reviewed as
+	SQL          string `gorm:"type:mediumtext" json:"sql"`
+	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
+	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
+	Reason       string `gorm:"size:512" json:"reason"`
+	CreatorID    int64  `gorm:"index:idx_release_creator;not null" json:"creatorId"`
+	Creator      string `gorm:"size:64" json:"creator"`
+	// Source says which door the ticket came in by, and ClientName snapshots WHICH
+	// external system raised it. The creator is the service account the client
+	// acts as — true, but not the whole truth, and the audit rows say
+	// "actor=svc-devops, operator=API:DevOps 平台" precisely so the trail names the
+	// system that asked as well as the identity it borrowed.
+	Source     string `gorm:"size:16;not null;default:console" json:"source"` // console|api
+	ClientID   int64  `gorm:"not null;default:0" json:"clientId,omitempty"`
+	ClientName string `gorm:"size:64" json:"clientName,omitempty"`
+	// ExternalRef is the caller's own ticket id (a change number, a CI build id),
+	// carried through so both systems can talk about the same release.
+	ExternalRef string `gorm:"size:128;index:idx_release_extref" json:"externalRef,omitempty"`
+	// IdemKey is "<clientID>:<externalRef>" and exists only to carry a UNIQUE
+	// index: an external caller retries, and a retry that raised a SECOND release
+	// would apply the same change twice. It is a POINTER so an absent key is NULL
+	// rather than "", because NULLs do not collide in a unique index while empty
+	// strings do — every console release would otherwise be a duplicate of the
+	// first one. Uniqueness is enforced by the database, not by a check-then-insert
+	// that two concurrent retries can both pass.
+	IdemKey *string `gorm:"size:160;uniqueIndex:uk_release_idem" json:"-"`
+	Status       string `gorm:"size:16;index:idx_release_status;not null;default:pending" json:"status"`
+	// Risk is the gateway verdict captured when the release was submitted — the
+	// same field AsyncJob carries, and for the same reason: the dictionary may
+	// change between submit and execute, and the level that authorised the run is
+	// the one worth recording.
+	Risk       string     `gorm:"size:16" json:"risk"`
+	Error      string     `gorm:"size:512" json:"error"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	StartedAt  *time.Time `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
+}
+
+func (Release) TableName() string { return "tbl_release" }
+
+// ReleaseStage — one stage of one run. This is what the pipeline view draws.
+//
+// Findings holds the review stage's JSON result so the operator can see WHY a
+// release was stopped without re-running the check against a rule library that
+// may have changed since.
+type ReleaseStage struct {
+	ID        int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ReleaseID int64  `gorm:"index:idx_rstage_release;not null" json:"releaseId"`
+	StepOrder int    `gorm:"not null" json:"stepOrder"`
+	Name      string `gorm:"size:64;not null" json:"name"`
+	Type      string `gorm:"size:16;not null" json:"type"`
+	Config    string `gorm:"type:text" json:"config"`
+	OnFailure string `gorm:"size:16;not null;default:abort" json:"onFailure"`
+	Status    string `gorm:"size:16;not null;default:pending" json:"status"`
+	Log       string `gorm:"type:mediumtext" json:"log"`
+	Findings  string `gorm:"type:mediumtext" json:"findings"`
+	// ApprovalID/ApNo link an approve stage to the ticket it is waiting on. The
+	// sweeper reads them to resume the run once the ticket is decided, which is
+	// why the link lives on the stage and not only in the log.
+	ApprovalID int64      `gorm:"index:idx_rstage_approval" json:"approvalId"`
+	ApprovalNo string     `gorm:"size:32" json:"approvalNo"`
+	Rows       int        `json:"rows"`
+	StartedAt  *time.Time `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
+}
+
+func (ReleaseStage) TableName() string { return "tbl_release_stage" }
+
 // Notification kinds delivered to a user's in-app inbox.
 const (
 	NotifApprovalApproved = "approval-approved"
 	NotifApprovalRejected = "approval-rejected"
 	NotifApprovalExpired  = "approval-expired"
+	// Release pipeline outcomes, delivered to the release creator.
+	NotifReleaseDone   = "release-done"
+	NotifReleaseFailed = "release-failed"
+	NotifReleaseWait   = "release-waiting"
 )
 
 // Notification — an in-app message to a single user (e.g. their approval was

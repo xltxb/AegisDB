@@ -220,7 +220,7 @@ function chainText(a: Approval) {
 .pg:disabled { opacity: .4; cursor: default; }
 .pgn { font: 500 12px var(--font-mono); color: var(--text-muted); }
 
-.table { border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-card); overflow: hidden; }
+.table { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .thead, .tr { display: grid; grid-template-columns: 110px 88px minmax(180px, 1fr) 130px 190px 120px 96px 76px; gap: 10px; align-items: center; padding: 10px 14px; }
 .thead { background: var(--surface-page); font: 600 11px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
 .tr { border-top: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); cursor: pointer; }

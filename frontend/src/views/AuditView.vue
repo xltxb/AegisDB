@@ -63,7 +63,7 @@ async function load() {
     total.value = res.total
     page.value = res.page
   } catch (e) {
-    ui.notifyError(e, '加载失败')
+    ui.notifyError(e, t('loadFailed'))
   }
 }
 onMounted(load)
@@ -113,10 +113,10 @@ async function doExport() {
     a.download = 'audit_export.csv'
     a.click()
     URL.revokeObjectURL(url)
-    exported.value = `✓ 已导出 ${total.value} 条`
+    exported.value = '✓ ' + t('auditExported', { n: total.value })
     setTimeout(() => (exported.value = ''), 2600)
   } catch (e) {
-    ui.notifyError(e, '导出失败')
+    ui.notifyError(e, t('exportFailed'))
   }
 }
 

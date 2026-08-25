@@ -1118,6 +1118,30 @@ func (r *Repo) FailStuckExportJobs() (int64, error) {
 	return res.RowsAffected, res.Error
 }
 
+// ExpiredExportJobs returns completed export jobs whose archive is past the
+// retention cutoff and still on disk.
+//
+// The clock is FINISHED_AT, falling back to created_at: retention counts from
+// when the file appeared, not from when the job was queued — a job that sat in
+// the queue for an hour would otherwise lose an hour of its keep-time. A job
+// with no `files` is already swept (or never produced one), so it is skipped
+// rather than re-marked.
+func (r *Repo) ExpiredExportJobs(cutoff time.Time, limit int) ([]model.ExportJob, error) {
+	var js []model.ExportJob
+	err := r.db.Where("status = ? AND files <> '' AND COALESCE(finished_at, created_at) < ?",
+		model.ExportDone, cutoff).
+		Order("id asc").Limit(limit).Find(&js).Error
+	return js, err
+}
+
+// AllExportFiles returns every path any export job still claims, so the orphan
+// sweep can tell "nobody's file" from "somebody's file".
+func (r *Repo) AllExportFiles() ([]string, error) {
+	var rows []string
+	err := r.db.Model(&model.ExportJob{}).Where("files <> ''").Pluck("files", &rows).Error
+	return rows, err
+}
+
 func (r *Repo) ListExportJobs(userID int64, limit int) ([]model.ExportJob, error) {
 	var js []model.ExportJob
 	q := r.db.Where("user_id = ?", userID).Order("id desc")

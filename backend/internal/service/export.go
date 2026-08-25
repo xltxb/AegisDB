@@ -138,6 +138,21 @@ func exportLimitErr(rows int, rawBytes, maxRows, maxBytes int64) error {
 // working directory) used when no export.savePath is configured.
 const DefaultExportDir = "export"
 
+// maxStoredSQLBytes bounds any user-submitted SQL the gateway persists on a job
+// row (export/async). The columns are MEDIUMTEXT — 16MB, migration 0018 — and
+// letting the database refuse the INSERT surfaced as a raw driver error the
+// operator can't act on ("Error 1406: Data too long for column 'sql'").
+const maxStoredSQLBytes = 15 << 20
+
+// ErrSQLTooLong marks a stored-SQL bound refusal so handlers can surface the
+// wrapped message instead of collapsing it into a generic error.
+var ErrSQLTooLong = errors.New("sql too long")
+
+// storedSQLTooLong is the actionable refusal for SQL past maxStoredSQLBytes.
+func storedSQLTooLong(n int) error {
+	return fmt.Errorf("SQL 过长(%.1fMB,上限 15MB)——请改用脚本上传通道,或缩短语句(如用临时表替代超长 IN 列表): %w", float64(n)/(1<<20), ErrSQLTooLong)
+}
+
 // ExportSavePath returns the data-export directory: the configured
 // export.savePath, or the default "export" dir under the backend run dir.
 func (s *Services) ExportSavePath() string {
@@ -173,6 +188,9 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	// Exports are data reads by definition, so require a single read-only statement.
 	if !exportSQLReadOnly(sql) {
 		return nil, ErrExportNotReadOnly
+	}
+	if len(sql) > maxStoredSQLBytes {
+		return nil, storedSQLTooLong(len(sql))
 	}
 	// FR-CONN-04: maintenance-state instances restrict operations. The worker
 	// opens a real connection, so the export channel has to honour this too.
@@ -336,6 +354,15 @@ func (s *Services) failExport(id int64, msg string) {
 // matches recorded files only) nor ever cleaned up — a big export failing at
 // the cap otherwise stranded gigabytes of undownloadable archives (B3).
 func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, name string) ([]string, string, int, int64, error) {
+	// Execute the single NORMALISED statement, never the raw text. The raw form
+	// may end with a semicolon (finger habit from the terminal, which strips it
+	// client-side before submitting) or a trailing comment line, and some
+	// drivers refuse that outright — sqlite fails with "not an error (21)", the
+	// PostgreSQL extended protocol is similarly strict. Submission already
+	// proved the split yields exactly one statement (exportSQLReadOnly).
+	if stmts := sqlutil.SplitStatements(sql); len(stmts) == 1 {
+		sql = stmts[0]
+	}
 	now := time.Now()
 	dir := s.UserExportDir(u)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
@@ -29,6 +30,12 @@ import (
 // the ticket stays a ticket. The full file is one click away and the digest ties
 // the two together.
 const scriptExcerptLines = 40
+
+// scriptExcerptLineBytes bounds ONE excerpt line. Truncating by line count
+// alone left the excerpt unbounded for long LINES — a generated single-line
+// statement (an 80KB IN-list) rode into the ticket whole, which is exactly the
+// oversized-command failure the excerpt exists to prevent.
+const scriptExcerptLineBytes = 300
 
 // maxScriptBytes bounds what the gateway will read off disk and judge in one
 // request. Not a storage limit — the reference model removed that — but a limit
@@ -90,11 +97,24 @@ func scriptExcerpt(filename, content string, stmtCount, high, mid int) string {
 		head = lines[:scriptExcerptLines]
 		truncated = true
 	}
+	// Bound each line too — see scriptExcerptLineBytes. Cut on a rune boundary
+	// so a multi-byte character isn't split into mojibake.
+	clipped := make([]string, len(head))
+	for i, l := range head {
+		if len(l) > scriptExcerptLineBytes {
+			cut := scriptExcerptLineBytes
+			for cut > 0 && !utf8.RuneStart(l[cut]) {
+				cut--
+			}
+			l = l[:cut] + " …(本行截断,全文见所引用的脚本文件)"
+		}
+		clipped[i] = l
+	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "\\i %s\n", filename)
 	fmt.Fprintf(&b, "-- 共 %d 条语句 · 高危 %d · 需审批 %d · %s · sha256:%s\n",
 		stmtCount, high, mid, humanBytes(len(content)), scriptDigest(content))
-	b.WriteString(strings.Join(head, "\n"))
+	b.WriteString(strings.Join(clipped, "\n"))
 	if truncated {
 		fmt.Fprintf(&b, "\n-- …… 以下省略 %d 行,全文见所引用的脚本文件 ……", len(lines)-scriptExcerptLines)
 	}

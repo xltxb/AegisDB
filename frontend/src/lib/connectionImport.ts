@@ -103,7 +103,7 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
   if (missing.length) {
     return {
       rows,
-      errors: [{ line: firstIdx + 1, message: `缺少必需的列: ${missing.join(', ')}` }],
+      errors: [{ line: firstIdx + 1, message: tr('ciMissingCols', { cols: missing.join(', ') }) }],
     }
   }
   const columnAt = (name: string) => header.indexOf(name)
@@ -127,15 +127,15 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
 
     const blank = REQUIRED.filter((c) => !String(row[c as keyof ImportRow]).trim())
     if (blank.length) {
-      errors.push({ line, message: `第 ${line} 行缺少: ${blank.join(', ')}` })
+      errors.push({ line, message: tr('ciRowMissing', { line, cols: blank.join(', ') }) })
       continue
     }
     if (!validEnvs.includes(row.env)) {
-      errors.push({ line, message: `第 ${line} 行环境 "${row.env}" 无效,仅支持: ${validEnvs.join(' / ')}` })
+      errors.push({ line, message: tr('ciBadEnv', { line, v: `"${row.env}"`, list: validEnvs.join(' / ') }) })
       continue
     }
     if (!(IMPORT_POLICIES as readonly string[]).includes(row.policy)) {
-      errors.push({ line, message: `第 ${line} 行网关策略 "${row.policy}" 无效,仅支持: ${IMPORT_POLICIES.join(' / ')}` })
+      errors.push({ line, message: tr('ciBadPolicy', { line, v: `"${row.policy}"`, list: IMPORT_POLICIES.join(' / ') }) })
       continue
     }
     rows.push(row)
@@ -146,3 +146,10 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
 
 /** Columns the importer reads, for the UI's help text. */
 export const IMPORT_COLUMNS = KNOWN
+
+import { i18n } from '@/locales'
+
+// Validation messages are read by whoever pasted the sheet, so they follow the
+// console's language. A lib has no component context, so it goes through the
+// i18n instance directly — the same way the ui store does.
+const tr = (k: string, p?: Record<string, unknown>) => i18n.global.t(k as never, p as never) as string

@@ -36,22 +36,37 @@ defineEmits<{ click: [MouseEvent] }>()
 }
 .vbtn.full { width: 100%; }
 .vbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Pressed state, all variants: 1px down and the shadow pulls in, at
+   --dur-instant. It is the cheapest possible "yes, I got that" — and the one
+   piece of feedback a console must never skip, because half the buttons here
+   start something that takes seconds to answer. */
+.vbtn:active:not(:disabled) {
+  transform: translateY(1px);
+  transition: transform var(--dur-instant) var(--ease-out);
+}
 .v-primary {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 6px 18px -6px rgba(59, 110, 246, 0.5);
+  box-shadow: 0 6px 14px -6px rgba(59, 110, 246, 0.8);
 }
-.v-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.v-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 8px 18px -6px rgba(59, 110, 246, 0.9); }
+.v-primary:active:not(:disabled) { background: var(--accent-pressed); box-shadow: 0 3px 8px -4px rgba(59, 110, 246, 0.9); }
 .v-secondary {
-  background: transparent;
+  background: var(--surface-card);
   color: var(--text-body);
   border-color: var(--border-default);
 }
-.v-secondary:hover:not(:disabled) { background: var(--surface-sunken); }
+.v-secondary:hover:not(:disabled) { background: var(--surface-sunken); border-color: var(--border-strong); }
+.v-secondary:active:not(:disabled) { background: var(--border-subtle); }
+/* Outlined, not filled. A filled red button makes 终止发布 louder than 新建发布,
+   which is backwards: the destructive action should be reachable, not
+   attractive. It only becomes solid inside a confirmation dialog, where it IS
+   the subject of the sentence. */
 .v-danger {
-  background: var(--danger-subtle);
+  background: var(--surface-card);
   color: var(--danger-text);
-  border-color: rgba(240, 71, 62, 0.4);
+  border-color: rgba(240, 71, 62, 0.35);
 }
-.v-danger:hover:not(:disabled) { background: rgba(240, 71, 62, 0.26); }
+.v-danger:hover:not(:disabled) { background: var(--danger-subtle); border-color: rgba(240, 71, 62, 0.6); }
+.v-danger:active:not(:disabled) { background: var(--danger-100); }
 </style>

@@ -1,7 +1,8 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
+  APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog,
+  ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
 
@@ -58,7 +59,7 @@ export const api = {
 
   // ---- data export ----
   exportConfig: () =>
-    http.get<any, Envelope<{ enabled: boolean; savePath: string }>>('/export/config').then(ok),
+    http.get<any, Envelope<{ enabled: boolean; savePath: string; retentionDays: number }>>('/export/config').then(ok),
   // raw envelope so callers can detect 42601 (path unset); returns the new job.
   exportData: (connectionId: number, sql: string, name = '', database = '') =>
     http.post<any, Envelope<ExportJob>>('/export', { connectionId, sql, name, database }),
@@ -216,6 +217,54 @@ export const api = {
     http.patch<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`, { tier, level }).then(ok),
   deleteRiskCommand: (name: string) =>
     http.delete<any, Envelope<RiskCommandView[]>>(`/risk-commands/${name}`).then(ok),
+
+  // ---- 数据库规范审查 (SQL review) ----
+  // The rule list and the check are open to terminal operators: self-checking a
+  // change before submitting it is the point. Editing the library is admin-only
+  // on the server, so the console hides the controls rather than guessing.
+  reviewRules: () => http.get<any, Envelope<ReviewRule[]>>('/sql-review/rules').then(ok),
+  reviewCatalog: () => http.get<any, Envelope<ReviewCatalog>>('/sql-review/catalog').then(ok),
+  saveReviewRule: (id: number, body: Partial<ReviewRule>) =>
+    id > 0
+      ? http.put<any, Envelope<ReviewRule>>(`/sql-review/rules/${id}`, body)
+      : http.post<any, Envelope<ReviewRule>>('/sql-review/rules', body),
+  deleteReviewRule: (id: number) => http.delete<any, Envelope<any>>(`/sql-review/rules/${id}`),
+  // connectionId wins over dialect when both are sent: the target instance
+  // decides which rules can possibly apply.
+  reviewCheck: (body: { connectionId?: number; dialect?: string; sql: string }) =>
+    http.post<any, Envelope<ReviewCheckResp>>('/sql-review/check', body, { timeout: SCRIPT_TIMEOUT_MS }).then(ok),
+
+  // ---- 发布流程 (CI/CD) ----
+  pipelines: () => http.get<any, Envelope<Pipeline[]>>('/pipelines').then(ok),
+  savePipeline: (id: number, body: Partial<Pipeline>) =>
+    id > 0
+      ? http.put<any, Envelope<Pipeline>>(`/pipelines/${id}`, body)
+      : http.post<any, Envelope<Pipeline>>('/pipelines', body),
+  deletePipeline: (id: number) => http.delete<any, Envelope<any>>(`/pipelines/${id}`),
+  releases: (scope: 'mine' | 'all' = 'mine', status = '', page = 1, pageSize = 20) =>
+    http.get<any, Envelope<ReleasePage>>(
+      `/releases?scope=${scope}&status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`,
+    ).then(ok),
+  release: (id: number) => http.get<any, Envelope<Release>>(`/releases/${id}`).then(ok),
+  // raw envelope so the caller can detect 42800 (MFA step-up) and 40300 (denied
+  // by the capability matrix), which mean different things to the operator.
+  createRelease: (body: {
+    title: string; pipelineId: number; connectionId: number; database?: string
+    sql?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
+  }) => http.post<any, Envelope<Release>>('/releases', body),
+  abortRelease: (id: number) => http.post<any, Envelope<any>>(`/releases/${id}/abort`),
+  continueStage: (releaseId: number, stageId: number) =>
+    http.post<any, Envelope<any>>(`/releases/${releaseId}/stages/${stageId}/continue`),
+
+  // ---- 开放接口凭据 (external API clients) ----
+  // The create call returns the ONLY plaintext copy of the secret; there is no
+  // "fetch it again" endpoint because the server keeps a bcrypt hash.
+  apiClients: () => http.get<any, Envelope<APIClient[]>>('/api-clients').then(ok),
+  createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; enabled?: boolean }) =>
+    http.post<any, Envelope<{ client: APIClient; token: string }>>('/api-clients', body),
+  updateApiClient: (id: number, body: Partial<{ name: string; userId: number; allowIps: string; scopes: string[]; enabled: boolean }>) =>
+    http.put<any, Envelope<APIClient>>(`/api-clients/${id}`, body),
+  deleteApiClient: (id: number) => http.delete<any, Envelope<any>>(`/api-clients/${id}`),
 
   // ---- approvals ----
   // Paged listing {items,total,page,pageSize}.

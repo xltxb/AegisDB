@@ -89,4 +89,6 @@ var allModels = []any{
 	&model.Notification{}, &model.RoleTag{}, &model.ExportJob{}, &model.ScriptUpload{},
 	&model.AsyncJob{}, &model.UserTag{}, &model.TerminalSnippet{},
 	&model.EnvTier{}, &model.Environment{},
+	&model.SQLReviewRule{}, &model.Pipeline{}, &model.PipelineStage{},
+	&model.Release{}, &model.ReleaseStage{}, &model.APIClient{},
 }

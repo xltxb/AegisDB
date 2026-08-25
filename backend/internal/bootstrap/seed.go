@@ -115,7 +115,16 @@ func backfillEnvTiers(db *gorm.DB) error {
 	if err := backfillExplainCapability(db); err != nil {
 		return err
 	}
-	return backfillEnvTierMenu(db)
+	if err := backfillReleaseCapability(db); err != nil {
+		return err
+	}
+	if err := backfillEnvTierMenu(db); err != nil {
+		return err
+	}
+	// The release menu key follows the same rule as the tiers menu did: a key with
+	// no RoleMenu row reads as denied, so an upgraded database would show the
+	// permissions page a menu nobody — not even an administrator — could grant.
+	return backfillPipelineMenu(db)
 }
 
 // backfillExplainCapability writes the `explain` row for every role × tier that
@@ -132,6 +141,54 @@ func backfillEnvTiers(db *gorm.DB) error {
 // written back — same meaning, now visible. Tiers created later get their rows
 // from the template clone (Repo.CreateEnvTierFrom), not from here.
 func backfillExplainCapability(db *gorm.DB) error {
+	return backfillCapability(db, "explain", func(*gorm.DB, model.Role, model.EnvTier) (string, error) {
+		return model.LevelAllow, nil
+	})
+}
+
+// backfillReleaseCapability writes the `release` row (发起发布单) for every role ×
+// tier that has none, MIRRORING that role's `write` level on the same tier.
+//
+// Not defaulted to allow, and not hand-written per role: derived. "May this role
+// start a release against this tier" and "may this role change data on it" are
+// different questions (see model.CapRelease), but a role that cannot write on a
+// tier certainly should not be able to raise a release there, and one that needs
+// approval to write should need it to release. Deriving reproduces the intent the
+// operator already expressed on that tier instead of inventing a second policy
+// they never reviewed — and it is the same table the seeded matrix ships, so the
+// two cannot drift (TestReleaseCapabilityMirrorsWrite).
+//
+// Per cell and only where absent, like every other capability backfill: a level
+// somebody set is never touched.
+func backfillReleaseCapability(db *gorm.DB) error {
+	return backfillCapability(db, model.CapRelease, func(tx *gorm.DB, r model.Role, t model.EnvTier) (string, error) {
+		var write model.RoleCapability
+		err := tx.Where("role_id = ? AND capability = ? AND tier_code = ?", r.ID, "write", t.Code).
+			First(&write).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// No write row means write reads as allow (Repo.CapabilityLevel), so
+			// release inherits the same answer.
+			return model.LevelAllow, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		return write.Level, nil
+	})
+}
+
+// backfillCapability is the shared shape of a capability backfill: for every
+// role × tier with no row for `cap`, write one at the level `level` computes.
+//
+// A missing capability row reads as `allow`, so behaviour is identical either
+// way — this is about what the permissions page can SHOW. Without the rows it
+// renders the default rather than a stored value, so an administrator looking at
+// the matrix cannot tell "nobody has decided this" from "somebody chose allow",
+// and the first save would be writing values they never actually reviewed.
+//
+// Tiers created later get their rows from the template clone
+// (Repo.CreateEnvTierFrom), not from here.
+func backfillCapability(db *gorm.DB, cap string, level func(*gorm.DB, model.Role, model.EnvTier) (string, error)) error {
 	var roles []model.Role
 	if err := db.Find(&roles).Error; err != nil {
 		return err
@@ -144,15 +201,19 @@ func backfillExplainCapability(db *gorm.DB) error {
 		for _, t := range tiers {
 			var n int64
 			if err := db.Model(&model.RoleCapability{}).
-				Where("role_id = ? AND capability = ? AND tier_code = ?", r.ID, "explain", t.Code).
+				Where("role_id = ? AND capability = ? AND tier_code = ?", r.ID, cap, t.Code).
 				Count(&n).Error; err != nil {
 				return err
 			}
 			if n > 0 {
 				continue
 			}
+			lvl, err := level(db, r, t)
+			if err != nil {
+				return err
+			}
 			if err := db.Create(&model.RoleCapability{
-				RoleID: r.ID, Capability: "explain", TierCode: t.Code, Level: model.LevelAllow,
+				RoleID: r.ID, Capability: cap, TierCode: t.Code, Level: lvl,
 			}).Error; err != nil {
 				return err
 			}
@@ -377,17 +438,23 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	}
 
 	// ---- Menus ----
-	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings"}
+	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings", "pipeline"}
 	// Instance config (db), rules, tiers/environments (envtier), permissions
 	// (perms) and settings are all platform-admin only — non-admins don't even
 	// see these pages.
+	//
+	// pipeline (发布流程/CI-CD) follows terminal: raising a release ends in an
+	// execution against an instance, so the people who may execute there are the
+	// ones who may release. Read-only and audit roles are deliberately left out —
+	// they cannot execute, and a release they could raise would only ever be
+	// refused at the execute stage.
 	menuMatrix := map[string][]bool{
-		//        terminal approve  db    rules envtier perms audit settings
-		"admin": {true, true, true, true, true, true, true, true},
-		"owner": {true, true, false, false, false, false, true, false},
-		"l2":    {true, true, false, false, false, false, true, false},
-		"ro":    {true, false, false, false, false, false, true, false},
-		"audit": {false, false, false, false, false, false, true, false},
+		//        terminal approve  db    rules envtier perms audit settings pipeline
+		"admin": {true, true, true, true, true, true, true, true, true},
+		"owner": {true, true, false, false, false, false, true, false, true},
+		"l2":    {true, true, false, false, false, false, true, false, true},
+		"ro":    {true, false, false, false, false, false, true, false, false},
+		"audit": {false, false, false, false, false, false, true, false, false},
 	}
 	for code, vals := range menuMatrix {
 		for i, k := range menuKeys {
@@ -407,14 +474,19 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	// Seeded "allow" everywhere, which is exactly the behaviour before it existed.
 	// The dimension is here so an operator CAN restrict it, not so the product
 	// decides for them.
-	caps := []string{"select", "write", "ddl", "grant", "conn", "approve", "explain"}
+	// "release" (发起发布单) is the newest dimension and is seeded to mirror who
+	// can already change what: the roles that may run a change here may also
+	// release one, production releases go through an approval-backed flow, and the
+	// read-only roles cannot raise one at all. See model.CapRelease for why it is
+	// a dimension of its own rather than an alias of write/ddl.
+	caps := model.Capabilities
 	envs := []string{"prod", "staging", "dev"}
 	matrices := map[string][][]string{
-		"admin": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "deny"}, {"allow", "allow", "allow"}},
-		"owner": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}},
-		"l2":    {{"allow", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
-		"ro":    {{"allow", "allow", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
-		"audit": {{"allow", "allow", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}},
+		"admin": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "deny"}, {"allow", "allow", "allow"}, {"approve", "allow", "allow"}},
+		"owner": {{"allow", "allow", "allow"}, {"approve", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "approve"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}, {"allow", "allow", "allow"}, {"approve", "allow", "allow"}},
+		"l2":    {{"allow", "allow", "allow"}, {"approve", "approve", "allow"}, {"approve", "approve", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}, {"approve", "approve", "allow"}},
+		"ro":    {{"allow", "allow", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}, {"deny", "deny", "allow"}},
+		"audit": {{"allow", "allow", "allow"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"deny", "deny", "deny"}, {"allow", "allow", "allow"}, {"deny", "deny", "deny"}},
 	}
 	for code, rows := range matrices {
 		for ci, capName := range caps {
@@ -471,6 +543,10 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"export.maxBytes": 2_000_000_000,
 		// 单个导出任务的整体执行超时(秒),默认 30min — service/export.go exportExecTimeout。
 		"export.execTimeout": 1800,
+		// 导出归档在服务器上保留几天,过期由每小时一次的清理任务删除(0=永久保留)。
+		// 这不只是省磁盘:导出文件是生产数据的副本,留着就是一直存在的一份拷贝。
+		// 任务行不删 —— 谁导了什么、多少行、什么时候,要比文件活得久。
+		"export.retentionDays": 3,
 
 		"approval.onTimeout":      "auto-escalate",
 		"approval.timeoutMinutes": 720,

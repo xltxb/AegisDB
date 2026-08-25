@@ -67,3 +67,141 @@ select {
 .hov:hover { background: var(--surface-sunken); }
 
 .spin { animation: spin 1s linear infinite; }
+
+/* ============================================================
+   Shared surface & state layer
+   ------------------------------------------------------------
+   Every view used to hand-roll these: its own card border, its
+   own 10/11/12/16 padding, its own status chip, its own log
+   block. The result was that nothing lined up ACROSS pages and
+   a change to "how a card looks" meant editing twelve files.
+   These classes are the one place that answers those questions;
+   views opt in by using them instead of re-declaring them.
+
+   Two rules they encode:
+   · Depth comes from ELEVATION, not outlines. A card is a
+     surface that lifts; a hairline is for separating things
+     inside one surface.
+   · Mono is for DATA (ids, SQL, counts, durations). Labels and
+     prose are the body face. Mono on every meta line is what
+     made the console read like debug output.
+   ============================================================ */
+
+/* ---- surfaces ---- */
+.v-card {
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-out);
+}
+.v-card--pad { padding: var(--space-4) var(--space-5); }
+/* A card that can be picked. The lift says "you are pointing at me"; the
+   brand rail says "you are looking at me" — two different questions, so two
+   different signals. */
+.v-card--pick { cursor: pointer; position: relative; }
+.v-card--pick:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.v-card--pick:active { transform: translateY(0); }
+.v-card.is-selected { box-shadow: var(--shadow-md); }
+.v-card.is-selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--accent), var(--glow-accent));
+}
+
+/* ---- page header ---- */
+.v-page { flex: 1; min-height: 0; padding: var(--space-6); }
+.v-head { display: flex; align-items: flex-end; margin-bottom: var(--space-4); }
+.v-head-acts { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.v-eyebrow {
+  font: var(--weight-semibold) 10.5px var(--font-mono);
+  letter-spacing: var(--tracking-caps);
+  color: var(--accent-text);
+  text-transform: uppercase;
+}
+.v-h1 {
+  font: var(--weight-bold) 19px var(--font-display);
+  color: var(--text-strong);
+  letter-spacing: var(--tracking-tight);
+  margin-top: 5px;
+}
+.v-sub { font: var(--weight-medium) 12.5px var(--font-body); color: var(--text-muted); margin-top: 3px; }
+
+/* ---- status ---- */
+/* One vocabulary for "what state is this in", so a release, an approval, a job
+   and a delivery all say it the same way. The leading dot is what makes the
+   state readable without relying on colour alone. */
+.v-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  font: var(--weight-semibold) 10.5px var(--font-body);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.v-status::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.v-status--ok { background: var(--success-subtle); color: var(--success-text); }
+.v-status--bad { background: var(--danger-subtle); color: var(--danger-text); }
+.v-status--wait { background: var(--warning-subtle); color: var(--warning-text); }
+.v-status--run { background: var(--accent-subtle); color: var(--accent-text); }
+.v-status--run::before { animation: statePulse 1.4s var(--ease-out) infinite; }
+@keyframes statePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ---- data ---- */
+/* Numbers that change in place (counts, latencies, durations) must not make the
+   line around them jiggle. */
+.v-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.v-tag {
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  font: var(--weight-semibold) 10px var(--font-mono);
+  color: var(--text-muted);
+}
+.v-log {
+  margin: 0;
+  padding: var(--space-3) 14px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--surface-sunken) 55%, var(--surface-card));
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+  font: var(--weight-medium) 11.5px var(--font-mono);
+  line-height: 1.65;
+  color: var(--text-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ---- waiting & empty ----
+   A console spends most of its life in these two states, and both used to be
+   an afterthought: a spinner that collapsed the layout, and the words
+   "暂无数据" with nothing to do next. */
+.v-skeleton {
+  height: 11px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-sunken) 25%, var(--surface-card) 37%, var(--surface-sunken) 63%);
+  background-size: 400% 100%;
+  animation: vShimmer 1.4s ease infinite;
+}
+@keyframes vShimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+.v-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-10) var(--space-6);
+  text-align: center;
+}
+.v-empty-title { font: var(--weight-semibold) 13px var(--font-body); color: var(--text-body); }
+.v-empty-sub { font: var(--weight-medium) 11.5px var(--font-body); color: var(--text-faint); max-width: 260px; line-height: 1.6; }
+
+/* prefers-reduced-motion is honoured globally in tokens/motion.css — the
+   catch-all there also zeroes the keyframes declared above. */

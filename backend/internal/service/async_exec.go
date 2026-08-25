@@ -31,6 +31,10 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// Same stored-SQL bound as the export channel (MEDIUMTEXT job row).
+	if len(sql) > maxStoredSQLBytes {
+		return nil, storedSQLTooLong(len(sql))
+	}
 	// FR-CONN-04: maintenance freezes activity on an instance. This channel runs
 	// against the same instance through the same executor, so skipping the check
 	// meant anyone blocked in the terminal could resubmit the identical statement

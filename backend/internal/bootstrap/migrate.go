@@ -52,7 +52,12 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	// Same reasoning for the tier/environment split: without these rows no
 	// environment resolves to a tier, and connection edits would be refused
 	// outright on an upgraded install.
-	return backfillEnvTiers(db)
+	if err := backfillEnvTiers(db); err != nil {
+		return err
+	}
+	// …and for the release pipeline + review library: an absent menu key reads as
+	// denied for everyone, and an empty rule library passes every script.
+	return seedPipelineReference(db)
 }
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).
@@ -62,6 +67,12 @@ func autoMigrate(db *gorm.DB) error {
 	}
 	if err := db.AutoMigrate(allModels...); err != nil {
 		return fmt.Errorf("auto-migrate: %w", err)
+	}
+	// The AutoMigrate path is dev/tests' only schema step (OpenDB calls it
+	// directly), so the reference backfills have to hang off it too — see
+	// seedPipelineReference.
+	if err := seedPipelineReference(db); err != nil {
+		return err
 	}
 	slog.Info("schema migrated (auto-migrate)")
 	return nil

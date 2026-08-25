@@ -387,13 +387,13 @@ async function add() {
           <div class="mono mute">{{ c.host }}:{{ c.port }}</div>
           <div class="mono" :style="{ color: roleColor(c.defaultRole) }">{{ c.defaultRole }}</div>
           <div>
-            <select v-if="isAdmin" class="polsel" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }" :value="c.policy" title="网关策略" @change="setPolicy(c, ($event.target as HTMLSelectElement).value)">
+            <select v-if="isAdmin" class="polsel" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }" :value="c.policy" :title="$t('fPolicy')" @change="setPolicy(c, ($event.target as HTMLSelectElement).value)">
               <option v-for="p in policyOpts" :key="p" :value="p">{{ p }}</option>
             </select>
             <span v-else class="pill" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }">{{ c.policy }}</span>
           </div>
           <div class="statuscell">
-            <span class="pill" :class="{ click: isAdmin }" :style="{ background: stMeta(c.status).bg, color: stMeta(c.status).c }" :title="isAdmin ? '切换状态' : ''" @click="toggle(c)">
+            <span class="pill" :class="{ click: isAdmin }" :style="{ background: stMeta(c.status).bg, color: stMeta(c.status).c }" :title="isAdmin ? $t('tipToggleStatus') : ''" @click="toggle(c)">
               <span class="dotc" />{{ c.status === 'online' ? $t('online') : $t('maint') }}
             </span>
             <button v-if="isAdmin" class="editbtn" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>

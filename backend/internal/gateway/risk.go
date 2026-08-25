@@ -169,6 +169,15 @@ func PlanOnly(sql string) bool {
 func parseVerbExplain(sql string) (verb string, planOnly bool) {
 	s := strings.TrimSpace(StripComments(sql))
 	verb = firstWord(s)
+	// A WITH statement is governed by what it DOES, not by its leading keyword:
+	// the everyday CTE (`WITH t AS (SELECT …) SELECT …`) is a read, while a CTE
+	// carrying a mutation (`WITH d AS (DELETE … RETURNING …) SELECT …` — really
+	// deletes, ER9) is exactly its mutation. Leaving the verb as WITH filed every
+	// CTE into the default (write) capability, which refused read-only CTE
+	// exports and mis-labelled CTE reads in the terminal.
+	if strings.EqualFold(verb, "WITH") {
+		return cteEffectiveVerb(s), false
+	}
 	if !strings.EqualFold(verb, "EXPLAIN") {
 		return strings.ToUpper(verb), false
 	}
@@ -327,6 +336,65 @@ func IsRead(sql string) bool {
 // (quoted text is blanked first so a value can't trigger it).
 var mutatingRe = regexp.MustCompile(`(?i)\b(insert|update|delete|merge|replace|truncate|drop|alter|create|grant|revoke)\b`)
 
+// cteMainVerbs are the keywords a WITH statement's main clause can begin with.
+var cteMainVerbs = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true,
+	"MERGE": true, "REPLACE": true, "VALUES": true, "TABLE": true,
+}
+
+// cteEffectiveVerb resolves the verb that governs a WITH statement (s is
+// already comment-stripped and trimmed).
+//
+// Mutation wins outright: if a mutating verb appears ANYWHERE in the blanked
+// text — main clause or inside a CTE body — that verb governs, so
+// `WITH d AS (DELETE …) SELECT …` is judged a DELETE, never a read (ER9's
+// stance, now expressed in the verb itself). Otherwise the statement is a read
+// shaped by its main clause: scan at paren depth 0 past the CTE definitions
+// (their bodies sit inside parentheses) for the first main-clause keyword.
+// Nothing recognisable falls back to WITH, which no capability maps to a read.
+func cteEffectiveVerb(s string) string {
+	blanked := blankQuoted(s)
+	if m := mutatingRe.FindString(blanked); m != "" {
+		return strings.ToUpper(m)
+	}
+	depth := 0
+	for i := 0; i < len(blanked); i++ {
+		switch blanked[i] {
+		case '(':
+			depth++
+		case ')':
+			if depth > 0 {
+				depth--
+			}
+		default:
+			if depth == 0 && isWordStart(blanked, i) {
+				j := i
+				for j < len(blanked) && isWordChar(blanked[j]) {
+					j++
+				}
+				if w := strings.ToUpper(blanked[i:j]); cteMainVerbs[w] {
+					return w
+				}
+				i = j - 1
+			}
+		}
+	}
+	return "WITH"
+}
+
+// isWordStart reports whether position i begins a word (letter preceded by a
+// non-word byte or the start of the string).
+func isWordStart(s string, i int) bool {
+	if !isWordChar(s[i]) {
+		return false
+	}
+	return i == 0 || !isWordChar(s[i-1])
+}
+
+func isWordChar(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
+
 // MapVerbToCapability maps a SQL verb to a capability-matrix dimension
 // (case-insensitive).
 func MapVerbToCapability(verb string) string {
@@ -446,6 +514,18 @@ func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (st
 		}
 	}
 	return best, nil
+}
+
+// CapabilityFor answers one capability-matrix cell for a set of roles, using the
+// same union rule the judgement layers use (allow ≺ approve ≺ deny).
+//
+// It exists for dimensions that are NOT read off a statement. A release ticket
+// is not SQL — nothing to parse a verb from — but "may this role raise one on
+// this tier" is the same matrix question, and answering it in the service layer
+// would be a second implementation of the union, free to disagree with this one
+// about what a missing row or a multi-role user means.
+func (e *RiskEngine) CapabilityFor(roleIDs []int64, cap, tier string) (string, error) {
+	return e.capabilityLevelUnion(roleIDs, cap, tier)
 }
 
 // Evaluate runs the three-layer judgement (menu guard is enforced by middleware):

@@ -47,3 +47,5 @@ Thumbs.db
 /vela-web-*.zip
 # Test residue: script-upload tests write under the package dir
 /backend/internal/bootstrap/uploads/
+# 同理,从 backend/ 起服务时上传的脚本落在这里 —— 是用户上传的真实 SQL,不进仓库
+/backend/uploads/

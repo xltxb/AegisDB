@@ -27,6 +27,7 @@ type Services struct {
 
 	apCounter    atomic.Int64
 	auditCounter atomic.Int64
+	relCounter   atomic.Int64 // REL-<n> release numbers
 	auditMu      sync.Mutex // serialize audit-chain writes (prev-read + insert must be atomic)
 	// mfaGrace remembers a successful PROD step-up per user/session/instance so a
 	// code vouches for a working session rather than a single command.
@@ -34,6 +35,9 @@ type Services struct {
 	mfaGrace   map[string]time.Time
 	exportQueue  chan int64 // async export-job ids, drained by a worker pool
 	asyncQueue   chan int64 // async SQL-exec-job ids, drained by a worker pool
+	// releaseQueue carries release ids for the CI/CD runner. A negative id means
+	// "resume an already-claimed run" — see dispatchReleaseJob.
+	releaseQueue chan int64
 }
 
 const exportWorkers = 3 // how many export jobs run in parallel
@@ -85,6 +89,29 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager,
 				s.runAsyncJobSafe(id)
 			}
 		}()
+	}
+	// Release (CI/CD) runner. Numbers continue from the highest REL- already
+	// issued, never restarting at 1 over a truncated table.
+	s.relCounter.Store(repo.MaxReleaseSeq())
+	// A release left `running` by a previous process cannot be resumed (its
+	// execute stage may have reached the database), while one still `pending`
+	// never started and is simply re-queued. `waiting` runs are untouched: they
+	// are blocked on a human and their state is fully in the database.
+	if n, err := repo.FailStuckReleases(); err == nil && n > 0 {
+		slog.Warn("reconciled interrupted releases on startup", "failed", n)
+	}
+	s.releaseQueue = make(chan int64, 256)
+	for i := 0; i < releaseWorkers; i++ {
+		go func() {
+			for id := range s.releaseQueue {
+				s.dispatchReleaseJob(id)
+			}
+		}()
+	}
+	if pending, err := repo.PendingReleases(); err == nil {
+		for _, rel := range pending {
+			s.enqueueRelease(rel.ID)
+		}
 	}
 	return s
 }

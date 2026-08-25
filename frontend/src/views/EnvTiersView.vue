@@ -278,7 +278,7 @@ const moveTargets = computed(() =>
         </div>
         <div class="frow">
           <div><div class="fl">{{ $t('etFTemplate') }}</div><VSelect v-model="tf.templateCode" :options="envtier.tierCodes" /></div>
-          <div><div class="fl">{{ $t('etFLayer') }}</div><input v-model="tf.connLayer" placeholder="L1 核心 · 写" /></div>
+          <div><div class="fl">{{ $t('etFLayer') }}</div><input v-model="tf.connLayer" :placeholder="$t('etLayerPh')" /></div>
         </div>
         <!-- Stating what the clone does is the whole point of the mandatory
              template: the operator is copying a rule set, not naming a label. -->
