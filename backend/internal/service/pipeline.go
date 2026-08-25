@@ -966,6 +966,19 @@ func (s *Services) ContinueManualStage(u *model.User, releaseID, stageID int64) 
 	_ = s.Repo.UpdateReleaseStage(stageID, map[string]any{
 		"log": "· 已由 " + u.Name + " 人工确认继续", "finished_at": time.Now(),
 	})
+	// The confirmation is a DECISION, so it goes on the chain in the decision
+	// shape finalizeApproval writes: actor = whose change it is, operator = who
+	// waved it through, result = pending — a green light, not an execution (the
+	// execute stage audits what actually runs). The stage log above is neither
+	// hash-chained nor what an auditor reads.
+	creator, _ := s.Repo.GetUserByID(rel.CreatorID)
+	if creator == nil {
+		creator = &model.User{ID: rel.CreatorID, Name: rel.Creator}
+	}
+	conn, _ := s.Repo.GetConnection(rel.ConnectionID)
+	s.recordAuditBy(creator, u.Name, conn,
+		fmt.Sprintf("RELEASE-CONTINUE %s :: 人工确认「%s」放行", rel.RelNo, st.Name),
+		orDefault(rel.Risk, model.RiskMid), model.ResultPending, rel.RelNo, "approve")
 	s.continueRelease(releaseID)
 	return nil
 }
