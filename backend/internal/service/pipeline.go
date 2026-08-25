@@ -310,7 +310,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
 		Reason: clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
-		Source: orDefault(origin.Source, model.ReleaseSourceConsole),
+		Source:   orDefault(origin.Source, model.ReleaseSourceConsole),
 		ClientID: origin.ClientID, ClientName: origin.ClientName,
 		ExternalRef: clip(origin.ExternalRef, 120), IdemKey: origin.IdemKey,
 	}
@@ -648,7 +648,19 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 	}
 }
 
-// stageBackup runs the configured backup statement. With none configured the
+// backupVerbs is what a backup statement may BE. A backup copies data — CREATE
+// … AS SELECT, INSERT … SELECT, SELECT INTO — so only copying verbs pass.
+// (ParseVerb resolves a WITH to its main clause's verb, so a CTE-fronted copy
+// still lands here and a CTE-smuggled mutation lands on its mutation.)
+//
+// The check exists because template config is the one execution channel that
+// never meets the risk engine: the SQL is written by an admin against no
+// particular target, then runs later against whichever instance a release
+// picks. An allowlist of copying verbs keeps the slot being what its name says,
+// no matter who edits the template or where the release points it.
+var backupVerbs = map[string]bool{"CREATE": true, "INSERT": true, "SELECT": true}
+
+// stageBackup runs the configured backup statement(s). With none configured the
 // stage is SKIPPED and says so — reporting a green "备份完成" for a step that did
 // nothing would be the most dangerous line in the whole run.
 func (s *Services) stageBackup(rel *model.Release, conn *model.Connection, cfg stageCfg) stageOutcome {
@@ -657,17 +669,34 @@ func (s *Services) stageBackup(rel *model.Release, conn *model.Connection, cfg s
 		return stageOutcome{status: model.RunSkipped,
 			log: "· 未配置备份语句,本阶段跳过(物理备份需由 DBA 侧完成)"}
 	}
-	res := s.Executor.Run(conn, sql, s.asyncExecTimeout())
-	if res.Err != nil {
-		return failStage("· 备份失败: %s", res.Output)
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) == 0 {
+		return stageOutcome{status: model.RunSkipped, log: "· 备份配置中没有可执行的语句,本阶段跳过"}
+	}
+	// Judge EVERY statement before running ANY: a mutation hidden behind a
+	// legitimate first statement must not get the first one executed.
+	for _, one := range stmts {
+		if verb := gateway.ParseVerb(one); !backupVerbs[verb] {
+			return failStage("· 备份语句只允许复制数据(CREATE/INSERT/SELECT),拒绝执行 %s;如需其它操作请放入发布内容走完整判定", verb)
+		}
 	}
 	creator, _ := s.Repo.GetUserByID(rel.CreatorID)
+	var b strings.Builder
+	total := 0
+	for i, one := range stmts {
+		res := s.Executor.Run(conn, one, s.asyncExecTimeout())
+		if res.Err != nil {
+			return failStage("· 备份第 %d/%d 条失败: %s", i+1, len(stmts), res.Output)
+		}
+		total += res.Rows
+		fmt.Fprintf(&b, "· [%d/%d] %s (%dms)\n", i+1, len(stmts), clip(res.Output, 200), res.Ms)
+	}
 	if creator != nil {
 		s.recordAuditBy(creator, releaseOperator(rel), conn, "RELEASE-BACKUP "+rel.RelNo+" :: "+safeClip(sql, 200),
 			model.RiskLow, model.ResultExecuted, rel.RelNo, "exec")
 	}
-	return stageOutcome{status: model.RunSuccess, rows: res.Rows,
-		log: fmt.Sprintf("· 备份完成 · %s (%dms)", res.Output, res.Ms)}
+	return stageOutcome{status: model.RunSuccess, rows: total,
+		log: fmt.Sprintf("· 备份完成 · %d 条语句\n%s", len(stmts), b.String())}
 }
 
 // stageExecute applies the change — after judging it again.
@@ -794,11 +823,19 @@ func (s *Services) stageNotify(rel *model.Release, conn *model.Connection) stage
 }
 
 // finishRelease writes the terminal state once and notifies the creator.
+//
+// A failed terminal also SKIPS every stage the run never reached: a dead
+// release whose later stages read 待执行 forever looks like a run that is
+// still coming — the same debris AbortRelease already tidies, so every
+// terminal path tidies it the same way.
 func (s *Services) finishRelease(rel *model.Release, status, errMsg string) {
 	now := time.Now()
 	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
 		"status": status, "error": clip(errMsg, 400), "finished_at": now,
 	})
+	if status != model.RunSuccess {
+		s.skipUnrunStages(rel.ID, now)
+	}
 	if status == model.RunSuccess {
 		s.notify(rel.CreatorID, model.NotifReleaseDone, "发布完成",
 			fmt.Sprintf("%s「%s」已全部阶段通过", rel.RelNo, rel.Title), rel.RelNo)
@@ -971,12 +1008,45 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
 		"error": "已由 " + u.Name + " 终止", "finished_at": now,
 	})
-	for _, st := range s.stagesOf(rel.ID) {
+	// The pending approval a parked run raised is voided WITH the run: leaving
+	// it in the approvers' queue invites a decision on a change that no longer
+	// exists — and the sweeper would then try to resume a corpse.
+	s.voidReleaseApprovals(rel, "发布单已终止")
+	s.skipUnrunStages(rel.ID, now)
+	return nil
+}
+
+// skipUnrunStages marks every stage a terminal run never reached as skipped —
+// pending and waiting rows on a finished release are debris, not work.
+func (s *Services) skipUnrunStages(releaseID int64, now time.Time) {
+	for _, st := range s.stagesOf(releaseID) {
 		if st.Status == model.RunPending || st.Status == model.RunWaiting {
 			_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{"status": model.RunSkipped, "finished_at": now})
 		}
 	}
-	return nil
+}
+
+// voidReleaseApprovals expires every still-pending ticket this release raised,
+// using the same vocabulary as the timeout sweep (作废 = expired, no human
+// decision recorded — because none was made). The claim keeps a racing human
+// decision authoritative: if an approver decided first, their outcome stands.
+func (s *Services) voidReleaseApprovals(rel *model.Release, reason string) {
+	for _, st := range s.stagesOf(rel.ID) {
+		if st.Type != model.StageApprove || st.ApprovalID == 0 {
+			continue
+		}
+		ap, err := s.Repo.GetApproval(st.ApprovalID)
+		if err != nil || ap.Status != model.StatusPending {
+			continue
+		}
+		if claimed, _ := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusExpired); !claimed {
+			continue
+		}
+		_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+			"log": "· 审批单 " + ap.ApNo + " 已作废(" + reason + ")",
+		})
+		s.cancelExternalApproval(*ap) // collapse the still-open 审批魔方/飞书 card, best-effort
+	}
 }
 
 // stagesOf reads a run's stages, treating a read error as "no stages" — every

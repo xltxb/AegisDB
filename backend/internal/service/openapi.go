@@ -58,10 +58,14 @@ func (s *Services) CreateAPIClient(actor *model.User, req dto.APIClientReq) (*mo
 	if err != nil {
 		return nil, "", err
 	}
+	allowIPs := ""
+	if req.AllowIPs != nil {
+		allowIPs = strings.TrimSpace(*req.AllowIPs)
+	}
 	cl := &model.APIClient{
 		Name: clip(name, 60), Key: key, SecretHash: hash,
 		UserID: svcUser.ID, UserName: svcUser.Name,
-		AllowIPs: strings.TrimSpace(req.AllowIPs), Scopes: strings.Join(scopes, ","),
+		AllowIPs: allowIPs, Scopes: strings.Join(scopes, ","),
 		Enabled: true, CreatedBy: actor.ID,
 	}
 	if err := s.Repo.CreateAPIClient(cl); err != nil {
@@ -91,7 +95,17 @@ func (s *Services) UpdateAPIClient(id int64, req dto.APIClientReq) (*model.APICl
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	fields := map[string]any{"enabled": req.Enabled, "allow_ips": strings.TrimSpace(req.AllowIPs)}
+	// Partial-update semantics: only what the request SAID changes. The enable
+	// switch sends {enabled} alone, and the fields it stays silent about are
+	// security controls — an update that zeroed the absent ones once turned
+	// "停用凭据" into "顺手清空它的 IP 白名单".
+	fields := map[string]any{}
+	if req.Enabled != nil {
+		fields["enabled"] = *req.Enabled
+	}
+	if req.AllowIPs != nil {
+		fields["allow_ips"] = strings.TrimSpace(*req.AllowIPs)
+	}
 	if n := strings.TrimSpace(req.Name); n != "" {
 		fields["name"] = clip(n, 60)
 	}

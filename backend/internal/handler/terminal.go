@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"

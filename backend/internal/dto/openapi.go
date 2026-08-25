@@ -4,12 +4,15 @@ import "velagateway/internal/model"
 
 // ---- 开放接口凭据(控制台管理) ----
 
+// AllowIPs/Enabled 是指针:控制台的启停开关只 PUT {enabled},编辑表单只 PUT 它改的
+// 字段。nil = 没提 = 保持不变;非 nil 的空串/false 才是显式的"清空/停用"。这里被
+// 归零的都是安全控制 —— 值类型的 AllowIPs 曾让"停用凭据"顺手抹掉它的 IP 白名单。
 type APIClientReq struct {
 	Name     string   `json:"name"`
 	UserID   int64    `json:"userId"`   // 绑定的服务账号
-	AllowIPs string   `json:"allowIps"` // 逗号分隔 IP/CIDR;空 = 不限来源
+	AllowIPs *string  `json:"allowIps"` // 逗号分隔 IP/CIDR;空 = 不限来源
 	Scopes   []string `json:"scopes"`   // release:create / release:read / review:check
-	Enabled  bool     `json:"enabled"`
+	Enabled  *bool    `json:"enabled"`
 }
 
 // APIClientCreated carries the ONE plaintext copy of the credential. It is

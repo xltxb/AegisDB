@@ -332,7 +332,8 @@ func TestReleaseBlockedByReviewError(t *testing.T) {
 	done := app.waitRelease(token, rel.ID, "success", "failed")
 	eq(t, done.Status, "failed", "review must stop the release")
 	// The execute stage must never have started: that is the whole point.
-	if ex := stageByType(done, "execute"); ex == nil || ex.Status != "pending" {
+	// A failed terminal marks unreached stages `skipped` — not run, never will be.
+	if ex := stageByType(done, "execute"); ex == nil || ex.Status != "skipped" {
 		t.Errorf("execute stage should not have run, got %+v", ex)
 	}
 }

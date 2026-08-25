@@ -46,25 +46,10 @@ func (h *Handler) OpenCreateRelease(c *gin.Context) {
 			Pipeline: c.PostForm("pipeline"), Reason: c.PostForm("reason"),
 			SQL: c.PostForm("sql"), MfaCode: c.PostForm("mfaCode"),
 		}
-		if fh, err := c.FormFile("file"); err == nil {
-			if fh.Size > maxOpenUploadBytes {
-				resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
-				return
-			}
-			f, oerr := fh.Open()
-			if oerr != nil {
-				resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
-				return
-			}
-			defer f.Close()
-			// io.ReadAll under an explicit cap — trusting fh.Size and sizing a
-			// buffer from it lets a lying Content-Length allocate what it likes.
-			body, rerr := io.ReadAll(io.LimitReader(f, maxOpenUploadBytes+1))
-			if rerr != nil || len(body) > maxOpenUploadBytes {
-				resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
-				return
-			}
-			req.Script, req.Filename = string(body), fh.Filename
+		if script, filename, ok := readOpenScriptFile(c); !ok {
+			return // readOpenScriptFile already wrote the refusal
+		} else if script != "" {
+			req.Script, req.Filename = script, filename
 		}
 	} else if err := c.ShouldBindJSON(&req); err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误: "+err.Error())
@@ -114,13 +99,13 @@ func (h *Handler) OpenReviewCheck(c *gin.Context) {
 		req = dto.OpenReviewReq{
 			Instance: c.PostForm("instance"), Dialect: c.PostForm("dialect"), SQL: c.PostForm("sql"),
 		}
-		if fh, err := c.FormFile("file"); err == nil && fh.Size <= maxOpenUploadBytes {
-			if f, oerr := fh.Open(); oerr == nil {
-				defer f.Close()
-				if body, rerr := io.ReadAll(io.LimitReader(f, maxOpenUploadBytes+1)); rerr == nil && len(body) <= maxOpenUploadBytes {
-					req.Script, req.Filename = string(body), fh.Filename
-				}
-			}
+		// Same reader, same bound, same refusal as the create endpoint. This
+		// branch used to swallow an oversized file and then answer "请提供 sql 或
+		// script" — an error naming a field the caller did fill in.
+		if script, filename, ok := readOpenScriptFile(c); !ok {
+			return
+		} else if script != "" {
+			req.Script, req.Filename = script, filename
 		}
 	} else if err := c.ShouldBindJSON(&req); err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误: "+err.Error())
@@ -217,6 +202,34 @@ func (h *Handler) DeleteAPIClient(c *gin.Context) {
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
+}
+
+// readOpenScriptFile reads the optional multipart `file` part under the shared
+// 15MB bound. ok=false means a refusal was already written to the response; a
+// missing file part is ("", "", true) — the part is optional on both callers.
+func readOpenScriptFile(c *gin.Context) (script, filename string, ok bool) {
+	fh, err := c.FormFile("file")
+	if err != nil {
+		return "", "", true // no file part — inline sql/script may still be present
+	}
+	if fh.Size > maxOpenUploadBytes {
+		resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
+		return "", "", false
+	}
+	f, oerr := fh.Open()
+	if oerr != nil {
+		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
+		return "", "", false
+	}
+	defer f.Close()
+	// io.ReadAll under an explicit cap — trusting fh.Size and sizing a buffer
+	// from it lets a lying Content-Length allocate what it likes.
+	body, rerr := io.ReadAll(io.LimitReader(f, maxOpenUploadBytes+1))
+	if rerr != nil || len(body) > maxOpenUploadBytes {
+		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
+		return "", "", false
+	}
+	return string(body), fh.Filename, true
 }
 
 // clientName is the log label for a credential (nil-safe: an unauthenticated

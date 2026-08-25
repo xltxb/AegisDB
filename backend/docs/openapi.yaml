@@ -1115,7 +1115,7 @@ paths:
     put:
       tags: [settings]
       summary: '[settings · admin] 改名称 / 服务账号 / scope / IP 白名单 / 启停'
-      description: key 与 secret 不可修改 —— 轮换 = 新签一把 + 吊销旧的,避免正在用的系统毫无征兆地开始 401。
+      description: 局部更新:只有请求里出现的字段会变,缺席字段一律保持原值(启停开关只发 {enabled},不会动 IP 白名单;allowIps 传空串才是显式清空)。key 与 secret 不可修改 —— 轮换 = 新签一把 + 吊销旧的,避免正在用的系统毫无征兆地开始 401。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     delete:
@@ -1182,7 +1182,7 @@ paths:
       summary: '[scope review:check] 规范审查预检,不建单'
       security:
         - openApiKey: []
-      description: CI 合并前的门禁:同一套规则库,只回结果,不产生任何单据。
+      description: CI 合并前的门禁:同一套规则库,只回结果,不产生任何单据。multipart 的 file 与建单接口同一条 15MB 上限,超限明确报错。
       requestBody:
         content:
           application/json:
