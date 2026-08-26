@@ -169,6 +169,9 @@ export const api = {
     http.get<any, Envelope<DbObjects>>(
       `/connections/${id}/objects?scope=${encodeURIComponent(scope)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
+  // Oracle 存储程序重新编译。它是一次 DDL,后端按终端同一套闸门判定并记审计。
+  compileObject: (id: number, body: { scope: string; type: string; name: string; database?: string }) =>
+    http.post<any, Envelope<{ ok: boolean; report: any }>>(`/connections/${id}/objects/compile`, body),
   objectSource: (id: number, scope: string, type: string, name: string, database = '') =>
     http.get<any, Envelope<ObjectSource>>(
       `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,

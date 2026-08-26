@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X } from 'lucide-vue-next'
+import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X, Hammer } from 'lucide-vue-next'
 import api from '@/api'
 import ObjectGroups from './ObjectGroups.vue'
 import { highlightSqlHtml } from '@/lib/sqlHighlight'
@@ -104,11 +104,14 @@ function maybeLoadDbObjects(cid: number, name: string) {
 }
 
 // ---- source viewer ----
-const src = ref({ open: false, name: '', type: '', text: '', loading: false, err: '' })
+// cid/scope/database are remembered so 编译 can target exactly what is on screen
+// rather than re-deriving it from the tree state.
+const src = ref({ open: false, name: '', type: '', text: '', loading: false, err: '', cid: 0, scope: '', database: '' })
 // database: pass the browsed database for schema-level opens (PostgreSQL
 // family) — see ensureObjects; flat engines leave it empty.
 async function openSource(cid: number, scope: string, type: string, name: string, database = '') {
-  src.value = { open: true, name, type, text: '', loading: true, err: '' }
+  src.value = { open: true, name, type, text: '', loading: true, err: '', cid, scope, database }
+  compileState.value = { busy: false, report: null, err: '' }
   try {
     const r = await api.objectSource(cid, scope, type, name, database)
     src.value.text = r.source
@@ -119,6 +122,40 @@ async function openSource(cid: number, scope: string, type: string, name: string
   }
 }
 function closeSource() { src.value.open = false }
+
+// ---- 编译(Oracle 存储程序) ----
+//
+// 只有 Oracle 有编译单元。按钮的可见性跟着实例引擎走,而不是跟着对象类型猜:
+// 其它引擎上的 "procedure" 没有 ALTER … COMPILE 这回事。
+const COMPILABLE = ['package', 'procedure', 'function', 'trigger', 'type']
+const compileState = ref<{ busy: boolean; report: any | null; err: string }>({ busy: false, report: null, err: '' })
+const canCompile = computed(() => {
+  const c = props.connections.find((x) => x.id === src.value.cid)
+  return !!c && /oracle/i.test(c.engine) && COMPILABLE.includes(src.value.type)
+})
+// 成功的判定跟后端一致:每个单元 VALID 且没有诊断。前端不另立标准。
+const cmpOK = computed(() => {
+  const r = compileState.value.report
+  if (!r || !(r.targets || []).length || (r.errors || []).length) return false
+  return (r.targets || []).every((t: any) => t.status === 'VALID')
+})
+async function compileObject() {
+  compileState.value = { busy: true, report: null, err: '' }
+  try {
+    const env = await api.compileObject(src.value.cid, {
+      scope: src.value.scope, type: src.value.type, name: src.value.name, database: src.value.database,
+    })
+    if (env.code !== 0) { compileState.value = { busy: false, report: null, err: env.msg }; return }
+    compileState.value = { busy: false, report: env.data.report, err: '' }
+    // 编译改变了对象,屏幕上的源码可能已经不是库里的那份 —— 重新取一次。
+    try {
+      const r = await api.objectSource(src.value.cid, src.value.scope, src.value.type, src.value.name, src.value.database)
+      src.value.text = r.source
+    } catch { /* 源码刷新失败不掩盖编译结果 */ }
+  } catch (e: any) {
+    compileState.value = { busy: false, report: null, err: e?.message || t('objCompileFail') }
+  }
+}
 
 // Lazily load a database's contents on first expand. Needed for PostgreSQL, where
 // the top level lists databases (no tables/schemas) introspected on demand; a
@@ -390,8 +427,29 @@ function clickInst(id: number) {
         <div class="src-hdr">
           <div class="src-title">{{ src.name }}</div>
           <span class="src-type">{{ src.type }}</span>
+          <button v-if="canCompile" class="src-compile" :disabled="compileState.busy" @click="compileObject">
+            <Hammer :size="13" />{{ compileState.busy ? $t('objCompiling') : $t('objCompile') }}
+          </button>
           <div class="src-x" @click="closeSource"><X :size="16" /></div>
         </div>
+
+        <!-- 编译结果:状态按 Oracle 的裁决显示。ALTER … COMPILE 即使编译出错也
+             返回成功,所以这里认的是 all_objects.status 与 all_errors。 -->
+        <div v-if="compileState.err" class="cmp err">{{ compileState.err }}</div>
+        <div v-else-if="compileState.report" class="cmp" :class="compileState.report.ok === false ? 'err' : 'ok'">
+          <div class="cmp-head">
+            <span class="cmp-badge" :class="cmpOK ? 'ok' : 'bad'">{{ cmpOK ? $t('objCompileOk') : $t('objCompileBad') }}</span>
+            <span v-for="tg in (compileState.report.targets || [])" :key="tg.type" class="cmp-unit">
+              {{ tg.type }} · <b :class="tg.status === 'VALID' ? 'ok' : 'bad'">{{ tg.status }}</b>
+            </span>
+            <span class="cmp-ms">{{ compileState.report.ms }}ms</span>
+          </div>
+          <div v-for="(d, i) in (compileState.report.errors || [])" :key="i" class="cmp-diag">
+            <span class="cmp-loc">{{ d.type }} {{ d.line }}:{{ d.position }}</span>{{ d.text }}
+          </div>
+          <div v-for="(w, i) in (compileState.report.warnings || [])" :key="'w' + i" class="cmp-diag warn">{{ w }}</div>
+        </div>
+
         <div class="src-body scy">
           <div v-if="src.loading" class="shint">{{ $t('treeLoading') }}</div>
           <div v-else-if="src.err" class="shint err">{{ src.err }}</div>
@@ -477,7 +535,24 @@ function clickInst(id: number) {
 .src-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
 .src-title { font: 600 13px var(--font-mono); color: var(--text-strong); }
 .src-type { font: 600 10px var(--font-mono); color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.08em; }
-.src-x { margin-left: auto; color: var(--text-faint); cursor: pointer; display: flex; }
+.src-compile { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer; }
+.src-compile:hover:not(:disabled) { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
+.src-compile:disabled { opacity: 0.6; cursor: default; }
+.cmp { margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-default); background: var(--surface-sunken); font: 500 11.5px var(--font-body); }
+.cmp.ok { border-color: var(--success-text); background: var(--success-subtle); }
+.cmp.err { border-color: var(--danger-text); background: var(--danger-subtle); color: var(--danger-text); }
+.cmp-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cmp-badge { padding: 2px 8px; border-radius: 999px; font: 700 10px var(--font-mono); }
+.cmp-badge.ok { background: var(--success-text); color: var(--surface-card); }
+.cmp-badge.bad { background: var(--danger-text); color: var(--surface-card); }
+.cmp-unit { font: 500 11px var(--font-mono); color: var(--text-muted); }
+.cmp-unit b.ok { color: var(--success-text); }
+.cmp-unit b.bad { color: var(--danger-text); }
+.cmp-ms { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
+.cmp-diag { margin-top: 6px; font: 500 11.5px var(--font-mono); color: var(--danger-text); white-space: pre-wrap; }
+.cmp-diag.warn { color: var(--warning-text); }
+.cmp-loc { display: inline-block; min-width: 132px; color: var(--text-muted); }
+.src-x { margin-left: 4px; color: var(--text-faint); cursor: pointer; display: flex; }
 .src-x:hover { color: var(--text-strong); }
 .src-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 16px; }
 .src-body pre { margin: 0; font: 400 12px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-word; }

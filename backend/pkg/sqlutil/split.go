@@ -38,6 +38,20 @@ func SplitStatements(sql string) []string {
 		b.Reset()
 	}
 	for i := 0; i < len(sql); i++ {
+		// At a statement boundary a PL/SQL block is taken WHOLE: every semicolon
+		// inside a package body belongs to the body, not to the script. This is
+		// the one merge this function performs — see plsql.go for why it does not
+		// violate the rule above (the merged unit is exactly the unit the server
+		// executes, and the dictionary still scans all of it).
+		if strings.TrimSpace(b.String()) == "" && plsqlBlockKind(sql[i:]) != "" {
+			atStart := len(out) == 0 && strings.TrimSpace(sql[:i]) == ""
+			if body, next, ok := takePLSQLBlock(sql, i, atStart); ok {
+				out = append(out, body)
+				b.Reset()
+				i = next - 1 // the loop's i++ lands on the next byte
+				continue
+			}
+		}
 		c := sql[i]
 		switch c {
 		case '$': // PostgreSQL dollar-quoted string $tag$ ... $tag$ — copy verbatim

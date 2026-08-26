@@ -483,3 +483,12 @@ type NotificationsResp struct {
 type MarkReadReq struct {
 	IDs []int64 `json:"ids"`
 }
+
+// CompileReq asks to recompile one Oracle stored program. Scope is the owner /
+// schema; Type is package|procedure|function|trigger|type.
+type CompileReq struct {
+	Scope    string `json:"scope"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Database string `json:"database"`
+}

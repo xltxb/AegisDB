@@ -304,6 +304,46 @@ components:
         reason: { type: string }
         mfaCode: { type: string }
 
+    CompileReq:
+      type: object
+      required: [type, name]
+      properties:
+        scope: { type: string, description: 'owner / schema;留空用连接账号的当前 schema' }
+        type: { type: string, enum: [package, procedure, function, trigger, type] }
+        name: { type: string, description: 对象名;必须是合法 Oracle 标识符(拼入语句,不可绑定) }
+        database: { type: string }
+    CompileResp:
+      type: object
+      properties:
+        ok: { type: boolean, description: 所有编译单元 VALID 且无诊断才为 true }
+        report:
+          type: object
+          properties:
+            object: { type: string }
+            kind: { type: string }
+            ms: { type: integer }
+            targets:
+              type: array
+              description: 每个编译单元编译后的状态(包有 PACKAGE 与 PACKAGE BODY 两个)
+              items:
+                type: object
+                properties:
+                  type: { type: string, example: PACKAGE BODY }
+                  status: { type: string, enum: [VALID, INVALID] }
+            errors:
+              type: array
+              description: all_errors 的内容 —— 行、列与编译器原文
+              items:
+                type: object
+                properties:
+                  type: { type: string }
+                  line: { type: integer }
+                  position: { type: integer }
+                  text: { type: string, example: 'PLS-00103: 出现符号 ";"' }
+            warnings:
+              type: array
+              description: 单条 ALTER 的驱动报错(如只有规格没有包体时的 COMPILE BODY)
+              items: { type: string }
     ServiceAccountReq:
       type: object
       required: [name, roleIds]
@@ -698,6 +738,33 @@ paths:
         - { name: scope, in: query, schema: { type: string } }
         - { name: database, in: query, schema: { type: string }, description: PostgreSQL 系必传,目录按库隔离 }
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/objects/compile:
+    post:
+      tags: [connections]
+      summary: '[terminal] 重新编译 Oracle 存储程序(包 / 过程 / 函数 / 触发器 / 类型)'
+      description: |
+        Oracle 专有:包在依赖对象改动后会变成 INVALID,这里让 DBA 立刻重编并当场看到错误,
+        而不是等下一次业务调用才暴露。**编译是一次 DDL**,因此与终端走同一套闸门(菜单权限
+        → 能力矩阵 ddl 维度 → 高危字典 + 严格模式),逐条记审计;命中需审批的实例会被拒绝并
+        指向发布单,而不是降级执行。
+
+        成功与否**不以驱动是否报错为准** —— `ALTER … COMPILE` 即使编译失败也返回成功,只是
+        把对象留成 INVALID。响应里的 ok 由回读 all_objects.status 与 all_errors 决定:所有
+        单元 VALID 且无诊断才算通过。包会编译规格与包体两个单元(只编规格会让包体失效)。
+
+        对象名与 schema 是拼进 SQL 文本的(Oracle 不能把标识符做成绑定变量),因此二者都必须
+        是合法 Oracle 标识符,否则整个请求被拒。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompileReq' }
+      responses:
+        '200':
+          description: 'OK(ok=false 表示编译未通过,errors 里是 all_errors 的行列与文本)/ 40300 无权 / 40001 引擎非 Oracle、标识符非法、类型不可编译、实例未配置真实凭据'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompileResp' }
   /connections/{id}/object-source:
     get:
       tags: [connections]

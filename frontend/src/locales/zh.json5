@@ -177,6 +177,8 @@
   setExportMaxRows: '单次导出行数上限', setExportMaxRowsD: '超过则任务失败,防止无界查询占满磁盘；0 为不限制',
   setExportMaxBytes: '单次导出数据量上限(字节)', setExportMaxBytesD: '按未压缩 CSV 内容累计；0 为不限制',
   setExportTimeout: '导出执行超时(秒)', setExportTimeoutD: '单个导出任务的整体执行时限,超过则任务失败',
+  objCompile: '编译', objCompiling: '编译中…', objCompileOk: '编译通过', objCompileBad: '编译未通过',
+  objCompileFail: '编译请求失败',
   connSearchPh: '搜索:名称 / 地址 / 库名 / 标签 / 引擎', connAllEnv: '全部', connNoMatch: '没有匹配的数据源 —— 换个关键词,或清除环境筛选',
   rlConfirmExec: '确认执行',
   rlChangeType: '变更类型', rlCtAuto: '自动识别',
