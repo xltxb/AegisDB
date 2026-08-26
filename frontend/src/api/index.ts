@@ -1,7 +1,7 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -169,6 +169,9 @@ export const api = {
     http.get<any, Envelope<DbObjects>>(
       `/connections/${id}/objects?scope=${encodeURIComponent(scope)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
+  // Oracle 存储程序重新编译。它是一次 DDL,后端按终端同一套闸门判定并记审计。
+  compileObject: (id: number, body: { scope: string; type: string; name: string; database?: string }) =>
+    http.post<any, Envelope<{ ok: boolean; report: any }>>(`/connections/${id}/objects/compile`, body),
   objectSource: (id: number, scope: string, type: string, name: string, database = '') =>
     http.get<any, Envelope<ObjectSource>>(
       `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
@@ -250,7 +253,7 @@ export const api = {
   // by the capability matrix), which mean different things to the operator.
   createRelease: (body: {
     title: string; pipelineId: number; connectionId: number; database?: string
-    sql?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
+    sql?: string; changeType?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
   }) => http.post<any, Envelope<Release>>('/releases', body),
   abortRelease: (id: number) => http.post<any, Envelope<any>>(`/releases/${id}/abort`),
   continueStage: (releaseId: number, stageId: number) =>
@@ -259,10 +262,14 @@ export const api = {
   // ---- 开放接口凭据 (external API clients) ----
   // The create call returns the ONLY plaintext copy of the secret; there is no
   // "fetch it again" endpoint because the server keeps a bcrypt hash.
+  // 服务账号:凭据背后的机器主体。创建是 admin 行为;停用/角色走常规用户管理。
+  serviceAccounts: () => http.get<any, Envelope<ServiceAccount[]>>('/service-accounts').then(ok),
+  createServiceAccount: (body: { name: string; roleIds: number[]; tags?: string[]; dept?: string }) =>
+    http.post<any, Envelope<UserView>>('/service-accounts', body),
   apiClients: () => http.get<any, Envelope<APIClient[]>>('/api-clients').then(ok),
-  createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; enabled?: boolean }) =>
+  createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; pipelineId?: number; enabled?: boolean }) =>
     http.post<any, Envelope<{ client: APIClient; token: string }>>('/api-clients', body),
-  updateApiClient: (id: number, body: Partial<{ name: string; userId: number; allowIps: string; scopes: string[]; enabled: boolean }>) =>
+  updateApiClient: (id: number, body: Partial<{ name: string; userId: number; allowIps: string; scopes: string[]; pipelineId: number; enabled: boolean }>) =>
     http.put<any, Envelope<APIClient>>(`/api-clients/${id}`, body),
   deleteApiClient: (id: number) => http.delete<any, Envelope<any>>(`/api-clients/${id}`),
 

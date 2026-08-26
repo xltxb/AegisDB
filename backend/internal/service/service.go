@@ -250,6 +250,16 @@ func (s *Services) Login(email, password, mfaCode string) (string, time.Time, *m
 		s.auditLoginFail(email)
 		return "", time.Time{}, nil, ErrUserDisabled
 	}
+	// A service account's only door is its API credential; the console is not
+	// one of its doors. Its empty PasswordHash already fails below, but that is
+	// an accident of creation — this check holds even if a hash ever appears on
+	// the row. Same uniform refusal as a wrong password: the login boundary
+	// must not confirm what kind of account an email is.
+	if u.Kind == model.UserKindService {
+		crypto.CheckPassword(dummyPasswordHash, password) // equalize timing
+		s.auditLoginFail(email)
+		return "", time.Time{}, nil, ErrInvalidCredentials
+	}
 	// A set password is required; an empty/unusable hash always fails (this
 	// closes the "empty PasswordHash accepts any password" bypass).
 	if !crypto.CheckPassword(u.PasswordHash, password) {

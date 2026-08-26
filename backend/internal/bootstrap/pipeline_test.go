@@ -281,7 +281,8 @@ func TestReleaseRunsPipelineToSuccess(t *testing.T) {
 		t.Fatal("a release must carry a number")
 	}
 
-	done := app.waitRelease(token, rel.ID, "success", "failed")
+	// 0024 执行闸:到点的人点击确认后才落库
+	done := app.confirmExecutionAndWait(token, rel.ID)
 	eq(t, done.Status, "success", "release status")
 	for _, st := range done.Stages {
 		if st.Status != "success" && st.Status != "skipped" {
@@ -375,7 +376,8 @@ func TestReleaseWaitsForApprovalThenExecutes(t *testing.T) {
 
 	// The sweeper is what notices the decision (see ResumeReleaseApprovals).
 	app.svc.ResumeReleaseApprovals()
-	done := app.waitRelease(admin, rel.ID, "success", "failed")
+	// 0024 执行闸:到点的人点击确认后才落库
+	done := app.confirmExecutionAndWait(admin, rel.ID)
 	eq(t, done.Status, "success", "release resumes after approval")
 	eq(t, stageByType(done, "execute").Status, "success", "execute stage")
 }

@@ -850,6 +850,13 @@ func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) 
 	enrolled := u.MFAEnabled && u.MFASecret != "" // seed flags enabled w/o secret; that isn't enrolled
 	if !enrolled {
 		if s.settingBool("security.mfaMandatory", false) {
+			// The mandate binds PEOPLE. A service account cannot enroll TOTP, and
+			// forcing it would end with a shared TOTP secret in a CI vault — worse
+			// than the exemption. Its second factor is the API credential's bcrypt
+			// secret plus that credential's own IP allowlist.
+			if u.Kind == model.UserKindService {
+				return nil
+			}
 			return ErrMFARequired // must enroll before any PROD op
 		}
 		return nil // opt-in default
@@ -972,6 +979,12 @@ func (s *Services) AdminSetPassword(actor *model.User, id int64, newPassword str
 	u, err := s.Repo.GetUserByID(id)
 	if err != nil {
 		return ErrNotFound
+	}
+	// A service account has no console door, so a password on it is a key to a
+	// door that must stay locked. Login refuses kind=service regardless, but a
+	// hash that exists is a hash that can leak — refuse to mint one at all.
+	if u.Kind == model.UserKindService {
+		return fmt.Errorf("服务账号不能设置登录口令,它只通过 API 凭据访问")
 	}
 	hash, err := crypto.HashPassword(newPassword)
 	if err != nil {

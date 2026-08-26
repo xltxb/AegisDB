@@ -8,6 +8,7 @@ import (
 
 	"velagateway/internal/dto"
 	"velagateway/internal/middleware"
+	"velagateway/internal/model"
 	"velagateway/internal/service"
 	"velagateway/pkg/resp"
 )
@@ -109,8 +110,21 @@ func (h *Handler) AbortRelease(c *gin.Context) {
 // ContinueStage is the human "继续" on a manual gate.
 func (h *Handler) ContinueStage(c *gin.Context) {
 	stageID, _ := strconv.ParseInt(c.Param("stageId"), 10, 64)
-	if err := h.Svc.ContinueManualStage(middleware.CurrentUser(c), pathID(c), stageID); err != nil {
-		resp.Fail(c, releaseErrCode(err), err.Error())
+	// 同一个"继续"入口,两种人工闸:manual 是流程里配置的确认点,execute 是
+	// 内置的执行闸(0024)。按阶段类型分流,授权语义各自负责。
+	st, err := h.Repo.GetReleaseStage(stageID)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "阶段不存在")
+		return
+	}
+	var cerr error
+	if st.Type == model.StageExecute {
+		cerr = h.Svc.ConfirmExecuteStage(middleware.CurrentUser(c), pathID(c), stageID)
+	} else {
+		cerr = h.Svc.ContinueManualStage(middleware.CurrentUser(c), pathID(c), stageID)
+	}
+	if cerr != nil {
+		resp.Fail(c, releaseErrCode(cerr), cerr.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})

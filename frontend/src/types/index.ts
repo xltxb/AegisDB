@@ -142,8 +142,21 @@ export interface UserView {
   roleIds: number[]
   primaryRoleId: number
   status: 'active' | 'disabled' | 'invited'
+  kind?: 'human' | 'service' // 服务账号在列表里要能一眼认出来
   mfaEnabled: boolean
   lastActive: string
+}
+
+// 服务账号 —— 对接升级单/CI/CD 系统的机器主体(kind=service 的用户)。
+export interface ServiceAccount {
+  id: number
+  name: string
+  email: string // 生成的唯一标识,不是邮箱
+  status: string
+  dept: string
+  roles: string[]
+  tags: string[]
+  clients: number // 已绑定的 API 凭据数
 }
 
 export interface RiskCommandView {
@@ -483,6 +496,7 @@ export interface Release {
   env: string
   tierCode: string
   engine: string
+  changeType?: 'dml' | 'ddl' | '' // 变更类型;历史单为空
   sql: string
   scriptUploadId?: number
   reason: string
@@ -518,6 +532,8 @@ export interface APIClient {
   userName: string
   allowIps: string
   scopes: string
+  /** 该凭据建单固定走的发布流程;0 = 未绑定,走目标分层的默认流程。外部请求不可指定流程。 */
+  pipelineId: number
   enabled: boolean
   lastUsedAt: string | null
   createdAt: string

@@ -155,6 +155,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/connections/:id/schema", menu("terminal"), h.GetConnectionSchema)
 		a.GET("/connections/:id/objects", menu("terminal"), h.GetConnectionObjects)
 		a.GET("/connections/:id/object-source", menu("terminal"), h.GetConnectionObjectSource)
+		// Oracle 包/存储程序重新编译 —— 一次 DDL,判定与审计同终端(service.CompileObject)。
+		a.POST("/connections/:id/objects/compile", menu("terminal"), h.CompileObject)
 
 		// control tiers & environments — reads are open to any authenticated caller
 		// (the terminal tree, instance labels and the connection form all render
@@ -242,6 +244,13 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/settings/webhook/test", menu("settings"), admin, h.TestWebhook)
 		a.POST("/settings/lark/test", menu("settings"), admin, h.TestLark)
 		a.GET("/settings/webhook/deliveries", menu("settings"), h.WebhookDeliveries)
+
+		// 服务账号 — the machine principal an API credential acts as. Creation is
+		// admin-only for the same reason issuing a credential is: together they
+		// are a standing grant of change rights to an external system. Lifecycle
+		// (disable, roles, tags) reuses the ordinary /users management.
+		a.GET("/service-accounts", menu("settings"), h.ListServiceAccounts)
+		a.POST("/service-accounts", menu("settings"), admin, h.CreateServiceAccount)
 
 		// 开放接口凭据 — a credential is a standing right to raise production
 		// changes, so issuing and revoking one is admin-only; viewing the list

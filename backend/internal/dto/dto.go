@@ -401,6 +401,7 @@ type UserView struct {
 	RoleIDs       []int64  `json:"roleIds"`       // every role held (for the multi-role editor)
 	PrimaryRoleID int64    `json:"primaryRoleId"`
 	Status        string   `json:"status"`
+	Kind          string   `json:"kind"`          // human|service — 服务账号在用户列表里要能一眼认出来
 	MFAEnabled    bool     `json:"mfaEnabled"`
 	LastActive    string   `json:"lastActive"`
 }
@@ -481,4 +482,13 @@ type NotificationsResp struct {
 // MarkReadReq marks notifications read; empty IDs marks all of the user's.
 type MarkReadReq struct {
 	IDs []int64 `json:"ids"`
+}
+
+// CompileReq asks to recompile one Oracle stored program. Scope is the owner /
+// schema; Type is package|procedure|function|trigger|type.
+type CompileReq struct {
+	Scope    string `json:"scope"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Database string `json:"database"`
 }

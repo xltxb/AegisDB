@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -792,4 +793,34 @@ func (h *Handler) WebhookDeliveries(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	rows, _ := h.Repo.ListWebhookDeliveries(limit)
 	resp.OK(c, rows)
+}
+
+// CompileObject recompiles an Oracle stored program (package / procedure /
+// function / trigger / type) and reports the resulting status plus any
+// compilation errors. It is a DDL against the target, so it goes through the
+// same three-layer gate as the terminal — see service.CompileObject.
+func (h *Handler) CompileObject(c *gin.Context) {
+	var req dto.CompileReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	rep, err := h.Svc.CompileObject(middleware.CurrentUser(c), pathID(c),
+		req.Scope, req.Type, req.Name, req.Database)
+	if err != nil {
+		resp.Fail(c, compileErrCode(err), err.Error())
+		return
+	}
+	resp.OK(c, gin.H{"ok": rep.OK(), "report": rep})
+}
+
+func compileErrCode(err error) int {
+	switch {
+	case errors.Is(err, service.ErrForbidden):
+		return resp.CodeForbidden
+	case errors.Is(err, service.ErrNotFound):
+		return resp.CodeBadRequest
+	default:
+		return resp.CodeBadRequest
+	}
 }

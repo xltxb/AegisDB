@@ -45,6 +45,9 @@ func (h *Handler) OpenCreateRelease(c *gin.Context) {
 			Instance: c.PostForm("instance"), Database: c.PostForm("database"),
 			Pipeline: c.PostForm("pipeline"), Reason: c.PostForm("reason"),
 			SQL: c.PostForm("sql"), MfaCode: c.PostForm("mfaCode"),
+			// 每个 JSON 字段在这里都要有对应读取:漏一个,multipart 调用方的声明
+			// 就被静默忽略 —— changeType 曾经就是这样漏掉的。
+			ChangeType: c.PostForm("changeType"),
 		}
 		if script, filename, ok := readOpenScriptFile(c); !ok {
 			return // readOpenScriptFile already wrote the refusal
@@ -152,6 +155,31 @@ func (h *Handler) OpenListPipelines(c *gin.Context) {
 		})
 	}
 	resp.OK(c, out)
+}
+
+// ---------------------------------------------------------------- 服务账号(控制台)
+
+// ListServiceAccounts returns the machine principals the credential UI binds to.
+func (h *Handler) ListServiceAccounts(c *gin.Context) {
+	resp.OK(c, h.Svc.ListServiceAccounts())
+}
+
+// CreateServiceAccount mints a machine principal (kind=service): roles + tags,
+// no password, no console login — its only door is an API credential.
+func (h *Handler) CreateServiceAccount(c *gin.Context) {
+	var req dto.ServiceAccountReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	u, err := h.Svc.CreateServiceAccount(middleware.CurrentUser(c), req)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
+	slog.Info("service account created", "name", u.Name, "email", u.Email,
+		"by", middleware.CurrentUser(c).Name)
+	resp.OK(c, u)
 }
 
 // ---------------------------------------------------------------- 凭据管理(控制台)

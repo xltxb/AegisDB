@@ -136,7 +136,8 @@ async function continueStage(r: Release, st: ReleaseStage) {
 
 // ---- create form ----
 const formOpen = ref(false)
-const f = ref({ title: '', pipelineId: 0, connectionId: 0, database: '', sql: '', reason: '', mfaCode: '' })
+// changeType: '' = 自动推断;声明了就必须与内容一致(后端强校验,DML/DDL 不得同单)
+const f = ref({ title: '', pipelineId: 0, connectionId: 0, database: '', sql: '', changeType: '', reason: '', mfaCode: '' })
 const needMfa = ref(false)
 const busy = ref(false)
 const preview = ref<ReviewResult | null>(null)
@@ -183,7 +184,7 @@ function openForm() {
   const firstPipe = pipelines.value.find((p) => p.enabled && p.isDefault) || pipelines.value.find((p) => p.enabled)
   f.value = {
     title: '', pipelineId: firstPipe?.id || 0, connectionId: conns.value[0]?.id || 0,
-    database: '', sql: '', reason: '', mfaCode: '',
+    database: '', sql: '', changeType: '', reason: '', mfaCode: '',
   }
   preview.value = null
   needMfa.value = false
@@ -209,7 +210,7 @@ async function submit() {
   try {
     const env = await api.createRelease({
       title: f.value.title.trim(), pipelineId: f.value.pipelineId, connectionId: f.value.connectionId,
-      database: f.value.database, sql: f.value.sql, reason: f.value.reason.trim(), mfaCode: f.value.mfaCode.trim(),
+      database: f.value.database, sql: f.value.sql, changeType: f.value.changeType, reason: f.value.reason.trim(), mfaCode: f.value.mfaCode.trim(),
     })
     if (env.code === CODE_MFA_REQUIRED) { needMfa.value = true; ui.notify(t('rlNeedMfa'), 'error'); return }
     if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
@@ -245,6 +246,7 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
         <div v-for="r in releases" :key="r.id" class="ritem" :class="{ on: r.id === openId }" @click="select(r)">
           <div class="rtop">
             <span class="rno">{{ r.relNo }}</span>
+            <span v-if="r.changeType" class="ctb" :class="r.changeType">{{ r.changeType.toUpperCase() }}</span>
             <span class="pill" :class="r.status">{{ $t('rlSt_' + r.status) }}</span>
           </div>
           <div class="rtitle">{{ r.title }}</div>
@@ -271,7 +273,7 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
         <div class="dhead">
           <div class="dic"><Rocket :size="18" color="var(--accent-text)" /></div>
           <div class="grow">
-            <div class="dt">{{ open.relNo }} · {{ open.title }}</div>
+            <div class="dt">{{ open.relNo }} · {{ open.title }}<span v-if="open.changeType" class="ctb big" :class="open.changeType">{{ open.changeType.toUpperCase() }}</span></div>
             <div class="ds">
               {{ open.instance }}<span v-if="open.database"> / {{ open.database }}</span> ·
               {{ open.pipelineName }} · {{ fmt(open.createdAt) }}
@@ -314,11 +316,13 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
             <span class="sbt">{{ openStageObj.name }}</span>
             <span class="pill" :class="openStageObj.status">{{ $t('rlSt_' + openStageObj.status) }}</span>
             <span v-if="openStageObj.approvalNo" class="apno">{{ openStageObj.approvalNo }}</span>
+            <!-- 两种人工闸共用一个"继续"入口:manual 是流程里配置的确认点,
+                 execute 是内置执行闸(必须有人点击才落库)。按钮文案区分语义。 -->
             <VButton
-              v-if="openStageObj.type === 'manual' && openStageObj.status === 'waiting'"
+              v-if="(openStageObj.type === 'manual' || openStageObj.type === 'execute') && openStageObj.status === 'waiting'"
               variant="primary" height="30px" @click="continueStage(open, openStageObj)"
             >
-              <Play :size="13" />{{ $t('rlContinue') }}
+              <Play :size="13" />{{ openStageObj.type === 'execute' ? $t('rlConfirmExec') : $t('rlContinue') }}
             </VButton>
           </div>
           <pre v-if="openStageObj.log" class="log">{{ openStageObj.log }}</pre>
@@ -370,6 +374,15 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
             </div>
           </div>
           <div><div class="fl">{{ $t('rlPipeline') }}</div><VSelect v-model="pipeLabelSel" :options="pipeLabels" /></div>
+          <div>
+            <div class="fl">{{ $t('rlChangeType') }}</div>
+            <div class="ctseg">
+              <span class="ct" :class="{ on: f.changeType === '' }" @click="f.changeType = ''">{{ $t('rlCtAuto') }}</span>
+              <span class="ct" :class="{ on: f.changeType === 'dml' }" @click="f.changeType = 'dml'">DML</span>
+              <span class="ct" :class="{ on: f.changeType === 'ddl' }" @click="f.changeType = 'ddl'">DDL</span>
+            </div>
+            <div class="hint">{{ $t('rlChangeTypeHint') }}</div>
+          </div>
           <div><div class="fl">{{ $t('rlContent') }}</div><textarea v-model="f.sql" class="sqlbox" spellcheck="false" :placeholder="$t('rlSqlPh')" /></div>
           <div><div class="fl">{{ $t('reason') }}</div><input v-model="f.reason" class="in" :placeholder="$t('rlReasonPh')" /></div>
           <div v-if="needMfa"><div class="fl">{{ $t('loginMfaLabel') }}</div><input v-model="f.mfaCode" class="in" :placeholder="$t('loginMfaPh')" /></div>
@@ -411,6 +424,13 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
 .ritem.on::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0;
   background: linear-gradient(180deg, var(--accent), var(--glow-accent)); }
 .rtop { display: flex; align-items: center; gap: 8px; }
+.ctseg { display: inline-flex; gap: 6px; }
+.ct { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--border-default); background: var(--surface-sunken); font: 600 11.5px var(--font-mono); color: var(--text-muted); cursor: pointer; user-select: none; }
+.ct.on { background: var(--accent-subtle); border-color: var(--accent-text); color: var(--accent-text); }
+.ctb { padding: 1px 7px; border-radius: 5px; font: 700 9.5px var(--font-mono); letter-spacing: 0.04em; }
+.ctb.dml { background: var(--success-subtle); color: var(--success-text); }
+.ctb.ddl { background: var(--warning-subtle); color: var(--warning-text); }
+.ctb.big { margin-left: 8px; vertical-align: 2px; }
 .rno { font: 600 11.5px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-faint); letter-spacing: 0.02em; }
 .rtitle { font: 600 14px var(--font-body); color: var(--text-strong); margin-top: 5px; letter-spacing: -0.005em; }
 .rmeta { display: flex; align-items: center; gap: 7px; margin-top: 6px; font: 500 11.5px var(--font-body); color: var(--text-muted); }

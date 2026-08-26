@@ -97,18 +97,17 @@ func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 	admin := app.login("linwei@vela.io", "vela123")
 	// The credential acts as a DBA-lead service account — the same rights that
 	// account has in the console, no more.
-	token := app.issueClient(admin, "DevOps 平台", "zhangwei@vela.io", nil)
-
+	// 流程由网关侧绑定在凭据上 —— 外部请求不再指定(也不允许指定)。
 	pid := app.createPipeline(admin, "外部发布流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"error"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
-	_ = pid
+	token := app.issueClientPiped(admin, "DevOps 平台", "zhangwei@vela.io", nil, pid)
 
 	// Addressed by NAME: an external caller knows "sandbox-dev", not a row id.
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "外部单:建表", "externalRef": "CHG-1001",
-		"instance": "sandbox-dev", "pipeline": "外部发布流程",
+		"instance": "sandbox-dev",
 		"sql": "CREATE TABLE tbl_ext (\n id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'id',\n" +
 			" PRIMARY KEY (id)\n) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='ext';",
 		"reason": "外部系统提交",
@@ -126,14 +125,10 @@ func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 	eq(t, created.Instance, "sandbox-dev", "resolved instance")
 	eq(t, created.Pipeline, "外部发布流程", "resolved pipeline")
 
-	// Poll to completion through the SAME endpoint an integrator would use.
-	var final openRelease
-	for i := 0; i < 200; i++ {
-		final = app.openRelease(token, created.RelNo)
-		if final.Status == "success" || final.Status == "failed" {
-			break
-		}
-	}
+	// 0024 执行闸:外部单也停在待确认,由网关侧(审批角色)在控制台点击。
+	app.confirmOpenReleaseAndWait(admin, created.RelNo)
+	// Poll the final state through the SAME endpoint an integrator would use.
+	final := app.openRelease(token, created.RelNo)
 	eq(t, final.Status, "success", "release status")
 	if len(final.Stages) != 2 {
 		t.Fatalf("expected the flow's 2 stages, got %d", len(final.Stages))
@@ -148,12 +143,12 @@ func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 func TestOpenAPIRetryIsIdempotent(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
-	token := app.issueClient(admin, "CI", "zhangwei@vela.io", nil)
-	app.createPipeline(admin, "幂等流程", "", []map[string]any{{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`}})
+	idemPid := app.createPipeline(admin, "幂等流程", "", []map[string]any{{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`}})
+	token := app.issueClientPiped(admin, "CI", "zhangwei@vela.io", nil, idemPid)
 
 	body := map[string]any{
 		"title": "幂等", "externalRef": "BUILD-77", "instance": "sandbox-dev",
-		"pipeline": "幂等流程", "sql": "SELECT 1;",
+		"sql": "SELECT 1;",
 	}
 	first := app.openDo(http.MethodPost, "/api/v1/open/releases", token, body)
 	second := app.openDo(http.MethodPost, "/api/v1/open/releases", token, body)
@@ -171,18 +166,17 @@ func TestOpenAPIRetryIsIdempotent(t *testing.T) {
 func TestOpenAPIAcceptsScriptUpload(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
-	token := app.issueClient(admin, "发布平台", "zhangwei@vela.io", nil)
-	app.createPipeline(admin, "脚本流程", "", []map[string]any{
+	scriptPid := app.createPipeline(admin, "脚本流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
+	token := app.issueClientPiped(admin, "发布平台", "zhangwei@vela.io", nil, scriptPid)
 
 	script := "-- upgrade\nCREATE TABLE tbl_from_file (id BIGINT NOT NULL COMMENT 'id', PRIMARY KEY(id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='f';\n"
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	_ = mw.WriteField("title", "脚本升级单")
 	_ = mw.WriteField("instance", "sandbox-dev")
-	_ = mw.WriteField("pipeline", "脚本流程")
 	_ = mw.WriteField("externalRef", "REL-FILE-1")
 	fw, _ := mw.CreateFormFile("file", "upgrade.sql")
 	_, _ = fw.Write([]byte(script))
@@ -204,15 +198,9 @@ func TestOpenAPIAcceptsScriptUpload(t *testing.T) {
 	var created openRelease
 	_ = json.Unmarshal(env.Data, &created)
 
-	var final openRelease
-	for i := 0; i < 200; i++ {
-		final = app.openRelease(token, created.RelNo)
-		if final.Status == "success" || final.Status == "failed" {
-			break
-		}
-	}
-	// The script executed from the FILE, digest-verified — the same path a script
-	// approval uses.
+	// 0024 执行闸:控制台侧确认后,脚本才从文件执行(摘要校验同脚本审批路径)。
+	app.confirmOpenReleaseAndWait(admin, created.RelNo)
+	final := app.openRelease(token, created.RelNo)
 	eq(t, final.Status, "success", "script release status")
 }
 
@@ -266,11 +254,11 @@ func TestOpenAPIInheritsServiceAccountPermissions(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
 	// Bound to a read-only RESEARCH account: it may look, not change.
-	token := app.issueClient(admin, "研发流水线", "zhaolei@vela.io", nil)
-	app.createPipeline(admin, "只执行", "", []map[string]any{{"name": "执行变更", "type": "execute"}})
+	execPid := app.createPipeline(admin, "只执行", "", []map[string]any{{"name": "执行变更", "type": "execute"}})
+	token := app.issueClientPiped(admin, "研发流水线", "zhaolei@vela.io", nil, execPid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
-		"title": "越权 DDL", "instance": "sandbox-dev", "pipeline": "只执行",
+		"title": "越权 DDL", "instance": "sandbox-dev",
 		"sql": "DROP TABLE tbl_order;",
 	})
 	if r.Code == 0 {

@@ -1,0 +1,13 @@
+-- 0021: 服务账号 —— 机器主体,对接升级单/CI/CD 等外部系统.
+--
+-- kind 区分人和机器。服务账号是开放接口凭据(tbl_api_client.user_id)背后的
+-- 主体:它像人一样持有角色、标签、审计归属 —— 能力矩阵、标签范围、审计链对
+-- 两种 kind 一视同仁,这是有意的:给机器一条"更简单"的判定通道,它终将成为
+-- 所有人绕行的通道。
+--
+-- 区别只有两处,都在收紧的方向:
+--   1. 登录:kind=service 一律拒绝(不设口令,口令也设不上)。它唯一的门是
+--      API 凭据,那扇门有自己的 bcrypt secret + 每凭据 IP 白名单。
+--   2. MFA 强制:mfaMandatory 只约束人。机器无法注册 TOTP,硬套只会逼着
+--      运维给服务账号留一个共享 TOTP 秘钥 —— 比豁免更糟。
+ALTER TABLE tbl_user ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'human';

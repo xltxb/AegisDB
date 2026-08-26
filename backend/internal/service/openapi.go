@@ -2,6 +2,7 @@ package service
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -26,6 +27,115 @@ import (
 // What the door adds over the console path is only what a machine caller needs:
 // a non-interactive credential, name-based addressing (an external system knows
 // "order-cluster", not connection id 12), and idempotency (it will retry).
+
+// ---------------------------------------------------------------- 服务账号
+
+// CreateServiceAccount mints a machine principal for external systems (升级单
+// 平台、CI/CD) to act through.
+//
+// It is a User row with kind=service, and deliberately NOTHING else special:
+// roles decide what its releases may touch, tags narrow which instances it
+// sees, the audit chain attributes to it by name — every judgement layer
+// treats it exactly like a person. The two differences both point the strict
+// way: it can never log into the console (no password exists and none can be
+// set), and the MFA mandate does not apply to it (a machine cannot enroll
+// TOTP; its second factor is the API credential's bcrypt secret plus that
+// credential's own IP allowlist).
+func (s *Services) CreateServiceAccount(actor *model.User, req dto.ServiceAccountReq) (*model.User, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return nil, fmt.Errorf("服务账号名称不能为空")
+	}
+	if len(req.RoleIDs) == 0 {
+		return nil, fmt.Errorf("请为服务账号指定至少一个角色")
+	}
+	if err := s.validateRoleIDs(req.RoleIDs); err != nil {
+		return nil, err
+	}
+	email := serviceAccountEmail(name)
+	if _, err := s.Repo.GetUserByEmail(email); err == nil {
+		return nil, fmt.Errorf("同名服务账号已存在: %s", name)
+	}
+	dept := strings.TrimSpace(req.Dept)
+	if dept == "" {
+		dept = "服务账号"
+	}
+	u := &model.User{
+		Name: clip(name, 60), Email: email, RoleID: req.RoleIDs[0],
+		Status: "active", Kind: model.UserKindService,
+		// PasswordHash stays EMPTY. Login fail-closes on an empty hash AND on
+		// kind=service — two locks on a door this account must never use.
+		Dept: clip(dept, 60), Initials: "SA", LastActive: "—",
+	}
+	if err := s.Repo.CreateUser(u); err != nil {
+		return nil, err
+	}
+	if err := s.Repo.SetUserRoles(u.ID, req.RoleIDs); err != nil {
+		return nil, err
+	}
+	if len(req.Tags) > 0 {
+		if err := s.Repo.SetUserTags(u.ID, req.Tags); err != nil {
+			return nil, err
+		}
+	}
+	s.auditAdminAction(actor, "admin.serviceaccount.create name="+u.Name)
+	return u, nil
+}
+
+// ListServiceAccounts returns the machine principals with what the credential
+// binding UI needs: roles, tags, and how many credentials already act as each.
+func (s *Services) ListServiceAccounts() []dto.ServiceAccountView {
+	users, err := s.Repo.ListUsers()
+	if err != nil {
+		return []dto.ServiceAccountView{}
+	}
+	clients, _ := s.Repo.ListAPIClients()
+	bound := map[int64]int{}
+	for _, c := range clients {
+		bound[c.UserID]++
+	}
+	out := []dto.ServiceAccountView{}
+	for _, u := range users {
+		if u.Kind != model.UserKindService {
+			continue
+		}
+		roles, _ := s.Repo.RolesOfUser(u.ID)
+		tags, _ := s.Repo.TagsForUser(u.ID)
+		if tags == nil {
+			tags = []string{}
+		}
+		if roles == nil {
+			roles = []string{}
+		}
+		out = append(out, dto.ServiceAccountView{
+			ID: u.ID, Name: u.Name, Email: u.Email, Status: u.Status, Dept: u.Dept,
+			Roles: roles, Tags: tags, Clients: bound[u.ID],
+		})
+	}
+	return out
+}
+
+// serviceAccountEmail derives the account's unique identity from its name. It
+// LOOKS like an email because tbl_user's identity column is one; nothing is
+// ever delivered to it. ASCII survives; anything else (中文名) hashes into the
+// slug so two different Chinese names never collide on "svc-@…".
+func serviceAccountEmail(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == ' ':
+			b.WriteByte('-')
+		}
+	}
+	slug := strings.Trim(b.String(), "-")
+	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
+	if slug == "" {
+		return "svc-" + sum + "@service.vela"
+	}
+	return "svc-" + clip(slug, 40) + "-" + sum + "@service.vela"
+}
 
 // ---------------------------------------------------------------- 凭据管理
 
@@ -62,10 +172,18 @@ func (s *Services) CreateAPIClient(actor *model.User, req dto.APIClientReq) (*mo
 	if req.AllowIPs != nil {
 		allowIPs = strings.TrimSpace(*req.AllowIPs)
 	}
+	pipelineID := int64(0)
+	if req.PipelineID != nil && *req.PipelineID > 0 {
+		if err := s.validateClientPipeline(*req.PipelineID); err != nil {
+			return nil, "", err
+		}
+		pipelineID = *req.PipelineID
+	}
 	cl := &model.APIClient{
 		Name: clip(name, 60), Key: key, SecretHash: hash,
 		UserID: svcUser.ID, UserName: svcUser.Name,
 		AllowIPs: allowIPs, Scopes: strings.Join(scopes, ","),
+		PipelineID: pipelineID,
 		Enabled: true, CreatedBy: actor.ID,
 	}
 	if err := s.Repo.CreateAPIClient(cl); err != nil {
@@ -105,6 +223,14 @@ func (s *Services) UpdateAPIClient(id int64, req dto.APIClientReq) (*model.APICl
 	}
 	if req.AllowIPs != nil {
 		fields["allow_ips"] = strings.TrimSpace(*req.AllowIPs)
+	}
+	if req.PipelineID != nil {
+		if *req.PipelineID > 0 {
+			if err := s.validateClientPipeline(*req.PipelineID); err != nil {
+				return nil, err
+			}
+		}
+		fields["pipeline_id"] = *req.PipelineID // 0 = 解绑,回到分层默认流程
 	}
 	if n := strings.TrimSpace(req.Name); n != "" {
 		fields["name"] = clip(n, 60)
@@ -201,15 +327,18 @@ func (s *Services) CreateReleaseFromAPI(u *model.User, cl *model.APIClient, req 
 	if err != nil {
 		return nil, err
 	}
-	pipelineID, err := s.resolvePipelineID(req.PipelineID, req.Pipeline)
-	if err != nil {
-		return nil, err
+	// 发布流程是网关侧策略:凭据绑定的流水线 > 目标分层的默认流程。请求里出现
+	// pipeline 字段一律拒绝而非忽略 —— 静默忽略会让调用方以为自己指定成功了。
+	if req.PipelineID > 0 || strings.TrimSpace(req.Pipeline) != "" {
+		return nil, fmt.Errorf("发布流程由网关侧配置(凭据绑定或分层默认),请移除 pipeline/pipelineId 字段;如需调整流程请联系管理员")
 	}
+	pipelineID := cl.PipelineID
 
 	inner := dto.ReleaseReq{
 		Title: strings.TrimSpace(req.Title), PipelineID: pipelineID,
 		ConnectionID: conn.ID, Database: strings.TrimSpace(req.Database),
 		Reason: strings.TrimSpace(req.Reason), MfaCode: req.MfaCode,
+		ChangeType: req.ChangeType,
 	}
 	if inner.Title == "" {
 		inner.Title = "外部升级单 " + strings.TrimSpace(req.ExternalRef)
@@ -311,26 +440,17 @@ func (s *Services) resolveConnection(id int64, name string) (*model.Connection, 
 	return &hits[0], nil
 }
 
-// resolvePipelineID accepts an id or a flow NAME; zero means "the default flow
-// for the target's tier", which submitRelease works out.
-func (s *Services) resolvePipelineID(id int64, name string) (int64, error) {
-	if id > 0 {
-		return id, nil
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return 0, nil
-	}
-	ps, err := s.Repo.ListPipelines()
+// validateClientPipeline checks a to-be-bound flow exists and is enabled — a
+// credential bound to a dead template would refuse every ticket it raises.
+func (s *Services) validateClientPipeline(id int64) error {
+	p, err := s.Repo.GetPipeline(id)
 	if err != nil {
-		return 0, err
+		return fmt.Errorf("发布流程不存在: %d", id)
 	}
-	for _, p := range ps {
-		if strings.EqualFold(p.Name, name) {
-			return p.ID, nil
-		}
+	if !p.Enabled {
+		return fmt.Errorf("发布流程「%s」已停用,不能绑定", p.Name)
 	}
-	return 0, fmt.Errorf("发布流程不存在: %s", name)
+	return nil
 }
 
 // ---------------------------------------------------------------- 查询
@@ -376,6 +496,7 @@ func (s *Services) OpenReleaseResp(rel *model.Release, withLog bool) dto.OpenRel
 	v := s.releaseView(*rel) // redacts credentials on the way out
 	out := dto.OpenReleaseResp{
 		RelNo: v.RelNo, Title: v.Title, Status: v.Status, Risk: v.Risk,
+		ChangeType: v.ChangeType,
 		Instance: v.Instance, Database: v.Database, Env: v.Env, Pipeline: v.PipelineName,
 		ExternalRef: v.ExternalRef, Error: v.Error,
 		CreatedAt: v.CreatedAt.Format(time.RFC3339),

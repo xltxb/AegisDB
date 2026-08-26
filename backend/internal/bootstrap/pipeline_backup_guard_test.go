@@ -97,7 +97,8 @@ func TestBackupStageAllowsCopyingSQL(t *testing.T) {
 	var rel releaseView
 	_ = json.Unmarshal(r.Data, &rel)
 
-	done := app.waitRelease(admin, rel.ID, "success", "failed")
+	// 0024 执行闸:到点的人点击确认后才落库
+	done := app.confirmExecutionAndWait(admin, rel.ID)
 	eq(t, done.Status, "success", "a copying backup passes")
 	eq(t, stageByType(done, "backup").Status, "success", "backup ran")
 }

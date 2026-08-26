@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Tag, Pencil } from 'lucide-vue-next'
+import { Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
@@ -23,6 +23,41 @@ const ui = useUIStore()
 const envtier = useEnvTierStore()
 
 const conns = ref<Connection[]>([])
+// 数据源一多,双层分组的长表就成了"滚动扫全表"。三件套:全字段搜索、环境
+// 筛选、分组折叠 —— 搜索时强制展开,否则命中项藏在折叠组里等于没搜到。
+const q = ref('')
+const envFilter = ref('') // '' = 全部环境
+const collapsed = ref(new Set<string>())
+function toggleGroup(key: string) {
+  const next = new Set(collapsed.value)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  collapsed.value = next
+}
+const isCollapsed = (key: string) => !q.value.trim() && collapsed.value.has(key)
+// 搜索匹配:名称/地址/库名/引擎/标签/角色,一个框全找
+function matches(c: Connection, needle: string) {
+  const hay = [c.name, c.host + ':' + c.port, c.database, c.engine, c.tags, c.defaultRole, c.layer]
+    .join(' ').toLowerCase()
+  return hay.includes(needle)
+}
+const filtered = computed(() => {
+  let rows = conns.value
+  if (envFilter.value) rows = rows.filter((c) => c.env === envFilter.value)
+  const needle = q.value.trim().toLowerCase()
+  if (needle) rows = rows.filter((c) => matches(c, needle))
+  return rows
+})
+// 环境 chips 的计数按"搜索后"算:筛选器要回答"命中的都在哪",不是全量分布
+const envCounts = computed(() => {
+  const m: Record<string, number> = {}
+  const needle = q.value.trim().toLowerCase()
+  for (const c of conns.value) {
+    if (needle && !matches(c, needle)) continue
+    m[c.env] = (m[c.env] || 0) + 1
+  }
+  return m
+})
 const allTags = ref<string[]>([])
 const tagModal = ref<{ open: boolean; conn: Connection | null }>({ open: false, conn: null })
 const tagArr = (s: string) => (s ? s.split(',').map((x) => x.trim()).filter(Boolean) : [])
@@ -253,7 +288,7 @@ interface ConnGroup {
 }
 const envGroups = computed<ConnGroup[]>(() => {
   const byEnv: Record<string, Connection[]> = {}
-  for (const c of conns.value) (byEnv[c.env] ||= []).push(c)
+  for (const c of filtered.value) (byEnv[c.env] ||= []).push(c)
 
   const byType = (rows: Connection[]) => {
     const m: Record<string, Connection[]> = {}
@@ -275,6 +310,8 @@ const envGroups = computed<ConnGroup[]>(() => {
       count: byEnv[k].length, types: byType(byEnv[k]),
     })
   }
+  // 过滤态下空组只是噪音;全量视图仍显示空环境(它回答"这个环境还没接入实例")
+  if (q.value.trim() || envFilter.value) return groups.filter((g) => g.count > 0)
   return groups
 })
 
@@ -360,6 +397,21 @@ async function add() {
       </div>
     </div>
 
+    <div class="toolbar">
+      <div class="searchbox">
+        <Search :size="14" />
+        <input v-model="q" class="sin" :placeholder="$t('connSearchPh')" />
+        <X v-if="q" :size="13" class="sclear" @click="q = ''" />
+      </div>
+      <div class="envchips">
+        <span class="echip" :class="{ on: envFilter === '' }" @click="envFilter = ''">{{ $t('connAllEnv') }}<i>{{ filtered.length }}</i></span>
+        <span v-for="e in envtier.environments" :key="e.code" class="echip" :class="[{ on: envFilter === e.code }, envtier.dotForEnv(e.code)]"
+          @click="envFilter = envFilter === e.code ? '' : e.code">
+          <span class="ed" />{{ envtier.envLabel(e.code) }}<i>{{ envCounts[e.code] || 0 }}</i>
+        </span>
+      </div>
+    </div>
+
     <div class="table">
       <div class="thead">
         <span>{{ $t('colInst') }}</span><span>{{ $t('colEngine') }}</span><span>{{ $t('colAddr') }}</span>
@@ -367,7 +419,11 @@ async function add() {
       </div>
 
       <template v-for="group in envGroups" :key="group.key">
-        <div class="grouprow" :class="group.cls"><span class="d" />{{ group.label }}<span class="gcnt">{{ group.count }}</span></div>
+        <div class="grouprow click" :class="group.cls" @click="toggleGroup(group.key)">
+          <ChevronDown :size="13" class="chev" :class="{ closed: isCollapsed(group.key) }" />
+          <span class="d" />{{ group.label }}<span class="gcnt">{{ group.count }}</span>
+        </div>
+        <template v-if="!isCollapsed(group.key)">
         <template v-for="ty in group.types" :key="ty.key">
         <!-- Second level: database type. The engine decides which driver reaches
              the instance and how its commands are read, so it groups rather than
@@ -401,7 +457,9 @@ async function add() {
         </div>
         </template>
         <div v-if="!group.types.length" class="typerow empty">{{ $t('connGroupEmpty') }}</div>
+        </template>
       </template>
+      <div v-if="!envGroups.some((g) => g.count > 0)" class="noresult">{{ $t('connNoMatch') }}</div>
     </div>
 
     <TagEditModal
@@ -503,7 +561,23 @@ async function add() {
 
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
-.head { display: flex; align-items: center; margin-bottom: 18px; }
+.head { display: flex; align-items: center; margin-bottom: 14px; }
+.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.searchbox { display: flex; align-items: center; gap: 8px; width: 300px; padding: 0 12px; height: 36px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-faint); }
+.searchbox:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.sin { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: 500 12.5px var(--font-body); color: var(--text-strong); }
+.sclear { cursor: pointer; color: var(--text-muted); }
+.envchips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.echip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border-default); background: var(--surface-card); font: 600 11.5px var(--font-body); color: var(--text-muted); cursor: pointer; user-select: none; }
+.echip i { font: 600 10px var(--font-mono); font-style: normal; color: var(--text-faint); }
+.echip.on { background: var(--accent-subtle); border-color: var(--accent-text); color: var(--accent-text); }
+.echip.on i { color: var(--accent-text); }
+.echip .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.55; }
+.grouprow.click { cursor: pointer; user-select: none; }
+.grouprow.click:hover { filter: brightness(0.97); }
+.chev { transition: transform var(--dur-fast) var(--ease-out); color: var(--text-faint); }
+.chev.closed { transform: rotate(-90deg); }
+.noresult { padding: 36px 0; text-align: center; font: 500 12.5px var(--font-body); color: var(--text-faint); }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
 .sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
 .acts { margin-left: auto; display: flex; gap: 10px; align-items: center; }

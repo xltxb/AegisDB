@@ -7,7 +7,7 @@
 // as, what it may do, where it may call from) rather than about the secret.
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { KeyRound, Plus, Copy, Check, Trash2, X, TriangleAlert } from 'lucide-vue-next'
+import { KeyRound, Plus, Copy, Check, Trash2, X, TriangleAlert, Bot } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -15,7 +15,7 @@ import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import type { APIClient, UserView } from '@/types'
+import type { APIClient, Pipeline, RoleBrief, ServiceAccount, UserView } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -24,8 +24,16 @@ const isAdmin = computed(() => auth.me?.roleCode === 'admin' || (auth.me?.roleCo
 
 const clients = ref<APIClient[]>([])
 const users = ref<UserView[]>([])
+// 服务账号 —— 凭据背后的机器主体。凭据应绑定它,而不是某个人的账号:人会离职、
+// 会换角色,绑在人身上的集成会跟着一起断。
+const svcAccounts = ref<ServiceAccount[]>([])
+const roles = ref<RoleBrief[]>([])
+const saOpen = ref(false)
+const sf = ref({ name: '', roleIds: [] as number[], tags: '' })
 const formOpen = ref(false)
-const nf = ref({ name: '', userId: 0, allowIps: '', scopes: ['release:create', 'release:read', 'review:check'] })
+const nf = ref({ name: '', userId: 0, allowIps: '', scopes: ['release:create', 'release:read', 'review:check'], pipelineId: 0 })
+// 发布流程绑定在凭据上(网关侧策略),外部请求不可指定 —— 0 = 走目标分层的默认流程。
+const pipelines = ref<Pipeline[]>([])
 // The one plaintext copy of a freshly-issued credential. Held in memory only,
 // shown until dismissed, never fetched again — there is nothing to fetch.
 const issued = ref<{ name: string; token: string } | null>(null)
@@ -33,14 +41,31 @@ const copied = ref(false)
 
 const SCOPES = ['release:create', 'release:read', 'review:check']
 
-const userLabels = computed(() => users.value.map(u => `${u.name} · ${u.email}`))
+// 服务账号排最前并带标记;人类账号仍可绑(兼容既有凭据),但不是推荐姿势。
+const principalLabel = (u: UserView) =>
+  u.kind === 'service' ? `🤖 ${u.name} · ${t('saMark')}` : `${u.name} · ${u.email}`
+const principals = computed(() =>
+  [...users.value].sort((a, b) => (a.kind === 'service' ? 0 : 1) - (b.kind === 'service' ? 0 : 1)))
+const userLabels = computed(() => principals.value.map(principalLabel))
+const pipeLabel = computed({
+  get: () => {
+    const p = pipelines.value.find(x => x.id === nf.value.pipelineId)
+    return p ? p.name : t('acPipeDefault')
+  },
+  set: (l: string) => {
+    const p = pipelines.value.find(x => x.name === l)
+    nf.value.pipelineId = p ? p.id : 0
+  },
+})
+const pipeOptions = computed(() => [t('acPipeDefault'), ...pipelines.value.map(p => p.name)])
+const pipeNameOf = (id: number) => pipelines.value.find(p => p.id === id)?.name || ''
 const userLabel = computed({
   get: () => {
     const u = users.value.find(x => x.id === nf.value.userId)
-    return u ? `${u.name} · ${u.email}` : ''
+    return u ? principalLabel(u) : ''
   },
   set: (l: string) => {
-    const u = users.value.find(x => `${x.name} · ${x.email}` === l)
+    const u = users.value.find(x => principalLabel(x) === l)
     nf.value.userId = u ? u.id : 0
   },
 })
@@ -48,11 +73,38 @@ const userLabel = computed({
 async function load() {
   try { clients.value = await api.apiClients() } catch (e) { ui.notifyError(e, t('loadFailed')) }
   try { users.value = await api.users() } catch { /* the picker degrades to empty */ }
+  try { svcAccounts.value = await api.serviceAccounts() } catch { /* section degrades to empty */ }
+  try { roles.value = await api.roles() } catch { /* role picker degrades */ }
+  try { pipelines.value = (await api.pipelines()).filter(p => p.enabled) } catch { /* picker degrades */ }
+}
+
+function toggleRole(id: number) {
+  const i = sf.value.roleIds.indexOf(id)
+  if (i >= 0) sf.value.roleIds.splice(i, 1)
+  else sf.value.roleIds.push(id)
+}
+
+async function createSA() {
+  if (!sf.value.name.trim() || !sf.value.roleIds.length) { ui.notify(t('saNeedFields'), 'error'); return }
+  try {
+    const env = await api.createServiceAccount({
+      name: sf.value.name.trim(), roleIds: sf.value.roleIds,
+      tags: sf.value.tags.split(',').map(x => x.trim()).filter(Boolean),
+    })
+    if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
+    saOpen.value = false
+    sf.value = { name: '', roleIds: [], tags: '' }
+    await load()
+    // 建完主体顺手打开发凭据的表单 —— 这两步几乎总是连着做的。
+    const created = users.value.find(u => u.kind === 'service' && env.data && u.id === env.data.id)
+    openForm()
+    if (created) nf.value.userId = created.id
+  } catch (e) { ui.notifyError(e, t('actionFailed')) }
 }
 onMounted(load)
 
 function openForm() {
-  nf.value = { name: '', userId: 0, allowIps: '', scopes: [...SCOPES] }
+  nf.value = { name: '', userId: 0, allowIps: '', scopes: [...SCOPES], pipelineId: 0 }
   issued.value = null
   formOpen.value = true
 }
@@ -68,7 +120,7 @@ async function create() {
   try {
     const env = await api.createApiClient({
       name: nf.value.name.trim(), userId: nf.value.userId,
-      allowIps: nf.value.allowIps.trim(), scopes: nf.value.scopes, enabled: true,
+      allowIps: nf.value.allowIps.trim(), scopes: nf.value.scopes, pipelineId: nf.value.pipelineId, enabled: true,
     })
     if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
     issued.value = { name: env.data.client.name, token: env.data.token }
@@ -145,6 +197,36 @@ const sample = computed(() => {
       <div class="ihint">{{ $t('acIssuedHint') }}</div>
     </div>
 
+    <!-- 服务账号:凭据背后的机器主体 -->
+    <div class="sablk">
+      <div class="sahead">
+        <Bot :size="14" /><span class="sat">{{ $t('saTitle') }}</span>
+        <span class="sasub">{{ $t('saSub') }}</span>
+        <VButton v-if="isAdmin" height="28px" @click="saOpen = !saOpen"><Plus :size="12" />{{ $t('saNew') }}</VButton>
+      </div>
+      <div v-if="saOpen" class="saform">
+        <input v-model="sf.name" class="in" :placeholder="$t('saNamePh')" />
+        <div class="scopes">
+          <span v-for="ro in roles" :key="ro.id" class="sc" :class="{ on: sf.roleIds.includes(ro.id) }" @click="toggleRole(ro.id)">
+            <Check v-if="sf.roleIds.includes(ro.id)" :size="11" />{{ ro.name }}
+          </span>
+        </div>
+        <input v-model="sf.tags" class="in" :placeholder="$t('saTagsPh')" />
+        <div class="sarow">
+          <span class="hint">{{ $t('saFormHint') }}</span>
+          <VButton variant="primary" height="30px" @click="createSA">{{ $t('saCreate') }}</VButton>
+        </div>
+      </div>
+      <div v-for="sa in svcAccounts" :key="sa.id" class="sarowi" :class="{ off: sa.status !== 'active' }">
+        <Bot :size="13" class="saic" />
+        <span class="san">{{ sa.name }}</span>
+        <code class="ikey">{{ sa.email }}</code>
+        <span class="sam">{{ sa.roles.join(' / ') }}<template v-if="sa.tags.length"> · {{ sa.tags.join(',') }}</template></span>
+        <span class="sam right">{{ $t('saClients', { n: sa.clients }) }}</span>
+      </div>
+      <div v-if="!svcAccounts.length" class="saempty">{{ $t('saEmpty') }}</div>
+    </div>
+
     <div class="list">
       <div v-for="c in clients" :key="c.id" class="item" :class="{ off: !c.enabled }">
         <div class="grow">
@@ -156,6 +238,8 @@ const sample = computed(() => {
             <span>{{ $t('acAccount') }}: {{ c.userName }}</span>
             <span class="sep">·</span>
             <span>{{ c.scopes }}</span>
+            <span class="sep">·</span>
+            <span>{{ c.pipelineId ? pipeNameOf(c.pipelineId) : $t('acPipeDefault') }}</span>
             <span class="sep">·</span>
             <span>{{ c.allowIps ? c.allowIps : $t('acAnyIP') }}</span>
             <span class="sep">·</span>
@@ -199,6 +283,11 @@ const sample = computed(() => {
             </div>
           </div>
           <div>
+            <div class="fl">{{ $t('acPipeline') }}</div>
+            <VSelect v-model="pipeLabel" :options="pipeOptions" />
+            <div class="hint">{{ $t('acPipelineHint') }}</div>
+          </div>
+          <div>
             <div class="fl">{{ $t('acAllowIPs') }}</div>
             <input v-model="nf.allowIps" class="in" placeholder="10.0.0.0/8, 203.0.113.7" />
             <div class="hint">{{ $t('acAllowIPsHint') }}</div>
@@ -227,6 +316,19 @@ const sample = computed(() => {
 .ibody { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
 .tok { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 8px 10px; border-radius: 8px; background: var(--surface-card); border: 1px solid var(--border-default); font: 500 11.5px var(--font-mono); color: var(--text-strong); }
 .ihint { margin-top: 7px; font: 500 11px var(--font-body); color: var(--text-muted); }
+.sablk { margin: 14px 20px 0; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-sunken); padding: 10px 12px; }
+.sahead { display: flex; align-items: center; gap: 8px; color: var(--text-body); }
+.sat { font: 600 12.5px var(--font-body); color: var(--text-strong); }
+.sasub { flex: 1; font: 500 11px var(--font-body); color: var(--text-faint); }
+.saform { margin-top: 9px; display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--border-default); border-radius: 10px; background: var(--surface-card); }
+.sarow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sarowi { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
+.sarowi.off { opacity: 0.55; }
+.saic { color: var(--accent-text); flex-shrink: 0; }
+.san { font: 600 12.5px var(--font-body); color: var(--text-strong); white-space: nowrap; }
+.sam { font: 500 11px var(--font-body); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sam.right { margin-left: auto; flex-shrink: 0; }
+.saempty { margin-top: 8px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
 .list { padding: 14px 20px 6px; display: flex; flex-direction: column; gap: 8px; }
 .item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 11px; background: var(--surface-sunken); }
 .item.off { opacity: 0.55; }
