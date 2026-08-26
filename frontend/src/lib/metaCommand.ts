@@ -79,10 +79,8 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
       case 'conninfo': return q(`SELECT SYS_CONTEXT('USERENV','DB_NAME') AS "Database", USER AS "User" FROM DUAL`)
       case 'd':
         if (!arg) return q(`SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`)
-        return {
-          sql: `SELECT column_name AS "Column", data_type AS "Type", nullable AS "Nullable" FROM all_tab_columns WHERE table_name=UPPER('${ident(arg)}') ORDER BY column_id`,
-          emptyNotice: notFound(arg),
-        }
+        // 与 DESC 同一个描述实现:两种拼法回答同一个问题,不该给出两种答案。
+        return describeSql(engine, arg)
     }
     return null
   }
@@ -97,6 +95,96 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
     case 'conninfo': return q('SELECT DATABASE() AS `Database`, CURRENT_USER() AS `User`, VERSION() AS `Version`')
     case 'di': return arg ? q(`SHOW INDEX FROM \`${ident(arg)}\``) : null
     case 'd': return arg ? q(`SHOW COLUMNS FROM \`${ident(arg)}\``) : q('SHOW TABLES')
+  }
+  return null
+}
+
+/** MySQL 家族把 DESC 当作合法 SQL,其余引擎不认。 */
+const isMySQLFamily = (engine: string) => /mysql|tidb|mariadb|polardb/i.test(engine)
+
+/**
+ * translateDescribe — DESC / DESCRIBE。
+ *
+ * 它是 SQL*Plus 的**客户端命令**,不是 SQL:原样发给 Oracle 服务端只会得到
+ * ORA-00900 invalid SQL statement。而它是每个 DBA 的肌肉记忆,报个错了事等于让
+ * 人改习惯去迁就工具。这里把它翻成目录查询 —— 翻出来的 SQL 照常经过网关的三层
+ * 判定与审计,和手敲那条查询没有任何区别。
+ *
+ * MySQL 家族返回 null:那里 DESC 本来就是合法语法,不去修一个没坏的东西。
+ * 认不出的写法也返回 null —— 原样交给服务端拒绝,好过在这里猜。
+ */
+export function translateDescribe(stmt: string, engine: string): MetaTranslation | null {
+  if (isMySQLFamily(engine)) return null
+  // 必须是整条语句就是 `desc <对象>`(可带结尾分号)。ORDER BY … DESC 里的 DESC
+  // 不在句首,拦错了会把一条正常查询变成目录查询。
+  const m = stmt.trim().match(/^desc(?:ribe)?\s+([^\s;]+)\s*;?\s*$/i)
+  if (!m) return null
+  return describeSql(engine, m[1])
+}
+
+/**
+ * describeSql builds the "what columns does this object have" query.
+ *
+ * Oracle 这条比看上去要绕,两处都是被真实用法逼出来的:
+ *
+ *  - **同义词**:v$session 是指向 SYS.V_$SESSION 的公共同义词,ALL_TAB_COLUMNS
+ *    里根本没有叫 V$SESSION 的行。只按名字直查会返回零行 —— 用户看到一张空表格,
+ *    以为这个视图没有列。所以要连 ALL_SYNONYMS 一起解。
+ *  - **长度与精度**:SQL*Plus 的 DESCRIBE 给的是 VARCHAR2(30)。只说 VARCHAR2
+ *    而不说多长,等于没描述。
+ *
+ * 不取 data_default:它在 ALL_TAB_COLUMNS 里是 LONG 类型,取它会给驱动添麻烦,
+ * 而 SQL*Plus 的 DESCRIBE 本来也不显示默认值。
+ */
+function describeSql(engine: string, arg: string): MetaTranslation | null {
+  const clean = ident(arg)
+  if (!clean) return null
+  const parts = clean.split('.').filter(Boolean)
+  const name = parts.pop() || ''
+  const owner = parts.pop() || ''
+  if (!name) return null
+
+  if (/oracle/i.test(engine)) {
+    const NAME = name.toUpperCase()
+    const OWNER = owner.toUpperCase()
+    const ownerCol = OWNER ? ` AND owner = '${OWNER}'` : ''
+    const synOwner = OWNER ? ` AND table_owner = '${OWNER}'` : ''
+    const typeExpr =
+      `data_type || CASE ` +
+      `WHEN data_type IN ('VARCHAR2','NVARCHAR2','CHAR','NCHAR','RAW') THEN '(' || char_length || ')' ` +
+      `WHEN data_type = 'NUMBER' AND data_precision IS NOT NULL THEN '(' || data_precision || ` +
+      `CASE WHEN NVL(data_scale,0) > 0 THEN ',' || data_scale ELSE '' END || ')' ` +
+      `ELSE '' END`
+    return {
+      sql:
+        `SELECT column_name AS "Column", ${typeExpr} AS "Type", nullable AS "Nullable" ` +
+        `FROM all_tab_columns WHERE (owner, table_name) IN (` +
+        `SELECT owner, table_name FROM all_tab_columns WHERE table_name = '${NAME}'${ownerCol} ` +
+        `UNION SELECT table_owner, table_name FROM all_synonyms ` +
+        `WHERE synonym_name = '${NAME}'${synOwner} AND owner IN ('PUBLIC', USER)` +
+        `) ORDER BY column_id`,
+      emptyNotice: notFound(arg),
+    }
+  }
+
+  if (/postgre|dws|gauss/i.test(engine)) {
+    const sch = owner ? ` AND table_schema = '${owner}'` : ''
+    return {
+      sql:
+        `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", ` +
+        `column_default AS "Default" FROM information_schema.columns ` +
+        `WHERE table_name = '${name}'${sch} ORDER BY ordinal_position`,
+      emptyNotice: notFound(arg),
+    }
+  }
+
+  if (/sqlite/i.test(engine)) {
+    // pragma_table_info(),不是 PRAGMA 语句:前者是 SELECT,会被判定层当作读;
+    // 后者的动词认不出来,会被当成写而要求审批 —— 描述一张表不该走审批。
+    return {
+      sql: `SELECT name AS "Column", type AS "Type", CASE "notnull" WHEN 1 THEN 'N' ELSE 'Y' END AS "Nullable" FROM pragma_table_info('${name}')`,
+      emptyNotice: notFound(arg),
+    }
   }
   return null
 }

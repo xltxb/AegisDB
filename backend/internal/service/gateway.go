@@ -89,9 +89,7 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 		return nil, ErrNotFound
 	}
 	// Target a specific database within the instance when the caller chose one.
-	if database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	// Tag-based access: a restricted role may only operate on its assigned DBs.
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
@@ -237,9 +235,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	if database != "" {
-		conn.Database = database // target database captured on the approval ticket
-	}
+	applyTargetDatabase(conn, database) // target database captured on the approval ticket
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
@@ -718,9 +714,7 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	if err != nil {
 		return 0, ErrNotFound
 	}
-	if database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if !s.canAccessConn(u, conn) {
 		return 0, ErrForbidden
 	}
@@ -1096,9 +1090,7 @@ func (s *Services) RecordTranscriptExport(u *model.User, req dto.TranscriptExpor
 	if !s.canAccessConn(u, conn) {
 		return ErrForbidden
 	}
-	if req.Database != "" {
-		conn.Database = req.Database
-	}
+	applyTargetDatabase(conn, req.Database)
 	name := filepath.Base(strings.ReplaceAll(strings.TrimSpace(req.Filename), "\\", "/"))
 	if name == "" || name == "." || name == "/" {
 		name = "session.log"

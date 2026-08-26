@@ -29,9 +29,7 @@ func (s *Services) CompileObject(u *model.User, connID int64, scope, kind, name,
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
-	if database = strings.TrimSpace(database); database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if conn.Status == "maint" {
 		return nil, fmt.Errorf("目标实例处于维护态,暂不能编译")
 	}

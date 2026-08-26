@@ -19,7 +19,7 @@ import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { needsArming, slotFromEvent, slotLabel, snippetPreview, snippetSubmitText } from '@/lib/snippet'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
-import { translateMetaSql, type NoticeRef } from '@/lib/metaCommand'
+import { translateMetaSql, translateDescribe, type NoticeRef } from '@/lib/metaCommand'
 import { Transcript } from '@/lib/transcript'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
 import { highlightSqlAnsi } from '@/lib/sqlHighlight'
@@ -411,17 +411,21 @@ async function handleSubmit(stmt: string) {
   // otherwise be printed for the next query that legitimately returns no rows.
   pendingEmptyNotice.value = null
   const raw = trimmed.replace(/\\[gG]\s*$/, '').replace(/;+\s*$/, '').trim()
+  // 两类客户端命令,一条通道:psql 风格的 \dt/\d/\dn,以及 SQL*Plus 的
+  // DESC/DESCRIBE(它不是 SQL,原样发给 Oracle 只会得到 ORA-00900)。翻译出来的
+  // 查询照常走网关判定与审计 —— 和手敲那条目录查询没有区别。
+  const meta = raw.startsWith('\\')
+    ? translateMetaSql(raw, props.conn.engine)
+    : translateDescribe(raw, props.conn.engine)
+  if (meta) {
+    pendingEmptyNotice.value = meta.emptyNotice ?? null
+    if (sendExec(meta.sql, '') === 'ws') return
+    try { handleExecEnv(await execRest(meta.sql, ''), meta.sql, '') }
+    catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
+    return
+  }
   if (raw.startsWith('\\')) {
-    // psql-style DB meta-commands (\dt, \d, \dn) translate to a query the driver
-    // understands; the rest are local terminal meta-commands.
-    const meta = translateMetaSql(raw, props.conn.engine)
-    if (meta) {
-      pendingEmptyNotice.value = meta.emptyNotice ?? null
-      if (sendExec(meta.sql, '') === 'ws') return
-      try { handleExecEnv(await execRest(meta.sql, ''), meta.sql, '') }
-      catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
-      return
-    }
+    // 不是可翻译的目录命令 → 本地终端命令(\?、\c 之类)。
     metaCommand(raw); editor.resume(); return
   }
   if (!raw) { editor.resume(); return }

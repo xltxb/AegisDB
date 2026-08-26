@@ -117,6 +117,20 @@ func oracleCompileSQL(owner, kind, name string) ([]string, error) {
 // before anything else and say so specifically.
 func IsOracleEngine(engine string) bool { return engineFamily(engine) == familyOracle }
 
+// TargetDatabaseSwitchable reports whether a per-request "target database" may
+// replace Connection.Database.
+//
+// For every other engine that field names a namespace you can switch to. For
+// ORACLE it names the SERVICE (or sid/…) — a connection coordinate, not a
+// namespace: Oracle qualifies objects by OWNER instead. Substituting an owner
+// there does not select a schema, it asks the listener for a service by that
+// name, which is how browsing the object tree produced
+//
+//	(CONNECT_DATA=(SERVICE_NAME=G04)) … TNS-12514
+//
+// against an instance whose service is g04_h01.
+func TargetDatabaseSwitchable(engine string) bool { return !IsOracleEngine(engine) }
+
 // OracleCompileStatements exposes the statements a compile would run, so the
 // service layer can judge EXACTLY what it is about to execute — the judged text
 // and the executed text must be the same bytes, not two constructions of it.

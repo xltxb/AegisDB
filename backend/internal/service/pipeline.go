@@ -226,9 +226,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	if req.Database != "" {
-		conn.Database = req.Database
-	}
+	applyTargetDatabase(conn, req.Database)
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
