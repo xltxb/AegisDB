@@ -250,7 +250,7 @@ export const api = {
   // by the capability matrix), which mean different things to the operator.
   createRelease: (body: {
     title: string; pipelineId: number; connectionId: number; database?: string
-    sql?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
+    sql?: string; changeType?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
   }) => http.post<any, Envelope<Release>>('/releases', body),
   abortRelease: (id: number) => http.post<any, Envelope<any>>(`/releases/${id}/abort`),
   continueStage: (releaseId: number, stageId: number) =>
@@ -264,9 +264,9 @@ export const api = {
   createServiceAccount: (body: { name: string; roleIds: number[]; tags?: string[]; dept?: string }) =>
     http.post<any, Envelope<UserView>>('/service-accounts', body),
   apiClients: () => http.get<any, Envelope<APIClient[]>>('/api-clients').then(ok),
-  createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; enabled?: boolean }) =>
+  createApiClient: (body: { name: string; userId: number; allowIps?: string; scopes?: string[]; pipelineId?: number; enabled?: boolean }) =>
     http.post<any, Envelope<{ client: APIClient; token: string }>>('/api-clients', body),
-  updateApiClient: (id: number, body: Partial<{ name: string; userId: number; allowIps: string; scopes: string[]; enabled: boolean }>) =>
+  updateApiClient: (id: number, body: Partial<{ name: string; userId: number; allowIps: string; scopes: string[]; pipelineId: number; enabled: boolean }>) =>
     http.put<any, Envelope<APIClient>>(`/api-clients/${id}`, body),
   deleteApiClient: (id: number) => http.delete<any, Envelope<any>>(`/api-clients/${id}`),
 

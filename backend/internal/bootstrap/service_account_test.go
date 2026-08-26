@@ -121,9 +121,15 @@ func TestServiceAccountDrivesCICDRelease(t *testing.T) {
 	owner := app.roleIDByCode(admin, "owner")
 	sa := app.createServiceAccount(admin, "upgrade-portal", []int64{owner}, nil)
 
-	// Bind a credential to the service account — the one door it has.
+	// Bind a credential to the service account — the one door it has. 发布流程
+	// 也绑在凭据上:外部请求不指定流程。
+	relPid := app.createPipeline(admin, "升级单流程", "", []map[string]any{
+		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
+		{"name": "执行变更", "type": "execute"},
+	})
 	cr := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "升级单系统", "userId": sa.ID, "scopes": []string{"release:create", "release:read"},
+		"pipelineId": relPid,
 	})
 	eq(t, cr.Code, 0, "issue credential")
 	var issued struct {
@@ -131,25 +137,17 @@ func TestServiceAccountDrivesCICDRelease(t *testing.T) {
 	}
 	_ = json.Unmarshal(cr.Data, &issued)
 
-	app.createPipeline(admin, "升级单流程", "", []map[string]any{
-		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
-		{"name": "执行变更", "type": "execute"},
-	})
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", issued.Token, map[string]any{
-		"title": "订单库升级 v3", "instance": "sandbox-dev", "pipeline": "升级单流程",
+		"title": "订单库升级 v3", "instance": "sandbox-dev",
 		"sql": "SELECT 1;", "externalRef": "CHG-2026-0825", "reason": "升级单系统同步",
 	})
 	eq(t, r.Code, 0, "external system raises the ticket")
 	var created openRelease
 	_ = json.Unmarshal(r.Data, &created)
 
-	var final openRelease
-	for i := 0; i < 200; i++ {
-		final = app.openRelease(issued.Token, created.RelNo)
-		if final.Status == "success" || final.Status == "failed" {
-			break
-		}
-	}
+	// 0024 执行闸:外部单停在待确认,由控制台侧审批角色点击后才落库。
+	app.confirmOpenReleaseAndWait(admin, created.RelNo)
+	final := app.openRelease(issued.Token, created.RelNo)
 	eq(t, final.Status, "success", "the CI/CD run completes")
 
 	// The chain answers "who did this": actor = the service account (the
@@ -201,13 +199,14 @@ func TestServiceAccountExemptFromMandatoryMFA(t *testing.T) {
 	sa := app.createServiceAccount(admin, "mfa-exempt-bot", []int64{owner}, nil)
 	cr := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "MFA豁免验证", "userId": sa.ID, "scopes": []string{"release:create", "release:read"},
+		"pipelineId": pid, // 网关侧绑定,外部请求不指定流程
 	})
 	var issued struct {
 		Token string `json:"token"`
 	}
 	_ = json.Unmarshal(cr.Data, &issued)
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", issued.Token, map[string]any{
-		"title": "机器提交", "connectionId": prod, "pipelineId": pid, "sql": "SELECT 1;", "reason": "MFA豁免回归",
+		"title": "机器提交", "connectionId": prod, "sql": "SELECT 1;", "reason": "MFA豁免回归",
 	})
 	eq(t, r.Code, 0, "service account raises a PROD release under the mandate")
 }

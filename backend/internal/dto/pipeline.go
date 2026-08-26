@@ -74,6 +74,7 @@ type ReleaseReq struct {
 	ConnectionID   int64  `json:"connectionId" binding:"required"`
 	Database       string `json:"database"`
 	SQL            string `json:"sql"`
+	ChangeType     string `json:"changeType"` // dml|ddl;空 = 由内容推断
 	ScriptUploadID int64  `json:"scriptUploadId"`
 	Reason         string `json:"reason"`
 	MfaCode        string `json:"mfaCode"`

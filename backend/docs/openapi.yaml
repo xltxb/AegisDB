@@ -254,10 +254,11 @@ components:
         name: { type: string }
         type: { type: string }
         status: { type: string, enum: [pending, running, waiting, success, failed, skipped] }
-        log: { type: string, description: 列表接口里为空,详情接口才带 }
+        log: { type: string, description: '列表接口里为空,详情接口才带。执行阶段的日志含逐条语句的执行摘要;返回结果集的语句(如自查 SELECT)会附对齐文本表预览(上限 20 行、单元格 60 字符,省略必有说明),口令等敏感值出口统一打码' }
         findings: { type: string, description: 审查阶段的 ReviewResult(JSON 字符串) }
         approvalId: { type: integer, format: int64 }
         approvalNo: { type: string }
+        confirmedBy: { type: string, description: 'execute 执行闸的放行人;空 = 尚未确认(阶段到达即停 waiting)。可点:创建者本人或审批角色' }
         rows: { type: integer }
         startedAt: { type: string, format: date-time, nullable: true }
         finishedAt: { type: string, format: date-time, nullable: true }
@@ -275,6 +276,7 @@ components:
         env: { type: string, description: 快照:在哪个环境跑的 }
         tierCode: { type: string, description: 快照:按哪个分层判的 }
         engine: { type: string }
+        changeType: { type: string, enum: [dml, ddl, ''], description: '变更类型:dml=数据订正,ddl=结构变更;历史单为空。提交时校验:声明与内容不符、或两类语句同单,均拒收' }
         sql: { type: string, description: 口令已打码;列表接口里截断 }
         reason: { type: string }
         creator: { type: string }
@@ -297,9 +299,30 @@ components:
         connectionId: { type: integer, format: int64 }
         database: { type: string }
         sql: { type: string }
+        changeType: { type: string, enum: [dml, ddl], description: '空 = 按语句推断。分类口径:SELECT 计入 DML,GRANT/REVOKE 计入 DDL,事务/会话控制(BEGIN/COMMIT/SET/USE)中性不参与判定' }
         scriptUploadId: { type: integer, format: int64, description: 与 sql 二选一;按摘要校验后执行 }
         reason: { type: string }
         mfaCode: { type: string }
+
+    ServiceAccountReq:
+      type: object
+      required: [name, roleIds]
+      properties:
+        name: { type: string, example: 升级单平台 }
+        roleIds: { type: array, items: { type: integer, format: int64 }, description: 多角色取并集,决定它的发布能到哪些分层 }
+        tags: { type: array, items: { type: string }, description: 标签范围;空 = 按角色派生范围 }
+        dept: { type: string, description: 列表展示用,默认「服务账号」 }
+    ServiceAccountView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        email: { type: string, example: svc-upgrade-portal-1a2b3c4d@service.vela, description: 自动生成的唯一标识,不是邮箱 }
+        status: { type: string }
+        dept: { type: string }
+        roles: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+        clients: { type: integer, description: 已绑定的 API 凭据数 }
 
     APIClient:
       type: object
@@ -312,25 +335,33 @@ components:
         userName: { type: string, description: 绑定的服务账号;能力矩阵与审计归属都按它算 }
         allowIps: { type: string, description: 逗号分隔 IP/CIDR;空 = 不限来源 }
         scopes: { type: string, example: 'release:create,release:read,review:check' }
+        pipelineId: { type: integer, format: int64, description: 该凭据建单固定走的发布流程;0 = 未绑定,走目标分层默认流程 }
         enabled: { type: boolean }
         lastUsedAt: { type: string, format: date-time, nullable: true }
         createdAt: { type: string, format: date-time }
     APIClientReq:
       type: object
+      description: |
+        创建时 name/userId 必填。**更新是局部语义**:只有请求里出现的字段会变,缺席
+        字段一律保持原值 —— 启停开关只发 {enabled},不会动 IP 白名单;allowIps 传空串
+        才是显式清空。
       required: [name, userId]
       properties:
         name: { type: string }
-        userId: { type: integer, format: int64, description: 必填且不给默认值 —— 不要绑管理员 }
-        allowIps: { type: string }
-        scopes: { type: array, items: { type: string, enum: ['release:create', 'release:read', 'review:check'] } }
-        enabled: { type: boolean }
+        userId: { type: integer, format: int64, description: 绑定的服务账号(见 /service-accounts);必填且不给默认值 —— 不要绑管理员或任何人类账号 }
+        allowIps: { type: string, nullable: true, description: 逗号分隔 IP/CIDR;更新时缺席=不变,空串=清空(不限来源) }
+        scopes: { type: array, items: { type: string, enum: ['release:create', 'release:read', 'review:check'] }, description: 更新时缺席=不变 }
+        pipelineId: { type: integer, format: int64, nullable: true, description: 绑定建单走的发布流程;更新时缺席=不变,0=解绑(回分层默认)。绑定的流程须存在且启用 }
+        enabled: { type: boolean, nullable: true, description: 更新时缺席=不变 }
 
     OpenReleaseReq:
       type: object
       description: |
-        外部系统提交的升级单。实例与流程可用**名字**寻址(`instance` / `pipeline`),
-        也可用 id;两者都给时 id 优先。正文三选一:`sql`、`script`(或 `scriptBase64`)、
-        multipart 的 `file` 字段。
+        外部系统提交的升级单。实例用**名字**寻址(`instance`)或 connectionId。
+        **发布流程不可指定**:由网关侧配置 —— 管理员在凭据上绑定一条流水线,或回落
+        到目标分层的默认流程;请求里出现 pipeline/pipelineId 会被整单拒绝(拒绝而非
+        忽略:静默忽略会让调用方以为自己指定成功了)。正文三选一:`sql`、`script`
+        (或 `scriptBase64`)、multipart 的 `file` 字段。
       properties:
         title: { type: string }
         externalRef:
@@ -341,8 +372,9 @@ components:
         instance: { type: string, example: order-cluster }
         connectionId: { type: integer, format: int64 }
         database: { type: string }
-        pipeline: { type: string, example: 标准发布流程 }
-        pipelineId: { type: integer, format: int64 }
+        pipeline: { type: string, deprecated: true, description: '**不可再指定**:发布流程由网关侧配置(凭据绑定 > 分层默认),请求携带此字段会被整单拒绝' }
+        pipelineId: { type: integer, format: int64, deprecated: true, description: 同 pipeline —— 携带即拒 }
+        changeType: { type: string, enum: [dml, ddl], description: '建议总是显式声明;空 = 按语句推断。声明与内容不符、或 DML/DDL 同单,提交即拒(错误点名第几条/什么动词)' }
         sql: { type: string }
         script: { type: string, description: 脚本全文;落盘并记摘要,执行阶段重读校验 }
         scriptBase64: { type: string, description: 脚本的 base64,避免 JSON 转义出错 }
@@ -367,6 +399,7 @@ components:
         relNo: { type: string, example: REL-42 }
         title: { type: string }
         status: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+        changeType: { type: string, enum: [dml, ddl], description: 声明的或推断出的变更类型 }
         risk: { type: string }
         instance: { type: string }
         database: { type: string }
@@ -972,6 +1005,7 @@ paths:
       description: |
         提交时按当前角色与实例**复判一次**:命中拒绝直接 40300;需审批的变更必须选含
         审批阶段的流程,否则拒收(不建单)。执行阶段会再判一次 —— 等待期间规则可能变。
+        可带 changeType(dml|ddl,空=按语句推断):声明与内容不符、或 DML/DDL 语句同单,提交即拒。
       requestBody:
         content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseReq' } } }
       responses:
@@ -994,7 +1028,7 @@ paths:
   /releases/{id}/stages/{stageId}/continue:
     post:
       tags: [pipelines]
-      summary: '[pipeline] 人工确认阶段继续(发起人不能确认自己的发布)'
+      summary: '[pipeline] 人工闸放行:manual 确认点 / execute 执行确认(必须点击后才落库)'
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: stageId, in: path, required: true, schema: { type: integer } }
@@ -1090,11 +1124,22 @@ paths:
     get:
       tags: [settings]
       summary: '[settings] 服务账号列表(机器主体:角色/标签/已绑定凭据数)'
-      responses: { '200': { : '#/components/responses/Ok' } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ServiceAccountView' }
     post:
       tags: [settings]
       summary: '[settings · admin] 创建服务账号(kind=service)'
       description: 对接升级单/CI/CD 系统的机器主体。像人一样持有角色与标签,能力矩阵、标签范围、审计链一视同仁;区别只有两处且都朝收紧方向 —— 控制台登录一律拒绝(口令不存在也设不上),security.mfaMandatory 不约束它(机器无法注册 TOTP,第二因子是 API 凭据的 bcrypt secret + 每凭据 IP 白名单)。身份标识自动生成为 svc-<slug>-<hash>@service.vela,仅作唯一标识,不是邮箱。停用走常规 PATCH /users/{id}(停用即刻切断其所有凭据,已有回归覆盖)。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceAccountReq' }
       responses: { '200': { description: 'OK / 40001 名称为空、重名、角色缺失' } }
   /api-clients:
     get:
@@ -1144,6 +1189,8 @@ paths:
       description: |
         JSON 或 multipart/form-data 都接受;后者用 `file` 字段直传 .sql(上限 15MB)。
         与控制台走**同一条** submitRelease:同样的流程模板、规则库、审批链、执行前复判、审计链。
+        可带 changeType(dml|ddl,空=推断):两类语句不得同单,声明与内容不符即拒;响应回带 changeType。
+        **执行需网关侧人工确认**:单据到达执行阶段会停在 waiting,由网关操作员在控制台点击「确认执行」后才落库 —— 轮询时看到 execute 阶段 waiting 属正常流转,不是卡单。
         审计行记 `actor=服务账号 / operator=API:<凭据名>`。
       requestBody:
         content:
@@ -1157,7 +1204,7 @@ paths:
                 externalRef: { type: string }
                 instance: { type: string }
                 database: { type: string }
-                pipeline: { type: string }
+                changeType: { type: string, enum: [dml, ddl] }
                 reason: { type: string }
                 sql: { type: string }
                 file: { type: string, format: binary }
@@ -1247,7 +1294,7 @@ paths:
   /open/pipelines:
     get:
       tags: [open-api]
-      summary: '[scope release:read] 可选用的发布流程'
+      summary: '[scope release:read] 发布流程一览(只读了解;建单不可指定流程)'
       security:
         - openApiKey: []
       responses:

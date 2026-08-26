@@ -261,6 +261,12 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 	if len(stmts) == 0 {
 		return nil, fmt.Errorf("发布内容中没有可执行的语句")
 	}
+	// 变更类型:声明必须与内容一致,DML/DDL 不得同单;未声明则推断。内容一经
+	// 提交不可变(内联在行里,脚本按 SHA-256 校验),所以只需在这里判一次。
+	changeType, err := releaseChangeType(req.ChangeType, stmts)
+	if err != nil {
+		return nil, err
+	}
 	// The release capability is judged BEFORE the statement is: "may this role
 	// raise a release on this tier" is a separate question from "may it run this
 	// SQL", and an operator who has denied production releases to a role means it
@@ -306,7 +312,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		RelNo: s.nextRelNo(), Title: clip(strings.TrimSpace(req.Title), 100),
 		PipelineID: pipeline.ID, PipelineName: pipeline.Name,
 		ConnectionID: conn.ID, Instance: conn.Name, Database: conn.Database,
-		Env: conn.Env, TierCode: tier, Engine: conn.Engine,
+		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
 		Reason: clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
@@ -540,7 +546,7 @@ func (s *Services) runStage(rel *model.Release, conn *model.Connection, st *mode
 	case model.StageBackup:
 		return s.stageBackup(rel, conn, cfg)
 	case model.StageExecute:
-		return s.stageExecute(rel, conn)
+		return s.stageExecute(rel, conn, st)
 	case model.StageVerify:
 		return s.stageVerify(rel, conn, cfg)
 	case model.StageManual:
@@ -699,8 +705,14 @@ func (s *Services) stageBackup(rel *model.Release, conn *model.Connection, cfg s
 		log: fmt.Sprintf("· 备份完成 · %d 条语句\n%s", len(stmts), b.String())}
 }
 
-// stageExecute applies the change — after judging it again.
-func (s *Services) stageExecute(rel *model.Release, conn *model.Connection) stageOutcome {
+// stageExecute applies the change — after a human clicks and after judging it
+// again. The gate is unconditional: 审批回答"可不可以做",这里回答"现在做",
+// 变更窗口和上下游就绪只有到点的人知道,自动落库等于把时机交给调度器。
+func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *model.ReleaseStage) stageOutcome {
+	if st.ConfirmedBy == "" {
+		return stageOutcome{status: model.RunWaiting,
+			log: "· 等待人工确认执行(创建者或审批角色点击「确认执行」后才会落库)"}
+	}
 	body, err := s.releaseBody(rel)
 	if err != nil {
 		return failStage("· 无法读取发布内容: %v", err)
@@ -745,12 +757,96 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection) stag
 		}
 		total += res.Rows
 		fmt.Fprintf(&b, "· [%d/%d] %s (%dms)\n", i+1, len(stmts), clip(res.Output, 200), res.Ms)
+		// A statement that returned a result SET gets it echoed into the log:
+		// releases carry SELECTs to verify their own work, and the operator
+		// reading the run wants to see what came back, not re-run the query.
+		b.WriteString(resultPreview(res))
 		// Every statement is audited individually: the chain must show what ran,
 		// not that "a release ran".
 		s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultExecuted, rel.RelNo, "exec")
 	}
 	return stageOutcome{status: model.RunSuccess, rows: total,
 		log: fmt.Sprintf("· 执行完成 · %d 条语句 · 影响 %d 行\n%s", len(stmts), total, b.String())}
+}
+
+// execLogPreviewRows bounds how many result rows an execute log echoes. The
+// log is an execution record, not a data export — someone who needs the full
+// set has the 数据导出 channel, which encrypts and audits it as an export.
+const execLogPreviewRows = 20
+
+// execLogCellWidth clips one cell: a TEXT column holding a document must not
+// turn the log into that document.
+const execLogCellWidth = 60
+
+// resultPreview renders a statement's result set as an indented text table for
+// the stage log. Empty for DML (no columns) — "N 行受影响" already says
+// everything a write returns.
+func resultPreview(res gateway.ExecResult) string {
+	if len(res.Columns) == 0 || len(res.Data) == 0 {
+		return ""
+	}
+	rows := res.Data
+	elided := 0
+	if len(rows) > execLogPreviewRows {
+		elided = len(rows) - execLogPreviewRows
+		rows = rows[:execLogPreviewRows]
+	}
+	cell := func(s string) string {
+		s = strings.ReplaceAll(s, "\n", "␤")
+		if len(s) > execLogCellWidth {
+			return s[:execLogCellWidth-1] + "…"
+		}
+		return s
+	}
+	// Column widths from header + shown rows (byte width — good enough for a
+	// log; CJK cells align imperfectly and that is fine).
+	w := make([]int, len(res.Columns))
+	for j, c := range res.Columns {
+		w[j] = len(cell(c))
+	}
+	for _, r := range rows {
+		for j, v := range r {
+			if j < len(w) && len(cell(v)) > w[j] {
+				w[j] = len(cell(v))
+			}
+		}
+	}
+	var b strings.Builder
+	line := func(cells []string) {
+		b.WriteString("    ")
+		for j := 0; j < len(res.Columns); j++ {
+			v := ""
+			if j < len(cells) {
+				v = cell(cells[j])
+			}
+			fmt.Fprintf(&b, "%-*s", w[j], v)
+			if j < len(res.Columns)-1 {
+				b.WriteString(" | ")
+			}
+		}
+		b.WriteString("\n")
+	}
+	line(res.Columns)
+	b.WriteString("    ")
+	for j := range res.Columns {
+		b.WriteString(strings.Repeat("-", w[j]))
+		if j < len(res.Columns)-1 {
+			b.WriteString("-+-")
+		}
+	}
+	b.WriteString("\n")
+	for _, r := range rows {
+		line(r)
+	}
+	// Elision is SAID, never silent: a log that looks complete but isn't is
+	// worse than either a complete one or an honest preview.
+	switch {
+	case res.Truncated:
+		fmt.Fprintf(&b, "    … 结果集超出返回上限已被截断,日志预览前 %d 行\n", len(rows))
+	case elided > 0:
+		fmt.Fprintf(&b, "    … 已省略 %d 行(日志仅预览前 %d 行,需完整数据请走数据导出)\n", elided, execLogPreviewRows)
+	}
+	return b.String()
 }
 
 // releaseApproved reports whether this release holds an APPROVED ticket. It
@@ -978,6 +1074,48 @@ func (s *Services) ContinueManualStage(u *model.User, releaseID, stageID int64) 
 	conn, _ := s.Repo.GetConnection(rel.ConnectionID)
 	s.recordAuditBy(creator, u.Name, conn,
 		fmt.Sprintf("RELEASE-CONTINUE %s :: 人工确认「%s」放行", rel.RelNo, st.Name),
+		orDefault(rel.Risk, model.RiskMid), model.ResultPending, rel.RelNo, "approve")
+	s.continueRelease(releaseID)
+	return nil
+}
+
+// ConfirmExecuteStage is the human click that lets an execute stage reach the
+// database. Authorised for the CREATOR (approval already passed someone else's
+// hands; the timing belongs to whoever raised it) and for approver roles.
+func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) error {
+	rel, err := s.Repo.GetRelease(releaseID)
+	if err != nil {
+		return ErrNotFound
+	}
+	st, err := s.Repo.GetReleaseStage(stageID)
+	if err != nil || st.ReleaseID != releaseID {
+		return ErrNotFound
+	}
+	if st.Type != model.StageExecute || st.Status != model.RunWaiting {
+		return fmt.Errorf("该阶段当前不在等待执行确认")
+	}
+	if u.ID != rel.CreatorID && !s.canApproveReleases(u) {
+		return ErrForbidden
+	}
+	// waiting → pending(不是 success:执行还没发生),driveRelease 会重新拿起它,
+	// 这次 ConfirmedBy 非空,闸放行。claim 保证两个人同时点只放行一次。
+	claimed, err := s.Repo.ClaimReleaseStage(stageID, model.RunWaiting, model.RunPending)
+	if err != nil || !claimed {
+		return ErrAlreadyDecided
+	}
+	_ = s.Repo.UpdateReleaseStage(stageID, map[string]any{
+		"confirmed_by": u.Name,
+		"log":          "· 已由 " + u.Name + " 确认执行",
+	})
+	// 决策入链:actor = 变更归属人,operator = 点击的人,pending = 放行非执行
+	// (真正的执行由 execute 阶段逐条记账)。
+	creator, _ := s.Repo.GetUserByID(rel.CreatorID)
+	if creator == nil {
+		creator = &model.User{ID: rel.CreatorID, Name: rel.Creator}
+	}
+	conn, _ := s.Repo.GetConnection(rel.ConnectionID)
+	s.recordAuditBy(creator, u.Name, conn,
+		fmt.Sprintf("RELEASE-EXECUTE-CONFIRM %s :: 确认执行「%s」", rel.RelNo, rel.Title),
 		orDefault(rel.Risk, model.RiskMid), model.ResultPending, rel.RelNo, "approve")
 	s.continueRelease(releaseID)
 	return nil

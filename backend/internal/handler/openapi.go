@@ -45,6 +45,9 @@ func (h *Handler) OpenCreateRelease(c *gin.Context) {
 			Instance: c.PostForm("instance"), Database: c.PostForm("database"),
 			Pipeline: c.PostForm("pipeline"), Reason: c.PostForm("reason"),
 			SQL: c.PostForm("sql"), MfaCode: c.PostForm("mfaCode"),
+			// 每个 JSON 字段在这里都要有对应读取:漏一个,multipart 调用方的声明
+			// 就被静默忽略 —— changeType 曾经就是这样漏掉的。
+			ChangeType: c.PostForm("changeType"),
 		}
 		if script, filename, ok := readOpenScriptFile(c); !ok {
 			return // readOpenScriptFile already wrote the refusal

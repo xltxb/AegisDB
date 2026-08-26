@@ -12,6 +12,8 @@ type APIClientReq struct {
 	UserID   int64    `json:"userId"`   // 绑定的服务账号
 	AllowIPs *string  `json:"allowIps"` // 逗号分隔 IP/CIDR;空 = 不限来源
 	Scopes   []string `json:"scopes"`   // release:create / release:read / review:check
+	// PipelineID 绑定该凭据建单走的发布流程;nil = 不变,0 = 解绑(走分层默认)。
+	PipelineID *int64 `json:"pipelineId"`
 	Enabled  *bool    `json:"enabled"`
 }
 
@@ -66,6 +68,10 @@ type OpenReleaseReq struct {
 	Database     string `json:"database"`
 	PipelineID   int64  `json:"pipelineId"`
 	Pipeline     string `json:"pipeline"`
+	// ChangeType declares what kind of change this is: dml or ddl. Empty lets
+	// the gateway infer it from the statements; either way the two kinds may
+	// never share one ticket.
+	ChangeType string `json:"changeType"`
 	SQL          string `json:"sql"`
 	Script       string `json:"script"`
 	ScriptBase64 string `json:"scriptBase64"`
@@ -109,6 +115,7 @@ type OpenReleaseResp struct {
 	RelNo       string      `json:"relNo"`
 	Title       string      `json:"title"`
 	Status      string      `json:"status"` // pending|running|waiting|success|failed|aborted
+	ChangeType  string      `json:"changeType"` // dml|ddl
 	Risk        string      `json:"risk"`
 	Instance    string      `json:"instance"`
 	Database    string      `json:"database,omitempty"`

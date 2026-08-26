@@ -42,7 +42,8 @@ func TestManualGateConfirmationIsAudited(t *testing.T) {
 		"/api/v1/releases/"+itoa(rel.ID)+"/stages/"+itoa(gate.ID)+"/continue", confirmer, nil)
 	eq(t, dec.Code, 0, "confirm the gate")
 
-	done := app.waitRelease(admin, rel.ID, "success", "failed")
+	// 0024 执行闸:到点的人点击确认后才落库
+	done := app.confirmExecutionAndWait(admin, rel.ID)
 	eq(t, done.Status, "success", "release resumes after the confirmation")
 
 	// The decision is on the chain, in the same shape as an approval decision:

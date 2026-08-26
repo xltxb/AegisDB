@@ -24,6 +24,9 @@ export default defineConfig({
     },
   },
   server: {
+    // 监听所有网卡(0.0.0.0),让同网段的同事/手机能用本机 IP 访问联调。
+    // API 走下面的 vite 代理转到本机 8080,所以后端继续只听 localhost 也通。
+    host: true,
     port: 5173,
     proxy: {
       // Proxy API + WS to the Go backend during dev (ws:true forwards the

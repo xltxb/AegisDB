@@ -496,6 +496,7 @@ export interface Release {
   env: string
   tierCode: string
   engine: string
+  changeType?: 'dml' | 'ddl' | '' // 变更类型;历史单为空
   sql: string
   scriptUploadId?: number
   reason: string
@@ -531,6 +532,8 @@ export interface APIClient {
   userName: string
   allowIps: string
   scopes: string
+  /** 该凭据建单固定走的发布流程;0 = 未绑定,走目标分层的默认流程。外部请求不可指定流程。 */
+  pipelineId: number
   enabled: boolean
   lastUsedAt: string | null
   createdAt: string

@@ -76,6 +76,12 @@ const (
 	LevelDeny    = "deny"
 )
 
+// Release change types — see Release.ChangeType.
+const (
+	ChangeDML = "dml"
+	ChangeDDL = "ddl"
+)
+
 // CapRelease is the capability dimension for RAISING a release (发起发布单),
 // judged per control tier like every other dimension.
 //
@@ -635,6 +641,9 @@ type APIClient struct {
 	// review:check. A read-only integration (a dashboard polling ticket status)
 	// should not hold a credential that can raise a production change.
 	Scopes     string     `gorm:"size:255;not null" json:"scopes"`
+	// PipelineID 绑定这把凭据建单要走的发布流程(网关侧策略,外部请求不可指定;
+	// 见 migrations/0023)。0 = 未绑定,走目标分层的默认流程。
+	PipelineID int64      `gorm:"not null;default:0" json:"pipelineId"`
 	Enabled    bool       `gorm:"not null;default:true" json:"enabled"`
 	LastUsedAt *time.Time `json:"lastUsedAt"`
 	CreatedBy  int64      `json:"createdBy"`
@@ -751,6 +760,10 @@ type Release struct {
 	Env          string `gorm:"size:32" json:"env"`
 	TierCode     string `gorm:"size:16" json:"tierCode"`
 	Engine       string `gorm:"size:32" json:"engine"` // snapshot: which dialect it was reviewed as
+	// ChangeType 是变更类型:dml(数据订正)或 ddl(结构变更)。提交时声明或由
+	// 内容推断,两类语句不得同单 —— 审批人按类型评估风险(DDL 锁表、DML 影响
+	// 行数),混装让两种评估都失效。见 service.releaseChangeType 的分类口径。
+	ChangeType   string `gorm:"size:8" json:"changeType"`
 	SQL          string `gorm:"type:mediumtext" json:"sql"`
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
@@ -809,6 +822,9 @@ type ReleaseStage struct {
 	// ApprovalID/ApNo link an approve stage to the ticket it is waiting on. The
 	// sweeper reads them to resume the run once the ticket is decided, which is
 	// why the link lives on the stage and not only in the log.
+	// ConfirmedBy 是 execute 阶段人工闸的放行人(空 = 未确认,阶段到达即停)。
+	// 审批回答"可不可以做",这里回答"现在做" —— 见 migrations/0024。
+	ConfirmedBy string `gorm:"size:64;not null;default:''" json:"confirmedBy"`
 	ApprovalID int64      `gorm:"index:idx_rstage_approval" json:"approvalId"`
 	ApprovalNo string     `gorm:"size:32" json:"approvalNo"`
 	Rows       int        `json:"rows"`

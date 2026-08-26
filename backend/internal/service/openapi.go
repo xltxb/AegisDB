@@ -172,10 +172,18 @@ func (s *Services) CreateAPIClient(actor *model.User, req dto.APIClientReq) (*mo
 	if req.AllowIPs != nil {
 		allowIPs = strings.TrimSpace(*req.AllowIPs)
 	}
+	pipelineID := int64(0)
+	if req.PipelineID != nil && *req.PipelineID > 0 {
+		if err := s.validateClientPipeline(*req.PipelineID); err != nil {
+			return nil, "", err
+		}
+		pipelineID = *req.PipelineID
+	}
 	cl := &model.APIClient{
 		Name: clip(name, 60), Key: key, SecretHash: hash,
 		UserID: svcUser.ID, UserName: svcUser.Name,
 		AllowIPs: allowIPs, Scopes: strings.Join(scopes, ","),
+		PipelineID: pipelineID,
 		Enabled: true, CreatedBy: actor.ID,
 	}
 	if err := s.Repo.CreateAPIClient(cl); err != nil {
@@ -215,6 +223,14 @@ func (s *Services) UpdateAPIClient(id int64, req dto.APIClientReq) (*model.APICl
 	}
 	if req.AllowIPs != nil {
 		fields["allow_ips"] = strings.TrimSpace(*req.AllowIPs)
+	}
+	if req.PipelineID != nil {
+		if *req.PipelineID > 0 {
+			if err := s.validateClientPipeline(*req.PipelineID); err != nil {
+				return nil, err
+			}
+		}
+		fields["pipeline_id"] = *req.PipelineID // 0 = 解绑,回到分层默认流程
 	}
 	if n := strings.TrimSpace(req.Name); n != "" {
 		fields["name"] = clip(n, 60)
@@ -311,15 +327,18 @@ func (s *Services) CreateReleaseFromAPI(u *model.User, cl *model.APIClient, req 
 	if err != nil {
 		return nil, err
 	}
-	pipelineID, err := s.resolvePipelineID(req.PipelineID, req.Pipeline)
-	if err != nil {
-		return nil, err
+	// 发布流程是网关侧策略:凭据绑定的流水线 > 目标分层的默认流程。请求里出现
+	// pipeline 字段一律拒绝而非忽略 —— 静默忽略会让调用方以为自己指定成功了。
+	if req.PipelineID > 0 || strings.TrimSpace(req.Pipeline) != "" {
+		return nil, fmt.Errorf("发布流程由网关侧配置(凭据绑定或分层默认),请移除 pipeline/pipelineId 字段;如需调整流程请联系管理员")
 	}
+	pipelineID := cl.PipelineID
 
 	inner := dto.ReleaseReq{
 		Title: strings.TrimSpace(req.Title), PipelineID: pipelineID,
 		ConnectionID: conn.ID, Database: strings.TrimSpace(req.Database),
 		Reason: strings.TrimSpace(req.Reason), MfaCode: req.MfaCode,
+		ChangeType: req.ChangeType,
 	}
 	if inner.Title == "" {
 		inner.Title = "外部升级单 " + strings.TrimSpace(req.ExternalRef)
@@ -421,26 +440,17 @@ func (s *Services) resolveConnection(id int64, name string) (*model.Connection, 
 	return &hits[0], nil
 }
 
-// resolvePipelineID accepts an id or a flow NAME; zero means "the default flow
-// for the target's tier", which submitRelease works out.
-func (s *Services) resolvePipelineID(id int64, name string) (int64, error) {
-	if id > 0 {
-		return id, nil
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return 0, nil
-	}
-	ps, err := s.Repo.ListPipelines()
+// validateClientPipeline checks a to-be-bound flow exists and is enabled — a
+// credential bound to a dead template would refuse every ticket it raises.
+func (s *Services) validateClientPipeline(id int64) error {
+	p, err := s.Repo.GetPipeline(id)
 	if err != nil {
-		return 0, err
+		return fmt.Errorf("发布流程不存在: %d", id)
 	}
-	for _, p := range ps {
-		if strings.EqualFold(p.Name, name) {
-			return p.ID, nil
-		}
+	if !p.Enabled {
+		return fmt.Errorf("发布流程「%s」已停用,不能绑定", p.Name)
 	}
-	return 0, fmt.Errorf("发布流程不存在: %s", name)
+	return nil
 }
 
 // ---------------------------------------------------------------- 查询
@@ -486,6 +496,7 @@ func (s *Services) OpenReleaseResp(rel *model.Release, withLog bool) dto.OpenRel
 	v := s.releaseView(*rel) // redacts credentials on the way out
 	out := dto.OpenReleaseResp{
 		RelNo: v.RelNo, Title: v.Title, Status: v.Status, Risk: v.Risk,
+		ChangeType: v.ChangeType,
 		Instance: v.Instance, Database: v.Database, Env: v.Env, Pipeline: v.PipelineName,
 		ExternalRef: v.ExternalRef, Error: v.Error,
 		CreatedAt: v.CreatedAt.Format(time.RFC3339),

@@ -628,7 +628,9 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .mhint { font: 500 12px var(--font-body); color: var(--text-muted); margin-bottom: 18px; }
 /* overflow-y:hidden keeps the rounded corners clipping (the old `overflow:hidden`
    did that) while .scx supplies the horizontal scroll. */
-.mtable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow-y: hidden; background: var(--surface-card); }
+/* 这页四个区块全是白底叠白底,--border-subtle 在浅色下几乎不可见 —— 区块边界
+   一律用 --border-default,矩阵格子给出可点击的"形状"而不是漂浮的符号。 */
+.mtable { border: 1px solid var(--border-default); border-radius: 14px; overflow-y: hidden; background: var(--surface-card); box-shadow: var(--shadow-xs); }
 /* min-width:max-content keeps the rows at their natural width so .mtable's
    overflow-x is what scrolls; without it the grid compresses instead. */
 .mgrid { min-width: max-content; }
@@ -639,25 +641,36 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
    errors when grid-template-columns lands on a non-grid, which is why that looked
    fine in review. */
 .mth, .mtr { display: grid; gap: 10px; }
-.mth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; }
+.mth { padding: 12px 18px; border-bottom: 1px solid var(--border-default); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-muted); text-transform: uppercase; }
 .ctr { text-align: center; }
 .mtr { padding: 9px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
+.mtr:nth-child(even) { background: color-mix(in oklch, var(--surface-sunken) 55%, var(--surface-card)); }
+.mtr:last-child { border-bottom: none; }
+.mtr:hover { background: var(--accent-subtle); }
+/* 分层列之间的竖向分隔:没有它,五列 ✓/旗 在一大片留白里对不上列头 */
+.cellwrap, .mth .ctr { border-left: 1px solid var(--border-subtle); }
 .cap { font: 500 13px var(--font-body); color: var(--text-body); }
 .cellwrap { display: flex; justify-content: center; }
-.cell { width: 34px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; cursor: pointer; }
+.cell { width: 40px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px; cursor: pointer;
+  border: 1px solid var(--border-subtle); background: var(--surface-card); transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
+.cell:hover { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
 .cell:hover { background: var(--surface-sunken); }
-.eyebrow2 { margin-top: 22px; font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 12px; }
+.eyebrow2 { margin-top: 28px; font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; }
 .menusub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: -6px; margin-bottom: 12px; }
-.menus { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); display: grid; grid-template-columns: 1fr 1fr; }
+.menus { border: 1px solid var(--border-default); border-radius: 14px; overflow: hidden; background: var(--surface-card); box-shadow: var(--shadow-xs); display: grid; grid-template-columns: 1fr 1fr; }
 .menurow { display: flex; align-items: center; gap: 11px; padding: 13px 18px; border-bottom: 1px solid var(--border-subtle); }
+.menurow:nth-child(odd) { border-right: 1px solid var(--border-subtle); }
+.menurow:hover { background: color-mix(in oklch, var(--surface-sunken) 60%, var(--surface-card)); }
+.menurow:last-child, .menurow:nth-last-child(2):nth-child(odd) { border-bottom: none; }
 .menurow .ml { flex: 1; font: 600 13px var(--font-body); color: var(--text-body); }
-.rtags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.rtags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: 14px; background: color-mix(in oklch, var(--surface-sunken) 45%, var(--surface-card)); box-shadow: var(--shadow-xs); }
 .rtag { display: inline-flex; height: 26px; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 12px var(--font-mono); }
 .rtagall { display: inline-flex; height: 26px; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--success-subtle); color: var(--success-text); font: 600 12px var(--font-mono); }
 .rtedit { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border: 1px dashed var(--border-default); border-radius: 999px; color: var(--text-muted); font: 600 12px var(--font-body); cursor: pointer; }
 .rtedit:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
-.members { display: flex; gap: 10px; flex-wrap: wrap; }
-.mchip { display: flex; align-items: center; gap: 9px; padding: 7px 8px 7px 7px; border: 1px solid var(--border-subtle); border-radius: 999px; background: var(--surface-card); }
+.members { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: 14px; background: color-mix(in oklch, var(--surface-sunken) 45%, var(--surface-card)); box-shadow: var(--shadow-xs); }
+.mchip { display: flex; align-items: center; gap: 9px; padding: 7px 8px 7px 7px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-card); }
 .mava { width: 28px; height: 28px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 11px var(--font-body); color: var(--text-muted); }
 .mava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; }
 .mchip span { font: 600 12px var(--font-body); color: var(--text-body); }

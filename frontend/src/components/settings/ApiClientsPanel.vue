@@ -15,7 +15,7 @@ import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import type { APIClient, RoleBrief, ServiceAccount, UserView } from '@/types'
+import type { APIClient, Pipeline, RoleBrief, ServiceAccount, UserView } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -31,7 +31,9 @@ const roles = ref<RoleBrief[]>([])
 const saOpen = ref(false)
 const sf = ref({ name: '', roleIds: [] as number[], tags: '' })
 const formOpen = ref(false)
-const nf = ref({ name: '', userId: 0, allowIps: '', scopes: ['release:create', 'release:read', 'review:check'] })
+const nf = ref({ name: '', userId: 0, allowIps: '', scopes: ['release:create', 'release:read', 'review:check'], pipelineId: 0 })
+// 发布流程绑定在凭据上(网关侧策略),外部请求不可指定 —— 0 = 走目标分层的默认流程。
+const pipelines = ref<Pipeline[]>([])
 // The one plaintext copy of a freshly-issued credential. Held in memory only,
 // shown until dismissed, never fetched again — there is nothing to fetch.
 const issued = ref<{ name: string; token: string } | null>(null)
@@ -45,6 +47,18 @@ const principalLabel = (u: UserView) =>
 const principals = computed(() =>
   [...users.value].sort((a, b) => (a.kind === 'service' ? 0 : 1) - (b.kind === 'service' ? 0 : 1)))
 const userLabels = computed(() => principals.value.map(principalLabel))
+const pipeLabel = computed({
+  get: () => {
+    const p = pipelines.value.find(x => x.id === nf.value.pipelineId)
+    return p ? p.name : t('acPipeDefault')
+  },
+  set: (l: string) => {
+    const p = pipelines.value.find(x => x.name === l)
+    nf.value.pipelineId = p ? p.id : 0
+  },
+})
+const pipeOptions = computed(() => [t('acPipeDefault'), ...pipelines.value.map(p => p.name)])
+const pipeNameOf = (id: number) => pipelines.value.find(p => p.id === id)?.name || ''
 const userLabel = computed({
   get: () => {
     const u = users.value.find(x => x.id === nf.value.userId)
@@ -61,6 +75,7 @@ async function load() {
   try { users.value = await api.users() } catch { /* the picker degrades to empty */ }
   try { svcAccounts.value = await api.serviceAccounts() } catch { /* section degrades to empty */ }
   try { roles.value = await api.roles() } catch { /* role picker degrades */ }
+  try { pipelines.value = (await api.pipelines()).filter(p => p.enabled) } catch { /* picker degrades */ }
 }
 
 function toggleRole(id: number) {
@@ -89,7 +104,7 @@ async function createSA() {
 onMounted(load)
 
 function openForm() {
-  nf.value = { name: '', userId: 0, allowIps: '', scopes: [...SCOPES] }
+  nf.value = { name: '', userId: 0, allowIps: '', scopes: [...SCOPES], pipelineId: 0 }
   issued.value = null
   formOpen.value = true
 }
@@ -105,7 +120,7 @@ async function create() {
   try {
     const env = await api.createApiClient({
       name: nf.value.name.trim(), userId: nf.value.userId,
-      allowIps: nf.value.allowIps.trim(), scopes: nf.value.scopes, enabled: true,
+      allowIps: nf.value.allowIps.trim(), scopes: nf.value.scopes, pipelineId: nf.value.pipelineId, enabled: true,
     })
     if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
     issued.value = { name: env.data.client.name, token: env.data.token }
@@ -224,6 +239,8 @@ const sample = computed(() => {
             <span class="sep">·</span>
             <span>{{ c.scopes }}</span>
             <span class="sep">·</span>
+            <span>{{ c.pipelineId ? pipeNameOf(c.pipelineId) : $t('acPipeDefault') }}</span>
+            <span class="sep">·</span>
             <span>{{ c.allowIps ? c.allowIps : $t('acAnyIP') }}</span>
             <span class="sep">·</span>
             <span>{{ $t('acLastUsed') }}: {{ fmt(c.lastUsedAt) }}</span>
@@ -264,6 +281,11 @@ const sample = computed(() => {
                 <Check v-if="nf.scopes.includes(s)" :size="11" />{{ s }}
               </span>
             </div>
+          </div>
+          <div>
+            <div class="fl">{{ $t('acPipeline') }}</div>
+            <VSelect v-model="pipeLabel" :options="pipeOptions" />
+            <div class="hint">{{ $t('acPipelineHint') }}</div>
           </div>
           <div>
             <div class="fl">{{ $t('acAllowIPs') }}</div>
