@@ -432,6 +432,8 @@
   srSub: '规则库判的是「写得对不对」,不是「危不危险」—— 后者归高危命令规则',
   srSub2: '{n} 条规则', srNewRule: '新建规则', srNewRuleSub: '自定义规则按正则匹配语句',
   srStatTotal: '规则总数', srStatOn: '已启用', srStatErr: '拦截级(error)', srStatCustom: '自定义',
+  srAllSpecs: '全部分级', srSpec_critical: '高危', srSpec_mandatory: '强制', srSpec_recommended: '建议', srSpec_none: '平台内置',
+  srSpecLevel: '规范分级', srSpecRef: '规范出处', srSpecRefPh: '如 DWS对象设计和业务开发规范 RULE 13',
   srLibTitle: '规则库', srLibSub: '按方言与分类筛选 · 级别与开关即改即生效',
   srAllDialects: '全部方言', srAllCats: '全部分类', srCustom: '自定义',
   srCat_dml: 'DML', srCat_ddl: 'DDL', srCat_structure: '表结构', srCat_naming: '命名',

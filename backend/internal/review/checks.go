@@ -51,7 +51,6 @@ var registry = map[string]checker{
 	"tidb.forbid.foreign.key":        chkTiDBForeignKey,
 	"tidb.avoid.auto.increment":      chkTiDBAutoIncrement,
 	"dws.require.distribute.by":      chkDWSDistributeBy,
-	"dws.prefer.column.store":        chkDWSOrientation,
 	"oracle.prefer.varchar2":         chkOracleVarchar2,
 	"oracle.number.precision":        chkOracleNumberPrecision,
 	"security.forbid.plain.password": chkPlainPassword,
@@ -59,6 +58,64 @@ var registry = map[string]checker{
 	"security.forbid.grant.public":   chkGrantPublic,
 	"perf.forbid.leading.wildcard":   chkLeadingWildcard,
 	"perf.forbid.func.on.column":     chkFunctionOnColumn,
+
+	// ---- 由公司规范派生(实现见 checks_spec.go)----
+	"mysql.alter.require.algorithm":    chkAlterAlgorithm,
+	"oracle.index.require.online":      chkOracleIndexOnline,
+	"tidb.require.col.not.null":        chkColumnNotNull,
+	"tidb.forbid.timestamp":            chkTiDBTimestamp,
+	"tidb.avoid.partition":             chkTiDBPartition,
+	"tidb.table.prefix":                chkTableNaming,
+	"tidb.table.max.length":            chkIdentifierLength,
+	"dws.require.col.not.null":         chkColumnNotNull,
+	"dws.forbid.select.star":           chkSelectStar,
+	"dws.delete.use.truncate":          chkDeleteWholeTable,
+	"dws.avoid.column.type":            chkForbidColumnType,
+	"dws.require.precision":            chkDWSPrecision,
+	"dws.distribute.key.max":           chkDWSDistributeKeyCount,
+	"dws.distribute.key.type":          chkDWSDistributeKeyType,
+	"dws.replication.confirm":          chkDWSReplication,
+	"dws.partition.max":                chkDWSPartitionCount,
+	"dws.view.forbid.orderby":          chkViewOrderBy,
+	"dws.view.max.nesting":             chkViewNesting,
+	"dws.forbid.not.in.subquery":       chkNotInSubquery,
+	"dws.forbid.scalar.subquery":       chkScalarSubquery,
+	"dws.subquery.forbid.orderby":      chkSubqueryOrderBy,
+	"dws.forbid.volatile.in.subquery":  chkVolatileInSubquery,
+	"dws.forbid.with.recursive":        chkWithRecursive,
+	"dws.require.schema.qualified":     chkSchemaQualified,
+	"dws.max.join.tables":              chkJoinCount,
+	codeSQLTag:                         nil,
+	"dws.forbid.func.on.column":       chkFunctionOnColumn,
+
+	// ---- 新版 DWS 规范 RULE 1..62(实现见 checks_dws.go)----
+	"dws.object.name.charset":            chkDWSNameCharset,
+	"dws.object.name.reserved.prefix":    chkDWSReservedPrefix,
+	"dws.object.name.max.length":         chkDWSNameLength,
+	"dws.temp.table.date.suffix":         chkDWSTempTableSuffix,
+	"dws.forbid.create.database":         chkDWSCreateDatabase,
+	"dws.database.charset.utf8":          chkDWSDatabaseUTF8,
+	"dws.database.dbcompatibility":       chkDWSDbCompatibility,
+	"dws.forbid.tablespace":              chkDWSForbidTablespace,
+	"dws.forbid.trigger":                 chkDWSForbidTrigger,
+	"dws.forbid.udf":                     chkDWSForbidUDF,
+	"dws.forbid.unlogged.table":          chkDWSForbidUnlogged,
+	"dws.require.hstore.opt":             chkDWSRequireHstoreOpt,
+	"dws.distribute.key.subset":          chkDWSDistributeKeySubset,
+	"dws.distribute.key.no.uuid.default": chkDWSUUIDDefaultOnDistKey,
+	"dws.pk.max.columns":                 chkDWSPKColumns,
+	"dws.partition.single.range":         chkDWSPartitionSingleRange,
+	"dws.partition.ttl":                  chkDWSPartitionTTL,
+	"dws.index.btree.only":               chkDWSIndexMethod,
+	"dws.index.max.per.table":            chkIndexCount,
+	"dws.varchar.length":                 chkDWSVarcharLength,
+	"dws.forbid.returning":               chkDWSForbidReturning,
+	"dws.forbid.distinct.on":             chkDWSForbidDistinctOn,
+	"dws.forbid.orderby.in.aggregate":    chkDWSAggregateOrderBy,
+	"dws.forbid.query.dop":               chkDWSQueryDop,
+	"dws.prefer.join.over.exists":        chkDWSPreferJoin,
+	"naming.index.max.length":          chkIndexNameLength,
+	"security.forbid.sensitive.column": chkSensitiveColumn,
 	// ddl.alter.merge is a SCRIPT-level rule (it compares statements to each
 	// other), handled by scriptFindings rather than by a per-statement checker.
 	codeAlterMerge: nil,
@@ -135,16 +192,34 @@ var (
 	alterRenRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\s+([^\s]+)\s+RENAME\b`)
 )
 
+// dropColumnRe catches ALTER TABLE … DROP COLUMN, which the three standards
+// forbid in production alongside DROP TABLE/DATABASE. It is a separate shape
+// from a leading DROP and would otherwise slip past unnoticed.
+var dropColumnRe = regexp.MustCompile(`(?is)\bALTER\s+TABLE\s+([^\s]+)\s+.*?\bDROP\s+(?:COLUMN\s+)?([A-Za-z_` + "`" + `"\[][^\s,;]*)`)
+
 func chkForbidDrop(st *stmt, p params, _ string) []string {
+	// 关键字用大写形式识别,对象名从原始大小写里取 —— 报错里出现 T_USERS 而库里
+	// 叫 t_users,会让人以为是另一张表。
+	rawM := dropRe.FindStringSubmatch(st.masked)
 	m := dropRe.FindStringSubmatch(st.upper)
 	if m == nil {
+		if p.boolean("dropColumn", false) {
+			if dm := dropColumnRe.FindStringSubmatch(st.masked); dm != nil && !isDropConstraint(st.upper) {
+				return []string{"ALTER TABLE " + identName(dm[1]) + " DROP COLUMN " + identName(dm[2]) +
+					" 会丢弃列上的数据且不可回滚"}
+			}
+		}
 		return nil
 	}
 	objects := p.list("objects", []string{"table", "database", "schema", "tablespace"})
 	obj := strings.ToLower(m[1])
 	for _, o := range objects {
 		if o == obj {
-			return []string{fmt.Sprintf("DROP %s %s 属于不可逆变更,需通过备份/回滚点流程执行", strings.ToUpper(obj), identName(m[2]))}
+			name := identName(m[2])
+			if rawM != nil {
+				name = identName(rawM[2])
+			}
+			return []string{fmt.Sprintf("DROP %s %s 属于不可逆变更,需通过备份/回滚点流程执行", strings.ToUpper(obj), name)}
 		}
 	}
 	return nil
@@ -755,21 +830,6 @@ func chkDWSDistributeBy(st *stmt, _ params, _ string) []string {
 	return []string{"表 " + identName(m[1]) + " 未指定 DISTRIBUTE BY,DWS 将按默认策略分布,易造成数据倾斜"}
 }
 
-func chkDWSOrientation(st *stmt, p params, _ string) []string {
-	m := createTableRe.FindStringSubmatch(st.masked)
-	if m == nil {
-		return nil
-	}
-	want := strings.ToLower(p.str("orientation", "column"))
-	om := orientationRe.FindStringSubmatch(st.masked)
-	if om == nil {
-		return []string{"表 " + identName(m[1]) + " 未指定 ORIENTATION,分析型表建议 ORIENTATION=" + want}
-	}
-	if strings.ToLower(om[1]) == want {
-		return nil
-	}
-	return []string{"表 " + identName(m[1]) + " 采用 " + om[1] + " 存储,分析型场景建议 " + want}
-}
 
 // ---------------------------------------------------------------- Oracle
 
@@ -857,13 +917,23 @@ func chkFunctionOnColumn(st *stmt, _ params, _ string) []string {
 
 // ---------------------------------------------------------------- script level
 
-const codeAlterMerge = "ddl.alter.merge"
+const (
+	codeAlterMerge = "ddl.alter.merge"
+	// codeSQLTag 只能在脚本这一级判:分句器会把语句前的注释剥掉,所以到了 stmt
+	// 手里那句标识注释已经不存在了。规则要的是"这段 SQL 开头有没有标明来源",
+	// 原文正好是唯一还留着它的地方。
+	codeSQLTag = "dws.require.sql.tag"
+)
 
 // scriptFindings holds the rules that compare statements to EACH OTHER, which a
 // per-statement checker structurally cannot do.
-func scriptFindings(active []Rule, stmts []*stmt) []Finding {
+func scriptFindings(active []Rule, stmts []*stmt, script string) []Finding {
 	var out []Finding
 	for _, r := range active {
+		if r.Code == codeSQLTag {
+			out = append(out, sqlTagFinding(r, stmts, script)...)
+			continue
+		}
 		if r.Code != codeAlterMerge {
 			continue
 		}

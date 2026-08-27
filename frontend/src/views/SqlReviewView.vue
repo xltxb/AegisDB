@@ -27,6 +27,9 @@ const rules = ref<ReviewRule[]>([])
 const catalog = ref<ReviewCatalog>({ dialects: ['all'], categories: [], levels: ['error', 'warn', 'info'] })
 const dialect = ref('all')
 const category = ref('')
+// 按规范分级筛选 —— 上线前最常问的一句是“这次改动碰了哪几条【高危】”,
+// 而不是“碰了哪几条 dml 规则”。'' = 全部,'none' = 规范未覆盖的平台内置规则。
+const spec = ref('')
 const conns = ref<Connection[]>([])
 
 // ---- library ----
@@ -34,7 +37,8 @@ const shown = computed(() =>
   rules.value.filter((r) => {
     const dialectOk = dialect.value === 'all' || r.dialect === 'all' || r.dialect.split(',').includes(dialect.value)
     const catOk = !category.value || r.category === category.value
-    return dialectOk && catOk
+    const specOk = !spec.value || (spec.value === 'none' ? !r.spec : r.spec === spec.value)
+    return dialectOk && catOk && specOk
   }),
 )
 const stats = computed(() => ({
@@ -42,7 +46,26 @@ const stats = computed(() => ({
   on: rules.value.filter((r) => r.enabled).length,
   err: rules.value.filter((r) => r.enabled && r.level === 'error').length,
   custom: rules.value.filter((r) => r.kind === 'regex').length,
+  spec: rules.value.filter((r) => !!r.spec).length,
 }))
+
+// 分级筛选页签。计数放在标签上 —— 一条规范分级下面有几条规则是可以直接看到的事实,
+// 不该要人先点进去才知道。
+const specTabs = computed(() => {
+  const order = catalog.value.specs || ['critical', 'mandatory', 'recommended']
+  const tabs = order.map((s) => ({ key: s, n: rules.value.filter((r) => r.spec === s).length }))
+  tabs.push({ key: 'none', n: rules.value.filter((r) => !r.spec).length })
+  return tabs.filter((t) => t.n > 0)
+})
+
+function specMeta(s: string) {
+  switch (s) {
+    case 'critical': return { bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
+    case 'mandatory': return { bg: 'var(--warn-subtle)', c: 'var(--warn-text)' }
+    case 'recommended': return { bg: 'var(--accent-subtle)', c: 'var(--accent-text)' }
+    default: return { bg: 'var(--surface-sunken)', c: 'var(--text-faint)' }
+  }
+}
 
 async function load() {
   try {
@@ -81,14 +104,22 @@ async function patch(r: ReviewRule, fields: Partial<ReviewRule>) {
 const editing = ref(0)
 const draftParams = ref('')
 const draftMsg = ref('')
+// 出处可改:规范会改版、章节会挪,运维自己写的规则也该能标出自哪一条。
+const draftSpec = ref<ReviewRule['spec']>('')
+const draftRef = ref('')
 function openParams(r: ReviewRule) {
   if (!isAdmin.value) return
   editing.value = editing.value === r.id ? 0 : r.id
   draftParams.value = r.params || ''
   draftMsg.value = r.message || ''
+  draftSpec.value = r.spec || ''
+  draftRef.value = r.specRef || ''
 }
 async function saveParams(r: ReviewRule) {
-  await patch(r, { params: draftParams.value.trim(), message: draftMsg.value.trim() })
+  await patch(r, {
+    params: draftParams.value.trim(), message: draftMsg.value.trim(),
+    spec: draftSpec.value, specRef: draftRef.value.trim(),
+  })
   editing.value = 0
 }
 
@@ -204,6 +235,14 @@ function dialectsOf(r: ReviewRule) {
             </div>
           </div>
         </div>
+        <!-- 规范分级与规则分类分两行:前者回答“规范怎么定性”,后者回答“查的是哪一类
+             写法”,混在一行会让人以为它们是同一组开关。 -->
+        <div class="specs">
+          <span class="spc" :class="{ on: !spec }" @click="spec = ''">{{ $t('srAllSpecs') }}</span>
+          <span v-for="s in specTabs" :key="s.key" class="spc" :class="{ on: spec === s.key }"
+                :style="spec === s.key ? { background: specMeta(s.key).bg, color: specMeta(s.key).c, borderColor: specMeta(s.key).c } : {}"
+                @click="spec = s.key">{{ $t('srSpec_' + s.key) }}<b>{{ s.n }}</b></span>
+        </div>
         <div class="cats">
           <span class="cat" :class="{ on: !category }" @click="category = ''">{{ $t('srAllCats') }}</span>
           <span v-for="c in catalog.categories" :key="c" class="cat" :class="{ on: category === c }" @click="category = c">
@@ -228,6 +267,14 @@ function dialectsOf(r: ReviewRule) {
               </div>
               <div v-if="r.message" class="rmsg">{{ r.message }}</div>
               <div v-else-if="r.params" class="rparams">{{ r.params }}</div>
+              <!-- 出处:被这条规则拦下来的人要能回去读原文。没有出处的写“平台内置”,
+                   免得有人拿平台的默认值当规范原文去引用。 -->
+              <div class="rsrc">
+                <span class="sbadge" :style="{ background: specMeta(r.spec).bg, color: specMeta(r.spec).c }">
+                  {{ $t('srSpec_' + (r.spec || 'none')) }}
+                </span>
+                <span v-if="r.specRef" class="sref">{{ r.specRef }}</span>
+              </div>
             </div>
             <div class="lvseg">
               <span v-for="lv in ['error', 'warn', 'info']" :key="lv" class="lv" :class="{ on: r.level === lv, ['lv-' + lv]: true }"
@@ -245,6 +292,15 @@ function dialectsOf(r: ReviewRule) {
               <textarea v-model="draftParams" class="pbox" spellcheck="false" />
               <div class="fl">{{ $t('srMessage') }}</div>
               <input v-model="draftMsg" class="in" :placeholder="$t('srMessagePh')" />
+              <div class="fl">{{ $t('srSpecLevel') }}</div>
+              <select v-model="draftSpec" class="in">
+                <option value="">{{ $t('srSpec_none') }}</option>
+                <option v-for="s in (catalog.specs || ['critical', 'mandatory', 'recommended'])" :key="s" :value="s">
+                  {{ $t('srSpec_' + s) }}
+                </option>
+              </select>
+              <div class="fl">{{ $t('srSpecRef') }}</div>
+              <input v-model="draftRef" class="in" :placeholder="$t('srSpecRefPh')" />
               <div class="pacts">
                 <VButton height="30px" @click="editing = 0">{{ $t('btnCancel') }}</VButton>
                 <VButton variant="primary" height="30px" @click="saveParams(r)">{{ $t('save') }}</VButton>
@@ -331,6 +387,14 @@ function dialectsOf(r: ReviewRule) {
 </template>
 
 <style scoped>
+.specs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; padding: 10px 18px 0; }
+.spc { padding: 2px 9px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-card); color: var(--text-muted); font: 600 11px var(--font-body); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.spc:hover { border-color: var(--accent-text); color: var(--accent-text); }
+.spc.on { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
+.spc b { font: 700 10px var(--font-mono); opacity: 0.75; }
+.rsrc { margin-top: 4px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.sbadge { padding: 1px 7px; border-radius: 5px; font: 600 10px var(--font-body); }
+.sref { font: 500 10.5px var(--font-body); color: var(--text-faint); }
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .head :deep(.vbtn), .head .roflag { margin-left: auto; }

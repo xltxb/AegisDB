@@ -37,6 +37,7 @@ func (s *Services) ReviewCatalog() dto.ReviewCatalogResp {
 		Dialects:   append([]string{review.DialectAll}, review.Dialects...),
 		Categories: review.Categories,
 		Levels:     []string{model.ReviewError, model.ReviewWarn, model.ReviewInfo},
+		Specs:      review.SpecLevels,
 	}
 }
 
@@ -51,6 +52,9 @@ func (s *Services) SaveReviewRule(id int64, req dto.ReviewRuleReq) (*model.SQLRe
 	if err := validateReviewLevel(req.Level); err != nil {
 		return nil, err
 	}
+	if err := validateReviewSpec(req.Spec); err != nil {
+		return nil, err
+	}
 	if req.Params != "" && !json.Valid([]byte(req.Params)) {
 		return nil, fmt.Errorf("规则参数不是合法 JSON")
 	}
@@ -62,6 +66,12 @@ func (s *Services) SaveReviewRule(id int64, req dto.ReviewRuleReq) (*model.SQLRe
 		fields := map[string]any{
 			"level": req.Level, "enabled": req.Enabled, "params": req.Params,
 			"message": clip(req.Message, 200), "sort_order": req.SortOrder,
+		}
+		if req.Spec != nil {
+			fields["spec"] = strings.TrimSpace(*req.Spec)
+		}
+		if req.SpecRef != nil {
+			fields["spec_ref"] = clip(strings.TrimSpace(*req.SpecRef), 128)
 		}
 		if n := strings.TrimSpace(req.Name); n != "" {
 			fields["name"] = clip(n, 60)
@@ -107,6 +117,8 @@ func (s *Services) SaveReviewRule(id int64, req dto.ReviewRuleReq) (*model.SQLRe
 		Level:    req.Level,
 		Kind:     model.ReviewKindRegex, // everything an operator creates is pattern-based
 		Enabled:  req.Enabled, Params: req.Params, Message: clip(req.Message, 200),
+		Spec:      strDeref(req.Spec),
+		SpecRef:   clip(strDeref(req.SpecRef), 128),
 		SortOrder: req.SortOrder, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	if err := s.Repo.CreateSQLReviewRule(row); err != nil {
@@ -119,6 +131,21 @@ func (s *Services) SaveReviewRule(id int64, req dto.ReviewRuleReq) (*model.SQLRe
 // deleting it would drop it out of the library entirely, and the next boot's
 // seed would put it back enabled — a toggle that undoes itself is worse than no
 // toggle at all.
+// validateReviewSpec keeps the classification to the vocabulary the four
+// standards use. Empty is legal and means "平台内置,规范未覆盖" — the library
+// deliberately holds guards no document demands, and forcing every rule to
+// claim a citation would only produce fake ones.
+func validateReviewSpec(spec *string) error {
+	if spec == nil {
+		return nil
+	}
+	switch strings.TrimSpace(*spec) {
+	case "", review.SpecCritical, review.SpecMandatory, review.SpecRecommended:
+		return nil
+	}
+	return fmt.Errorf("规范分级只能是 critical / mandatory / recommended,或留空表示平台内置")
+}
+
 func (s *Services) DeleteReviewRule(id int64) error {
 	row, err := s.Repo.GetSQLReviewRule(id)
 	if err != nil {

@@ -413,6 +413,8 @@
   srSub: 'These rules judge whether a change is written correctly — not whether it is dangerous',
   srSub2: '{n} rules', srNewRule: 'New rule', srNewRuleSub: 'A custom rule matches statements by regex',
   srStatTotal: 'Rules', srStatOn: 'Enabled', srStatErr: 'Blocking (error)', srStatCustom: 'Custom',
+  srAllSpecs: 'All levels', srSpec_critical: 'Critical', srSpec_mandatory: 'Mandatory', srSpec_recommended: 'Recommended', srSpec_none: 'Built-in',
+  srSpecLevel: 'Classification', srSpecRef: 'Source', srSpecRefPh: 'e.g. DWS spec RULE 13',
   srLibTitle: 'Rule library', srLibSub: 'Filter by dialect and category — level and switch apply immediately',
   srAllDialects: 'All dialects', srAllCats: 'All categories', srCustom: 'Custom',
   srCat_dml: 'DML', srCat_ddl: 'DDL', srCat_structure: 'Structure', srCat_naming: 'Naming',

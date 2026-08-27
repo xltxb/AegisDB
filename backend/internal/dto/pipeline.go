@@ -20,6 +20,10 @@ type ReviewRuleReq struct {
 	Params    string `json:"params"`
 	Message   string `json:"message"`
 	SortOrder int    `json:"sortOrder"`
+	// 规范出处。用指针:缺席 = 不改(内置规则的出处不该被一次改级别顺手清空),
+	// 显式传空串 = 标为"平台内置,规范未覆盖"。
+	Spec    *string `json:"spec,omitempty"`
+	SpecRef *string `json:"specRef,omitempty"`
 }
 
 // ReviewCheckReq asks for a review. ConnectionID wins over Dialect when both are
@@ -40,6 +44,9 @@ type ReviewCatalogResp struct {
 	Dialects   []string `json:"dialects"`
 	Categories []string `json:"categories"`
 	Levels     []string `json:"levels"`
+	// Specs:规范分级的展示顺序。空字符串(平台内置)不在其中 —— 它是"没有分级",
+	// 不是第四级。
+	Specs      []string `json:"specs"`
 }
 
 // ---- 发布流程 (CI/CD) ----

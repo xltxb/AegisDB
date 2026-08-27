@@ -604,6 +604,18 @@ func (Setting) TableName() string { return "tbl_setting" }
 
 // SQL-review rule levels. `error` blocks a release pipeline, `warn` records the
 // finding and lets it through, `info` is advice only.
+//
+// Level is NOT the same thing as the standard's classification (Spec below):
+// level is what a finding costs HERE, classification is how the company's
+// written standard grades the requirement. Lowering a rule to `warn` is an
+// operational decision; it does not rewrite the standard, and storing the two
+// in one column would make it look as though it did.
+//
+// Level is NOT the same thing as the standard's classification (Spec below):
+// level is what a finding costs HERE, classification is how the company's
+// written standard grades the requirement. Lowering a rule to `warn` is an
+// operational decision; it does not rewrite the standard, and storing the two
+// in one column would make it look as though it did.
 const (
 	ReviewError = "error"
 	ReviewWarn  = "warn"
@@ -640,6 +652,10 @@ type SQLReviewRule struct {
 	Dialect   string    `gorm:"size:64;not null;default:all" json:"dialect"`  // all|mysql|tidb|dws|oracle (comma-separated)
 	Category  string    `gorm:"size:32;not null" json:"category"`             // naming|structure|index|dml|ddl|security|perf
 	Level     string    `gorm:"size:16;not null;default:warn" json:"level"`   // error|warn|info
+	// Spec / SpecRef 是**引文**:这条规则出自公司规范的哪一级、哪一节。
+	// 空 = 规范未覆盖,是平台自带的防护 —— 标出来,免得有人把它当成规范原文去引用。
+	Spec    string `gorm:"size:16;not null;default:''" json:"spec"`     // critical|mandatory|recommended|''
+	SpecRef string `gorm:"size:128;not null;default:''" json:"specRef"` // 如 "Huawei DWS 規範 §5.3 分布鍵"
 	Kind      string    `gorm:"size:16;not null;default:builtin" json:"kind"` // builtin|regex
 	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
 	Params    string    `gorm:"type:text" json:"params"`  // JSON knobs; empty = builtin defaults

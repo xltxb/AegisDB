@@ -405,6 +405,13 @@ export type ReviewLevel = 'error' | 'warn' | 'info'
 
 /** One rule in the 规范审查规则库. `kind` decides what an operator may change:
  *  a builtin rule's code/scope binds it to a checker, a regex rule is theirs. */
+/**
+ * 规范分级 —— 公司四份规范(MySQL / TiDB / Oracle / Huawei DWS)共用的三级词汇。
+ * 空串 = 规范未覆盖,平台内置的防护。它和 level 是两件事:level 是这条发现在本
+ * 平台值多少钱,spec 是规范怎么定性这条要求 —— 把某条降成告警不等于改了规范。
+ */
+export type ReviewSpec = 'critical' | 'mandatory' | 'recommended' | ''
+
 export interface ReviewRule {
   id: number
   code: string
@@ -417,6 +424,10 @@ export interface ReviewRule {
   params: string
   message: string
   sortOrder: number
+  /** 规范分级;空 = 平台内置 */
+  spec: ReviewSpec
+  /** 出处,如 "Huawei DWS 規範 §5.3 分布鍵";空 = 平台内置 */
+  specRef: string
 }
 
 export interface ReviewFinding {
@@ -450,6 +461,8 @@ export interface ReviewCatalog {
   dialects: string[]
   categories: string[]
   levels: string[]
+  /** 规范分级的展示顺序 */
+  specs?: string[]
 }
 
 // ---------------------------------------------------------------- 发布流水线

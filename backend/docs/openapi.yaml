@@ -184,7 +184,13 @@ components:
 
     ReviewRule:
       type: object
-      description: 规范审查规则库的一行。`code` 是身份 —— 内置规则靠它绑定实现,不可改名。
+      description: |
+        规范审查规则库的一行。`code` 是身份 —— 内置规则靠它绑定实现,不可改名。
+
+        规则库按公司四份规范(docs/ 下 MySQL / TiDB / Oracle / DWS)重写,见
+        docs/adr/0007-sql-review-from-specs.md。`spec`/`specRef` 是**引文**,
+        `level` 是这条发现在本平台**值多少钱** —— 两者刻意分开:把某条规则降成
+        告警是运营决定,不等于改了公司规范。
       properties:
         id: { type: integer, format: int64 }
         code: { type: string, example: ddl.require.primary.key }
@@ -197,6 +203,8 @@ components:
         params: { type: string, description: JSON 字符串;空表示用内置默认 }
         message: { type: string }
         sortOrder: { type: integer }
+        spec: { type: string, enum: [critical, mandatory, recommended, ''], description: '规范分级:高危/强制/建议;空 = 规范未覆盖,平台内置的防护' }
+        specRef: { type: string, description: '出处,如 `DWS对象设计和业务开发规范 RULE 13`;空 = 平台内置', example: 'DWS对象设计和业务开发规范 RULE 13' }
     ReviewFinding:
       type: object
       properties:
@@ -1063,7 +1071,10 @@ paths:
   /sql-review/rules/{id}:
     put:
       tags: [sql-review]
-      summary: '[rules · admin] 改级别 / 开关 / 参数 / 文案;内置规则的编码与方言不可改'
+      summary: '[rules · admin] 改级别 / 开关 / 参数 / 文案 / 出处;内置规则的编码与方言不可改'
+      description: |
+        运维拥有的是 level / enabled / params / message / 显示名 与出处标注;
+        内置规则的 code、kind 与方言范围随版本走 —— 升级时会回填,改了会被覆盖。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     delete:

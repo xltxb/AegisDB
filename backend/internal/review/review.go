@@ -157,7 +157,7 @@ func Check(dialect, sql string, rules []Rule) Result {
 			}
 		}
 	}
-	res.Findings = append(res.Findings, scriptFindings(active, stmts)...)
+	res.Findings = append(res.Findings, scriptFindings(active, stmts, sql)...)
 	for _, f := range res.Findings {
 		switch f.Level {
 		case LevelError:
@@ -360,6 +360,24 @@ func (p params) str(key, def string) string {
 		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
 			return s
 		}
+	}
+	return def
+}
+
+// boolean reads a flag knob. An absent key is the default, never false —
+// "not configured" and "configured off" must not collapse into one another.
+func (p params) boolean(key string, def bool) bool {
+	v, ok := p[key]
+	if !ok {
+		return def
+	}
+	switch t := v.(type) {
+	case bool:
+		return t
+	case string:
+		return strings.EqualFold(strings.TrimSpace(t), "true")
+	case float64:
+		return t != 0
 	}
 	return def
 }
