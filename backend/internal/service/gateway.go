@@ -375,14 +375,17 @@ func (s *Services) defaultChainSteps() []model.ApprovalStep {
 // approverPool returns the users eligible to approve: the "owner" role members,
 // or the "admin" members as a fallback when no owner has been assigned yet.
 func (s *Services) approverPool() []model.User {
+	// 服务账号一律排除:它登录不了控制台,进了链就是一个永远不会有人点的节点
+	// (decidableApprovers)。若某角色只剩服务账号,视同该角色没有审批人,继续
+	// 回落到下一档,而不是造一条谁都动不了的链。
 	if owner, err := s.Repo.GetRoleByCode("owner"); err == nil {
-		if members, _ := s.Repo.MembersOfRole(owner.ID); len(members) > 0 {
-			return members
+		if members, _ := s.Repo.MembersOfRole(owner.ID); len(decidableApprovers(members)) > 0 {
+			return decidableApprovers(members)
 		}
 	}
 	if admin, err := s.Repo.GetRoleByCode("admin"); err == nil {
 		members, _ := s.Repo.MembersOfRole(admin.ID)
-		return members
+		return decidableApprovers(members)
 	}
 	return nil
 }

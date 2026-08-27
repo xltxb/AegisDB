@@ -308,6 +308,9 @@ type MemberDTO struct {
 	Name     string `json:"name"`
 	Initials string `json:"initials"`
 	Dept     string `json:"dept"`
+	// Kind 让调用方分得出真人与服务账号 —— 服务账号登录不了控制台,不能审批,
+	// 发布流程编辑器据此把它排除在"将由谁审批"之外(与后端 decidableApprovers 同口径)。
+	Kind     string `json:"kind"`
 }
 
 type RoleUpdateReq struct {

@@ -429,7 +429,7 @@ func (s *Services) ListRolesBrief() ([]dto.RoleBrief, error) {
 func (s *Services) DefaultApprovers() []dto.MemberDTO {
 	out := []dto.MemberDTO{}
 	for _, m := range s.approverPool() {
-		out = append(out, dto.MemberDTO{ID: m.ID, Name: m.Name, Initials: m.Initials, Dept: m.Dept})
+		out = append(out, dto.MemberDTO{ID: m.ID, Name: m.Name, Initials: m.Initials, Dept: m.Dept, Kind: m.Kind})
 	}
 	return out
 }
@@ -445,7 +445,7 @@ func (s *Services) RoleDetail(id int64) (*dto.RoleDetailResp, error) {
 	mds := []dto.MemberDTO{}
 	ids := []int64{}
 	for _, m := range members {
-		mds = append(mds, dto.MemberDTO{ID: m.ID, Name: m.Name, Initials: m.Initials, Dept: m.Dept})
+		mds = append(mds, dto.MemberDTO{ID: m.ID, Name: m.Name, Initials: m.Initials, Dept: m.Dept, Kind: m.Kind})
 		ids = append(ids, m.ID)
 	}
 	return &dto.RoleDetailResp{

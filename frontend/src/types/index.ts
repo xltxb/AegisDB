@@ -113,6 +113,8 @@ export interface RoleBrief {
 }
 
 export interface Member {
+  /** human | service —— 服务账号不能审批,审批人展示要排除 */
+  kind?: string
   id: number
   name: string
   initials: string

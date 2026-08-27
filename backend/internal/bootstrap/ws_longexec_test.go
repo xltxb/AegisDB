@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 // slowSQL is a recursive CTE that keeps SQLite busy for a couple of seconds —
@@ -88,5 +90,32 @@ func TestTerminalWS_AnswersHeartbeatWhileCommandRuns(t *testing.T) {
 	if !sawPong {
 		t.Errorf("no pong while a command was running (exec finished after %v) — "+
 			"the client's heartbeat watchdog closes the socket mid-statement", execElapsed)
+	}
+
+	// 等这条语句真正跑完再返回。
+	//
+	// 断言在看到 pong 的那一刻就成立了,但那时 slowSQL 还在跑,SQLite 的文件句柄
+	// 还开着。t.TempDir() 的清理紧接着去删这个文件,而 Windows 删不掉正在被打开
+	// 的文件 —— 测试于是在**清理阶段**失败,报的是 "The process cannot access the
+	// file because it is being used by another process",与心跳毫无关系。这让这条
+	// 用例有约 20% 的概率无故变红,而一张会无故变红的回归网,很快就没人再信它。
+	drainExec(t, c, execElapsed)
+}
+
+// drainExec reads until the exec reports back (output or error), so the target
+// database is closed before the temp dir is removed. Bounded: a statement that
+// never finishes must not hang the suite.
+func drainExec(t *testing.T, c *websocket.Conn, already time.Duration) {
+	t.Helper()
+	_ = c.SetReadDeadline(time.Now().Add(20 * time.Second))
+	for {
+		var m map[string]any
+		if err := c.ReadJSON(&m); err != nil {
+			t.Logf("exec did not report back within the drain window (pong seen at %v): %v", already, err)
+			return
+		}
+		if m["type"] == "output" || m["type"] == "error" {
+			return
+		}
 	}
 }

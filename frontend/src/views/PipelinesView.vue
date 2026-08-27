@@ -21,7 +21,7 @@ import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
-import type { Pipeline, PipelineStage, StageType } from '@/types'
+import type { Pipeline, PipelineStage, RoleBrief, StageType } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -54,10 +54,62 @@ async function load() {
     if (!editing.value && pipelines.value.length) select(pipelines.value[0])
   } catch (e) { ui.notifyError(e, t('loadFailed')) }
 }
+// 审批人:角色列表 + 全局默认链 + 每个角色的成员名。
+//
+// 建流程的人此前完全看不出这个审批节点将来会找谁 —— 只能去权限页反推 owner
+// 角色里有谁。把它显示出来,是这一块最便宜也最值的改动。
+const roles = ref<RoleBrief[]>([])
+const defaultChain = ref<string[]>([])
+const roleMembers = ref<Record<string, string[]>>({})
+
 onMounted(async () => {
   try { await envtier.load() } catch { /* the tier picker degrades to "every tier" */ }
+  try { roles.value = await api.roles() } catch { /* 角色选择器降级为空 */ }
+  try { defaultChain.value = (await api.approvalChain()).chain.map((m) => m.name) }
+  catch { /* 默认链取不到就不显示,不编造 */ }
   await load()
 })
+
+// 角色成员按需取:流程编辑器一次只关心被选中的那几个角色。
+async function ensureRoleMembers(code: string) {
+  if (!code || code in roleMembers.value) return
+  const r = roles.value.find((x) => x.code === code)
+  if (!r) return
+  roleMembers.value[code] = [] // 占位,避免并发重复请求
+  try {
+    const d = await api.role(r.id)
+    // 与后端 decidableApprovers 同口径:服务账号登录不了控制台,批不了单,
+    // 显示出来只会让人以为有人能批。
+    roleMembers.value[code] = (d.members || []).filter((m: any) => m.kind !== 'service').map((m: any) => m.name)
+  } catch { /* 取不到就显示为空,由下面的提示兜底 */ }
+}
+
+const roleLabels = computed(() => [t('plApproverDefault'), ...roles.value.map((r) => r.name)])
+const confirmRoleLabels = computed(() => [t('plConfirmDefault'), ...roles.value.map((r) => r.name)])
+// 三个人工节点,同一套取值:审批节点用 approverRole,两个确认门用 confirmRole。
+const roleKeyOf = (st: any) => (st.type === 'approve' ? 'approverRole' : 'confirmRole')
+function approverLabel(st: any) {
+  const r = roles.value.find((x) => x.code === cfgGet(st, roleKeyOf(st)))
+  return r ? r.name : (st.type === 'approve' ? t('plApproverDefault') : t('plConfirmDefault'))
+}
+function setApprover(st: any, label: string) {
+  const r = roles.value.find((x) => x.name === label)
+  cfgSet(st, roleKeyOf(st), r ? r.code : '')
+  if (r) ensureRoleMembers(r.code)
+}
+// 这个节点将来会找谁 —— 已解析出的人名,或者说不出来时的实话。
+function approverNames(st: any): { names: string[]; empty: boolean } {
+  const code = cfgGet(st, roleKeyOf(st))
+  // 未配角色时:审批走全局默认链(能列出人);两个确认门走"任何有审批权限的人",
+  // 那是一条能力规则而不是一份名单,列不出来也不该编 —— 由文案说明。
+  if (!code) {
+    if (st.type !== 'approve') return { names: [], empty: false }
+    return { names: defaultChain.value, empty: defaultChain.value.length === 0 }
+  }
+  const names = roleMembers.value[code]
+  if (names === undefined) { ensureRoleMembers(code); return { names: [], empty: false } }
+  return { names, empty: names.length === 0 }
+}
 
 function select(p: Pipeline) {
   if (dirty.value && !confirmAction(t('plDiscardConfirm'))) return
@@ -239,12 +291,48 @@ async function remove(p: Pipeline) {
                   @input="cfgSet(st, 'sql', ($event.target as HTMLInputElement).value)"
                 />
               </div>
-              <div v-else-if="st.type === 'manual'" class="srow">
-                <span class="cl">{{ $t('plNote') }}</span>
-                <input
-                  class="in small" :disabled="!isAdmin" :value="cfgGet(st, 'note')" :placeholder="$t('plNotePh')"
-                  @input="cfgSet(st, 'note', ($event.target as HTMLInputElement).value)"
-                />
+              <div v-else-if="st.type === 'approve'" class="scol">
+                <div class="srow">
+                  <span class="cl">{{ $t('plApprover') }}</span>
+                  <VSelect
+                    :model-value="approverLabel(st)" :options="roleLabels" height="34px"
+                    @update:model-value="(v: string) => isAdmin && setApprover(st, v)"
+                  />
+                </div>
+                <!-- 谁会被找上,当场说清楚:配好流程的人不该去权限页反推 -->
+                <div class="who" :class="{ warn: approverNames(st).empty }">
+                  <template v-if="approverNames(st).empty">{{ $t('plApproverEmpty') }}</template>
+                  <template v-else>
+                    {{ $t('plApproverWho', { n: approverNames(st).names.length }) }}
+                    <span class="wn" v-for="nm in approverNames(st).names.slice(0, 8)" :key="nm">{{ nm }}</span>
+                    <span v-if="approverNames(st).names.length > 8">…</span>
+                  </template>
+                </div>
+              </div>
+              <div v-else-if="st.type === 'manual' || st.type === 'execute'" class="scol">
+                <div v-if="st.type === 'manual'" class="srow">
+                  <span class="cl">{{ $t('plNote') }}</span>
+                  <input
+                    class="in small" :disabled="!isAdmin" :value="cfgGet(st, 'note')" :placeholder="$t('plNotePh')"
+                    @input="cfgSet(st, 'note', ($event.target as HTMLInputElement).value)"
+                  />
+                </div>
+                <div class="srow">
+                  <span class="cl">{{ $t('plConfirmer') }}</span>
+                  <VSelect
+                    :model-value="approverLabel(st)" :options="confirmRoleLabels" height="34px"
+                    @update:model-value="(v: string) => isAdmin && setApprover(st, v)"
+                  />
+                </div>
+                <div class="who" :class="{ warn: approverNames(st).empty }">
+                  <template v-if="approverNames(st).empty">{{ $t('plApproverEmpty') }}</template>
+                  <template v-else-if="!approverNames(st).names.length">{{ $t('plConfirmDefaultHint') }}</template>
+                  <template v-else>
+                    {{ $t('plConfirmWho', { n: approverNames(st).names.length }) }}
+                    <span class="wn" v-for="nm in approverNames(st).names.slice(0, 8)" :key="nm">{{ nm }}</span>
+                    <span v-if="approverNames(st).names.length > 8">…</span>
+                  </template>
+                </div>
               </div>
               <div class="shint">{{ $t('plHint_' + st.type) }}</div>
             </div>
@@ -312,6 +400,10 @@ async function remove(p: Pipeline) {
 .srow > .in { flex: 1; }
 .srow :deep(.vsel) { min-width: 140px; }
 .cl { font: 600 10.5px var(--font-mono); color: var(--text-faint); min-width: 52px; }
+.scol { display: flex; flex-direction: column; gap: 8px; }
+.who { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.who.warn { color: var(--warning-text); }
+.wn { padding: 1px 7px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-body); color: var(--text-body); }
 .shint { font: 500 10.5px var(--font-body); color: var(--text-faint); }
 .sacts { display: flex; flex-direction: column; gap: 4px; }
 .sb { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 7px; border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-muted); cursor: pointer; }

@@ -92,6 +92,19 @@ func (s *Services) SavePipeline(u *model.User, id int64, req dto.PipelineReq) (*
 		if st.Config != "" && !json.Valid([]byte(st.Config)) {
 			return nil, fmt.Errorf("第 %d 个阶段的配置不是合法 JSON", i+1)
 		}
+		// 指定的审批角色必须存在 —— 拼错的角色名不该等到某次真实发布才暴露。
+		// 成员数不在这里查:成员是会变的,保存时有人不代表跑的时候还有人,那一条
+		// 由 approvalStepsFor 在阶段运行时把关。
+		if st.Type == model.StageApprove {
+			if err := s.validateApproverRole(cfgApproverRole(st.Config)); err != nil {
+				return nil, fmt.Errorf("第 %d 个阶段: %w", i+1, err)
+			}
+		}
+		if st.Type == model.StageManual || st.Type == model.StageExecute {
+			if err := s.validateConfirmRole(cfgConfirmRole(st.Config)); err != nil {
+				return nil, fmt.Errorf("第 %d 个阶段: %w", i+1, err)
+			}
+		}
 		name := strings.TrimSpace(st.Name)
 		if name == "" {
 			name = stageTypeLabel(st.Type)
@@ -548,6 +561,14 @@ func (s *Services) runStage(rel *model.Release, conn *model.Connection, st *mode
 	case model.StageVerify:
 		return s.stageVerify(rel, conn, cfg)
 	case model.StageManual:
+		if role := cfgConfirmRole(st.Config); role != "" {
+			people, err := s.gateStaffing(role)
+			if err != nil {
+				return failStage("· %v", err)
+			}
+			return stageOutcome{status: model.RunWaiting,
+				log: "· 等待「" + gateWhoLabel(people) + "」人工确认" + cfgNote(cfg)}
+		}
 		return stageOutcome{status: model.RunWaiting, log: "· 等待人工确认" + cfgNote(cfg)}
 	case model.StageNotify:
 		return s.stageNotify(rel, conn)
@@ -627,6 +648,13 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 	if risk == "" {
 		risk = model.RiskMid
 	}
+	// 审批人:阶段配置指定的角色,没配则走全局默认链。空链是致命的 ——
+	// isChainMember 对谁都返回 false,单子建出来没有任何人能批,发布永远停在
+	// waiting。宁可在这里失败并说清楚,也不要造一张死单。
+	steps, serr := s.approvalStepsFor(cfgApproverRole(st.Config))
+	if serr != nil {
+		return failStage("· %v", serr)
+	}
 	ap := &model.Approval{
 		ApNo: s.nextApNo(), ConnectionID: conn.ID, Env: rel.Env, TierCode: rel.TierCode,
 		Instance: conn.Name, Command: label, Keyword: firstWord(body), Database: rel.Database,
@@ -636,10 +664,7 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 		ScriptUploadID: rel.ScriptUploadID, ScriptSHA256: rel.ScriptSHA256,
 		ReleaseID: rel.ID,
 	}
-	steps := s.defaultChainSteps()
-	if len(steps) > 0 {
-		steps[0].Status = "active"
-	}
+	steps[0].Status = "active" // approvalStepsFor guarantees a non-empty chain
 	if err := s.Repo.CreateApproval(ap, steps); err != nil {
 		return failStage("· 审批单创建失败: %v", err)
 	}
@@ -708,6 +733,14 @@ func (s *Services) stageBackup(rel *model.Release, conn *model.Connection, cfg s
 // 变更窗口和上下游就绪只有到点的人知道,自动落库等于把时机交给调度器。
 func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *model.ReleaseStage) stageOutcome {
 	if st.ConfirmedBy == "" {
+		if role := cfgConfirmRole(st.Config); role != "" {
+			people, err := s.gateStaffing(role)
+			if err != nil {
+				return failStage("· %v", err)
+			}
+			return stageOutcome{status: model.RunWaiting,
+				log: "· 等待「" + gateWhoLabel(people) + "」确认执行后才会落库"}
+		}
 		return stageOutcome{status: model.RunWaiting,
 			log: "· 等待人工确认执行(创建者或审批角色点击「确认执行」后才会落库)"}
 	}
@@ -1046,11 +1079,16 @@ func (s *Services) ContinueManualStage(u *model.User, releaseID, stageID int64) 
 	}
 	// Two-person control: whoever raised the release may not also wave it through
 	// its manual gate, unless self-approval is deliberately enabled (same setting
-	// the approval chain honours).
+	// the approval chain honours). This holds whichever way the gate is staffed.
 	if u.ID == rel.CreatorID && !s.settingBool("approval.allowSelfApprove", false) {
 		return ErrForbidden
 	}
-	if !s.canApproveReleases(u) {
+	// 配了角色就以角色为准 —— 有审批能力但不在这个角色里的人也不能推动本流程。
+	if role := cfgConfirmRole(st.Config); role != "" {
+		if !s.mayPassGate(u, role) {
+			return ErrForbidden
+		}
+	} else if !s.canApproveReleases(u) {
 		return ErrForbidden
 	}
 	claimed, err := s.Repo.ClaimReleaseStage(stageID, model.RunWaiting, model.RunSuccess)
@@ -1092,7 +1130,13 @@ func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) 
 	if st.Type != model.StageExecute || st.Status != model.RunWaiting {
 		return fmt.Errorf("该阶段当前不在等待执行确认")
 	}
-	if u.ID != rel.CreatorID && !s.canApproveReleases(u) {
+	// 默认允许发起人,是因为"何时执行"归发起人;一旦显式指定了角色,那正是要把
+	// 这个决定收走(变更窗口统一把关),所以配置优先于发起人身份。
+	if role := cfgConfirmRole(st.Config); role != "" {
+		if !s.mayPassGate(u, role) {
+			return ErrForbidden
+		}
+	} else if u.ID != rel.CreatorID && !s.canApproveReleases(u) {
 		return ErrForbidden
 	}
 	// waiting → pending(不是 success:执行还没发生),driveRelease 会重新拿起它,
