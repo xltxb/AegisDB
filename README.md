@@ -209,9 +209,11 @@ Webhook（HMAC-SHA256 签名 + 指数退避重试）/ 飞书通知 / 外部审�
 
 ## 测试与质量
 
-- 后端：`go test ./...` —— 以 **httptest 黑盒回归网**为主（`backend/internal/bootstrap/` 下 80+
+- 后端：`go test ./... -timeout 20m` —— 以 **httptest 黑盒回归网**为主（`backend/internal/bootstrap/` 下 80+
   测试文件，启动完整应用实跑 HTTP 接口，覆盖三层判定、多语句、审批链、审计链、脱敏、
   导出上限、会话安全等），另有引擎方言 / 口令脱敏等单元测试。
+  bootstrap 包每个用例都会启动一次完整应用并灌种子数据，整包约 11 分钟，**超过 `go test`
+  默认的 10 分钟包超时**，所以上面那条命令带了 `-timeout`；不带会在跑完前被判超时失败。
 - 前端：`npm run build` = `vue-tsc` 类型检查 + Vite 打包 + vue-i18n 严格模式构建期预编译
   （非法文案直接构建失败）。
 

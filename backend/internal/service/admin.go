@@ -134,7 +134,7 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 			}
 			out.Databases = append(out.Databases, db)
 		}
-		return out
+		return s.labelProjects(connID, out)
 	}
 	// No credentials → simulated connection: return the seeded tree (if any).
 	objs, _ := s.Repo.SchemaForConnection(connID)
@@ -148,6 +148,34 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 	}
 	for _, name := range order {
 		out.Databases = append(out.Databases, dto.SchemaDBDTO{Name: name, Tables: byDB[name]})
+	}
+	return s.labelProjects(connID, out)
+}
+
+// labelProjects tags each discovered database with the project it is filed
+// under. Filing is stored by NAME (databases are discovered, never
+// registered), so this is a map lookup, not a join — and a filing naming a
+// database that no longer exists simply matches nothing.
+//
+// A filing pointing at a deleted project degrades to unlabelled rather than
+// erroring: the tree is how people reach their data, and it must not go dark
+// over a bookkeeping detail.
+func (s *Services) labelProjects(connID int64, out dto.ConnectionSchemaResp) dto.ConnectionSchemaResp {
+	filed := s.Repo.DatabaseProjectsForConnection(connID)
+	if len(filed) == 0 {
+		return out
+	}
+	names := map[int64]string{}
+	if ps, err := s.Repo.ListProjects(); err == nil {
+		for _, p := range ps {
+			names[p.ID] = p.Name
+		}
+	}
+	for i, db := range out.Databases {
+		if id := filed[db.Name]; id != 0 {
+			out.Databases[i].ProjectID = id
+			out.Databases[i].ProjectName = names[id]
+		}
 	}
 	return out
 }

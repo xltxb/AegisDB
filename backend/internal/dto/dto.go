@@ -186,8 +186,6 @@ type ConnectionStatusReq struct {
 	Status string  `json:"status"`           // online|maint (empty = toggle)
 	Tags   *string `json:"tags,omitempty"`   // when present, replace the connection's tags
 	Policy *string `json:"policy,omitempty"` // when present, set the gateway policy
-	// ProjectID:归属项目。0 是**取消归属**的合法取值,所以用指针区分"没提"和"设为 0"。
-	ProjectID *int64 `json:"projectId,omitempty"`
 }
 
 // RoleTagsReq assigns the DB tags a role (user group) may access.
@@ -260,6 +258,9 @@ type ConnectionSchemaResp struct {
 
 type SchemaDBDTO struct {
 	Name    string            `json:"name"`
+	// 归属项目 —— 组织维度,判定层不看。0 = 未归属,是合法状态。
+	ProjectID   int64  `json:"projectId,omitempty"`
+	ProjectName string `json:"projectName,omitempty"`
 	Schemas []SchemaSchemaDTO `json:"schemas,omitempty"` // database → schema → tables (PostgreSQL)
 	Tables  []SchemaTableDTO  `json:"tables"`            // database → tables (flat engines)
 }
@@ -325,12 +326,19 @@ type ProjectReq struct {
 	Description *string `json:"description"`
 }
 
+// DatabaseProjectReq files one of a connection's databases under a project.
+// ProjectID 0 取消归属 —— 它是合法取值,不是"没填"。
+type DatabaseProjectReq struct {
+	Database  string `json:"database"`
+	ProjectID int64  `json:"projectId"`
+}
+
 type ProjectView struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
 	Owner       string    `json:"owner"`
 	Description string    `json:"description"`
-	Connections int       `json:"connections"`
+	Databases   int       `json:"databases"`
 	Releases    int       `json:"releases"`
 	CreatedAt   time.Time `json:"createdAt"`
 }

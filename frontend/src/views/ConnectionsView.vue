@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
+import { Database, Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
@@ -29,14 +29,58 @@ const conns = ref<Connection[]>([])
 const projects = ref<Project[]>([])
 const projectsPanel = ref<InstanceType<typeof ProjectsPanel> | null>(null)
 const projectName = (id?: number) => projects.value.find((p) => p.id === id)?.name || ''
-async function setProject(c: Connection, id: number) {
+// 展开一个实例才去列它的库:库是**实时发现**的,对真连接意味着一次网络往返,
+// 没人看的时候不该替他付这个钱。展开态、库列表、加载/报错各自按实例存。
+const openDbs = ref<Record<number, boolean>>({})
+const dbsOf = ref<Record<number, { name: string; projectId?: number }[]>>({})
+const dbsBusy = ref<Record<number, boolean>>({})
+const dbsErr = ref<Record<number, string>>({})
+
+async function toggleDbs(c: Connection) {
+  openDbs.value[c.id] = !openDbs.value[c.id]
+  if (openDbs.value[c.id] && !dbsOf.value[c.id]) await loadDbs(c)
+}
+
+async function loadDbs(c: Connection) {
+  dbsBusy.value[c.id] = true
+  dbsErr.value[c.id] = ''
   try {
-    const env = await api.setConnectionProject(c.id, id)
-    if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
-    c.projectId = id
+    const r = await api.connectionSchema(c.id)
+    // 连不上目标库时服务端把原因放在 error 里而不是抛错 —— 原样说出来,
+    // 空列表配一句“没有库”会把网络问题伪装成事实。
+    if (r.error) dbsErr.value[c.id] = r.error
+    dbsOf.value[c.id] = (r.databases || []).map((d) => ({ name: d.name, projectId: d.projectId || 0 }))
+  } catch (e: any) {
+    dbsErr.value[c.id] = e?.message || String(e)
+    dbsOf.value[c.id] = []
+  } finally {
+    dbsBusy.value[c.id] = false
+  }
+}
+
+// 归属的单位是**库**:一个实例底下的几个库分属不同团队是常态。
+async function setDbProject(c: Connection, db: { name: string; projectId?: number }, id: number) {
+  const prev = db.projectId || 0
+  try {
+    const env = await api.setDatabaseProject(c.id, db.name, id)
+    if (env.code !== 0) { db.projectId = prev; ui.notifyError(new Error(env.msg), t('actionFailed')); return }
+    db.projectId = id
     // 计数变了,面板要跟着刷新 —— 否则删除按钮会依据过时的数字给出错误预期。
     await projectsPanel.value?.load()
-  } catch (e) { ui.notifyError(e, t('actionFailed')) }
+  } catch (e) { db.projectId = prev; ui.notifyError(e, t('actionFailed')) }
+}
+
+// 实例行上显示它底下已归属的项目(去重) —— 一个实例可能横跨几个项目,
+// 所以这里是个列表而不是一个值。没展开过就没有,不猜。
+function projectsOn(c: Connection): string[] {
+  const dbs = dbsOf.value[c.id]
+  if (!dbs) return []
+  const names = new Set<string>()
+  for (const d of dbs) {
+    const p = projects.value.find((x) => x.id === d.projectId)
+    if (p) names.add(p.name)
+  }
+  return [...names]
 }
 // 数据源一多,双层分组的长表就成了"滚动扫全表"。三件套:全字段搜索、环境
 // 筛选、分组折叠 —— 搜索时强制展开,否则命中项藏在折叠组里等于没搜到。
@@ -447,19 +491,19 @@ async function add() {
              the instance and how its commands are read, so it groups rather than
              sitting in a column to be scanned for. -->
         <div class="typerow">{{ ty.label }}<span class="gcnt">{{ ty.rows.length }}</span></div>
-        <div v-for="c in ty.rows" :key="c.id" class="trow">
+        <template v-for="c in ty.rows" :key="c.id">
+        <div class="trow">
           <div>
             <div class="cn">{{ c.name }}</div>
             <div class="cl">{{ c.layer }}</div>
             <div class="tags">
               <span class="rbadge" :class="c.username ? 'real' : 'sim'">{{ c.username ? $t('connReal') : $t('connSim') }}</span>
-              <!-- 归属项目:与下面的访问标签刻意分开,两者不是一回事 -->
-              <select v-if="isAdmin" class="prsel" :value="c.projectId || 0" :title="$t('connProject')"
-                      @change="setProject(c, Number(($event.target as HTMLSelectElement).value))">
-                <option :value="0">{{ $t('connNoProject') }}</option>
-                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-              <span v-else-if="c.projectId" class="prchip">{{ projectName(c.projectId) }}</span>
+              <!-- 归属是**按库**定的,所以入口在这里展开,而不是行上一个下拉:
+                   一个实例底下的几个库可以分属不同项目。与访问标签刻意分开显示。 -->
+              <span class="dbtoggle" :class="{ on: openDbs[c.id] }" @click="toggleDbs(c)">
+                <Database :size="10" />{{ $t('connDbProjects') }}
+              </span>
+              <span v-for="pn in projectsOn(c)" :key="pn" class="prchip">{{ pn }}</span>
               <span v-for="tg in tagArr(c.tags)" :key="tg" class="tchip">{{ tg }}</span>
               <span v-if="isAdmin" class="tedit" @click="openTagEdit(c)"><Tag :size="10" />{{ tagArr(c.tags).length ? $t('edit') : $t('tagAdd') }}</span>
             </div>
@@ -480,6 +524,23 @@ async function add() {
             <button v-if="isAdmin" class="editbtn" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
           </div>
         </div>
+        <!-- 库一级:归属定在这里 -->
+        <div v-if="openDbs[c.id]" class="dbpanel">
+          <div v-if="dbsBusy[c.id]" class="dbnote">{{ $t('schemaLoading') }}</div>
+          <div v-else-if="dbsErr[c.id]" class="dbnote err">{{ dbsErr[c.id] }}</div>
+          <div v-else-if="!(dbsOf[c.id] || []).length" class="dbnote">{{ $t('schemaEmpty') }}</div>
+          <div v-for="db in dbsOf[c.id] || []" :key="db.name" class="dbrow">
+            <span class="dbname">{{ db.name }}</span>
+            <select v-if="isAdmin" class="prsel" :value="db.projectId || 0" :title="$t('connProject')"
+                    @change="setDbProject(c, db, Number(($event.target as HTMLSelectElement).value))">
+              <option :value="0">{{ $t('connNoProject') }}</option>
+              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+            <span v-else-if="db.projectId" class="prchip">{{ projectName(db.projectId) }}</span>
+            <span v-else class="dbnone">{{ $t('connNoProject') }}</span>
+          </div>
+        </div>
+        </template>
         </template>
         <div v-if="!group.types.length" class="typerow empty">{{ $t('connGroupEmpty') }}</div>
         </template>
@@ -588,6 +649,14 @@ async function add() {
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .head { display: flex; align-items: center; margin-bottom: 14px; }
 .prpanel { margin-bottom: 16px; }
+.dbtoggle { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 5px; border: 1px dashed var(--border-strong); color: var(--text-muted); font: 600 10px var(--font-body); cursor: pointer; }
+.dbtoggle:hover, .dbtoggle.on { border-style: solid; border-color: var(--accent-text); color: var(--accent-text); }
+.dbpanel { margin: 0 0 10px 18px; padding: 8px 12px; border-left: 2px solid var(--border-default); display: flex; flex-direction: column; gap: 6px; }
+.dbrow { display: flex; align-items: center; gap: 10px; }
+.dbname { min-width: 180px; font: 600 11.5px var(--font-mono); color: var(--text-body); }
+.dbnone { font: 500 10.5px var(--font-body); color: var(--text-faint); }
+.dbnote { font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.dbnote.err { color: var(--danger-text); }
 .prsel { height: 20px; max-width: 150px; padding: 0 4px; border: 1px solid var(--accent-text); border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); cursor: pointer; }
 .prchip { padding: 1px 7px; border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); }
 .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }

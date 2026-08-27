@@ -180,6 +180,7 @@
   objMojibakeTitle: '这些问号是数据库里实际存储的内容,不是本页的显示问题',
   objMojibakeSub: '部署该对象时客户端字符集(NLS_LANG)与库不匹配,Oracle 在 CREATE 时就把中文替换成了问号,源码已无法从库中恢复 —— 需用正确的源码重新部署。可用下面这条自行核实(输出是纯 ASCII,不受影响):',
   objCopyFail: '复制失败 —— 浏览器未授予剪贴板权限;可手动选中源码后按 Ctrl+C',
+  connDbProjects: '库归属',
   prTitle: '项目', prSub: '数据库与升级单的归属 —— 决定“归谁跟进”,不决定“谁能访问”(访问范围由标签决定)',
   prNew: '新建项目', prEdit: '编辑项目', prName: '项目名称', prNamePh: '如 订单业务线',
   prOwner: '负责人 / 团队', prOwnerPh: '如 订单组', prDesc: '说明', prDescPh: '这个项目涵盖什么',

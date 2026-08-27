@@ -97,8 +97,6 @@ export interface Connection {
   defaultRole: string
   layer: string
   tags: string
-  /** 归属项目;0 = 未归属(合法状态)。组织维度,不参与访问判定。 */
-  projectId?: number
   username?: string
   password?: string
   database?: string
@@ -112,7 +110,7 @@ export interface Project {
   owner: string
   description: string
   /** 名下的数据库数 —— 删除受它约束 */
-  connections: number
+  databases: number
   /** 名下的升级单数(含库已改挂他处的历史单据) */
   releases: number
   createdAt: string
@@ -363,6 +361,9 @@ export interface ConnectionSchema {
   connectionId: number
   databases: {
     name: string
+    /** 归属项目 —— 组织维度,判定层不看。0 / 缺省 = 未归属,是合法状态。 */
+    projectId?: number
+    projectName?: string
     schemas?: { name: string; tables: { name: string }[] }[]
     tables: { name: string }[]
   }[]

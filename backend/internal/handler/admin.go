@@ -80,17 +80,25 @@ func (h *Handler) TestConnection(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": ok, "message": msg})
 }
 
+// SetDatabaseProject files ONE of a connection's databases under a project
+// (projectId 0 = 取消归属). The unit is the database, not the connection: one
+// instance routinely hosts databases owned by different teams, and filing at
+// the instance level would force people to split instances along org lines.
+func (h *Handler) SetDatabaseProject(c *gin.Context) {
+	var req dto.DatabaseProjectReq
+	_ = c.ShouldBindJSON(&req)
+	if err := h.Svc.SetDatabaseProject(middleware.CurrentUser(c), pathID(c), req.Database, req.ProjectID); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
+	resp.OK(c, gin.H{"ok": true})
+}
+
 func (h *Handler) PatchConnection(c *gin.Context) {
 	var req dto.ConnectionStatusReq
 	_ = c.ShouldBindJSON(&req)
 	id := pathID(c)
 	switch {
-	case req.ProjectID != nil: // 归属项目(0 = 取消归属)
-		if err := h.Svc.SetConnectionProject(id, *req.ProjectID); err != nil {
-			resp.Fail(c, resp.CodeBadRequest, err.Error())
-			return
-		}
-		c.Set("patched", "project")
 	case req.Tags != nil: // replace tags
 		if err := h.Svc.SetConnectionTags(id, *req.Tags); err != nil {
 			resp.Fail(c, resp.CodeInternalError, "保存标签失败")

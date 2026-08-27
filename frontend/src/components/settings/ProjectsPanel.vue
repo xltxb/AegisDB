@@ -83,7 +83,7 @@ async function remove(p: Project) {
             <span v-if="p.owner" class="iowner">{{ p.owner }}</span>
           </div>
           <div class="imeta">
-            <span>{{ $t('prDbs', { n: p.connections }) }}</span>
+            <span>{{ $t('prDbs', { n: p.databases }) }}</span>
             <span class="sep">·</span>
             <span>{{ $t('prReleases', { n: p.releases }) }}</span>
             <template v-if="p.description"><span class="sep">·</span><span class="dim">{{ p.description }}</span></template>

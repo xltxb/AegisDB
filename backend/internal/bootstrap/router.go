@@ -158,6 +158,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.PUT("/connections/:id", menu("db"), admin, h.UpdateConnection)
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)
 		a.PATCH("/connections/:id", menu("db"), admin, h.PatchConnection)
+		a.PUT("/connections/:id/database-project", menu("db"), admin, h.SetDatabaseProject)
 		a.GET("/connections/:id/schema", menu("terminal"), h.GetConnectionSchema)
 		a.GET("/connections/:id/objects", menu("terminal"), h.GetConnectionObjects)
 		a.GET("/connections/:id/object-source", menu("terminal"), h.GetConnectionObjectSource)

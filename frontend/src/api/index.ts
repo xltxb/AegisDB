@@ -256,8 +256,9 @@ export const api = {
   updateProject: (id: number, body: Partial<{ name: string; owner: string; description: string }>) =>
     http.patch<any, Envelope<Project>>(`/projects/${id}`, body),
   deleteProject: (id: number) => http.delete<any, Envelope<any>>(`/projects/${id}`),
-  setConnectionProject: (id: number, projectId: number) =>
-    http.patch<any, Envelope<any>>(`/connections/${id}`, { projectId }),
+  /** 把实例下的一个库归到项目(projectId 0 = 取消归属)。归属的单位是库,不是实例。 */
+  setDatabaseProject: (id: number, database: string, projectId: number) =>
+    http.put<any, Envelope<any>>(`/connections/${id}/database-project`, { database, projectId }),
   release: (id: number) => http.get<any, Envelope<Release>>(`/releases/${id}`).then(ok),
   // raw envelope so the caller can detect 42800 (MFA step-up) and 40300 (denied
   // by the capability matrix), which mean different things to the operator.

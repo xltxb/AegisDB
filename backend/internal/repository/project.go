@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"velagateway/internal/model"
 )
 
@@ -41,11 +43,11 @@ func (r *Repo) DeleteProject(id int64) error {
 	return r.db.Delete(&model.Project{}, id).Error
 }
 
-// CountConnectionsInProject is what makes "delete" answerable: a project still
+// CountDatabasesInProject is what makes "delete" answerable: a project still
 // holding databases must say how many, not just refuse.
-func (r *Repo) CountConnectionsInProject(id int64) int {
+func (r *Repo) CountDatabasesInProject(id int64) int {
 	var n int64
-	if err := r.db.Model(&model.Connection{}).Where("project_id = ?", id).Count(&n).Error; err != nil {
+	if err := r.db.Model(&model.DatabaseProject{}).Where("project_id = ?", id).Count(&n).Error; err != nil {
 		return 0
 	}
 	return int(n)
@@ -62,7 +64,49 @@ func (r *Repo) CountReleasesInProject(id int64) int {
 	return int(n)
 }
 
-// SetConnectionProject files (or unfiles, with 0) one database.
-func (r *Repo) SetConnectionProject(connID, projectID int64) error {
-	return r.db.Model(&model.Connection{}).Where("id = ?", connID).Update("project_id", projectID).Error
+// ------------------------------------------------- 库的归属 (DatabaseProject)
+
+// DatabaseProjectID returns the project one database is filed under, or 0.
+func (r *Repo) DatabaseProjectID(connID int64, database string) int64 {
+	var row model.DatabaseProject
+	if err := r.db.Where("connection_id = ? AND db_name = ?", connID, database).First(&row).Error; err != nil {
+		return 0
+	}
+	return row.ProjectID
+}
+
+// DatabaseProjectsForConnection maps this connection's databases to their
+// projects, so the tree can label a whole instance in one query.
+func (r *Repo) DatabaseProjectsForConnection(connID int64) map[string]int64 {
+	var rows []model.DatabaseProject
+	out := map[string]int64{}
+	if err := r.db.Where("connection_id = ?", connID).Find(&rows).Error; err != nil {
+		return out
+	}
+	for _, x := range rows {
+		out[x.Database] = x.ProjectID
+	}
+	return out
+}
+
+// SetDatabaseProject files one database under a project. projectID 0 UNFILES it
+// by deleting the row — "unassigned" is the absence of a row, not a row saying
+// zero, so nothing has to remember to treat 0 specially in later queries.
+func (r *Repo) SetDatabaseProject(connID int64, database string, projectID, actorID int64) error {
+	if projectID == 0 {
+		return r.db.Where("connection_id = ? AND db_name = ?", connID, database).
+			Delete(&model.DatabaseProject{}).Error
+	}
+	var row model.DatabaseProject
+	err := r.db.Where("connection_id = ? AND db_name = ?", connID, database).First(&row).Error
+	if err == nil {
+		// Refiling is an overwrite, not a second row — the unique key says so too.
+		return r.db.Model(&model.DatabaseProject{}).Where("id = ?", row.ID).
+			Updates(map[string]any{"project_id": projectID, "updated_at": time.Now()}).Error
+	}
+	now := time.Now()
+	return r.db.Create(&model.DatabaseProject{
+		ConnectionID: connID, Database: database, ProjectID: projectID,
+		CreatedBy: actorID, CreatedAt: now, UpdatedAt: now,
+	}).Error
 }

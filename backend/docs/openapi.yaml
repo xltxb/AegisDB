@@ -276,7 +276,7 @@ components:
         env: { type: string, description: 快照:在哪个环境跑的 }
         tierCode: { type: string, description: 快照:按哪个分层判的 }
         engine: { type: string }
-        projectId: { type: integer, format: int64, description: '归属项目;0 = 未归属' }
+        projectId: { type: integer, format: int64, description: '归属项目 —— 取**目标库**的归属;0 = 未归属' }
         projectName: { type: string, description: 提交时快照 —— 库以后改挂别的项目,历史单据不改账 }
         changeType: { type: string, enum: [dml, ddl, ''], description: '变更类型:dml=数据订正,ddl=结构变更;历史单为空。提交时校验:声明与内容不符、或两类语句同单,均拒收' }
         sql: { type: string, description: 口令已打码;列表接口里截断 }
@@ -346,6 +346,12 @@ components:
               type: array
               description: 单条 ALTER 的驱动报错(如只有规格没有包体时的 COMPILE BODY)
               items: { type: string }
+    DatabaseProjectReq:
+      type: object
+      required: [database]
+      properties:
+        database: { type: string, description: 库名,取对象树给出的那个名字 }
+        projectId: { type: integer, format: int64, description: 0 = 取消归属(合法取值,不是"没填") }
     ProjectReq:
       type: object
       required: [name]
@@ -360,7 +366,7 @@ components:
         name: { type: string }
         owner: { type: string }
         description: { type: string }
-        connections: { type: integer, description: 名下的数据库数;>0 时不可删除 }
+        databases: { type: integer, description: 名下的数据库数;>0 时不可删除 }
         releases: { type: integer, description: 名下的升级单数(含库已改挂他处的历史单据) }
         createdAt: { type: string, format: date-time }
     ServiceAccountReq:
@@ -719,6 +725,9 @@ paths:
       tags: [connections]
       summary: '[db] 项目列表(含名下数据库数与升级单数)'
       description: |
+        归属的单位是**数据库**,不是数据源:一个实例底下的几个库分属不同团队是常态,
+        把归属挂在实例上,等于逼着人按项目去拆实例。
+
         项目是**组织维度,不是安全边界**:它回答"这个库、这张单归谁跟进",判定层
         (能力矩阵 / 标签范围 / 高危字典)一概不看它。谁能访问哪些库,仍然只由
         Connection.tags 与角色决定。读开放给所有已登录用户 —— 归属信息本身不敏感。
@@ -778,6 +787,23 @@ paths:
       summary: '[db · admin] 局部修改:status / tags / policy'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/database-project:
+    put:
+      tags: [connections]
+      summary: '[db · admin] 把实例下的一个库归到项目(projectId 0 = 取消归属)'
+      description: |
+        归属的单位是**数据库**,不是实例 —— 一个实例底下的几个库分属不同团队是常态。
+
+        库名按**发现到的名字**存(系统里没有库的注册表,对象树是实时 introspect 的),
+        与升级单记录目标库用的是同一个字符串。库名不校验是否真实存在:对象树可能
+        正好连不上,而记账不该取决于连通性;指向不存在的库的归属是惰性的 —— 没有
+        任何地方会列出它。项目则必须存在,否则库会显示"已归属"而无人认领。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DatabaseProjectReq' }
+      responses: { '200': { description: 'OK / 40001 项目不存在或未指定数据库' } }
   /connections/{id}/test:
     post:
       tags: [connections]
@@ -787,7 +813,7 @@ paths:
   /connections/{id}/schema:
     get:
       tags: [connections]
-      summary: '[terminal] 库表树'
+      summary: '[terminal] 库表树(每个库带回它的归属项目)'
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
         - { name: database, in: query, schema: { type: string } }

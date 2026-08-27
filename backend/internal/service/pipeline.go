@@ -319,8 +319,8 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		}
 	}
 
-	// 归属项目按提交这一刻的库快照下来 —— 库以后改挂别的项目,历史单据不改账。
-	projectID, projectName := s.projectOf(conn)
+	// 归属项目按提交这一刻的目标库快照下来 —— 库以后改挂别的项目,历史单据不改账。
+	projectID, projectName := s.projectOf(conn, req.Database)
 	rel := &model.Release{
 		RelNo: s.nextRelNo(), Title: clip(strings.TrimSpace(req.Title), 100),
 		PipelineID: pipeline.ID, PipelineName: pipeline.Name,

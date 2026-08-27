@@ -232,9 +232,6 @@ type Connection struct {
 	Password    string    `gorm:"size:255" json:"-"`                   // never serialized
 	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema / sqlite file
 	Tags        string    `gorm:"size:255" json:"tags"` // comma-separated labels for group access
-	// ProjectID 是**组织归属**,判定层一概不看它(访问范围仍由 Tags 决定)。
-	// 0 = 未归属,合法状态:项目是后加的维度,存量库不该因为没人填归属就不可用。
-	ProjectID   int64     `gorm:"not null;default:0;index:idx_connection_project" json:"projectId"`
 	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // online|maint
 	CreatedAt   time.Time `json:"createdAt"`
 }
@@ -256,6 +253,31 @@ type Project struct {
 }
 
 func (Project) TableName() string { return "tbl_project" }
+
+// DatabaseProject files ONE DATABASE under a project.
+//
+// The unit is the database, not the connection: one instance routinely hosts
+// databases owned by different teams, and hanging the filing on the instance
+// would force people to split instances along org lines — org structure
+// dictating database topology, which is backwards.
+//
+// Databases are DISCOVERED, never registered (the tree introspects them live),
+// so the key is the NAME as the tree reports it — the same string a release
+// records as its target. A row whose database later disappears is harmless:
+// nothing lists it, and no lookup matches it.
+//
+// No row = 未归属, which is a legitimate state rather than a gap to be fixed.
+type DatabaseProject struct {
+	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64     `gorm:"uniqueIndex:uk_db_project,priority:1;not null" json:"connectionId"`
+	Database     string    `gorm:"column:db_name;uniqueIndex:uk_db_project,priority:2;size:128;not null" json:"database"`
+	ProjectID    int64     `gorm:"not null;index:idx_db_project_project" json:"projectId"`
+	CreatedBy    int64     `gorm:"not null;default:0" json:"createdBy"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+func (DatabaseProject) TableName() string { return "tbl_database_project" }
 
 // Export job / task states.
 const (
