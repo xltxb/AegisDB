@@ -25,9 +25,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	if database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}

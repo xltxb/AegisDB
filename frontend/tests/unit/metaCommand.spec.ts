@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { translateMetaSql } from '../../src/lib/metaCommand'
+import { translateMetaSql, translateDescribe } from '../../src/lib/metaCommand'
 
 // Describing a relation is answered by querying the catalog for its columns, and
 // a name that does not exist simply yields ZERO ROWS. The terminal then drew an
@@ -75,4 +75,69 @@ test('a schema-qualified relation keeps its schema filter', () => {
   const sql = translateMetaSql('\\d public.users', 'postgres')!.sql
   expect(sql).toContain("table_schema='public'")
   expect(sql).toContain("table_name='users'")
+})
+
+// ---------------------------------------------------------------- DESC / DESCRIBE
+//
+// DESC 是 SQL*Plus 的客户端命令,不是 SQL。原样发给 Oracle 服务端会得到
+// ORA-00900: invalid SQL statement —— 而它是每个 DBA 的肌肉记忆,不能只回一句
+// 报错了事。MySQL 家族的 DESC 本来就是合法 SQL,那里必须原样放行,别去修一个
+// 没坏的东西。
+test('DESC 在没有该语法的引擎上被翻译,在 MySQL 家族原样放行', () => {
+  for (const engine of ['oracle', 'postgres', 'dws', 'sqlite']) {
+    const r = translateDescribe('desc emp', engine)
+    expect(r, engine).not.toBeNull()
+    expect(r!.sql.toLowerCase(), engine).not.toContain('desc emp')
+    expect(r!.emptyNotice?.id, engine).toBe('termRelationNotFound')
+  }
+  // MySQL / TiDB / PolarDB / MariaDB:DESC 是原生语法
+  for (const engine of ['MySQL 8.0', 'TiDB 7', 'PolarDB', 'MariaDB']) {
+    expect(translateDescribe('desc emp', engine), engine).toBeNull()
+  }
+})
+
+test('DESCRIBE 全拼与大小写、结尾分号都认', () => {
+  for (const cmd of ['DESCRIBE emp', 'Desc emp;', 'desc   emp  ;']) {
+    const r = translateDescribe(cmd, 'oracle')
+    expect(r, cmd).not.toBeNull()
+    expect(r!.sql, cmd).toContain("'EMP'")
+  }
+})
+
+// ORDER BY … DESC 不是描述命令 —— 拦错了会把一条正常查询变成目录查询。
+test('DESC 作为排序关键字不被误拦', () => {
+  for (const cmd of ['SELECT * FROM t ORDER BY id DESC', 'select a desc, b from t']) {
+    expect(translateDescribe(cmd, 'oracle'), cmd).toBeNull()
+  }
+  expect(translateDescribe('desc', 'oracle')).toBeNull() // 没有对象名
+})
+
+// v$session 是公共同义词,ALL_TAB_COLUMNS 里的真名是 V_$SESSION。只按名字直查
+// 会返回零行 —— 用户看到的是"空表格",而不是这个视图的列。
+test('Oracle 的描述要能穿透同义词', () => {
+  const r = translateDescribe('desc v$session', 'oracle')
+  expect(r).not.toBeNull()
+  expect(r!.sql.toLowerCase()).toContain('all_synonyms')
+  expect(r!.sql).toContain("'V$SESSION'")
+})
+
+// SQL*Plus 的 DESCRIBE 会给出长度/精度;只显示 VARCHAR2 而不说多长,等于没描述。
+test('Oracle 的描述带出长度与精度', () => {
+  const sql = translateDescribe('desc emp', 'oracle')!.sql.toLowerCase()
+  expect(sql).toContain('char_length')
+  expect(sql).toContain('data_precision')
+})
+
+// owner.table 要按属主限定,否则同名表会混在一起。
+test('限定名按属主过滤', () => {
+  const r = translateDescribe('desc scott.emp', 'oracle')
+  expect(r!.sql).toContain("'SCOTT'")
+  expect(r!.sql).toContain("'EMP'")
+})
+
+// 参数是拼进 SQL 字符串字面量的,注入必须挡住。
+test('对象名里的引号与分号不得穿透', () => {
+  const r = translateDescribe(`desc emp'; DROP TABLE users --`, 'oracle')
+  // 要么直接不认(原样交给服务端去拒),要么翻译出来但注入不得穿透 —— 两者都安全
+  expect(r === null || (!r.sql.includes(';') && !/drop\s+table/i.test(r.sql))).toBe(true)
 })

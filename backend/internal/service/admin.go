@@ -120,9 +120,7 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 	}
 	// A caller may target a specific database (e.g. a PostgreSQL database picked
 	// from the list) to load that database's tables.
-	if database = strings.TrimSpace(database); database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if gateway.RealExecSupported(conn) {
 		groups, err := gateway.RealSchema(conn)
 		if err != nil {
@@ -173,9 +171,7 @@ func (s *Services) ConnectionObjects(u *model.User, connID int64, scope, databas
 		out.Error = "无权访问该连接"
 		return out
 	}
-	if database = strings.TrimSpace(database); database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if !gateway.RealExecSupported(conn) {
 		return simulatedObjects(conn.Engine)
 	}
@@ -211,9 +207,7 @@ func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, ty
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
-	if database = strings.TrimSpace(database); database != "" {
-		conn.Database = database
-	}
+	applyTargetDatabase(conn, database)
 	if !gateway.RealExecSupported(conn) {
 		return &dto.ObjectSourceResp{Name: name, Type: typ, Source: simulatedObjectSource(conn.Engine, typ, name)}, nil
 	}

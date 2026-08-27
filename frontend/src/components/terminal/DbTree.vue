@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X, Hammer } from 'lucide-vue-next'
+import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X, Hammer, TriangleAlert, Copy, Check } from 'lucide-vue-next'
 import api from '@/api'
 import ObjectGroups from './ObjectGroups.vue'
 import { highlightSqlHtml } from '@/lib/sqlHighlight'
+import { copyText } from '@/lib/clipboard'
 import { engineDisplay, engineLabels } from '@/lib/engines'
 import { useEnvTierStore } from '@/stores/envtier'
 import type { Connection, ConnectionSchema, DbObjects } from '@/types'
@@ -123,16 +124,36 @@ async function openSource(cid: number, scope: string, type: string, name: string
 }
 function closeSource() { src.value.open = false }
 
+// 复制建表/源码文本。复制的是**原始文本**,不是渲染后的高亮 DOM —— 后者会把
+// 语法着色的标签一起带走。成功与否如实反馈:复制这种事,谎报成功比失败更糟。
+const srcCopied = ref(false)
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+async function copySource() {
+  const ok = await copyText(src.value.text)
+  if (!ok) { srcCopyErr.value = true; setTimeout(() => (srcCopyErr.value = false), 2000); return }
+  srcCopied.value = true
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => (srcCopied.value = false), 1600)
+}
+const srcCopyErr = ref(false)
+
 // ---- 编译(Oracle 存储程序) ----
 //
 // 只有 Oracle 有编译单元。按钮的可见性跟着实例引擎走,而不是跟着对象类型猜:
 // 其它引擎上的 "procedure" 没有 ALTER … COMPILE 这回事。
 const COMPILABLE = ['package', 'procedure', 'function', 'trigger', 'type']
 const compileState = ref<{ busy: boolean; report: any | null; err: string }>({ busy: false, report: null, err: '' })
-const canCompile = computed(() => {
-  const c = props.connections.find((x) => x.id === src.value.cid)
-  return !!c && /oracle/i.test(c.engine) && COMPILABLE.includes(src.value.type)
-})
+const srcConn = computed(() => props.connections.find((x) => x.id === src.value.cid) || null)
+const isOracleSrc = computed(() => !!srcConn.value && /oracle/i.test(srcConn.value.engine))
+const canCompile = computed(() => isOracleSrc.value && COMPILABLE.includes(src.value.type))
+
+// 连续问号 = 库里存的就是问号,不是这一页显示坏了。
+//
+// 成因是部署该对象时客户端 NLS_LANG 与库字符集不匹配:Oracle 在 CREATE 那一刻
+// 就把每个转换不了的字符换成 '?' 永久存下,ALL_SOURCE 里已经没有原文。看到的人
+// 第一反应总是"页面乱码",于是去查前端、查传输、查驱动 —— 这行提示就是为了把那
+// 段弯路省掉,并给出可自证的办法。
+const looksMojibake = computed(() => isOracleSrc.value && /\?{2,}/.test(src.value.text))
 // 成功的判定跟后端一致:每个单元 VALID 且没有诊断。前端不另立标准。
 const cmpOK = computed(() => {
   const r = compileState.value.report
@@ -427,6 +448,9 @@ function clickInst(id: number) {
         <div class="src-hdr">
           <div class="src-title">{{ src.name }}</div>
           <span class="src-type">{{ src.type }}</span>
+          <button v-if="src.text && !src.loading" class="src-copy" @click="copySource">
+            <component :is="srcCopied ? Check : Copy" :size="13" />{{ srcCopied ? $t('copied') : $t('copy') }}
+          </button>
           <button v-if="canCompile" class="src-compile" :disabled="compileState.busy" @click="compileObject">
             <Hammer :size="13" />{{ compileState.busy ? $t('objCompiling') : $t('objCompile') }}
           </button>
@@ -448,6 +472,18 @@ function clickInst(id: number) {
             <span class="cmp-loc">{{ d.type }} {{ d.line }}:{{ d.position }}</span>{{ d.text }}
           </div>
           <div v-for="(w, i) in (compileState.report.warnings || [])" :key="'w' + i" class="cmp-diag warn">{{ w }}</div>
+        </div>
+
+        <div v-if="srcCopyErr" class="cmp err">{{ $t('objCopyFail') }}</div>
+
+        <!-- 库里存的就是问号 —— 说清楚它不是显示问题,并给出自证方式 -->
+        <div v-if="looksMojibake && !src.loading && !src.err" class="mojibake">
+          <TriangleAlert :size="14" />
+          <div>
+            <div class="mj-t">{{ $t('objMojibakeTitle') }}</div>
+            <div class="mj-s">{{ $t('objMojibakeSub') }}</div>
+            <code class="mj-q">SELECT line, dump(text, 1016) FROM all_source WHERE name = '{{ src.name }}'</code>
+          </div>
         </div>
 
         <div class="src-body scy">
@@ -535,7 +571,13 @@ function clickInst(id: number) {
 .src-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
 .src-title { font: 600 13px var(--font-mono); color: var(--text-strong); }
 .src-type { font: 600 10px var(--font-mono); color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.08em; }
-.src-compile { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer; }
+.src-copy { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer; }
+.src-copy:hover { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
+.mojibake { display: flex; gap: 10px; margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--warning-text); background: var(--warning-subtle); color: var(--warning-text); }
+.mj-t { font: 600 12px var(--font-body); }
+.mj-s { margin-top: 3px; font: 500 11.5px var(--font-body); color: var(--text-body); }
+.mj-q { display: block; margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: var(--surface-card); border: 1px solid var(--border-subtle); font: 500 10.5px var(--font-mono); color: var(--text-muted); overflow-x: auto; white-space: nowrap; }
+.src-compile { margin-left: 8px; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer; }
 .src-compile:hover:not(:disabled) { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
 .src-compile:disabled { opacity: 0.6; cursor: default; }
 .cmp { margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border-default); background: var(--surface-sunken); font: 500 11.5px var(--font-body); }
