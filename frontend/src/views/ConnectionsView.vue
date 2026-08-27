@@ -5,6 +5,7 @@ import { Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
+import ProjectsPanel from '@/components/settings/ProjectsPanel.vue'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -12,7 +13,7 @@ import { useEnvTierStore } from '@/stores/envtier'
 import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
 import { UTF8_BOM } from '@/lib/transcript'
 import { engineDisplay, engineLabels } from '@/lib/engines'
-import type { Connection } from '@/types'
+import type { Connection, Project } from '@/types'
 
 const auth = useAuthStore()
 // Instance configuration is platform-admin only (backend enforces it too).
@@ -23,6 +24,20 @@ const ui = useUIStore()
 const envtier = useEnvTierStore()
 
 const conns = ref<Connection[]>([])
+// 项目:库的组织归属。与 tags 是两回事 —— tags 决定谁能碰这个库(判定层会看),
+// 项目决定这个库归谁跟进(判定层不看)。两者显示上刻意分开,免得被当成一回事。
+const projects = ref<Project[]>([])
+const projectsPanel = ref<InstanceType<typeof ProjectsPanel> | null>(null)
+const projectName = (id?: number) => projects.value.find((p) => p.id === id)?.name || ''
+async function setProject(c: Connection, id: number) {
+  try {
+    const env = await api.setConnectionProject(c.id, id)
+    if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
+    c.projectId = id
+    // 计数变了,面板要跟着刷新 —— 否则删除按钮会依据过时的数字给出错误预期。
+    await projectsPanel.value?.load()
+  } catch (e) { ui.notifyError(e, t('actionFailed')) }
+}
 // 数据源一多,双层分组的长表就成了"滚动扫全表"。三件套:全字段搜索、环境
 // 筛选、分组折叠 —— 搜索时强制展开,否则命中项藏在折叠组里等于没搜到。
 const q = ref('')
@@ -319,6 +334,7 @@ async function load() {
   // M14: 加载失败以 toast 呈现，避免静默失败
   try {
     conns.value = await api.connections()
+    try { projects.value = await api.projects() } catch { /* 归属下拉降级为空 */ }
     ui.pageSub = t('subDb', { n: conns.value.length })
   } catch (e) {
     ui.notifyError(e, t('actionFailed'))
@@ -412,6 +428,8 @@ async function add() {
       </div>
     </div>
 
+    <ProjectsPanel ref="projectsPanel" class="prpanel" @changed="projects = $event" />
+
     <div class="table">
       <div class="thead">
         <span>{{ $t('colInst') }}</span><span>{{ $t('colEngine') }}</span><span>{{ $t('colAddr') }}</span>
@@ -435,6 +453,13 @@ async function add() {
             <div class="cl">{{ c.layer }}</div>
             <div class="tags">
               <span class="rbadge" :class="c.username ? 'real' : 'sim'">{{ c.username ? $t('connReal') : $t('connSim') }}</span>
+              <!-- 归属项目:与下面的访问标签刻意分开,两者不是一回事 -->
+              <select v-if="isAdmin" class="prsel" :value="c.projectId || 0" :title="$t('connProject')"
+                      @change="setProject(c, Number(($event.target as HTMLSelectElement).value))">
+                <option :value="0">{{ $t('connNoProject') }}</option>
+                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <span v-else-if="c.projectId" class="prchip">{{ projectName(c.projectId) }}</span>
               <span v-for="tg in tagArr(c.tags)" :key="tg" class="tchip">{{ tg }}</span>
               <span v-if="isAdmin" class="tedit" @click="openTagEdit(c)"><Tag :size="10" />{{ tagArr(c.tags).length ? $t('edit') : $t('tagAdd') }}</span>
             </div>
@@ -562,6 +587,9 @@ async function add() {
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .head { display: flex; align-items: center; margin-bottom: 14px; }
+.prpanel { margin-bottom: 16px; }
+.prsel { height: 20px; max-width: 150px; padding: 0 4px; border: 1px solid var(--accent-text); border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); cursor: pointer; }
+.prchip { padding: 1px 7px; border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); }
 .toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
 .searchbox { display: flex; align-items: center; gap: 8px; width: 300px; padding: 0 12px; height: 36px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-faint); }
 .searchbox:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }

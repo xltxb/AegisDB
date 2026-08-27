@@ -319,11 +319,14 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		}
 	}
 
+	// 归属项目按提交这一刻的库快照下来 —— 库以后改挂别的项目,历史单据不改账。
+	projectID, projectName := s.projectOf(conn)
 	rel := &model.Release{
 		RelNo: s.nextRelNo(), Title: clip(strings.TrimSpace(req.Title), 100),
 		PipelineID: pipeline.ID, PipelineName: pipeline.Name,
 		ConnectionID: conn.ID, Instance: conn.Name, Database: conn.Database,
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
+		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
 		Reason: clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
@@ -1253,7 +1256,7 @@ func (s *Services) stagesOf(id int64) []model.ReleaseStage {
 
 // ListReleases returns a page of runs. A user sees their own; oversight roles
 // (the same ones that may see all terminal activity) see everything.
-func (s *Services) ListReleases(u *model.User, scope, status string, page, pageSize int) dto.ReleasePage {
+func (s *Services) ListReleases(u *model.User, scope, status string, page, pageSize int, projectID int64) dto.ReleasePage {
 	if page < 1 {
 		page = 1
 	}
@@ -1263,7 +1266,7 @@ func (s *Services) ListReleases(u *model.User, scope, status string, page, pageS
 	if scope != "all" || !s.canSeeAllActivity(u) {
 		scope = "mine"
 	}
-	rels, total, err := s.Repo.ListReleasesPaged(scope, u.ID, status, (page-1)*pageSize, pageSize)
+	rels, total, err := s.Repo.ListReleasesPaged(scope, u.ID, status, projectID, (page-1)*pageSize, pageSize)
 	if err != nil {
 		return dto.ReleasePage{Items: []dto.ReleaseView{}}
 	}

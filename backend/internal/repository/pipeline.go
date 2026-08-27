@@ -151,10 +151,15 @@ func (r *Repo) GetReleaseByNo(no string) (*model.Release, error) {
 
 // ListReleasesPaged returns releases newest first. scope "mine" narrows to the
 // caller's own; anything else lists all (the handler decides who may ask for it).
-func (r *Repo) ListReleasesPaged(scope string, userID int64, status string, offset, limit int) ([]model.Release, int64, error) {
+func (r *Repo) ListReleasesPaged(scope string, userID int64, status string, projectID int64, offset, limit int) ([]model.Release, int64, error) {
 	q := r.db.Model(&model.Release{})
 	if scope == "mine" {
 		q = q.Where("creator_id = ?", userID)
+	}
+	// 按项目跟进:0 = 不限,与"未归属"不同 —— 后者要显式查 project_id = 0,
+	// 这里用不到,列表页的"全部项目"就是不加这个条件。
+	if projectID > 0 {
+		q = q.Where("project_id = ?", projectID)
 	}
 	if status != "" && status != "all" {
 		q = q.Where("status = ?", status)

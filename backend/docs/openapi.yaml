@@ -276,6 +276,8 @@ components:
         env: { type: string, description: 快照:在哪个环境跑的 }
         tierCode: { type: string, description: 快照:按哪个分层判的 }
         engine: { type: string }
+        projectId: { type: integer, format: int64, description: '归属项目;0 = 未归属' }
+        projectName: { type: string, description: 提交时快照 —— 库以后改挂别的项目,历史单据不改账 }
         changeType: { type: string, enum: [dml, ddl, ''], description: '变更类型:dml=数据订正,ddl=结构变更;历史单为空。提交时校验:声明与内容不符、或两类语句同单,均拒收' }
         sql: { type: string, description: 口令已打码;列表接口里截断 }
         reason: { type: string }
@@ -344,6 +346,23 @@ components:
               type: array
               description: 单条 ALTER 的驱动报错(如只有规格没有包体时的 COMPILE BODY)
               items: { type: string }
+    ProjectReq:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: 订单业务线, description: 名称即身份,唯一 }
+        owner: { type: string, nullable: true, description: '负责人 / 团队;编辑时缺席=不变' }
+        description: { type: string, nullable: true, description: 编辑时缺席=不变 }
+    ProjectView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        owner: { type: string }
+        description: { type: string }
+        connections: { type: integer, description: 名下的数据库数;>0 时不可删除 }
+        releases: { type: integer, description: 名下的升级单数(含库已改挂他处的历史单据) }
+        createdAt: { type: string, format: date-time }
     ServiceAccountReq:
       type: object
       required: [name, roleIds]
@@ -695,6 +714,50 @@ paths:
       responses: { '200': { description: 文件流 } }
 
   # ---------------------------------------------------------------- connections
+  /projects:
+    get:
+      tags: [connections]
+      summary: '[db] 项目列表(含名下数据库数与升级单数)'
+      description: |
+        项目是**组织维度,不是安全边界**:它回答"这个库、这张单归谁跟进",判定层
+        (能力矩阵 / 标签范围 / 高危字典)一概不看它。谁能访问哪些库,仍然只由
+        Connection.tags 与角色决定。读开放给所有已登录用户 —— 归属信息本身不敏感。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProjectView' }
+    post:
+      tags: [connections]
+      summary: '[db · admin] 新建项目'
+      description: 名称即身份(唯一)。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectReq' }
+      responses: { '200': { description: 'OK / 40001 名称为空或重名' } }
+  /projects/{id}:
+    patch:
+      tags: [connections]
+      summary: '[db · admin] 编辑项目(局部更新:缺席字段保持原值)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectReq' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [connections]
+      summary: '[db · admin] 删除项目(名下还有数据库时拒绝)'
+      description: |
+        名下仍有数据库时**拒绝删除**并说明还剩几个 —— 悄悄把库变成"未归属",会让
+        跟进视图静静地说谎。历史升级单不阻止删除:它们带的是项目名的快照,项目没了
+        也读得出当初挂在哪。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK / 40001 名下还有数据库' } }
   /connections:
     get:
       tags: [connections]
@@ -1052,6 +1115,7 @@ paths:
       parameters:
         - { name: scope, in: query, schema: { type: string, enum: [mine, all], default: mine }, description: all 需监管角色 }
         - { name: status, in: query, schema: { type: string } }
+        - { name: projectId, in: query, schema: { type: integer, format: int64 }, description: '按项目跟进;缺省/0 = 全部项目' }
         - { name: page, in: query, schema: { type: integer, default: 1 } }
         - { name: pageSize, in: query, schema: { type: integer, default: 20, maximum: 100 } }
       responses:

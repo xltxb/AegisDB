@@ -1,7 +1,7 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Release, ReleasePage, ReviewCatalog, ServiceAccount,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, Release, ReleasePage, ReviewCatalog, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -244,10 +244,20 @@ export const api = {
       ? http.put<any, Envelope<Pipeline>>(`/pipelines/${id}`, body)
       : http.post<any, Envelope<Pipeline>>('/pipelines', body),
   deletePipeline: (id: number) => http.delete<any, Envelope<any>>(`/pipelines/${id}`),
-  releases: (scope: 'mine' | 'all' = 'mine', status = '', page = 1, pageSize = 20) =>
+  releases: (scope: 'mine' | 'all' = 'mine', status = '', page = 1, pageSize = 20, projectId = 0) =>
     http.get<any, Envelope<ReleasePage>>(
-      `/releases?scope=${scope}&status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`,
+      `/releases?scope=${scope}&status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}&projectId=${projectId}`,
     ).then(ok),
+
+  // ---- 项目(数据库与升级单的归属) ----
+  projects: () => http.get<any, Envelope<Project[]>>('/projects').then(ok),
+  createProject: (body: { name: string; owner?: string; description?: string }) =>
+    http.post<any, Envelope<Project>>('/projects', body),
+  updateProject: (id: number, body: Partial<{ name: string; owner: string; description: string }>) =>
+    http.patch<any, Envelope<Project>>(`/projects/${id}`, body),
+  deleteProject: (id: number) => http.delete<any, Envelope<any>>(`/projects/${id}`),
+  setConnectionProject: (id: number, projectId: number) =>
+    http.patch<any, Envelope<any>>(`/connections/${id}`, { projectId }),
   release: (id: number) => http.get<any, Envelope<Release>>(`/releases/${id}`).then(ok),
   // raw envelope so the caller can detect 42800 (MFA step-up) and 40300 (denied
   // by the capability matrix), which mean different things to the operator.

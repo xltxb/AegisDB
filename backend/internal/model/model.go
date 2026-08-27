@@ -232,11 +232,30 @@ type Connection struct {
 	Password    string    `gorm:"size:255" json:"-"`                   // never serialized
 	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema / sqlite file
 	Tags        string    `gorm:"size:255" json:"tags"` // comma-separated labels for group access
+	// ProjectID 是**组织归属**,判定层一概不看它(访问范围仍由 Tags 决定)。
+	// 0 = 未归属,合法状态:项目是后加的维度,存量库不该因为没人填归属就不可用。
+	ProjectID   int64     `gorm:"not null;default:0;index:idx_connection_project" json:"projectId"`
 	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // online|maint
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
 func (Connection) TableName() string { return "tbl_connection" }
+
+// Project groups databases and the releases raised against them, so a team can
+// follow what is happening to the databases it owns. It is an ORGANISATIONAL
+// axis only — see service/project.go for why it deliberately is not a security
+// boundary (Connection.Tags already is one).
+type Project struct {
+	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string    `gorm:"size:64;uniqueIndex:uk_project_name;not null" json:"name"`
+	Owner       string    `gorm:"size:64" json:"owner"`
+	Description string    `gorm:"size:512" json:"description"`
+	CreatedBy   int64     `gorm:"not null;default:0" json:"createdBy"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+func (Project) TableName() string { return "tbl_project" }
 
 // Export job / task states.
 const (
@@ -764,6 +783,9 @@ type Release struct {
 	// 内容推断,两类语句不得同单 —— 审批人按类型评估风险(DDL 锁表、DML 影响
 	// 行数),混装让两种评估都失效。见 service.releaseChangeType 的分类口径。
 	ChangeType   string `gorm:"size:8" json:"changeType"`
+	// 归属项目,提交时从目标库快照 —— 库以后改挂别的项目,历史单据不跟着改账。
+	ProjectID    int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
+	ProjectName  string `gorm:"size:64" json:"projectName"`
 	SQL          string `gorm:"type:mediumtext" json:"sql"`
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`

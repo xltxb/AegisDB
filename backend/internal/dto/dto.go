@@ -1,6 +1,8 @@
 // Package dto defines request/response payloads (the front/back contract).
 package dto
 
+import "time"
+
 // ---- Auth ----
 
 type LoginReq struct {
@@ -21,11 +23,11 @@ type MeResp struct {
 	Name         string                       `json:"name"`
 	Email        string                       `json:"email"`
 	Initials     string                       `json:"initials"`
-	RoleID       int64                        `json:"roleId"`   // primary role (display/JWT)
+	RoleID       int64                        `json:"roleId"` // primary role (display/JWT)
 	RoleCode     string                       `json:"roleCode"`
 	RoleName     string                       `json:"roleName"`
 	Layer        string                       `json:"layer"`
-	RoleIDs      []int64                      `json:"roleIds"`   // every role held (union permissions)
+	RoleIDs      []int64                      `json:"roleIds"` // every role held (union permissions)
 	RoleNames    []string                     `json:"roleNames"`
 	RoleCodes    []string                     `json:"roleCodes"` // codes of all held roles (e.g. contains "admin")
 	CanApprove   bool                         `json:"canApprove"`
@@ -129,11 +131,11 @@ type ScriptScanReq struct {
 	// gateway reads that file itself and ignores anything sent here. It was
 	// `binding:"required"`, which made "the file is already on the server" an
 	// impossible request to express.
-	Content      string `json:"content"`
-	Filename     string `json:"filename"`
-	MfaCode      string `json:"mfaCode"`
-	UploadID     int64  `json:"uploadId"` // >0 = already-uploaded script; don't save again
-	Database     string `json:"database"` // selected target database within the instance
+	Content  string `json:"content"`
+	Filename string `json:"filename"`
+	MfaCode  string `json:"mfaCode"`
+	UploadID int64  `json:"uploadId"` // >0 = already-uploaded script; don't save again
+	Database string `json:"database"` // selected target database within the instance
 }
 
 type ScannedStmt struct {
@@ -184,6 +186,8 @@ type ConnectionStatusReq struct {
 	Status string  `json:"status"`           // online|maint (empty = toggle)
 	Tags   *string `json:"tags,omitempty"`   // when present, replace the connection's tags
 	Policy *string `json:"policy,omitempty"` // when present, set the gateway policy
+	// ProjectID:归属项目。0 是**取消归属**的合法取值,所以用指针区分"没提"和"设为 0"。
+	ProjectID *int64 `json:"projectId,omitempty"`
 }
 
 // RoleTagsReq assigns the DB tags a role (user group) may access.
@@ -255,9 +259,9 @@ type ConnectionSchemaResp struct {
 }
 
 type SchemaDBDTO struct {
-	Name    string             `json:"name"`
-	Schemas []SchemaSchemaDTO  `json:"schemas,omitempty"` // database → schema → tables (PostgreSQL)
-	Tables  []SchemaTableDTO   `json:"tables"`            // database → tables (flat engines)
+	Name    string            `json:"name"`
+	Schemas []SchemaSchemaDTO `json:"schemas,omitempty"` // database → schema → tables (PostgreSQL)
+	Tables  []SchemaTableDTO  `json:"tables"`            // database → tables (flat engines)
 }
 
 // SchemaSchemaDTO is a schema within a database and its tables.
@@ -310,7 +314,25 @@ type MemberDTO struct {
 	Dept     string `json:"dept"`
 	// Kind 让调用方分得出真人与服务账号 —— 服务账号登录不了控制台,不能审批,
 	// 发布流程编辑器据此把它排除在"将由谁审批"之外(与后端 decidableApprovers 同口径)。
-	Kind     string `json:"kind"`
+	Kind string `json:"kind"`
+}
+
+// ProjectReq creates or edits a project. Owner/Description are pointers so an
+// edit that only renames cannot blank the fields it never mentioned.
+type ProjectReq struct {
+	Name        string  `json:"name"`
+	Owner       *string `json:"owner"`
+	Description *string `json:"description"`
+}
+
+type ProjectView struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	Owner       string    `json:"owner"`
+	Description string    `json:"description"`
+	Connections int       `json:"connections"`
+	Releases    int       `json:"releases"`
+	CreatedAt   time.Time `json:"createdAt"`
 }
 
 type RoleUpdateReq struct {
@@ -401,10 +423,10 @@ type UserView struct {
 	Initials      string   `json:"initials"`
 	Dept          string   `json:"dept"`
 	Roles         []string `json:"roles"`
-	RoleIDs       []int64  `json:"roleIds"`       // every role held (for the multi-role editor)
+	RoleIDs       []int64  `json:"roleIds"` // every role held (for the multi-role editor)
 	PrimaryRoleID int64    `json:"primaryRoleId"`
 	Status        string   `json:"status"`
-	Kind          string   `json:"kind"`          // human|service — 服务账号在用户列表里要能一眼认出来
+	Kind          string   `json:"kind"` // human|service — 服务账号在用户列表里要能一眼认出来
 	MFAEnabled    bool     `json:"mfaEnabled"`
 	LastActive    string   `json:"lastActive"`
 }

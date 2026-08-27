@@ -20,7 +20,7 @@ import { CODE_MFA_REQUIRED } from '@/api/http'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import type { Connection, Pipeline, Release, ReleaseStage, ReviewResult } from '@/types'
+import type { Project, Connection, Pipeline, Release, ReleaseStage, ReviewResult } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -29,6 +29,9 @@ const auth = useAuthStore()
 const releases = ref<Release[]>([])
 const openId = ref(0)
 const scope = ref<'mine' | 'all'>('mine')
+// 按项目跟进升级单 —— 这正是项目这个维度存在的理由。0 = 全部项目。
+const projectFilter = ref(0)
+const projects = ref<Project[]>([])
 const pipelines = ref<Pipeline[]>([])
 const conns = ref<Connection[]>([])
 const openStage = ref(0)
@@ -46,7 +49,7 @@ const anyLive = computed(() =>
 
 async function loadList() {
   try {
-    const page = await api.releases(scope.value, '', 1, 50)
+    const page = await api.releases(scope.value, '', 1, 50, projectFilter.value)
     releases.value = page.items
     if (!openId.value && page.items.length) openId.value = page.items[0].id
     ui.pageSub = t('rlSub2', { n: page.total })
@@ -69,6 +72,7 @@ function select(r: Release) {
 onMounted(async () => {
   try { conns.value = await api.connections() } catch { /* the form falls back to an empty picker */ }
   try { pipelines.value = await api.pipelines() } catch { /* same */ }
+  try { projects.value = await api.projects() } catch { /* 筛选器降级为“全部项目” */ }
   await loadList()
   await refreshOpen()
   timer = setInterval(() => { if (anyLive.value) { loadList(); refreshOpen() } }, 2500)
@@ -236,6 +240,12 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
           <div class="si" :class="{ active: scope === 'mine' }" @click="scope = 'mine'; loadList()">{{ $t('rlMine') }}</div>
           <div class="si" :class="{ active: scope === 'all' }" @click="scope = 'all'; loadList()">{{ $t('rlAll') }}</div>
         </div>
+        <div class="pfilter">
+          <select v-model.number="projectFilter" class="psel" @change="loadList()">
+            <option :value="0">{{ $t('rlAllProjects') }}</option>
+            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
+          </select>
+        </div>
         <VButton variant="primary" @click="openForm"><Plus :size="15" />{{ $t('rlNew') }}</VButton>
       </div>
     </div>
@@ -246,6 +256,7 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
         <div v-for="r in releases" :key="r.id" class="ritem" :class="{ on: r.id === openId }" @click="select(r)">
           <div class="rtop">
             <span class="rno">{{ r.relNo }}</span>
+            <span v-if="r.projectName" class="prj">{{ r.projectName }}</span>
             <span v-if="r.changeType" class="ctb" :class="r.changeType">{{ r.changeType.toUpperCase() }}</span>
             <span class="pill" :class="r.status">{{ $t('rlSt_' + r.status) }}</span>
           </div>
@@ -427,10 +438,14 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
 .ctseg { display: inline-flex; gap: 6px; }
 .ct { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--border-default); background: var(--surface-sunken); font: 600 11.5px var(--font-mono); color: var(--text-muted); cursor: pointer; user-select: none; }
 .ct.on { background: var(--accent-subtle); border-color: var(--accent-text); color: var(--accent-text); }
+.prj { padding: 1px 7px; border-radius: 5px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 9.5px var(--font-body); color: var(--text-muted); }
 .ctb { padding: 1px 7px; border-radius: 5px; font: 700 9.5px var(--font-mono); letter-spacing: 0.04em; }
 .ctb.dml { background: var(--success-subtle); color: var(--success-text); }
 .ctb.ddl { background: var(--warning-subtle); color: var(--warning-text); }
 .ctb.big { margin-left: 8px; vertical-align: 2px; }
+.pfilter { display: flex; align-items: center; }
+.psel { height: 30px; max-width: 190px; padding: 0 8px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer; }
+.psel:hover { border-color: var(--accent-text); color: var(--accent-text); }
 .rno { font: 600 11.5px var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-faint); letter-spacing: 0.02em; }
 .rtitle { font: 600 14px var(--font-body); color: var(--text-strong); margin-top: 5px; letter-spacing: -0.005em; }
 .rmeta { display: flex; align-items: center; gap: 7px; margin-top: 6px; font: 500 11.5px var(--font-body); color: var(--text-muted); }

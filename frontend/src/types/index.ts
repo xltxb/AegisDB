@@ -97,10 +97,25 @@ export interface Connection {
   defaultRole: string
   layer: string
   tags: string
+  /** 归属项目;0 = 未归属(合法状态)。组织维度,不参与访问判定。 */
+  projectId?: number
   username?: string
   password?: string
   database?: string
   status: 'online' | 'maint'
+}
+
+// 项目:数据库与升级单的归属。组织维度,不是安全边界(访问范围仍由 tags 决定)。
+export interface Project {
+  id: number
+  name: string
+  owner: string
+  description: string
+  /** 名下的数据库数 —— 删除受它约束 */
+  connections: number
+  /** 名下的升级单数(含库已改挂他处的历史单据) */
+  releases: number
+  createdAt: string
 }
 
 export interface RoleBrief {
@@ -499,6 +514,9 @@ export interface Release {
   tierCode: string
   engine: string
   changeType?: 'dml' | 'ddl' | '' // 变更类型;历史单为空
+  /** 归属项目,提交时从目标库快照 —— 库以后改挂别处,历史单据不改账 */
+  projectId?: number
+  projectName?: string
   sql: string
   scriptUploadId?: number
   reason: string

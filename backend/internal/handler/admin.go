@@ -85,6 +85,12 @@ func (h *Handler) PatchConnection(c *gin.Context) {
 	_ = c.ShouldBindJSON(&req)
 	id := pathID(c)
 	switch {
+	case req.ProjectID != nil: // 归属项目(0 = 取消归属)
+		if err := h.Svc.SetConnectionProject(id, *req.ProjectID); err != nil {
+			resp.Fail(c, resp.CodeBadRequest, err.Error())
+			return
+		}
+		c.Set("patched", "project")
 	case req.Tags != nil: // replace tags
 		if err := h.Svc.SetConnectionTags(id, *req.Tags); err != nil {
 			resp.Fail(c, resp.CodeInternalError, "保存标签失败")
@@ -823,4 +829,56 @@ func compileErrCode(err error) int {
 	default:
 		return resp.CodeBadRequest
 	}
+}
+
+// ---------------------------------------------------------------- 项目(Project)
+
+// ListProjects returns every project with what it currently owns. Read is open
+// to the db menu: knowing which team owns which database is the point of the
+// feature, and there is nothing sensitive in a name.
+func (h *Handler) ListProjects(c *gin.Context) {
+	resp.OK(c, h.Svc.ListProjects())
+}
+
+func (h *Handler) CreateProject(c *gin.Context) {
+	var req dto.ProjectReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	p, err := h.Svc.CreateProject(middleware.CurrentUser(c), req)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
+	resp.OK(c, p)
+}
+
+func (h *Handler) UpdateProject(c *gin.Context) {
+	var req dto.ProjectReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	p, err := h.Svc.UpdateProject(middleware.CurrentUser(c), pathID(c), req)
+	if err != nil {
+		resp.Fail(c, projectErrCode(err), err.Error())
+		return
+	}
+	resp.OK(c, p)
+}
+
+func (h *Handler) DeleteProject(c *gin.Context) {
+	if err := h.Svc.DeleteProject(middleware.CurrentUser(c), pathID(c)); err != nil {
+		resp.Fail(c, projectErrCode(err), err.Error())
+		return
+	}
+	resp.OK(c, gin.H{"ok": true})
+}
+
+func projectErrCode(err error) int {
+	if errors.Is(err, service.ErrNotFound) {
+		return resp.CodeBadRequest
+	}
+	return resp.CodeBadRequest
 }

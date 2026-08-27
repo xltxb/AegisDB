@@ -32,6 +32,8 @@ type releaseView struct {
 	Title  string      `json:"title"`
 	Status string      `json:"status"`
 	Risk   string      `json:"risk"`
+	ProjectID   int64  `json:"projectId"`
+	ProjectName string `json:"projectName"`
 	Error  string      `json:"error"`
 	Stages []stageView `json:"stages"`
 }

@@ -147,7 +147,13 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 
 		// connections — read is open (tag-filtered); instance config is admin-only
 		a.GET("/connections", h.ListConnections) // tag-filtered per the caller's role
-		a.GET("/tags", h.ListTags)               // distinct connection tags (for pickers)
+		a.GET("/tags", h.ListTags)
+		// 项目 —— 数据库与升级单的归属(组织维度,不是安全边界:判定层不看它)。
+		// 读开放给 db 菜单,增删改与实例配置同一档:admin-only。
+		a.GET("/projects", h.ListProjects)
+		a.POST("/projects", menu("db"), admin, h.CreateProject)
+		a.PATCH("/projects/:id", menu("db"), admin, h.UpdateProject)
+		a.DELETE("/projects/:id", menu("db"), admin, h.DeleteProject)               // distinct connection tags (for pickers)
 		a.POST("/connections", menu("db"), admin, h.CreateConnection)
 		a.PUT("/connections/:id", menu("db"), admin, h.UpdateConnection)
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)

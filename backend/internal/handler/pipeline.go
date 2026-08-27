@@ -63,8 +63,10 @@ func (h *Handler) DeletePipeline(c *gin.Context) {
 func (h *Handler) ListReleases(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	// 按项目跟进升级单:projectId 缺省/0 = 全部项目。
+	projectID, _ := strconv.ParseInt(c.Query("projectId"), 10, 64)
 	resp.OK(c, h.Svc.ListReleases(middleware.CurrentUser(c),
-		c.DefaultQuery("scope", "mine"), c.Query("status"), page, pageSize))
+		c.DefaultQuery("scope", "mine"), c.Query("status"), page, pageSize, projectID))
 }
 
 // GetRelease returns one run with its stages — the pipeline view's data source.
