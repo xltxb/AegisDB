@@ -183,9 +183,9 @@ export const api = {
   updateRole: (id: number, body: { name?: string; description?: string; defaultConnRole?: string; canApprove?: boolean }) =>
     http.patch<any, Envelope<RoleDetail>>(`/roles/${id}`, body).then(ok),
   setMenus: (id: number, menus: Record<string, boolean>) =>
-    http.put(`/roles/${id}/menus`, { menus }),
+    http.put<any, Envelope<any>>(`/roles/${id}/menus`, { menus }).then(ok),
   setCapabilities: (id: number, matrix: Record<string, Record<string, string>>) =>
-    http.put(`/roles/${id}/capabilities`, { matrix }),
+    http.put<any, Envelope<any>>(`/roles/${id}/capabilities`, { matrix }).then(ok),
   setRoleTags: (id: number, tags: string[]) =>
     http.put<any, Envelope<RoleDetail>>(`/roles/${id}/tags`, { tags }).then(ok),
   addMember: (id: number, userId: number) =>
@@ -200,11 +200,13 @@ export const api = {
   invite: (email: string, roleId: number) => http.post('/users/invite', { email, roleId }),
   createUser: (body: { email: string; name?: string; password: string; roleIds: number[] }) =>
     http.post<any, Envelope<any>>('/users', body).then(ok),
-  setUserRoles: (id: number, roleIds: number[]) => http.patch(`/users/${id}`, { roleIds }),
+  setUserRoles: (id: number, roleIds: number[]) =>
+    http.patch<any, Envelope<any>>(`/users/${id}`, { roleIds }).then(ok),
   // Per-user data-access scope. An empty list clears it and the user falls back
   // to the scope their roles grant.
   userTags: (id: number) => http.get<any, Envelope<string[]>>(`/users/${id}/tags`).then(ok),
-  setUserTags: (id: number, tags: string[]) => http.put(`/users/${id}/tags`, { tags }),
+  setUserTags: (id: number, tags: string[]) =>
+    http.put<any, Envelope<any>>(`/users/${id}/tags`, { tags }).then(ok),
   // admin user management: password reset + OTP binding
   setUserPassword: (id: number, password: string) =>
     http.post<any, Envelope<any>>(`/users/${id}/password`, { password }).then(ok),
@@ -299,8 +301,10 @@ export const api = {
       .get<any, Envelope<{ items: Approval[]; total: number }>>(`/approvals?ap=${encodeURIComponent(apNo)}`)
       .then(ok)
       .then((r) => r.items[0] || null),
-  approve: (id: number) => http.post(`/approvals/${id}/approve`),
-  reject: (id: number) => http.post(`/approvals/${id}/reject`),
+  // 返回信封而不是 .then(ok):调用方要拿 msg 原样显示给人看 —— 服务端拒绝的
+  // 理由(不能自审 / 不在审批链 / 已被处理)各自要人做的事完全不同。
+  approve: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/approve`).then(ok),
+  reject: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/reject`).then(ok),
 
   // ---- audit ----
   audit: (q: AuditQuery) => http.get<any, Envelope<AuditPage>>(`/audit?${auditQS(q)}`).then(ok),

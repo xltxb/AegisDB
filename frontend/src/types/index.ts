@@ -190,6 +190,10 @@ export interface ApprovalStep {
 }
 
 export interface Approval {
+  /** 当前登录者此刻能不能决定这张单 —— 服务端算好带下来,前端不再自己判一遍 */
+  canDecide?: boolean
+  /** 不能决定时的理由,显示在按钮原来的位置;可决定时为空 */
+  blockReason?: string
   id: number
   apNo: string
   connectionId: number

@@ -84,16 +84,20 @@ async function goto(p: number) {
   await load()
 }
 
-// Only a member on this approval's chain may act on it (backend enforces too).
+// 谁能决定这张单,由服务端说了算(service.DecideBlockFor)。这里**不再自己判
+// 一遍**:此前前端只看审批链成员,而服务端还有"不能审自己发起的"这一条 ——
+// 两份判断不一致的结果,就是一个亮着却点不动的按钮。
 function canDecide(a: Approval) {
-  return (a.steps || []).some((s) => s.approverId === auth.me?.id)
+  return a.canDecide === true
 }
 async function decide(a: Approval, approve: boolean) {
   if (!canDecide(a)) return
   // B3: 批准会立即真实执行该命令，驳回同样不可逆——二次确认防误点
   const verb = approve ? t('apApprove') : t('apReject')
   if (!confirmAction(t('apConfirm', { verb, cmd: a.command }))) return
-  // M14: 审批/驳回失败以 toast 呈现
+  // M14: 审批/驳回失败以 toast 呈现。api 层经 ok() 把业务级拒绝抛成 Error(msg),
+  // 所以服务端说的理由会原样出现在 toast 上 —— 此前这里只 catch 抛出的异常,而
+  // 拒绝是正常返回的信封,于是点了没反应,也没人说得出为什么。
   try {
     if (approve) await api.approve(a.id)
     else await api.reject(a.id)
@@ -102,6 +106,8 @@ async function decide(a: Approval, approve: boolean) {
     if (detail.value) detail.value = list.value.find((x) => x.id === a.id) || null
   } catch (e) {
     ui.notifyError(e, t('actionFailed'))
+    // 被拒的常见原因之一是"已被别人处理过",刷一次比让人对着过期卡片发呆好。
+    await load()
   }
 }
 
@@ -203,7 +209,7 @@ function chainText(a: Approval) {
             <VButton variant="danger" height="38px" @click="decide(detail, false)">{{ $t('apReject') }}</VButton>
             <VButton variant="primary" height="38px" @click="decide(detail, true)">{{ $t('apApprove') }}</VButton>
           </template>
-          <span v-else-if="detail.status === 'pending'" class="waitc">{{ $t('apWaitChain') }}</span>
+          <span v-else-if="detail.status === 'pending'" class="waitc">{{ detail.blockReason || $t('apWaitChain') }}</span>
           <span v-else class="waitc">{{ detail.status === 'approved' ? $t('apDone') : $t('apRejected') }}</span>
         </div>
       </div>

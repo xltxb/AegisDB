@@ -370,9 +370,13 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "加载失败")
 		return
 	}
+	// canDecide / blockReason 由服务端算好带下来。UI 照着它决定按钮亮不亮 ——
+	// 让前端自己再判一遍规则,两份判断迟早会不一致。
 	type apView struct {
 		model.Approval
-		Steps []model.ApprovalStep `json:"steps"`
+		Steps       []model.ApprovalStep `json:"steps"`
+		CanDecide   bool                 `json:"canDecide"`
+		BlockReason string               `json:"blockReason"`
 	}
 	out := []apView{}
 	for _, a := range aps {
@@ -380,7 +384,12 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		// Mask credentials for display; the real command stays in the DB for
 		// execution after approval (a is a copy, so this doesn't touch storage).
 		a.Command = sqlutil.RedactSecrets(a.Command)
-		out = append(out, apView{Approval: a, Steps: steps})
+		row := a // DecideBlockFor 读的是这一行,不能把循环变量的地址交出去
+		block := h.Svc.DecideBlockFor(u, &row)
+		out = append(out, apView{
+			Approval: a, Steps: steps,
+			CanDecide: block == service.BlockNone, BlockReason: block.Reason(),
+		})
 	}
 	pending, _ := h.Repo.CountPendingApprovals(scope, u.ID)
 	resp.OK(c, gin.H{"items": out, "total": total, "pending": pending, "page": page, "pageSize": pageSize})
@@ -388,6 +397,10 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 
 func (h *Handler) ApproveApproval(c *gin.Context) {
 	res, err := h.Svc.DecideApproval(middleware.CurrentUser(c), pathID(c), true)
+	if r, ok := err.(*service.DecideRefusal); ok {
+		resp.Fail(c, resp.CodeForbidden, r.Error())
+		return
+	}
 	if err == service.ErrForbidden {
 		resp.Fail(c, resp.CodeForbidden, "仅审批链成员可审批")
 		return
@@ -405,6 +418,10 @@ func (h *Handler) ApproveApproval(c *gin.Context) {
 
 func (h *Handler) RejectApproval(c *gin.Context) {
 	_, err := h.Svc.DecideApproval(middleware.CurrentUser(c), pathID(c), false)
+	if r, ok := err.(*service.DecideRefusal); ok {
+		resp.Fail(c, resp.CodeForbidden, r.Error())
+		return
+	}
 	if err == service.ErrForbidden {
 		resp.Fail(c, resp.CodeForbidden, "仅审批链成员可驳回")
 		return

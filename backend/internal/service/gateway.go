@@ -397,19 +397,16 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 	if err != nil {
 		return nil, ErrNotFound
 	}
-	if ap.Status != model.StatusPending {
+	// 能不能决定这张单,只有一处判断(DecideBlockFor)—— 它同时喂给待办列表,
+	// 所以按钮亮不亮和点下去放不放行,永远说的是同一件事。
+	switch block := s.DecideBlockFor(actor, ap); block {
+	case BlockNone:
+	case BlockNotPending:
 		return nil, ErrAlreadyDecided
-	}
-	// The initiator may not decide their own ticket (two-person control, R16) —
-	// unless an admin has explicitly enabled self-approval (small teams / single
-	// operator). Default off preserves the segregation-of-duties guarantee.
-	if actor != nil && actor.ID == ap.InitiatorID && !s.settingBool("approval.allowSelfApprove", false) {
-		return nil, ErrForbidden
-	}
-	// Only a member on this approval's chain may act on it — holding the approve
-	// menu is not enough.
-	if !s.isChainMember(id, actor) {
-		return nil, ErrForbidden
+	default:
+		// 理由随错误一起带出去:笼统一句"无权处理"会让人去修错的东西 ——
+		// 不在链上要去找管理员,自己发起的要去找同事,两件事完全不同。
+		return nil, &DecideRefusal{Block: block}
 	}
 	return s.finalizeApproval(ap, approve, actor.Name)
 }
