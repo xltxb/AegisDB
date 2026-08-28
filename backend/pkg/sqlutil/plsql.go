@@ -32,6 +32,15 @@ var (
 	plsqlTailRe = regexp.MustCompile(`(?is)\bEND\s*(?:[A-Za-z_][A-Za-z0-9_$#]*\s*)?;\s*$`)
 )
 
+// IsPLSQLBlock reports whether s begins a PL/SQL block (stored program, DECLARE
+// or anonymous BEGIN).
+//
+// SplitStatements hands such a block back WHOLE, because that is the unit Oracle
+// executes. Anything that JUDGES the statement rather than running it has the
+// opposite need — a DROP inside a package body is still a DROP — and must look
+// inside. This tells it when to.
+func IsPLSQLBlock(s string) bool { return plsqlBlockKind(s) != "" }
+
 // plsqlBlockKind reports what s starts with: "" (not a block), "block" (a stored
 // program or DECLARE — may end at EOF) or "begin" (needs an explicit '/').
 func plsqlBlockKind(s string) string {

@@ -146,7 +146,11 @@ func Check(dialect, sql string, rules []Rule) Result {
 		}
 	}
 	stmts := splitWithLines(sql)
-	res.Statements = len(stmts)
+	for _, st := range stmts {
+		if !st.inner {
+			res.Statements++
+		}
+	}
 	for _, st := range stmts {
 		for _, r := range active {
 			for _, msg := range fire(r, st, dialect) {
@@ -265,6 +269,9 @@ type stmt struct {
 	masked string // sql with the CONTENT of quoted literals replaced by spaces
 	upper  string // upper-cased masked
 	verb   string // SELECT / INSERT / CREATE / …
+	// inner:这条是从 PL/SQL 块体里拆出来的,不是脚本里独立的一条。
+	// 规则照跑,但不计入"这段脚本有几条语句" —— 那个数字是给人看的。
+	inner  bool
 }
 
 func splitWithLines(sql string) []*stmt {
@@ -288,6 +295,18 @@ func splitWithLines(sql string) []*stmt {
 			index: i + 1, line: line, raw: p, sql: strings.TrimSpace(clean),
 			masked: masked, upper: strings.ToUpper(masked), verb: gateway.ParseVerb(clean),
 		})
+		// PL/SQL 块要再看进去一层:块整体交回来是给执行用的,而审查的检查器都锚在
+		// 语句开头 —— 不拆开,包体里的 DROP 就一条规则都触发不了。内部语句沿用块
+		// 的序号与行号,报出来指向的是这个块,而不是一个凭空多出来的语句。
+		for _, inner := range innerStatements(clean) {
+			ic := gateway.StripComments(inner)
+			im := maskLiterals(ic)
+			out = append(out, &stmt{
+				index: i + 1, line: line, raw: inner, sql: strings.TrimSpace(ic),
+				masked: im, upper: strings.ToUpper(im), verb: gateway.ParseVerb(ic),
+				inner: true,
+			})
+		}
 	}
 	return out
 }
