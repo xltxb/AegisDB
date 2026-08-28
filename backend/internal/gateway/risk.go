@@ -182,12 +182,17 @@ func parseVerbExplain(sql string) (verb string, planOnly bool) {
 		return strings.ToUpper(verb), false
 	}
 
-	planOnly = true // an EXPLAIN plans, unless an ANALYZE turns up below
+	planOnly = true // an EXPLAIN plans, unless an executing option turns up below
 	rest := strings.TrimSpace(s[len(verb):])
 	for {
 		w := firstWord(rest)
 		up := strings.ToUpper(w)
-		if up == "ANALYZE" {
+		// ANALYSE is ANALYZE's British spelling, which PostgreSQL and GaussDB both
+		// accept; PERFORMANCE is DWS/GaussDB's own bare option
+		// (EXPLAIN { [ANALYZE|ANALYSE] [VERBOSE] | PERFORMANCE } <stmt>). All three
+		// RUN the wrapped statement — missing any of them turns EXPLAIN into a way
+		// to execute anything while being judged a plan.
+		if up == "ANALYZE" || up == "ANALYSE" || up == "PERFORMANCE" {
 			planOnly = false
 			rest = strings.TrimSpace(rest[len(w):])
 			continue
@@ -226,7 +231,11 @@ func parseVerbExplain(sql string) (verb string, planOnly bool) {
 }
 
 var (
-	// ANALYZE anywhere in an EXPLAIN option list.
+	// An executing option anywhere in an EXPLAIN option list.
+	//
+	// Both spellings of ANALYZE/ANALYSE count; PERFORMANCE is listed too even
+	// though GaussDB only documents it as a BARE option — if some version does
+	// accept it in the list, treating it as executing is the safe direction.
 	//
 	// Deliberately blunt: `EXPLAIN (ANALYZE FALSE) …` does not execute, and this
 	// still treats it as if it did. The two ways of being wrong are not
@@ -234,7 +243,7 @@ var (
 	// been safe, while under-gating runs a DELETE that was judged a read. There
 	// is no lookahead in RE2 to express "ANALYZE not followed by FALSE" anyway,
 	// and a cleverer rule here would be one more thing to get subtly wrong.
-	explainAnalyzeOptRe = regexp.MustCompile(`(?i)\banalyze\b`)
+	explainAnalyzeOptRe = regexp.MustCompile(`(?i)\b(analy[sz]e|performance)\b`)
 	// The FOR that separates Oracle's EXPLAIN PLAN preamble from the statement.
 	explainPlanForRe = regexp.MustCompile(`(?i)\bfor\b`)
 )

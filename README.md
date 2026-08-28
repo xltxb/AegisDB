@@ -66,7 +66,9 @@ cd frontend && npm install && npm run dev    # http://localhost:5173（代理 /a
 ### 三层风险判定 · 环境/分层模型
 
 - 判定链：`菜单权限 → 能力矩阵(角色×能力×分层) → 高危命令字典(命令×分层)`，外加严格模式
-  （拦截无 WHERE 的 DELETE/UPDATE）。EXPLAIN 独立成档（`EXPLAIN` 只读、`EXPLAIN ANALYZE` 按真实执行判）。
+  （拦截无 WHERE 的 DELETE/UPDATE）。EXPLAIN 独立成档：`EXPLAIN` 只看计划、按只读判；
+  而**会真的执行**被包住语句的那些形式按真实执行判 —— `EXPLAIN ANALYZE`／英式拼写
+  `ANALYSE`、选项表里的 `(ANALYZE …)`、以及 DWS/GaussDB 的 `EXPLAIN PERFORMANCE`。
 - **分层标签（tier）承载规则，环境（environment）归属实例**：内置五个分层 —— `prod` 生产、
   `staging` 预发布、`uat` 演练、`gli` 法务、`dev` 开发；可自建环境并挂到任一分层，新分层自动
   克隆规则。同一 `DROP` 在 PROD 分层拦截转审批、在 DEV 直接放行。
@@ -133,7 +135,9 @@ cd frontend && npm install && npm run dev    # http://localhost:5173（代理 /a
 
 ### 数据库规范审查（MySQL / TiDB / DWS / Oracle）
 
-- **34 条内置规则**，覆盖 DML、DDL、表结构、命名、索引、安全、性能七类，按**方言**作用域生效：
+- **87 条内置规则**，按公司四份规范（`docs/` 下 MySQL / TiDB / Oracle / DWS）重写，每条标注
+  **规范分级与出处**（高危 / 强制 / 建议；规范未覆盖的标「平台内置」）——被拦下来的人能回去读原文。
+  覆盖 DML、DDL、表结构、命名、索引、安全、性能七类，按**方言**作用域生效：
   TiDB 禁外键、DWS 建表必须 `DISTRIBUTE BY`、Oracle 用 `VARCHAR2` 而非 `VARCHAR`、
   MySQL 强制 InnoDB + utf8mb4，通用规则如"建表必须有主键""新增 NOT NULL 列必须给 DEFAULT"
   "UPDATE/DELETE 必须带 WHERE"。
