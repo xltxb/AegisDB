@@ -124,7 +124,11 @@ func backfillEnvTiers(db *gorm.DB) error {
 	// The release menu key follows the same rule as the tiers menu did: a key with
 	// no RoleMenu row reads as denied, so an upgraded database would show the
 	// permissions page a menu nobody — not even an administrator — could grant.
-	return backfillPipelineMenu(db)
+	if err := backfillPipelineMenu(db); err != nil {
+		return err
+	}
+	// 项目菜单同理:没有 RoleMenu 行的键读作对所有人拒绝,管理员也不例外。
+	return backfillProjectMenu(db)
 }
 
 // backfillExplainCapability writes the `explain` row for every role × tier that

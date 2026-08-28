@@ -156,10 +156,13 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/sensitive-columns", menu("perms"), admin, h.SaveSensitiveColumn)
 		a.PUT("/sensitive-columns/:id", menu("perms"), admin, h.SaveSensitiveColumn)
 		a.DELETE("/sensitive-columns/:id", menu("perms"), admin, h.DeleteSensitiveColumn)
+		// 项目有自己的菜单键。读不设门槛:数据源配置页的归属下拉、发布单页的项目
+		// 筛选都要用它,而那两处各有各的菜单 —— 把读绑在 project 上会让另外两个页面
+		// 少半截功能。增删改则收在 project 菜单 + 管理员。
 		a.GET("/projects", h.ListProjects)
-		a.POST("/projects", menu("db"), admin, h.CreateProject)
-		a.PATCH("/projects/:id", menu("db"), admin, h.UpdateProject)
-		a.DELETE("/projects/:id", menu("db"), admin, h.DeleteProject)               // distinct connection tags (for pickers)
+		a.POST("/projects", menu("project"), admin, h.CreateProject)
+		a.PATCH("/projects/:id", menu("project"), admin, h.UpdateProject)
+		a.DELETE("/projects/:id", menu("project"), admin, h.DeleteProject)               // distinct connection tags (for pickers)
 		a.POST("/connections", menu("db"), admin, h.CreateConnection)
 		a.PUT("/connections/:id", menu("db"), admin, h.UpdateConnection)
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)

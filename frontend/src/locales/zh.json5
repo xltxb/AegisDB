@@ -1,7 +1,7 @@
 // Chinese locale — ported from the prototype's tr() pairs.
 {
   // nav / topbar
-  navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navDb: '配置', navRules: '规则', navEnvTier: '分层', navPerms: '权限', navAudit: '审计', navSettings: '设置',
+  navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navProject: '项目', navDb: '配置', navRules: '规则', navEnvTier: '分层', navPerms: '权限', navAudit: '审计', navSettings: '设置',
   // shared form controls
   selSearchPh: '输入关键词搜索', selNoMatch: '无匹配项',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
@@ -19,6 +19,9 @@
   // titles
   t_terminal: 'Web 命令行', t_terminalSub: 'prod-order-cluster · dba_l2',
   t_approve: '审批待办', t_approveSub: '你的审批队列 · DBA 组长视角',
+  t_project: '项目', t_projectSub: '数据库与升级单的归属 —— 决定归谁跟进,不决定谁能访问',
+  prPageSub: '{n} 个项目', prStatProjects: '项目', prStatDatabases: '已归属的数据库', prStatReleases: '升级单',
+  prFollowTitle: '按项目跟进', prFollowSub: '点一个项目,直接看它名下的升级单', prGoReleases: '看升级单',
   t_db: '数据源配置', t_dbSub: '9 实例 · 3 环境分层',
   t_rules: '高危命令规则', t_rulesSub: 'strict 策略 · 实时匹配',
   t_envtier: '分层与环境', t_envtierSub: '分层标签承载规则 · 环境归属实例',

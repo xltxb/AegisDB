@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
+import { FolderKanban,
   Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound, Rocket, GitBranch, SpellCheck,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
   CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck,
@@ -32,6 +32,7 @@ const navItems = [
   // rule library second (editing it is admin-only server-side).
   { key: 'sqlreview', gate: 'terminal', path: '/sql-review', icon: SpellCheck, label: 'navSqlReview' },
   { key: 'approve', path: '/approvals', icon: ClipboardCheck, label: 'navAppr', badge: true },
+  { key: 'project', path: '/projects', icon: FolderKanban, label: 'navProject' },
   { key: 'db', path: '/connections', icon: Database, label: 'navDb' },
   { key: 'rules', path: '/risk-rules', icon: ShieldAlert, label: 'navRules' },
   { key: 'envtier', path: '/env-tiers', icon: Layers, label: 'navEnvTier' },

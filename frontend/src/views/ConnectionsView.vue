@@ -5,7 +5,6 @@ import { Database, Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
-import ProjectsPanel from '@/components/settings/ProjectsPanel.vue'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -27,7 +26,9 @@ const conns = ref<Connection[]>([])
 // 项目:库的组织归属。与 tags 是两回事 —— tags 决定谁能碰这个库(判定层会看),
 // 项目决定这个库归谁跟进(判定层不看)。两者显示上刻意分开,免得被当成一回事。
 const projects = ref<Project[]>([])
-const projectsPanel = ref<InstanceType<typeof ProjectsPanel> | null>(null)
+// 项目的增删改搬去了「项目」页;这里只留库归属,它要对着实例底下的库来点,
+// 离开这个上下文就没法用。列表只读一次即可 —— 新建的项目在那边建,回到这页
+// 会重新加载。
 const projectName = (id?: number) => projects.value.find((p) => p.id === id)?.name || ''
 // 展开一个实例才去列它的库:库是**实时发现**的,对真连接意味着一次网络往返,
 // 没人看的时候不该替他付这个钱。展开态、库列表、加载/报错各自按实例存。
@@ -65,8 +66,6 @@ async function setDbProject(c: Connection, db: { name: string; projectId?: numbe
     const env = await api.setDatabaseProject(c.id, db.name, id)
     if (env.code !== 0) { db.projectId = prev; ui.notifyError(new Error(env.msg), t('actionFailed')); return }
     db.projectId = id
-    // 计数变了,面板要跟着刷新 —— 否则删除按钮会依据过时的数字给出错误预期。
-    await projectsPanel.value?.load()
   } catch (e) { db.projectId = prev; ui.notifyError(e, t('actionFailed')) }
 }
 
@@ -471,8 +470,6 @@ async function add() {
         </span>
       </div>
     </div>
-
-    <ProjectsPanel ref="projectsPanel" class="prpanel" @changed="projects = $event" />
 
     <div class="table">
       <div class="thead">

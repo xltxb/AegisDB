@@ -796,7 +796,7 @@ paths:
   /projects:
     get:
       tags: [connections]
-      summary: '[db] 项目列表(含名下数据库数与升级单数)'
+      summary: '[*] 项目列表(含名下数据库数与升级单数)'
       description: |
         归属的单位是**数据库**,不是数据源:一个实例底下的几个库分属不同团队是常态,
         把归属挂在实例上,等于逼着人按项目去拆实例。
@@ -814,7 +814,7 @@ paths:
                 items: { $ref: '#/components/schemas/ProjectView' }
     post:
       tags: [connections]
-      summary: '[db · admin] 新建项目'
+      summary: '[project · admin] 新建项目'
       description: 名称即身份(唯一)。
       requestBody:
         content:
@@ -824,7 +824,7 @@ paths:
   /projects/{id}:
     patch:
       tags: [connections]
-      summary: '[db · admin] 编辑项目(局部更新:缺席字段保持原值)'
+      summary: '[project · admin] 编辑项目(局部更新:缺席字段保持原值)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       requestBody:
         content:
@@ -833,7 +833,7 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     delete:
       tags: [connections]
-      summary: '[db · admin] 删除项目(名下还有数据库时拒绝)'
+      summary: '[project · admin] 删除项目(名下还有数据库时拒绝)'
       description: |
         名下仍有数据库时**拒绝删除**并说明还剩几个 —— 悄悄把库变成"未归属",会让
         跟进视图静静地说谎。历史升级单不阻止删除:它们带的是项目名的快照,项目没了

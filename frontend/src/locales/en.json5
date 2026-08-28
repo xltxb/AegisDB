@@ -1,6 +1,6 @@
 // English locale — ported from the prototype's tr() pairs.
 {
-  navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navDb: 'DB', navRules: 'Rules', navEnvTier: 'Tiers', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
+  navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navProject: 'Projects', navDb: 'DB', navRules: 'Rules', navEnvTier: 'Tiers', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
   // shared form controls
   selSearchPh: 'Type to search', selNoMatch: 'No match',
   t_export: 'Data export', t_exportSub: 'SQL export · compressed & encrypted', t_uploads: 'Script upload', t_uploadsSub: 'Upload and manage your script files',
@@ -17,6 +17,9 @@
   notifTitle: 'Notifications', notifEmpty: 'No notifications', notifMarkAll: 'Mark all read', notifViewAppr: 'View approvals',
   t_terminal: 'Web CLI', t_terminalSub: 'prod-order-cluster · dba_l2',
   t_approve: 'Approval inbox', t_approveSub: 'Your queue · DBA lead view',
+  t_project: 'Projects', t_projectSub: 'Which team owns a database and its releases — filing only, not access',
+  prPageSub: '{n} projects', prStatProjects: 'Projects', prStatDatabases: 'Databases filed', prStatReleases: 'Releases',
+  prFollowTitle: 'Follow up by project', prFollowSub: 'Open a project to see its releases', prGoReleases: 'Releases',
   t_db: 'Data sources', t_dbSub: '9 instances · 3 tiers',
   t_rules: 'Risk policies', t_rulesSub: 'strict · live matching',
   t_envtier: 'Tiers & environments', t_envtierSub: 'tiers carry the rules · environments group the instances',

@@ -145,6 +145,9 @@ func seedPipelineReference(db *gorm.DB) error {
 	if err := backfillPipelineMenu(db); err != nil {
 		return err
 	}
+	if err := backfillProjectMenu(db); err != nil {
+		return err
+	}
 	if err := seedReviewLibrary(db); err != nil {
 		return err
 	}

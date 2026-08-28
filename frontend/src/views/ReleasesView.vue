@@ -8,6 +8,7 @@
 // clicking a stage shows the log or the review findings it produced rather than
 // a generic "failed".
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Rocket, Plus, X, Check, Loader, Hourglass, CircleX, Minus, Play,
@@ -30,6 +31,7 @@ const releases = ref<Release[]>([])
 const openId = ref(0)
 const scope = ref<'mine' | 'all'>('mine')
 // 按项目跟进升级单 —— 这正是项目这个维度存在的理由。0 = 全部项目。
+const route = useRoute()
 const projectFilter = ref(0)
 const projects = ref<Project[]>([])
 const pipelines = ref<Pipeline[]>([])
@@ -73,6 +75,10 @@ onMounted(async () => {
   try { conns.value = await api.connections() } catch { /* the form falls back to an empty picker */ }
   try { pipelines.value = await api.pipelines() } catch { /* same */ }
   try { projects.value = await api.projects() } catch { /* 筛选器降级为“全部项目” */ }
+  // 从「项目」页点进来时带着 ?project=<id>:直接落到筛过的列表,而不是让人
+  // 到了这页再从下拉里把刚才点的那个项目重新找一遍。
+  const fromProject = Number(route.query.project)
+  if (fromProject > 0) projectFilter.value = fromProject
   await loadList()
   await refreshOpen()
   timer = setInterval(() => { if (anyLive.value) { loadList(); refreshOpen() } }, 2500)

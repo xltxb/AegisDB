@@ -26,6 +26,9 @@ const router = createRouter({
         // submitting is a review that only ever arrives as a rejection.
         { path: 'sql-review', name: 'sql-review', component: () => import('@/views/SqlReviewView.vue'), meta: { menuKey: 'sqlreview', gate: 'terminal' } },
         { path: 'approvals', name: 'approvals', component: () => import('@/views/ApprovalsView.vue'), meta: { menuKey: 'approve' } },
+        // 项目自己一页,自己的菜单键。它从数据源配置页搬出来,因为两者的读者不是
+        // 同一批人:配置实例的是 DBA,按项目跟进升级单的是业务线上的人。
+        { path: 'projects', name: 'projects', component: () => import('@/views/ProjectsView.vue'), meta: { menuKey: 'project' } },
         { path: 'connections', name: 'connections', component: () => import('@/views/ConnectionsView.vue'), meta: { menuKey: 'db' } },
         { path: 'risk-rules', name: 'risk-rules', component: () => import('@/views/RiskRulesView.vue'), meta: { menuKey: 'rules' } },
         { path: 'env-tiers', name: 'env-tiers', component: () => import('@/views/EnvTiersView.vue'), meta: { menuKey: 'envtier' } },
