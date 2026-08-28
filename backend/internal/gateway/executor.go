@@ -20,6 +20,9 @@ type ExecResult struct {
 	Columns   []string   // result-set column names (real reads only)
 	Data      [][]string // result rows as strings, capped (real reads only)
 	Truncated bool       // true when the result set exceeded maxResultRows
+	// MaskedColumns:被脱敏的列名。数据本身已经是打码后的了 —— 这个字段只是让
+	// 界面能标一句"该列已脱敏",而不是让前端去做脱敏。
+	MaskedColumns []string
 	Err       error      // non-nil when the target DB rejected the statement
 }
 

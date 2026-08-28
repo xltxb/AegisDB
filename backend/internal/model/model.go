@@ -667,6 +667,27 @@ type SQLReviewRule struct {
 
 func (SQLReviewRule) TableName() string { return "tbl_sql_review_rule" }
 
+// SensitiveColumn — 一条"这张表的这个字段是敏感的"。
+//
+// 命中的列在**结果离开网关之前**就被打码,回传给前端的数据本身已经是脱敏后的。
+// 让前端去打码等于把明文发到浏览器再请它别显示 —— 抓个包就绕过了。
+//
+// TableName 为 "*" 表示所有表:口令、密钥这类字段在哪张表上都不该被看到。
+type SensitiveColumn struct {
+	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	// 字段不能叫 TableName —— 那是 GORM 用来问"这个模型对应哪张表"的方法名。
+	Tbl        string    `gorm:"column:table_name;size:128;uniqueIndex:uk_sensitive_col,priority:1;not null" json:"tableName"`
+	ColumnName string    `gorm:"size:128;uniqueIndex:uk_sensitive_col,priority:2;not null" json:"columnName"`
+	MaskStyle  string    `gorm:"size:16;not null;default:partial" json:"maskStyle"` // partial|full|hash
+	Enabled    bool      `gorm:"not null;default:true" json:"enabled"`
+	Note       string    `gorm:"size:255" json:"note"`
+	CreatedBy  int64     `gorm:"not null;default:0" json:"createdBy"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+func (SensitiveColumn) TableName() string { return "tbl_sensitive_column" }
+
 // ---------------------------------------------------------------- 开放接口 (API clients)
 
 // APIClient is one external system allowed to raise SQL release tickets through

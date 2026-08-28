@@ -29,6 +29,12 @@ type Services struct {
 	auditCounter atomic.Int64
 	relCounter   atomic.Int64 // REL-<n> release numbers
 	auditMu      sync.Mutex // serialize audit-chain writes (prev-read + insert must be atomic)
+	// 敏感字段规则的短缓存。挂在实例上而不是做成包级变量:包级的那一份会在
+	// 多个 Services 之间串味(测试里一个用例的规则漏进另一个用例),而一个
+	// "有时候用的是别人的规则"的脱敏开关,比没有还危险。
+	sensitiveMu    sync.RWMutex
+	sensitiveRules []gateway.SensitiveRule
+	sensitiveAt    time.Time
 	// mfaGrace remembers a successful PROD step-up per user/session/instance so a
 	// code vouches for a working session rather than a single command.
 	mfaGraceMu sync.Mutex

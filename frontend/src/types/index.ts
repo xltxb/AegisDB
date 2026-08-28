@@ -104,6 +104,21 @@ export interface Connection {
 }
 
 // 项目:数据库与升级单的归属。组织维度,不是安全边界(访问范围仍由 tags 决定)。
+/**
+ * 敏感字段规则。命中的列在**服务端**打码后才回传 —— 前端拿到的已经是星号,
+ * 不做也不该做任何脱敏工作。
+ */
+export interface SensitiveColumn {
+  id: number
+  /** 表名;'*' = 所有表 */
+  tableName: string
+  columnName: string
+  maskStyle: 'partial' | 'full' | 'hash'
+  enabled: boolean
+  note: string
+  createdAt?: string
+}
+
 export interface Project {
   id: number
   name: string

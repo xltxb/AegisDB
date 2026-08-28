@@ -150,6 +150,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/tags", h.ListTags)
 		// 项目 —— 数据库与升级单的归属(组织维度,不是安全边界:判定层不看它)。
 		// 读开放给 db 菜单,增删改与实例配置同一档:admin-only。
+		// 敏感字段:读开放给能进权限页的人(知道哪些字段被脱敏本身不敏感,
+		// 反而是"为什么这列是星号"的答案),增删改仅管理员。
+		a.GET("/sensitive-columns", menu("terminal"), h.ListSensitiveColumns)
+		a.POST("/sensitive-columns", menu("perms"), admin, h.SaveSensitiveColumn)
+		a.PUT("/sensitive-columns/:id", menu("perms"), admin, h.SaveSensitiveColumn)
+		a.DELETE("/sensitive-columns/:id", menu("perms"), admin, h.DeleteSensitiveColumn)
 		a.GET("/projects", h.ListProjects)
 		a.POST("/projects", menu("db"), admin, h.CreateProject)
 		a.PATCH("/projects/:id", menu("db"), admin, h.UpdateProject)

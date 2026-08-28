@@ -1,7 +1,7 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, Release, ReleasePage, ReviewCatalog, ServiceAccount,
+  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, Release, ReleasePage, ReviewCatalog, SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -252,6 +252,14 @@ export const api = {
     ).then(ok),
 
   // ---- 项目(数据库与升级单的归属) ----
+  // 敏感字段:读开放给能进终端的人 —— 被脱敏的列是一串星号,"为什么看不到"
+  // 要有个自己查得到的答案。增删改仅管理员(服务端也这么判)。
+  sensitiveColumns: () => http.get<any, Envelope<SensitiveColumn[]>>('/sensitive-columns').then(ok),
+  saveSensitiveColumn: (id: number, body: Partial<SensitiveColumn>) =>
+    id
+      ? http.put<any, Envelope<SensitiveColumn>>(`/sensitive-columns/${id}`, body)
+      : http.post<any, Envelope<SensitiveColumn>>('/sensitive-columns', body),
+  deleteSensitiveColumn: (id: number) => http.delete<any, Envelope<any>>(`/sensitive-columns/${id}`),
   projects: () => http.get<any, Envelope<Project[]>>('/projects').then(ok),
   createProject: (body: { name: string; owner?: string; description?: string }) =>
     http.post<any, Envelope<Project>>('/projects', body),

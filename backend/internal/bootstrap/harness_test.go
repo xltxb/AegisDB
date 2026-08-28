@@ -69,6 +69,9 @@ func newTestApp(t *testing.T) *testApp {
 	engine := gateway.NewRiskEngine(repo, cfg.Gateway.StrictMode)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
 	svc := service.New(repo, engine, jwtMgr, cfg.Gateway.StrictMode)
+	// 与 main.go 保持一致:不挂上这个 provider,脱敏在测试里根本不会发生,
+	// 而"测试通过了但线上才是另一套接线"是最不该有的一种绿。
+	gateway.SensitiveRulesProvider = svc.SensitiveRulesForGateway
 	h := handler.New(svc, repo)
 	r := NewRouter(cfg, h, repo, svc, jwtMgr)
 

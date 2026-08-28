@@ -90,5 +90,5 @@ var allModels = []any{
 	&model.AsyncJob{}, &model.UserTag{}, &model.TerminalSnippet{},
 	&model.EnvTier{}, &model.Environment{},
 	&model.SQLReviewRule{}, &model.Pipeline{}, &model.PipelineStage{},
-	&model.Release{}, &model.ReleaseStage{}, &model.APIClient{}, &model.Project{}, &model.DatabaseProject{},
+	&model.Release{}, &model.ReleaseStage{}, &model.APIClient{}, &model.Project{}, &model.DatabaseProject{}, &model.SensitiveColumn{},
 }

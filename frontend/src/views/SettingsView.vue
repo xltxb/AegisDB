@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound, Webhook } from 'lucide-vue-next'
+import { EyeOff, Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound, Webhook } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -8,6 +8,7 @@ import MfaModal from '@/components/modals/MfaModal.vue'
 import IpAllowlistModal from '@/components/modals/IpAllowlistModal.vue'
 import WebhookPanel from '@/components/settings/WebhookPanel.vue'
 import ApiClientsPanel from '@/components/settings/ApiClientsPanel.vue'
+import SensitiveColumnsPanel from '@/components/settings/SensitiveColumnsPanel.vue'
 import { useI18n } from 'vue-i18n'
 import { APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
 import { useRouter } from 'vue-router'
@@ -30,6 +31,7 @@ const tabs = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
   { id: 'approval', icon: GitPullRequestArrow, label: 'setAppr' },
   { id: 'security', icon: Lock, label: 'setSec' },
+  { id: 'sensitive', icon: EyeOff, label: 'scTitle' },
   { id: 'notify', icon: Bell, label: 'setNotify' },
   { id: 'webhook', icon: Webhook, label: 'setWebhookTab' },
   { id: 'openapi', icon: KeyRound, label: 'setOpenApi' },
@@ -322,6 +324,9 @@ async function save() {
 
       <!-- Webhook (audit event forwarding) -->
       <WebhookPanel v-show="activeTab === 'webhook'" />
+
+      <!-- 敏感字段:规则在这里维护,脱敏在服务端做 -->
+      <SensitiveColumnsPanel v-show="activeTab === 'sensitive'" />
 
       <!-- 开放接口凭据 -->
       <ApiClientsPanel v-show="activeTab === 'openapi'" />

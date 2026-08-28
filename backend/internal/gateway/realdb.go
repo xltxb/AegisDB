@@ -352,11 +352,16 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 		if err := rows.Err(); err != nil {
 			return ExecResult{}, err
 		}
+		// 敏感字段在**离开网关之前**打码。放在这里而不是让上层各自处理:整个网关
+		// 只有 RealRun 与 RealQueryEach 两处把行读出来,在这里做,新加的调用路径也
+		// 天然被覆盖 —— 不会有人"忘了加脱敏"。
+		masked := maskResultSet(query, cols, data)
 		out := fmt.Sprintf("+ %s rows", thousands(len(data)))
 		if truncated {
 			out = fmt.Sprintf("+ %s+ rows (显示前 %d)", thousands(maxResultRows), maxResultRows)
 		}
-		return ExecResult{Output: out, Rows: len(data), Columns: cols, Data: data, Truncated: truncated}, nil
+		return ExecResult{Output: out, Rows: len(data), Columns: cols, Data: data,
+			Truncated: truncated, MaskedColumns: masked}, nil
 	}
 	res, err := db.ExecContext(ctx, query)
 	if err != nil {
@@ -395,6 +400,11 @@ func RealQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 		if err := onHeader(cols); err != nil {
 			return err
 		}
+		// 导出走的是流式路径,一行都不会落进内存里的大数组 —— 所以脱敏也必须是
+		// 逐行的。列集合在表头就定下来了,打码目标算一次,之后每行都过同一次改写。
+		//
+		// 导出尤其不能漏:一份 CSV 落到磁盘、发进聊天工具,比终端上看一眼跑得远得多。
+		maskRow, _ := maskStream(query, cols)
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))
 		for i := range vals {
@@ -408,6 +418,7 @@ func RealQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 			for i, v := range vals {
 				rec[i] = cellString(v)
 			}
+			maskRow(rec) // 敏感字段在写出去之前就已经是打码后的
 			if err := onRow(rec); err != nil {
 				return err
 			}

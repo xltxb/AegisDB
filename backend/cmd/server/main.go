@@ -94,6 +94,9 @@ func main() {
 	// 审批人自检:这些审批环节还有没有人能批。只报告,不阻止启动 —— 审批人是谁
 	// 是组织的决定,一个自检程序没有资格替人拿主意;它该做的是在人还看得见的时候
 	// 把话说清楚。放在这里是因为 svc 刚好齐备,而服务还没开始收请求。
+	// 敏感字段规则的取数入口。挂在这里而不是把规则一路传下去:整个网关只有两处
+	// 把行读出来(RealRun / RealQueryEach),挂一次,新加的调用路径也天然被覆盖。
+	gateway.SensitiveRulesProvider = svc.SensitiveRulesForGateway
 	svc.LogApprovalStaffing()
 	h := handler.New(svc, repo)
 

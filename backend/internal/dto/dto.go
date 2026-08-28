@@ -333,6 +333,25 @@ type DatabaseProjectReq struct {
 	ProjectID int64  `json:"projectId"`
 }
 
+// SensitiveColumnReq 定义一条敏感字段规则。TableName 留空按"所有表"处理。
+type SensitiveColumnReq struct {
+	TableName  string `json:"tableName"`
+	ColumnName string `json:"columnName"`
+	MaskStyle  string `json:"maskStyle"` // partial|full|hash;空 = partial
+	Enabled    bool   `json:"enabled"`
+	Note       string `json:"note"`
+}
+
+type SensitiveColumnView struct {
+	ID         int64     `json:"id"`
+	TableName  string    `json:"tableName"`
+	ColumnName string    `json:"columnName"`
+	MaskStyle  string    `json:"maskStyle"`
+	Enabled    bool      `json:"enabled"`
+	Note       string    `json:"note"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
 type ProjectView struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`

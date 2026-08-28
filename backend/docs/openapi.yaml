@@ -360,6 +360,25 @@ components:
       properties:
         database: { type: string, description: 库名,取对象树给出的那个名字 }
         projectId: { type: integer, format: int64, description: 0 = 取消归属(合法取值,不是"没填") }
+    SensitiveColumnReq:
+      type: object
+      required: [columnName]
+      properties:
+        tableName: { type: string, example: t_user, description: "留空或 '*' = 所有表(口令、密钥这类字段在哪张表上都不该被看到)" }
+        columnName: { type: string, example: id_card }
+        maskStyle: { type: string, enum: [partial, full, hash], default: partial, description: 'partial 留头留尾;full 整体抹掉;hash 同值同码(能核对是不是同一个,看不出是谁)' }
+        enabled: { type: boolean }
+        note: { type: string, description: 为什么它是敏感的,给后来人看 }
+    SensitiveColumnView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        tableName: { type: string }
+        columnName: { type: string }
+        maskStyle: { type: string, enum: [partial, full, hash] }
+        enabled: { type: boolean }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }
     ProjectReq:
       type: object
       required: [name]
@@ -726,6 +745,52 @@ paths:
       summary: '[terminal] 下载导出分卷'
       parameters: [{ name: file, in: query, required: true, schema: { type: string } }]
       responses: { '200': { description: 文件流 } }
+
+  # ---------------------------------------------------------------- 敏感字段
+  /sensitive-columns:
+    get:
+      tags: [connections]
+      summary: '[terminal] 敏感字段列表'
+      description: |
+        按 表名 + 字段 定义。命中的列在**结果离开网关之前**就被打码,回传的数据本身
+        已经是脱敏后的 —— 前端不做、也不该做任何脱敏工作:让浏览器负责打码等于把
+        明文发过去再请它别显示,抓个包就绕过了,而且它已经躺在浏览器缓存和沿途代理
+        的日志里。
+
+        读开放给能进终端的人:被脱敏的列在结果里是一串星号,"为什么这列看不到"必须
+        有个自己查得到的答案。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SensitiveColumnView' }
+    post:
+      tags: [connections]
+      summary: '[terminal · admin] 新增敏感字段'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensitiveColumnReq' }
+      responses: { '200': { description: 'OK / 40001 字段名为空、脱敏方式非法或该 表.字段 已存在' } }
+  /sensitive-columns/{id}:
+    put:
+      tags: [connections]
+      summary: '[terminal · admin] 编辑敏感字段(含启用/停用)'
+      description: 停用会让该字段**从此明文回传**,所以它和删除一样写入审计。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensitiveColumnReq' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [connections]
+      summary: '[terminal · admin] 删除敏感字段 —— 该字段将不再脱敏'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
 
   # ---------------------------------------------------------------- connections
   /projects:
