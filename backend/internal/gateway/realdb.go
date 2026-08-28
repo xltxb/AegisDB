@@ -298,7 +298,22 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	if IsRead(query) {
+	// 三条路,而不是两条:
+	//
+	//   已知的读  → Query,取结果集
+	//   已知的写  → Exec,拿影响行数(写操作最该看到的就是这个)
+	//   认不出来  → **问数据库**:走 Query,数据库返回了列就把行显示出来,没有列
+	//               就如实说"执行成功"
+	//
+	// 第三条是这次加的。每个引擎都有自己的方言关键字(DWS 的 EXPLAIN PERFORMANCE、
+	// SQLite 的 PRAGMA、MySQL 里能返回结果集的 CALL),动词表永远补不完 —— 而"这条
+	// 语句返回不返回行"根本不必猜:执行一次就知道了。此前认不出来一律按写处理,
+	// 语句照样在服务端跑了,结果集却被丢掉,用户看到的就是"命令没有反应"。
+	//
+	// 注意这里**没有** Query 失败后回退 Exec 的逻辑,这是有意的:Query 报错时无法
+	// 判断语句到底执行了没有,再跑一次就可能是重复执行 —— 对一条 INSERT 来说,
+	// 重复执行比报错严重得多。报错就照实报错。
+	if IsRead(query) || !KnownVerb(ParseVerb(query)) {
 		rows, err := db.QueryContext(ctx, query)
 		if err != nil {
 			return ExecResult{}, err
@@ -307,6 +322,11 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 		cols, err := rows.Columns()
 		if err != nil {
 			return ExecResult{}, err
+		}
+		// 数据库说"这条语句没有结果集"——那它就不是查询,如实回话即可。
+		// 走到这里说明语句已经执行过了,不能再 Exec 一次。
+		if len(cols) == 0 {
+			return ExecResult{Output: "执行成功"}, nil
 		}
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))

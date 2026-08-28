@@ -413,6 +413,29 @@ func isWordChar(b byte) bool {
 	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
 }
 
+// KnownVerb reports whether the classifier actually recognises this verb, as
+// opposed to filing it under the default (write) bucket because nothing else
+// matched.
+//
+// The distinction matters at exactly one place: deciding whether to collect a
+// result set. Every engine has keywords of its own — DWS's `EXPLAIN PERFORMANCE`,
+// SQLite's `PRAGMA`, MySQL's `CALL` returning a result set — and a verb table can
+// only ever be behind. Where the table has an answer, use it; where it does not,
+// ASK THE DATABASE instead of guessing (see RealRun). Judgement still classifies
+// everything, because judging is the product; but "does this return rows" is a
+// question the database can answer for itself.
+func KnownVerb(verb string) bool {
+	switch strings.ToUpper(strings.TrimSpace(verb)) {
+	case "SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "USE",
+		"TABLE", "VALUES", "FETCH", "HELP",
+		"INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE",
+		"DROP", "ALTER", "TRUNCATE", "RENAME", "CREATE",
+		"GRANT", "REVOKE", "WITH":
+		return true
+	}
+	return false
+}
+
 // MapVerbToCapability maps a SQL verb to a capability-matrix dimension
 // (case-insensitive).
 func MapVerbToCapability(verb string) string {
