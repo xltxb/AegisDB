@@ -65,6 +65,24 @@ func TestReview_CleanBlockStaysQuiet(t *testing.T) {
 	}
 }
 
+// DELIMITER 不能成为绕过规则的口子。自定义分隔符把好几条真语句并成了一条,
+// 审查必须照样看进去 —— 否则同一条 DROP,换个分隔符写就通过了。
+func TestReview_LooksInsideCustomDelimiterStatements(t *testing.T) {
+	rules := allRules()
+	bare := Check(DialectMySQL, "DROP TABLE t_orders;", rules)
+	if bare.Passed {
+		t.Fatal("前置条件不成立:裸 DROP 本该被拦")
+	}
+
+	merged := Check(DialectMySQL, "DELIMITER //\nSELECT 1; DROP TABLE t_orders //\nDELIMITER ;\n", rules)
+	if !hasCode(merged, "ddl.forbid.drop") {
+		t.Errorf("自定义分隔符并进来的 DROP 必须照样命中,实际: %v", codesOf(merged))
+	}
+	if merged.Passed {
+		t.Error("换个分隔符写就通过了 —— 那等于给所有规则开了个后门")
+	}
+}
+
 // 语句数是给人看的:块还是一条语句,拆开只是为了让规则看得见里面。
 func TestReview_InnerStatementsDoNotInflateTheCount(t *testing.T) {
 	rules := allRules()

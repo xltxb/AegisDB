@@ -41,14 +41,26 @@ var blockScaffolding = map[string]bool{
 // dropped rather than guessed at — reporting on `v := 1` would only teach people
 // to ignore the review.
 func innerStatements(block string) []string {
-	if !sqlutil.IsPLSQLBlock(strings.TrimSpace(block)) {
+	trimmed := strings.TrimSpace(block)
+	body := ""
+	switch {
+	case sqlutil.IsPLSQLBlock(trimmed):
+		// 先切掉块头。`CREATE OR REPLACE PROCEDURE p IS BEGIN DROP TABLE t;` 按分号切,
+		// 第一段是 "CREATE … BEGIN DROP TABLE t" —— 首词是 CREATE,DROP 埋在中间,规则
+		// 一条都不触发。块体从第一个 BEGIN 之后开始:它前面是声明区(变量、游标),里面
+		// 没有要审的语句。
+		body = afterFirstBegin(trimmed)
+	case strings.Contains(trimmed, ";"):
+		// 分句器交回来的一条语句里居然还带分号,只有一种来路:MySQL 的 DELIMITER
+		// 把分号让给了语句体。那么这一条里可能并着好几条真语句,审查同样要看进去
+		// —— 否则 `DELIMITER //` 就成了绕过规则的口子:
+		//
+		//     DROP TABLE t;                              → 拦截
+		//     DELIMITER //  SELECT 1; DROP TABLE t //     → 若不看进去,通过
+		body = trimmed
+	default:
 		return nil
 	}
-	// 先切掉块头。`CREATE OR REPLACE PROCEDURE p IS BEGIN DROP TABLE t;` 按分号切,
-	// 第一段是 "CREATE … BEGIN DROP TABLE t" —— 首词是 CREATE,DROP 埋在中间,规则
-	// 一条都不触发。块体从第一个 BEGIN 之后开始:它前面是声明区(变量、游标),里面
-	// 没有要审的语句。
-	body := afterFirstBegin(block)
 	if body == "" {
 		return nil // 没有 BEGIN 的块(如 CREATE TYPE)没有块体可审
 	}

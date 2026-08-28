@@ -27,10 +27,22 @@ import "strings"
 //     PostgreSQL it is an operator, so skipping to end-of-line would delete a
 //     real stacked statement from the judged text while the server still ran it
 //     (ER2). Splitting there over-splits on MySQL, which is the safe direction.
+//   - MySQL's DELIMITER directive IS honoured. It is a CLIENT directive — the
+//     server rejects it — and it exists precisely so a routine body's semicolons
+//     stop being separators. Ignoring it split every stored-procedure script mid
+//     body into fragments the server rejects one by one, which is why such a
+//     script simply could not be run from the console. The directive line is
+//     consumed rather than emitted, exactly as the mysql client does with it.
+//
+//     It does NOT weaken judgement: what a custom delimiter produces is a LONGER
+//     statement, and every layer that matters reads the whole text of one —
+//     the high-risk dictionary scans it, and the review looks inside anything
+//     still carrying semicolons (see review.innerStatements).
 func SplitStatements(sql string) []string {
 	var out []string
 	var b strings.Builder
 	execDepth := 0 // >0 while inside /*!ver ... */: keep the body, drop the markers
+	delim := ";"  // 当前语句分隔符;DELIMITER 指令会改它
 	flush := func() {
 		if s := strings.TrimSpace(b.String()); s != "" {
 			out = append(out, s)
@@ -51,6 +63,23 @@ func SplitStatements(sql string) []string {
 				i = next - 1 // the loop's i++ lands on the next byte
 				continue
 			}
+		}
+		// DELIMITER 只在语句边界、且位于行首时生效 —— 它是一行指令,不是表达式。
+		// 这两个条件一起,保证 SQL 文本里出现 "delimiter" 这个词(列名、字符串)
+		// 不会被误当成指令。
+		if strings.TrimSpace(b.String()) == "" && atLineStart(sql, i) {
+			if d, next, ok := takeDelimiterDirective(sql, i); ok {
+				delim = d
+				b.Reset() // 指令本身不下发给服务器
+				i = next - 1
+				continue
+			}
+		}
+		// 非默认分隔符时,分号不再是分隔符 —— 那正是 DELIMITER 存在的理由。
+		if delim != ";" && strings.HasPrefix(sql[i:], delim) {
+			flush()
+			i += len(delim) - 1
+			continue
 		}
 		c := sql[i]
 		switch c {
@@ -158,6 +187,10 @@ func SplitStatements(sql string) []string {
 				b.WriteByte(c)
 			}
 		case ';':
+			if delim != ";" {
+				b.WriteByte(c) // 自定义分隔符生效时,分号属于语句体
+				break
+			}
 			flush()
 		default:
 			b.WriteByte(c)
@@ -165,6 +198,56 @@ func SplitStatements(sql string) []string {
 	}
 	flush()
 	return out
+}
+
+// atLineStart reports whether i sits at the beginning of a line (only blanks
+// before it). A DELIMITER directive is a whole line; requiring that is what
+// keeps a column or literal called "delimiter" from being read as one.
+func atLineStart(sql string, i int) bool {
+	for j := i - 1; j >= 0; j-- {
+		switch sql[j] {
+		case '\n':
+			return true
+		case ' ', '\t', '\r':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// takeDelimiterDirective recognises a "DELIMITER <token>" line and returns the
+// new delimiter plus the offset just past the line.
+//
+// The directive is CONSUMED, not emitted: it is a client-side instruction and
+// the server rejects it. Emitting it as a statement is what made every stored
+// procedure script fail on its first line.
+func takeDelimiterDirective(sql string, i int) (delim string, next int, ok bool) {
+	const kw = "DELIMITER"
+	if len(sql)-i < len(kw)+1 || !strings.EqualFold(sql[i:i+len(kw)], kw) {
+		return "", 0, false
+	}
+	rest := sql[i+len(kw):]
+	if rest == "" || (rest[0] != ' ' && rest[0] != '\t') {
+		return "", 0, false // "DELIMITERS" 这种以它开头的标识符不算
+	}
+	lineEnd := strings.IndexByte(rest, '\n')
+	line := rest
+	next = len(sql)
+	if lineEnd >= 0 {
+		line = rest[:lineEnd]
+		next = i + len(kw) + lineEnd + 1
+	}
+	d := strings.TrimSpace(line)
+	if d == "" {
+		return "", 0, false
+	}
+	// 分隔符是行上的第一个 token;后面若还有字符(注释等)一并忽略。
+	if sp := strings.IndexAny(d, " \t"); sp >= 0 {
+		d = d[:sp]
+	}
+	return d, next, true
 }
 
 // dollarTag reports whether a PostgreSQL dollar-quote opener starts at sql[i]
