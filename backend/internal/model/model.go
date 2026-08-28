@@ -921,6 +921,11 @@ const (
 	NotifApprovalRejected = "approval-rejected"
 	NotifApprovalExpired  = "approval-expired"
 	// Release pipeline outcomes, delivered to the release creator.
+	// 异步导出跑完(或失败)也要通知。它和审批、发布是同一类事:人提交完就走了,
+	// 结果什么时候出来他不知道,不主动告诉他,就只能靠他自己想起来回去刷一下。
+	NotifExportDone   = "export-done"
+	NotifExportFailed = "export-failed"
+
 	NotifReleaseDone   = "release-done"
 	NotifReleaseFailed = "release-failed"
 	NotifReleaseWait   = "release-waiting"

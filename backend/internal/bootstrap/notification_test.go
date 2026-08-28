@@ -10,6 +10,9 @@ type notifItem struct {
 	ID    int64  `json:"id"`
 	Type  string `json:"type"`
 	Title string `json:"title"`
+	// Body 是弹窗真正显示给人看的那句话 —— 一条只有标题的通知,人还得再点开
+	// 才知道是哪个任务。
+	Body  string `json:"body"`
 	RefNo string `json:"refNo"`
 	Read  bool   `json:"read"`
 }

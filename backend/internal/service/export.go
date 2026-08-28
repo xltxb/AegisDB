@@ -331,8 +331,16 @@ func (s *Services) runExportJob(id int64) {
 		return
 	}
 	s.recordAudit(u, conn, "EXPORT "+job.SQL, model.RiskLow, model.ResultExecuted, "", "exec")
+	// 提交导出的人早就离开这个页面了 —— 不告诉他,他只能自己想起来回去刷一下。
+	s.notify(job.UserID, model.NotifExportDone, "导出已完成",
+		fmt.Sprintf("%s · %d 行 · %d 个分卷,可在「导出」页下载(解压口令在任务详情里)",
+			job.Name, rows, len(files)), itoa64(id))
 }
 
+// failExport 把任务标记为失败,并告诉提交它的人。
+//
+// 失败尤其不能只写进库里:成功还能靠"文件出现了"发现,失败没有任何外部信号 ——
+// 人会一直等一个永远不会来的文件。
 func (s *Services) failExport(id int64, msg string) {
 	now := time.Now()
 	// The error column is VARCHAR(255); clip so marking the job failed can't itself
@@ -341,6 +349,10 @@ func (s *Services) failExport(id int64, msg string) {
 		"status": model.ExportFailed, "error": clip(msg, 250), "finished_at": now,
 	}); uerr != nil {
 		slog.Error("failed to mark export job failed", "id", id, "err", uerr)
+	}
+	if job, err := s.Repo.GetExportJob(id); err == nil {
+		s.notify(job.UserID, model.NotifExportFailed, "导出失败",
+			job.Name+" · "+clip(msg, 180), itoa64(id))
 	}
 }
 

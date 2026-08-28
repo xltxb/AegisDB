@@ -77,16 +77,40 @@ async function fetchGwStats() {
 const notifOpen = ref(false)
 let notifTimer: ReturnType<typeof setInterval> | null = null
 
+const okTypes = ['approval-approved', 'export-done', 'release-done']
+const badTypes = ['approval-rejected', 'export-failed', 'release-failed']
 const notifIcon = (t: string) =>
-  t === 'approval-approved' ? CircleCheck : t === 'approval-rejected' ? CircleX : Clock
+  okTypes.includes(t) ? CircleCheck : badTypes.includes(t) ? CircleX : Clock
 const notifCls = (t: string) =>
-  t === 'approval-approved' ? 'ok' : t === 'approval-rejected' ? 'bad' : 'warn'
+  okTypes.includes(t) ? 'ok' : badTypes.includes(t) ? 'bad' : 'warn'
+
+// 已经弹过的通知 id。
+//
+// **首次拉取只记账、不弹窗**:否则每次刷新页面都会把历史通知重演一遍 —— 三天前
+// 那次导出完成的提示,今天早上再弹一次,人很快就学会了无视所有弹窗。这里要的是
+// "刚刚完成了",不是"曾经完成过"。
+const toasted = new Set<number>()
+let notifPrimed = false
+
+// 审批出结果、异步导出跑完,人早就离开那个页面了 —— 不主动告诉他,他只能自己
+// 想起来回去刷一下。铃铛上的红点不算"告诉":它要人先看见、再点开。
+function toastNew(items: Notification[]) {
+  for (const n of items) {
+    if (toasted.has(n.id)) continue
+    toasted.add(n.id)
+    if (!notifPrimed || n.read) continue
+    const body = n.body ? `${n.title} — ${n.body}` : n.title
+    ui.notify(body, badTypes.includes(n.type) ? 'error' : okTypes.includes(n.type) ? 'success' : 'info')
+  }
+}
 
 async function fetchNotifs() {
   try {
     const r = await api.notifications()
     notifs.value = r.items
     notifUnread.value = r.unread
+    toastNew(r.items)
+    notifPrimed = true // 第一轮只是记下已有的,从第二轮起才算"新到的"
   } catch { /* ignore */ }
 }
 
