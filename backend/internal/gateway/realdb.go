@@ -75,12 +75,16 @@ func engineFamily(engine string) string {
 		return familyOracle
 	case strings.Contains(e, "mongo"):
 		return familyMongo
-	// PolarDB is MySQL-compatible, so it speaks the MySQL protocol.
+	// Postgres markers are checked BEFORE the MySQL list on purpose: PolarDB ships
+	// both a MySQL-compatible and a PostgreSQL-compatible edition, and both carry
+	// "polardb" in the engine label. Matching "polardb" first sent PolarDB for
+	// PostgreSQL to the MySQL driver, where it cannot connect at all.
+	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
+		return familyPostgres
+	// PolarDB (MySQL edition), TiDB and MariaDB all speak the MySQL protocol.
 	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"),
 		strings.Contains(e, "tidb"), strings.Contains(e, "polardb"):
 		return familyMySQL
-	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
-		return familyPostgres
 	}
 	return ""
 }

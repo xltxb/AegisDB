@@ -318,8 +318,17 @@ func blankQuoted(sql string) string {
 // readVerbs are the non-mutating leading verbs. Bare EXPLAIN only plans (no
 // execution), so it counts as a read; EXPLAIN ANALYZE is handled by IsRead via
 // the wrapped verb.
+// readVerbs are the statements that RETURN ROWS and change nothing.
+//
+// TABLE / VALUES / FETCH are full query statements in their own right, not
+// fragments: `TABLE t` is PostgreSQL/DWS (and MySQL 8.0.19+) shorthand for
+// `SELECT * FROM t`, `VALUES (1),(2)` is a standalone result set, and FETCH
+// pulls the next batch from an open cursor. Leaving them out routed them down
+// the write path, where nothing collects a result set — the statement ran and
+// the console showed nothing.
 var readVerbs = map[string]bool{
 	"SELECT": true, "SHOW": true, "DESC": true, "DESCRIBE": true, "WITH": true, "EXPLAIN": true,
+	"TABLE": true, "VALUES": true, "FETCH": true, "HELP": true,
 }
 
 // IsRead reports whether sql is a non-mutating statement, so callers can route it
@@ -408,7 +417,9 @@ func isWordChar(b byte) bool {
 // (case-insensitive).
 func MapVerbToCapability(verb string) string {
 	switch strings.ToUpper(strings.TrimSpace(verb)) {
-	case "SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "USE":
+	case "SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "USE",
+		// 独立的查询语句,只是关键字不叫 SELECT —— 见 readVerbs 的说明。
+		"TABLE", "VALUES", "FETCH", "HELP":
 		return "select"
 	case "INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE":
 		return "write"
@@ -580,6 +591,31 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 	// missing WHERE — both are statements about what a command WILL DO, and this
 	// one does nothing. EXPLAIN ANALYZE is not covered by any of this; PlanOnly
 	// is false for it and it falls through to the ordinary path below.
+	// 会话级设置(`SET search_path …` / Oracle `ALTER SESSION SET …`)既不读也不写
+	// 数据,只配置这条连接。它和 plan-only 的 EXPLAIN 是同一种东西,所以在这里用
+	// 同样的方式短路 —— 包括跳过下面的字典与严格模式,理由也一模一样:
+	//
+	// 字典匹配的是**文本里的那个词**。运维为了拦 `ALTER TABLE` 在字典里写下
+	// "ALTER",不会是想连 `ALTER SESSION SET NLS_DATE_FORMAT` 一起拦掉;字典是
+	// 单词粒度的,靠它命中会话设置是碰巧,不是本意。而在 Oracle 上,切 schema 正是
+	// 读数据的前置步骤 —— 拦掉它,只读用户就什么都干不了了。
+	//
+	// 只用 select 一道闸:能查数据的人,自然可以把自己的会话设好。放宽严格到会话
+	// 边界为止(SET GLOBAL / SET ROLE / ALTER SYSTEM 都不算,见 session_scope.go)。
+	if SessionScoped(sql) {
+		capLevel, err := e.capabilityLevelUnion(roleIDs, "select", tier)
+		if err != nil {
+			return unavailableVerdict(verb, err)
+		}
+		if capLevel == model.LevelDeny {
+			return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
+		}
+		if capLevel == model.LevelApprove {
+			return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "能力矩阵 · 需审批", Command: verb}
+		}
+		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
+	}
+
 	if PlanOnly(sql) {
 		// A plan is gated by BOTH `select` and `explain`, whichever is stricter.
 		//

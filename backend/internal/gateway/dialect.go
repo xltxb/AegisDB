@@ -82,6 +82,10 @@ var mongoCapability = map[string]string{
 	"COUNTDOCUMENTS": "select", "ESTIMATEDDOCUMENTCOUNT": "select", "DISTINCT": "select",
 	"EXPLAIN": "select", "STATS": "select", "GETINDEXES": "select", "LISTINDEXES": "select",
 	"LISTCOLLECTIONS": "select", "GETCOLLECTIONNAMES": "select", "SHOW": "select", "USE": "select",
+	// 游标续取与只读诊断。getMore 尤其要紧:它是翻页取下一批,判成写就意味着
+	// 一个只读用户翻不动自己查询的结果。
+	"GETMORE": "select", "LISTDATABASES": "select", "DBSTATS": "select",
+	"COLLSTATS": "select", "CURRENTOP": "select", "WATCH": "select",
 	// writes
 	"INSERT": "write", "INSERTONE": "write", "INSERTMANY": "write",
 	"UPDATE": "write", "UPDATEONE": "write", "UPDATEMANY": "write", "REPLACEONE": "write",

@@ -85,10 +85,56 @@ func takePLSQLBlock(sql string, i int, atStart bool) (body string, next int, ok 
 		pos = abs + 1
 	}
 	// No '/' anywhere: only a whole-input block may end at EOF.
-	if kind == "block" && atStart && plsqlTailRe.MatchString(sql[i:]) {
+	if atStart && plsqlTailRe.MatchString(sql[i:]) && (kind == "block" || beginIsAnonymousBlock(sql[i:])) {
 		if b := strings.TrimSpace(sql[i:]); b != "" {
 			return b, len(sql), true
 		}
 	}
 	return "", 0, false
+}
+
+// beginIsAnonymousBlock resolves the one ambiguity in the BEGIN keyword without
+// knowing the engine.
+//
+// MySQL/PostgreSQL open a transaction with `BEGIN;` or `BEGIN WORK;` — BEGIN is
+// the WHOLE statement, so a separator follows it immediately. Oracle's anonymous
+// block is `BEGIN <statements> END;` — the keyword is followed by the body.
+// The caller has already checked that the text ends in END; and is the entire
+// input, so together the two say: this is a PL/SQL block, not a transaction.
+//
+// Why it is worth resolving: `BEGIN … END;` with no trailing '/' is what a DBA
+// actually pastes into a terminal, and splitting it on the body's semicolons
+// produced fragments Oracle rejects one by one — the block simply could not be
+// run from the console.
+//
+// What it costs: strict mode's "unscoped mutation" check reads the statement's
+// leading verb, so a DELETE inside a merged block no longer trips it. That trade
+// is not new — it already applied to DECLARE and CREATE PROCEDURE blocks — and
+// the layer that matters still holds: the high-risk dictionary scans the whole
+// block text, so a DROP or DELETE inside one is caught exactly as before.
+func beginIsAnonymousBlock(s string) bool {
+	m := plsqlBeginRe.FindString(s)
+	if m == "" {
+		return false
+	}
+	rest := strings.TrimSpace(s[len(m):])
+	// `BEGIN;` / `BEGIN WORK;` / `BEGIN TRANSACTION;` — a transaction opener.
+	if rest == "" || strings.HasPrefix(rest, ";") {
+		return false
+	}
+	switch strings.ToUpper(firstWordOf(rest)) {
+	case "WORK", "TRANSACTION", "ISOLATION", "DEFERRED", "IMMEDIATE", "EXCLUSIVE":
+		return false
+	}
+	return true
+}
+
+func firstWordOf(s string) string {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == ';' {
+			return s[:i]
+		}
+	}
+	return s
 }
