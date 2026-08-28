@@ -1014,6 +1014,16 @@ func (r *Repo) ListPendingApprovalsOlderThan(cutoff time.Time) ([]model.Approval
 	return as, err
 }
 
+// PendingApprovals returns every ticket still awaiting a decision, regardless of
+// who is asking. The paged/scoped listing above is for the console, where a
+// ticket you are not on is none of your business; this one is for the checks
+// that must see the whole queue (审批人自检).
+func (r *Repo) PendingApprovals() ([]model.Approval, error) {
+	var as []model.Approval
+	err := r.db.Where("status = ?", model.StatusPending).Find(&as).Error
+	return as, err
+}
+
 // ----------------------------------------------------------------- Webhook / settings
 
 func (r *Repo) GetWebhook() (*model.WebhookConfig, error) {

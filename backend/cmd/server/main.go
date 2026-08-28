@@ -91,6 +91,10 @@ func main() {
 	// Ensure the default upload/export directories exist under the run dir at startup.
 	_ = os.MkdirAll(svc.ScriptSavePath(), 0o755)
 	_ = os.MkdirAll(svc.ExportSavePath(), 0o755)
+	// 审批人自检:这些审批环节还有没有人能批。只报告,不阻止启动 —— 审批人是谁
+	// 是组织的决定,一个自检程序没有资格替人拿主意;它该做的是在人还看得见的时候
+	// 把话说清楚。放在这里是因为 svc 刚好齐备,而服务还没开始收请求。
+	svc.LogApprovalStaffing()
 	h := handler.New(svc, repo)
 
 	r := bootstrap.NewRouter(cfg, h, repo, svc, jwtMgr)
