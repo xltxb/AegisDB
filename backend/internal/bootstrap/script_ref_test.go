@@ -112,7 +112,11 @@ func TestScriptRef_FileIsScannedServerSideNotTakenFromTheRequest(t *testing.T) {
 	}
 }
 
-// Swapping the file between review and approval must not go unnoticed.
+// Swapping the file between review and execution must not go unnoticed.
+//
+// 注意这个窗口比以前**长了**:审批通过不再顺带执行(ADR 0010),文件可以在
+// 审查之后、发起人执行之前的任何时刻被换掉。所以哈希校验放在执行那一步,才是
+// 校验"即将执行的这些字节" —— 也正因为窗口变长了,这条测试比以前更要紧。
 func TestScriptRef_AFileChangedAfterReviewIsRefused(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
@@ -133,6 +137,9 @@ func TestScriptRef_AFileChangedAfterReviewIsRefused(t *testing.T) {
 
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil)
 	eq(t, r.Code, 0, "the decision itself is recorded")
+
+	// 通过不执行任何命令,发起人自己来执行 —— 校验就发生在这一下。
+	app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", token, nil)
 
 	var after model.Approval
 	app.repo.DB().First(&after, ap.ID)

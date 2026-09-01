@@ -92,7 +92,7 @@ function canDecide(a: Approval) {
 }
 async function decide(a: Approval, approve: boolean) {
   if (!canDecide(a)) return
-  // B3: 批准会立即真实执行该命令，驳回同样不可逆——二次确认防误点
+  // B3: 两个方向都不可逆(通过会解锁一次真实执行,驳回会关掉这张单)——二次确认防误点
   const verb = approve ? t('apApprove') : t('apReject')
   if (!confirmAction(t('apConfirm', { verb, cmd: a.command }))) return
   // M14: 审批/驳回失败以 toast 呈现。api 层经 ok() 把业务级拒绝抛成 Error(msg),
@@ -108,6 +108,50 @@ async function decide(a: Approval, approve: boolean) {
     ui.notifyError(e, t('actionFailed'))
     // 被拒的常见原因之一是"已被别人处理过",刷一次比让人对着过期卡片发呆好。
     await load()
+  }
+}
+
+// 执行是**发起人**的动作,不是审批的副作用。
+//
+// 审批人按下的是"我同意",不是"现在就跑" —— 业务低峰、应用是否已停、备份是否
+// 就绪,只有发起人知道。所以这里是一个独立的按钮,而且它只对该去按的人亮:
+// canExecute 由服务端算(service.CanExecuteApproved),前端照着它走,免得出现
+// 一个亮着却点不动的按钮。
+const running = ref(false)
+// 行内状态比 a.status 多分了一档:approved 里"还没跑"和"跑过了"是两回事,而
+// 前者往往正等着看这一列的人去处理。挤在一个"已通过"里,他就看不见了。
+function rowState(a: Approval) {
+  if (a.status === 'approved' && !a.executedAt && !a.releaseId) return 'waitrun'
+  return a.status
+}
+function rowLabel(a: Approval) {
+  switch (rowState(a)) {
+    case 'pending': return 'apPending'
+    case 'waitrun': return 'apStWaitRun'
+    case 'approved': return a.executedAt ? 'apStRan' : 'apStDone'
+    default: return 'apRejected'
+  }
+}
+
+const shortTime = (s: string) =>
+  new Date(s).toLocaleString('zh', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+async function runApproved(a: Approval) {
+  if (a.canExecute !== true || running.value) return
+  // 这一下是真的落到库上,而且只有一次机会 —— 确认文案要把这两点都说出来。
+  if (!confirmAction(t('apExecuteConfirm', { cmd: a.command }))) return
+  running.value = true
+  try {
+    await api.executeApproval(a.id)
+    ui.notify(t('apExecuteDone'), 'success')
+    await load()
+    if (detail.value) detail.value = list.value.find((x) => x.id === a.id) || null
+  } catch (e) {
+    // 服务端的拒绝理由原样透出:等审批、找发起人、看发布单、重新提交 —— 四种
+    // 拒绝要人做的事完全不同。
+    ui.notifyError(e, t('actionFailed'))
+    await load()
+  } finally {
+    running.value = false
   }
 }
 
@@ -154,10 +198,10 @@ function chainText(a: Approval) {
         <span class="who"><span class="ava">{{ a.initiator.slice(0, 2).toUpperCase() }}</span>{{ a.initiator }}</span>
         <span class="mono mute">{{ a.env.toUpperCase() }} · {{ a.instance }}</span>
         <span class="mono mute">{{ new Date(a.createdAt).toLocaleString('zh', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>
-        <span class="st" :class="a.status">
-          <CircleCheckBig v-if="a.status === 'approved'" :size="13" />
-          <CircleX v-else-if="a.status === 'rejected'" :size="13" />
-          {{ a.status === 'pending' ? $t('apPending') : a.status === 'approved' ? $t('apDone') : $t('apRejected') }}
+        <span class="st" :class="rowState(a)">
+          <CircleCheckBig v-if="rowState(a) === 'approved'" :size="13" />
+          <CircleX v-else-if="rowState(a) === 'rejected'" :size="13" />
+          {{ $t(rowLabel(a) as any) }}
         </span>
         <span class="detbtn" @click.stop="openDetail(a)"><FileText :size="13" />{{ $t('apDetail') }}</span>
       </div>
@@ -210,6 +254,14 @@ function chainText(a: Approval) {
             <VButton variant="primary" height="38px" @click="decide(detail, true)">{{ $t('apApprove') }}</VButton>
           </template>
           <span v-else-if="detail.status === 'pending'" class="waitc">{{ detail.blockReason || $t('apWaitChain') }}</span>
+          <!-- 通过之后命令还没跑。这一格要说清它现在停在哪一步:等我执行 /
+               已经执行过了 / 归流水线执行 / 等的是别人。 -->
+          <template v-else-if="detail.status === 'approved' && detail.canExecute">
+            <span class="waitc grow">{{ $t('apExecuteMine') }}</span>
+            <VButton variant="primary" height="38px" :disabled="running" @click="runApproved(detail)">{{ $t('apExecute') }}</VButton>
+          </template>
+          <span v-else-if="detail.status === 'approved' && detail.executedAt" class="waitc">{{ $t('apExecuted', { at: shortTime(detail.executedAt) }) }}</span>
+          <span v-else-if="detail.status === 'approved' && detail.releaseId" class="waitc">{{ $t('apExecuteByPipeline') }}</span>
           <span v-else class="waitc">{{ detail.status === 'approved' ? $t('apDone') : $t('apRejected') }}</span>
         </div>
       </div>
@@ -241,6 +293,8 @@ function chainText(a: Approval) {
 .st { display: flex; align-items: center; gap: 4px; font-weight: 600; }
 .st.pending { color: var(--warning-text); }
 .st.approved { color: var(--success-text); }
+/* 待执行借用 pending 的告警色:它和"待审批"一样,是一件还没做完、有人得动手的事 */
+.st.waitrun { color: var(--warning-text); }
 .st.rejected { color: var(--danger-text); }
 .detbtn { display: inline-flex; align-items: center; gap: 4px; justify-content: center; padding: 4px 8px;
   border: 1px solid var(--border-subtle); border-radius: 7px; color: var(--text-muted); font-size: 11px; }

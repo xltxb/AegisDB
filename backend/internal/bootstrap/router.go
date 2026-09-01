@@ -247,6 +247,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// approvals
 		a.GET("/approvals", menu("approve"), h.ListApprovals)
 		a.POST("/approvals/:id/approve", menu("approve"), h.ApproveApproval)
+		// 执行由**发起人**发起,不是审批动作的一部分 —— 所以它是一个独立的接口,
+		// 而不是 approve 的副作用。
+		a.POST("/approvals/:id/execute", menu("terminal"), h.ExecuteApproval)
 		a.POST("/approvals/:id/reject", menu("approve"), h.RejectApproval)
 
 		// audit

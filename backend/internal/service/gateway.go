@@ -442,8 +442,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			return nil, ErrAlreadyDecided // someone else already decided/expired it
 		}
 		_ = s.Repo.DecideActiveStep(ap.ID, model.StatusApproved, now)
+		// 通过不再执行任何命令,两条分支的区别只是**接下来由谁执行**:
+		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
-		result, title := model.ResultExecuted, "审批已通过并执行"
+		result, title := model.ResultPending, "审批已通过,请前往执行"
 		if ap.ReleaseID > 0 {
 			// A release ticket authorises the pipeline; it does not run anything.
 			// The execute stage owns execution (and re-judges the statement before
@@ -452,29 +454,31 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			// has not run. The audit row therefore stays `pending`: approved, not yet
 			// executed, with the execution audited by the stage that performs it.
 			res.Output = "· 已批准,由发布流水线继续执行"
-			result, title = model.ResultPending, "审批已通过,发布流水线继续"
-		} else if conn != nil {
-			// A script approval carries a reference, not a body: re-read the file,
-			// verify it still hashes to what was reviewed, re-judge every statement
-			// and run them one at a time (see runApprovedScript). Handing ap.Command
-			// to the executor here would send an excerpt — and, before the reference
-			// model, sent `\i file` plus the whole script as a single statement.
-			if ap.ScriptUploadID > 0 {
-				res = s.runApprovedScript(ap, conn)
-			} else {
-				res = s.Executor.Run(conn, ap.Command, s.execTimeout()) // gateway runs it on behalf of the initiator
-			}
-			result = execResultStatus(res)
+			title = "审批已通过,发布流水线继续"
 		} else {
-			// The target connection was deleted/unavailable — nothing ran. Report
-			// this honestly instead of claiming "executed" (R-verify).
-			res.Output = "· 目标连接已不存在,命令未执行"
-			result, title = model.ResultWarn, "审批已通过但目标连接不存在,未执行"
+			// 通过**不再顺带执行**。命令在审批人点下去的那一刻跑,等于让审批人替
+			// 发起人选择了执行时机 —— 而业务低峰、应用是否已停、备份是否就绪,
+			// 只有发起人知道。审批人按下的是"我同意",不是"现在就跑"。
+			//
+			// 工单就停在这里等发起人来执行(ExecuteApproved)。审计行同样记 pending:
+			// 已批准、尚未执行,真正的执行由执行它的那一刻自己写审计。
+			res.Output = "· 已批准,等待发起人执行"
 		}
 		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
-		s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "exec")
-		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
-			fmt.Sprintf("%s 处理了你的命令：%s\n结果：%s", operatorName, safeClip(ap.Command, 60), clip(res.Output, 120)), ap.ApNo)
+		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
+		// 没有跑。记成 exec 会让审计里出现一条查不到对应库变更的"执行",也会让只
+		// 订阅 exec 的 webhook 在什么都没执行时收到通知。真正的执行由
+		// ExecuteApproved 自己写一条 exec —— 那条才对得上库里的变化。
+		s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "approve")
+		// 话要说清"还需要你去执行" —— 一句"已通过"会让人以为事情办完了,然后那条
+		// 命令就一直挂在那里,直到有人发现变更根本没生效。
+		body := fmt.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
+			operatorName, safeClip(ap.Command, 60))
+		if ap.ReleaseID > 0 {
+			body = fmt.Sprintf("%s 通过了发布单里的这一步：%s\n流水线将继续执行,无需手动操作。",
+				operatorName, safeClip(ap.Command, 60))
+		}
+		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title, body, ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}

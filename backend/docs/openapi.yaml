@@ -1283,8 +1283,27 @@ paths:
       tags: [approvals]
       summary: '[approve] 通过 —— 仅审批链成员;默认不可自批'
       description: |
-        普通工单通过后由网关代执行。**发布单的审批不执行任何命令** ——
-        执行归发布流水线的执行阶段,否则同一变更会被应用两次。
+        **通过不执行任何命令。** 审批人按下的是"我同意",不是"现在就跑" ——
+        执行时机(业务低峰、应用是否已停、备份是否就绪)只有发起人知道。
+        通过后工单停在 approved 等发起人调 `POST /approvals/{id}/execute`。
+        发布单的审批同样不执行:它的执行归发布流水线的执行阶段。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/execute:
+    post:
+      tags: [approvals]
+      summary: '[terminal] 执行已通过的工单 —— 仅发起人本人,且只能执行一次'
+      description: |
+        把"批准了"和"跑过了"分成两件事的那一步。四条边界:
+
+        - 只有**发起人**能执行(审批人替他跑,等于把刚拆开的两步又并回去)
+        - 一张工单只能执行**一次**(批准是对一次执行的授权,不是可反复使用的通行证)
+        - **发布单的工单走不了这条路**,它的执行归流水线,插队会把同一变更应用两次
+        - 下发前**再判一次**规则:工单可能在待执行状态里放了很久,期间字典、
+          实例归属、发起人的角色都可能变
+
+        拒绝的理由原样透出 —— 等审批、找发起人、看发布单、重新提交,
+        这四种拒绝要人做的事完全不同。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /approvals/{id}/reject:

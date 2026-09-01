@@ -406,9 +406,12 @@ func TestExternalApproval_AuditIdentifiesTheExternalApprover(t *testing.T) {
 	if err := json.Unmarshal(app.auditItemsRaw(token, ""), &rows); err != nil {
 		t.Fatalf("audit decode: %v", err)
 	}
+	// 判定条件是"这张单的审计里有没有人被记成 operator",而不是某一行的 result ——
+	// 通过之后命令并没有跑(ADR 0010),按 executed 去找会找不到,而档案该留的东西
+	// 一点没少。
 	found := false
 	for _, r := range rows {
-		if r.ApprovalNo == ap.ApNo && r.Result == "executed" {
+		if r.ApprovalNo == ap.ApNo && r.Operator != "" {
 			found = true
 			if !strings.Contains(r.Operator, "herbert@tbu.net") {
 				t.Errorf("audit does not name the approver who authorised the command: operator=%q actor=%q", r.Operator, r.Actor)
@@ -416,6 +419,6 @@ func TestExternalApproval_AuditIdentifiesTheExternalApprover(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatalf("no executed audit row for %s", ap.ApNo)
+		t.Fatalf("no audit row naming an approver for %s", ap.ApNo)
 	}
 }

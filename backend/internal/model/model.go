@@ -491,14 +491,23 @@ type Approval struct {
 	// back as external_task_id), not this.
 	ExternalTaskID string   `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
 	// ReleaseID links a ticket raised by a release pipeline's approve stage back
-	// to its release. It also SUPPRESSES execution on approval: the pipeline owns
-	// the execute stage, and finalizeApproval running the command as well would
-	// apply the change twice — once unaudited by the pipeline that believes it has
-	// not run yet. Zero for every ordinary ticket, which keeps the old behaviour.
+	// to its release. It also keeps the ticket OUT of the manual execute path
+	// (ExecuteApproved): the pipeline owns the execute stage, and letting someone
+	// run it by hand from the approvals page would apply the change twice — once
+	// there, once in the pipeline that still believes it has not run yet.
+	// Zero for every ordinary ticket.
 	ReleaseID int64 `gorm:"not null;default:0;index:idx_approval_release" json:"releaseId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
 	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)
+	// ExecutedAt 把"批准了"和"跑过了"分成两件事。
+	//
+	// 审批通过不再顺带执行:命令在审批人点下去的那一刻跑,意味着发起人可能不在
+	// 现场,而执行时机(业务低峰、应用是否已停、备份是否就绪)只有他知道。所以
+	// 通过之后工单停在这里等发起人来执行,这个字段就是"等"与"跑过了"的分界。
+	//
+	// 它也是一次性的闸:占住它才允许执行,所以一次批准只换一次执行。
+	ExecutedAt   *time.Time `json:"executedAt"`
 	DecidedAt    *time.Time `json:"decidedAt"`                   // when approved/rejected
 	CreatedAt    time.Time  `json:"createdAt"`
 }

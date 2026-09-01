@@ -630,10 +630,10 @@ func (s *Services) stageReview(rel *model.Release, conn *model.Connection, cfg s
 
 // stageApprove raises an approval ticket and parks the run on it.
 //
-// The ticket carries ReleaseID, which is what stops finalizeApproval from
-// executing the command when it is approved: the pipeline owns execution, and a
-// change applied twice — once by the approval, once by the execute stage — is
-// the failure this link exists to prevent.
+// The ticket carries ReleaseID, which is what keeps it out of the manual
+// execute path (ExecuteApproved): the pipeline owns execution, and a change
+// applied twice — once by hand from the approvals page, once by the execute
+// stage — is the failure this link exists to prevent.
 func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *model.ReleaseStage) stageOutcome {
 	if st.ApprovalID > 0 {
 		return stageOutcome{status: model.RunWaiting, log: "· 已存在审批单 " + st.ApprovalNo}

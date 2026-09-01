@@ -372,11 +372,15 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	}
 	// canDecide / blockReason 由服务端算好带下来。UI 照着它决定按钮亮不亮 ——
 	// 让前端自己再判一遍规则,两份判断迟早会不一致。
+	// canExecute 同理:通过之后命令并没有跑,要发起人自己来执行(见
+	// service.ExecuteApproved)。哪张工单在等他,由服务端说了算 —— 前端照着这一位
+	// 决定"执行"按钮亮不亮,而不是自己去拼 status / executedAt / 是不是发起人。
 	type apView struct {
 		model.Approval
 		Steps       []model.ApprovalStep `json:"steps"`
 		CanDecide   bool                 `json:"canDecide"`
 		BlockReason string               `json:"blockReason"`
+		CanExecute  bool                 `json:"canExecute"`
 	}
 	out := []apView{}
 	for _, a := range aps {
@@ -389,6 +393,7 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		out = append(out, apView{
 			Approval: a, Steps: steps,
 			CanDecide: block == service.BlockNone, BlockReason: block.Reason(),
+			CanExecute: h.Svc.CanExecuteApproved(u, &row),
 		})
 	}
 	pending, _ := h.Repo.CountPendingApprovals(scope, u.ID)

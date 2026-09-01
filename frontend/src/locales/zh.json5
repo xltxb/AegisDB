@@ -62,7 +62,7 @@
   ctxTitle: '执行上下文 · 风险检查', targetInst: '目标实例', dbLabel: '数据库', connRole: '连接角色', gwPolicy: '网关策略',
   idleTitle: '等待命令', idleSub: '输入 SQL 后实时检查',
   lowRiskTitle: '低风险 · 可执行', lowRiskSub: '未命中受限命令',
-  highRiskTitle: '高危操作 · P1', highRiskSub: 'DDL · 需审批后代执行',
+  highRiskTitle: '高危操作 · P1', highRiskSub: 'DDL · 需审批后由你执行',
   limitList: '受限命令清单', limitHint: '在「高危命令规则」中按环境新增 / 调整', chainTitle: '审批链 · 高危 DDL', initiated: '发起',
   // script scan
   scTitle: 'SQL 脚本扫描', scSub: '执行前自动检测高危命令 · 命中即转审批',
@@ -71,7 +71,7 @@
   scClean: '未检出高危命令，可直接执行', scRisky: '检出高危命令，执行需经审批',
   scRun: '执行脚本', scSubmitAppr: '提交审批后执行',
   scTargetDb: '目标库', scPickDb: '请选择目标库', scMustPick: '请先选择执行的目标库', scConfirm: '确认在 {i} · {d} 执行',
-  scSubmitted: '已提交审批 · 高危语句由网关代执行', scClose: '关闭', scDrop: '或拖入 .sql 文件',
+  scSubmitted: '已提交审批 · 通过后回来自己执行', scClose: '关闭', scDrop: '或拖入 .sql 文件',
   // db config
   connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
@@ -120,13 +120,22 @@
   t24h: '近 24h', t7d: '近 7 天', t30d: '近 30 天', tAll: '全部时间',
   auditFrom: '起始', auditTo: '结束', auditClearRange: '清除时间', auditTotal: '共 {n} 条', auditPageOf: '第 {p} / {n} 页',
   // approval inbox
-  apprSubTail: '· 通过后由网关代执行，全程写入审计', mineAppr: '待我审批', allAppr: '全部',
+  apprSubTail: '· 通过后由发起人自己执行，全程写入审计', mineAppr: '待我审批', allAppr: '全部',
   apprCardTail: '· 高危命令审批', apInitiator: '发起人', apTarget: '目标', apTier: '判定分层', apTierUnknown: '未记录(该单早于分层模型)', apReason: '操作原因', apResult: '执行结果', apWaitChain: '等待审批链成员处理',
-  apChain: '你 · DBA 组长 → 终审 李娜', apReject: '驳回', apApprove: '通过并代执行',
-  apDone: '已通过 · 网关已代执行 · 已写入审计与 Lark', apRejected: '已驳回 · 命令未执行 · 已通知发起人',
+  apChain: '你 · DBA 组长 → 终审 李娜', apReject: '驳回', apApprove: '通过',
+  // 通过不再代执行:审批人按下的是"我同意",执行时机由发起人挑。下面这一组
+  // 文案要把"还没跑"说清楚 —— 一句"已完成"会让人以为变更已经生效了。
+  apDone: '已通过 · 等待发起人执行', apRejected: '已驳回 · 命令未执行 · 已通知发起人',
+  apExecute: '执行', apExecuteMine: '审批已通过,由你来挑执行时机',
+  apExecuteConfirm: '现在真正执行「{cmd}」吗？这一步会直接作用到目标库,且只能执行一次。',
+  apExecuted: '已通过 · 已于 {at} 执行', apExecuteByPipeline: '已通过 · 由发布流水线执行',
+  apExecuteDone: '命令已执行完成',
+  // 列表那一格只有一行的宽度,放不下详情页那句完整的话。但"批了还没跑"与"跑过了"
+  // 必须一眼分得开 —— 扫一列全是"已通过"的人,看不出哪张还等着他。
+  apStWaitRun: '待执行', apStRan: '已执行', apStDone: '已通过',
   highP1: '高危 P1', privP2: '权限 P2', awaitingYou: '项待你审批',
   // approval modal
-  mApprTitle: '该命令需要审批后执行', mApprDesc: '提交后将生成 Lark 审批卡并通知审批人，通过后由网关代执行。',
+  mApprTitle: '该命令需要审批后执行', mApprDesc: '提交后将生成 Lark 审批卡并通知审批人。通过后命令不会自动执行——会通知你回到「审批」页自己挑时机执行。',
   sentenceSep: '。',
   mPolicyHit: '命中策略', mPolicyName: '「PROD · 高危 DDL 二级审批」',
   mPendCmd: '待执行命令', mEnv: '环境', mInst: '实例', mRisk: '风险',

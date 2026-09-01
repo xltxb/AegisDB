@@ -313,6 +313,8 @@ export const api = {
   // 理由(不能自审 / 不在审批链 / 已被处理)各自要人做的事完全不同。
   approve: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/approve`).then(ok),
   reject: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/reject`).then(ok),
+  // 执行是发起人的动作,不是审批的副作用 —— 所以它是独立的一个调用。
+  executeApproval: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/execute`).then(ok),
 
   // ---- audit ----
   audit: (q: AuditQuery) => http.get<any, Envelope<AuditPage>>(`/audit?${auditQS(q)}`).then(ok),

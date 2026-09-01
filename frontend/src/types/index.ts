@@ -209,6 +209,11 @@ export interface Approval {
   canDecide?: boolean
   /** 不能决定时的理由,显示在按钮原来的位置;可决定时为空 */
   blockReason?: string
+  /** 这张单此刻在等我去执行吗 —— 同样由服务端算好(service.CanExecuteApproved),
+   *  前端不自己去拼 status / executedAt / 是不是发起人 这三件事 */
+  canExecute?: boolean
+  /** 执行时刻;为空表示"批了但还没跑"。审批通过不再代执行,这是那一步的分界 */
+  executedAt?: string | null
   id: number
   apNo: string
   connectionId: number
@@ -224,6 +229,8 @@ export interface Approval {
   initiator: string
   reason: string
   riskLevel: string
+  /** >0 表示这张单属于一张发布单:它的执行归流水线,走不了发起人手动执行那条路 */
+  releaseId?: number
   status: 'pending' | 'approved' | 'rejected' | 'expired'
   auditId: string
   result: string

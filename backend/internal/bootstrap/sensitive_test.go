@@ -53,11 +53,30 @@ func (a *testApp) execSQL(token string, connID int64, sql string) apiResp {
 // 脱敏发生在结果从数据库读出来的那一刻,所以这组用例必须打到一个真库上 ——
 // 拿模拟执行器测脱敏,测的是一段永远不会跑到的代码。
 func (a *testApp) realSQLiteConn(token string) int64 {
+	return a.realSQLiteConnIn(token, "dev", "sensitive-probe")
+}
+
+// sameFileConns 把**同一个库文件**挂成两条连接:一条在 dev(准备数据用,不被拦),
+// 一条在 prod(分层决定规则,一条 DROP 就会被拦成审批工单)。
+//
+// 需要两条是因为生产分层上连 CREATE TABLE 都要审批 —— 用一条 prod 连接就没法
+// 先把被测的表建出来。
+func (a *testApp) sameFileConns(token, name string) (dev, prod int64) {
+	a.t.Helper()
+	path := filepath.Join(a.t.TempDir(), name+".db")
+	return a.sqliteConnAt(token, "dev", name+"-dev", path), a.sqliteConnAt(token, "prod", name+"-prod", path)
+}
+
+func (a *testApp) realSQLiteConnIn(token, env, name string) int64 {
+	return a.sqliteConnAt(token, env, name, filepath.Join(a.t.TempDir(), name+".db"))
+}
+
+func (a *testApp) sqliteConnAt(token, env, name, path string) int64 {
 	a.t.Helper()
 	r := a.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "sensitive-probe", "engine": "sqlite", "host": "local", "port": 0,
-		"env": "dev", "policy": "audit-only", "defaultRole": "dba_l2",
-		"database": filepath.Join(a.t.TempDir(), "probe.db"),
+		"name": name, "engine": "sqlite", "host": "local", "port": 0,
+		"env": env, "policy": "audit-only", "defaultRole": "dba_l2",
+		"database": path,
 	})
 	if r.Code != 0 {
 		a.t.Fatalf("建连接: code=%d msg=%s", r.Code, r.Msg)

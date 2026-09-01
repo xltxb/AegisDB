@@ -1024,6 +1024,32 @@ func (r *Repo) PendingApprovals() ([]model.Approval, error) {
 	return as, err
 }
 
+// SetApprovalExecResult writes back what the execution produced.
+//
+// 它**不碰 decided_at**:那是"什么时候批的",而现在批准与执行是两个时刻,
+// 沿用 SetApprovalResult 会把审批时间改成执行时间 —— 一张周一批、周三执行的单子,
+// 事后看就成了周三才批的。executed_at 已经在占位时盖过章了,这里只补结果。
+func (r *Repo) SetApprovalExecResult(id int64, output string, rows int) error {
+	return r.db.Model(&model.Approval{}).Where("id = ?", id).Updates(map[string]any{
+		"result": output, "result_rows": rows,
+	}).Error
+}
+
+// ClaimApprovalExecution atomically marks a ticket as executed, and reports
+// whether THIS caller is the one that claimed it.
+//
+// 条件里带 executed_at IS NULL:并发的两个执行请求只有一个能把行改动,另一个拿到
+// 0 行受影响,于是知道自己来晚了。一次批准只换一次执行,靠的就是这一行 SQL。
+func (r *Repo) ClaimApprovalExecution(id int64) (bool, error) {
+	res := r.db.Model(&model.Approval{}).
+		Where("id = ? AND status = ? AND executed_at IS NULL", id, model.StatusApproved).
+		Update("executed_at", time.Now())
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
 // ----------------------------------------------------------------- Webhook / settings
 
 func (r *Repo) GetWebhook() (*model.WebhookConfig, error) {
