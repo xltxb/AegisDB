@@ -581,7 +581,7 @@ func (h *Handler) MFADisable(c *gin.Context) {
 // ---------------------------------------------------------------- Users
 
 func (h *Handler) ListUsers(c *gin.Context) {
-	us, _ := h.Svc.UsersView()
+	us, _ := h.Svc.UsersView(middleware.CurrentUser(c))
 	resp.OK(c, us)
 }
 
@@ -592,6 +592,12 @@ func (h *Handler) PatchUser(c *gin.Context) {
 		return
 	}
 	if err := h.Svc.PatchUser(middleware.CurrentUser(c), pathID(c), req); err != nil {
+		// 停用被拦下时,理由原样透出:"换个管理员来点"和"先指派一位管理员"要人做的
+		// 事完全不同,一句"更新失败"会让人去修错的东西 —— 或者以为是系统坏了。
+		if d, ok := err.(*service.DisableRefusal); ok {
+			resp.Fail(c, resp.CodeForbidden, d.Error())
+			return
+		}
 		resp.Fail(c, resp.CodeBadRequest, "更新失败")
 		return
 	}

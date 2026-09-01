@@ -209,6 +209,12 @@ async function addMember(userId: number) {
 }
 async function toggleUser(u: UserView) {
   if (!isAdmin.value) return
+  // 停不了的先说原因,别让人白确认一次 —— "确认停用林伟?"→点确定→"不能停用自己"
+  // 是很难受的一段。canDisable 由服务端算(自己/最后一位管理员),前端只照着显示。
+  if (u.status !== 'disabled' && u.canDisable === false) {
+    ui.notify(u.disableBlock || t('actionFailed'), 'error', 5000)
+    return
+  }
   // M15: 禁用用户前二次确认（启用无需确认）
   if (u.status !== 'disabled' && !confirmAction(t('pmDisableUserConfirm', { name: u.name }))) return
   // M14: 启停失败以 toast 呈现

@@ -175,6 +175,10 @@ export interface UserView {
   kind?: 'human' | 'service' // 服务账号在列表里要能一眼认出来
   mfaEnabled: boolean
   lastActive: string
+  /** 这一行现在能不能被停用 —— 服务端算好带下来,前端不自己判(与 canDecide 同理) */
+  canDisable?: boolean
+  /** 不能停用时的原因,直接显示给人看;能停用时为空 */
+  disableBlock?: string
 }
 
 // 服务账号 —— 对接升级单/CI/CD 系统的机器主体(kind=service 的用户)。

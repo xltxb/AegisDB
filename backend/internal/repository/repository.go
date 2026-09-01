@@ -395,6 +395,33 @@ func (r *Repo) SetUserRoles(userID int64, roleIDs []int64) error {
 	})
 }
 
+// ActiveAdminIDs lists the users who can still administer the platform: kind
+// human, status active, and holding the admin role through ANY of their roles
+// (primary or membership — union semantics, same as the AdminOnly guard).
+//
+// 服务账号不算在内:它进不了控制台(Login 直接拒绝 kind=service),所以它救不了
+// "最后一个管理员被停用"的场面。把它算进去,等于用一个永远打不开的门证明屋子有出口。
+func (r *Repo) ActiveAdminIDs() []int64 {
+	var role model.Role
+	if err := r.db.Where("code = ?", "admin").First(&role).Error; err != nil {
+		return nil
+	}
+	var us []model.User
+	if err := r.db.Where("status = ? AND kind = ?", "active", model.UserKindHuman).Find(&us).Error; err != nil {
+		return nil
+	}
+	out := []int64{}
+	for i := range us {
+		for _, id := range r.EffectiveRoleIDs(&us[i]) {
+			if id == role.ID {
+				out = append(out, us[i].ID)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // RoleCodesForIDs returns the role codes for a set of role ids (for oversight /
 // admin checks that must consider every role a user holds).
 func (r *Repo) RoleCodesForIDs(ids []int64) []string {

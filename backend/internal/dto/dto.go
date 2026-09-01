@@ -456,6 +456,12 @@ type UserView struct {
 	Kind          string   `json:"kind"` // human|service — 服务账号在用户列表里要能一眼认出来
 	MFAEnabled    bool     `json:"mfaEnabled"`
 	LastActive    string   `json:"lastActive"`
+	// 这一行现在能不能被停用,以及不能的话为什么。由服务端算好带下来(与 canDecide /
+	// canExecute 同一套做法):否则"确认停用林伟?"→点确定→"不能停用自己"这个序列
+	// 会让人白白确认一次,而前端自己判一遍,两份判断迟早会不一致。
+	// 启用方向永远允许,所以这两个字段只对还没停用的账户有意义。
+	CanDisable   bool   `json:"canDisable"`
+	DisableBlock string `json:"disableBlock"`
 }
 
 type RiskCommandView struct {

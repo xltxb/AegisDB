@@ -484,19 +484,26 @@ func (s *Services) RoleDetail(id int64) (*dto.RoleDetailResp, error) {
 
 // ---------------------------------------------------------------- Users
 
-func (s *Services) UsersView() ([]dto.UserView, error) {
+func (s *Services) UsersView(actor *model.User) ([]dto.UserView, error) {
 	users, err := s.Repo.ListUsers()
 	if err != nil {
 		return nil, err
 	}
 	out := []dto.UserView{}
-	for _, u := range users {
+	for i := range users {
+		u := &users[i]
 		roles, _ := s.Repo.RolesOfUser(u.ID)
-		ids := s.Repo.EffectiveRoleIDs(&u)
+		ids := s.Repo.EffectiveRoleIDs(u)
+		// 停用方向才有拦的必要 —— 启用永远允许。
+		block := ""
+		if err := s.guardDisable(actor, u); err != nil {
+			block = err.Error()
+		}
 		out = append(out, dto.UserView{
 			ID: u.ID, Name: u.Name, Email: u.Email, Initials: u.Initials, Dept: u.Dept,
 			Roles: roles, RoleIDs: ids, PrimaryRoleID: u.RoleID,
 			Status: u.Status, Kind: u.Kind, MFAEnabled: u.MFAEnabled && u.MFASecret != "", LastActive: u.LastActive,
+			CanDisable: block == "", DisableBlock: block,
 		})
 	}
 	return out, nil
@@ -519,6 +526,11 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 			fields["status"] = req.Status
 		default:
 			return ErrBadRequest
+		}
+		if req.Status != "active" {
+			if err := s.guardDisable(actor, target); err != nil {
+				return err
+			}
 		}
 	}
 	if req.RoleID != nil {
@@ -585,6 +597,34 @@ func (s *Services) validateRoleIDs(ids []int64) error {
 	}
 	return nil
 }
+
+// guardDisable refuses the two ways disabling an account locks the platform.
+//
+// 停用是一把没有回程的闸:停掉之后登录被拒(Login 只放行 active),在手的 token 每个
+// 请求都被中间件按库里的最新状态挡下 —— 这是对的,停用就该立刻生效。但正因为这么
+// 彻底,把最后一个管理员停掉就没有路走回来了:重新启用要调管理员接口,而调它需要一个
+// 还能登录的管理员。剩下的唯一办法是有人直接去改数据库。
+//
+// 闸可以关,但不能把钥匙一起关在里面。
+func (s *Services) guardDisable(actor, target *model.User) error {
+	if actor != nil && actor.ID == target.ID {
+		// 这一条不是为了防死锁(下一条才是),而是因为它几乎总是误点:状态徽章就在
+		// 用户列表里自己那一行上,点下去的后果是当场把自己踢出控制台。要停用自己,
+		// 得请另一个管理员来做 —— 那时至少有人看着。
+		return &DisableRefusal{Reason: "不能停用自己的账户:停用会立刻生效,你会当场退出控制台。请让另一位管理员操作。"}
+	}
+	admins := s.Repo.ActiveAdminIDs()
+	if len(admins) != 1 || admins[0] != target.ID {
+		return nil // 目标不是最后一个管理员(或压根不是管理员)
+	}
+	return &DisableRefusal{Reason: "不能停用最后一位管理员:停用之后没有人能再启用任何账户,只能直接改数据库。请先指派另一位管理员。"}
+}
+
+// DisableRefusal carries the reason through to the console: 两种拒绝要人做的事不同
+// —— 一个是"换个人来点",一个是"先指派一位管理员"。
+type DisableRefusal struct{ Reason string }
+
+func (e *DisableRefusal) Error() string { return e.Reason }
 
 // CreateUser provisions an account directly from the admin console: it sets an
 // initial password and marks the account active so the user can sign in
