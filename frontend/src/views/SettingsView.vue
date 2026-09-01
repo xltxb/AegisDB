@@ -31,7 +31,7 @@ const tabs = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
   { id: 'approval', icon: GitPullRequestArrow, label: 'setAppr' },
   { id: 'security', icon: Lock, label: 'setSec' },
-  { id: 'sensitive', icon: EyeOff, label: 'scTitle' },
+  { id: 'sensitive', icon: EyeOff, label: 'sensTitle' },
   { id: 'notify', icon: Bell, label: 'setNotify' },
   { id: 'webhook', icon: Webhook, label: 'setWebhookTab' },
   { id: 'openapi', icon: KeyRound, label: 'setOpenApi' },
@@ -241,13 +241,14 @@ async function save() {
 
 <template>
   <div class="scy page">
+    <!-- Tab bar: switch between setting groups instead of one long scroll.
+         刻意放在 .col 外面 —— 见下方 .tabs 的注释。 -->
+    <div class="tabs">
+      <button v-for="tb in tabs" :key="tb.id" class="tab" :class="{ active: activeTab === tb.id }" @click="activeTab = tb.id">
+        <component :is="tb.icon" :size="15" />{{ $t(tb.label) }}
+      </button>
+    </div>
     <div class="col">
-      <!-- Tab bar: switch between setting groups instead of one long scroll -->
-      <div class="tabs">
-        <button v-for="tb in tabs" :key="tb.id" class="tab" :class="{ active: activeTab === tb.id }" @click="activeTab = tb.id">
-          <component :is="tb.icon" :size="15" />{{ $t(tb.label) }}
-        </button>
-      </div>
 
       <!-- Gateway -->
       <section v-show="activeTab === 'gateway'" class="card">
@@ -355,8 +356,12 @@ async function save() {
 <style scoped>
 .page { flex: 1; min-height: 0; padding: 24px 28px; }
 .col { max-width: 820px; display: flex; flex-direction: column; gap: 18px; }
-/* Tab bar — switch between setting groups so only one panel shows at a time. */
-.tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Tab bar — switch between setting groups so only one panel shows at a time.
+   它在 .col **外面**:820px 是正文的阅读宽度(一行设置项拉得太宽就难读),而页签是
+   导航,不该跟着受限。八个页签一共约 830px,只差 10px 就挤不下,最后一个会孤零零
+   掉到第二行 —— 那不是设计,是撞到了一条本不该管它的约束。
+   窗口真的窄到放不下时仍然换行,那才是它该换行的时候。 */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .tab {
   display: flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px;
   border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card);

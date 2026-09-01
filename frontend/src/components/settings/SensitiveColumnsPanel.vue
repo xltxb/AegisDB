@@ -84,8 +84,8 @@ async function remove(r: SensitiveColumn) {
     <div class="schead">
       <div class="scic"><EyeOff :size="18" color="var(--accent-text)" /></div>
       <div class="grow">
-        <div class="sct">{{ $t('scTitle') }}</div>
-        <div class="scs">{{ $t('scSub') }}</div>
+        <div class="sct">{{ $t('sensTitle') }}</div>
+        <div class="scs">{{ $t('sensSub') }}</div>
       </div>
       <VButton v-if="isAdmin" variant="primary" height="34px" @click="openNew"><Plus :size="14" />{{ $t('scNew') }}</VButton>
     </div>
@@ -113,7 +113,7 @@ async function remove(r: SensitiveColumn) {
       <div class="modal">
         <div class="mhead">
           <div class="mic"><EyeOff :size="17" color="var(--accent-text)" /></div>
-          <div><div class="mt">{{ editing.id ? $t('scEdit') : $t('scNew') }}</div><div class="ms">{{ $t('scSub') }}</div></div>
+          <div><div class="mt">{{ editing.id ? $t('scEdit') : $t('scNew') }}</div><div class="ms">{{ $t('sensSub') }}</div></div>
           <X :size="17" class="mx" @click="editing = null" />
         </div>
         <div class="mbody">

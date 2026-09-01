@@ -193,7 +193,7 @@
   objMojibakeSub: '部署该对象时客户端字符集(NLS_LANG)与库不匹配,Oracle 在 CREATE 时就把中文替换成了问号,源码已无法从库中恢复 —— 需用正确的源码重新部署。可用下面这条自行核实(输出是纯 ASCII,不受影响):',
   objCopyFail: '复制失败 —— 浏览器未授予剪贴板权限;可手动选中源码后按 Ctrl+C',
   connDbProjects: '库归属',
-  scTitle: '敏感字段', scSub: '按 表名 + 字段 定义;命中的列在服务端打码后才回传',
+  sensTitle: '敏感字段', sensSub: '按 表名 + 字段 定义;命中的列在服务端打码后才回传',
   scNew: '新增敏感字段', scEdit: '编辑敏感字段', scTable: '表名', scTablePh: '留空 = 所有表',
   scColumn: '字段名', scColumnPh: '如 id_card', scStyle: '脱敏方式', scNote: '说明', scNotePh: '为什么它是敏感的',
   scStyle_partial: '部分', scStyle_full: '全部', scStyle_hash: '哈希',

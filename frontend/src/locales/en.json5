@@ -173,7 +173,7 @@
   objMojibakeSub: 'The client charset (NLS_LANG) did not match the database when this object was deployed, so Oracle replaced the characters at CREATE time. The original text is not recoverable from the database — redeploy from correct source. Verify it yourself with (output is pure ASCII, unaffected):',
   objCopyFail: 'Copy failed — the browser denied clipboard access; select the text and press Ctrl+C',
   connDbProjects: 'Databases',
-  scTitle: 'Sensitive fields', scSub: 'By table + column; matched columns are masked server-side before they are returned',
+  sensTitle: 'Sensitive fields', sensSub: 'By table + column; matched columns are masked server-side before they are returned',
   scNew: 'New field', scEdit: 'Edit field', scTable: 'Table', scTablePh: 'blank = all tables',
   scColumn: 'Column', scColumnPh: 'e.g. id_card', scStyle: 'Masking', scNote: 'Note', scNotePh: 'why it is sensitive',
   scStyle_partial: 'Partial', scStyle_full: 'Full', scStyle_hash: 'Hash',
