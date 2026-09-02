@@ -93,6 +93,9 @@ const pendingSql = ref('')
 // What an empty result MEANS for the command in flight, as an i18n ref so it is
 // rendered in whatever language is active when it prints (see lib/metaCommand).
 const pendingEmptyNotice = ref<NoticeRef | null>(null)
+// psql 的 \d 是两段:列,然后索引。第二段等第一段渲染完再发 —— 和
+// pendingEmptyNotice 一样,是"延后到出结果那一刻"才用得上的东西。
+const pendingFollow = ref<{ titleKey: string; sql: string } | null>(null)
 const pendingVertical = ref(false) // render the pending command's result MySQL \G-style
 const expandedMode = ref(false)    // psql \x: persistent expanded (vertical) display
 
@@ -410,6 +413,7 @@ async function handleSubmit(stmt: string) {
   // Reset per-command state up front: a leftover notice from an earlier \d would
   // otherwise be printed for the next query that legitimately returns no rows.
   pendingEmptyNotice.value = null
+  pendingFollow.value = null
   const raw = trimmed.replace(/\\[gG]\s*$/, '').replace(/;+\s*$/, '').trim()
   // 两类客户端命令,一条通道:psql 风格的 \dt/\d/\dn,以及 SQL*Plus 的
   // DESC/DESCRIBE(它不是 SQL,原样发给 Oracle 只会得到 ORA-00900)。翻译出来的
@@ -419,6 +423,7 @@ async function handleSubmit(stmt: string) {
     : translateDescribe(raw, props.conn.engine)
   if (meta) {
     pendingEmptyNotice.value = meta.emptyNotice ?? null
+    pendingFollow.value = meta.follow ?? null
     if (sendExec(meta.sql, '') === 'ws') return
     try { handleExecEnv(await execRest(meta.sql, ''), meta.sql, '') }
     catch { out(c(ANSI.red, t('termExecFail'))); editor.resume() }
@@ -525,6 +530,21 @@ function execRest(sql: string, reason: string, mfaCode = '') {
   return api.exec(props.conn.id, sql, reason, mfaCode, targetDb.value)
 }
 
+// runFollow 发出目录命令的第二段(psql 的 \d 先列列、再列索引)。
+//
+// 先把 pendingFollow 清掉再发:第二段自己也会走到渲染那一步,不清就会无限套下去。
+// 它照常经过网关判定与审计 —— 确实跑了第二条目录查询,记两条是如实的。
+async function runFollow() {
+  const f = pendingFollow.value
+  if (!f) return
+  pendingFollow.value = null
+  out('')
+  out(c(ANSI.bold, t(f.titleKey as any)))
+  if (sendExec(f.sql, '') === 'ws') return
+  try { renderExecEnvelope(await execRest(f.sql, '')) }
+  catch { out(c(ANSI.gray, t('termExecFail'))) }
+}
+
 function sendExec(sql: string, reason: string, mfaCode = ''): 'ws' | 'rest' {
   lastExec = { sql, reason }
   pendingSql.value = sql
@@ -622,6 +642,7 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
       const n = pendingEmptyNotice.value
       out(c(ANSI.yellow, '· ' + t(n.id, n.params ?? {})))
       pendingEmptyNotice.value = null
+      pendingFollow.value = null // 表都没找到,再查它的索引没有意义
       risk.value = 'safe'
       return
     }
@@ -632,6 +653,7 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     else if (!props.gridView) outLines(renderTable(buildTable(m.columns, data), term.cols, truncHint))
     const more = m.truncated ? t('termTruncated', { n: data.length }) : ''
     out(c(ANSI.gray, t('termRows', { n: data.length, more, ms: msLabel(m.ms) })))
+    runFollow()
   } else if (isSelect(pendingSql.value) && rows > 0) {
     // Simulated connection (no credentials): synthesise a preview.
     const tb = synthTable(pendingSql.value, rows)

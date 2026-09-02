@@ -40,7 +40,10 @@ test('listing commands have no not-found notice', () => {
 test('the translations still resolve to the same queries', () => {
   expect(translateMetaSql('\\dt', 'postgres')!.sql).toContain('information_schema.tables')
   expect(translateMetaSql('\\l', 'postgres')!.sql).toContain('pg_database')
-  expect(translateMetaSql('\\d users', 'postgres')!.sql).toContain('information_schema.columns')
+  // 这里曾经钉的是 information_schema.columns —— 而它的 data_type 只给基础类型名,
+  // varchar(128) 变成 "character varying",numeric(38,6) 变成 "numeric"。那是这条
+  // 命令最要紧的信息,所以现在走 pg_catalog + format_type,和 psql 给的一致。
+  expect(translateMetaSql('\\d users', 'postgres')!.sql).toContain('format_type')
   expect(translateMetaSql('\\d users', 'mysql')!.sql).toBe('SHOW COLUMNS FROM `users`')
   expect(translateMetaSql('\\dt', 'mysql')!.sql).toContain('SHOW FULL TABLES')
   expect(translateMetaSql('\\d users', 'oracle')!.sql).toContain('all_tab_columns')
@@ -62,7 +65,7 @@ test('the identifier sanitiser strips anything that could break out of the liter
     const sql = translateMetaSql('\\d ' + arg, 'postgres')!.sql
     // The interpolated table name must consist solely of identifier characters,
     // so nothing can terminate the literal it sits inside.
-    const literal = /table_name='([^']*)'/.exec(sql)
+    const literal = /relname='([^']*)'/.exec(sql)
     expect(literal, arg).not.toBeNull()
     expect(literal![1], arg).toMatch(/^[A-Za-z0-9_$.]*$/)
     // And the statement stays a single one: no separator survives.
@@ -73,8 +76,8 @@ test('the identifier sanitiser strips anything that could break out of the liter
 // A schema-qualified name still targets that schema.
 test('a schema-qualified relation keeps its schema filter', () => {
   const sql = translateMetaSql('\\d public.users', 'postgres')!.sql
-  expect(sql).toContain("table_schema='public'")
-  expect(sql).toContain("table_name='users'")
+  expect(sql).toContain("nspname='public'")
+  expect(sql).toContain("relname='users'")
 })
 
 // ---------------------------------------------------------------- DESC / DESCRIBE
@@ -140,4 +143,50 @@ test('对象名里的引号与分号不得穿透', () => {
   const r = translateDescribe(`desc emp'; DROP TABLE users --`, 'oracle')
   // 要么直接不认(原样交给服务端去拒),要么翻译出来但注入不得穿透 —— 两者都安全
   expect(r === null || (!r.sql.includes(';') && !/drop\s+table/i.test(r.sql))).toBe(true)
+})
+
+// psql 的 \\d 与平台的 \\d 对不上:平台丢了类型的长度与精度,也没有索引段。
+//
+// 类型丢精度不是"少显示一点",是**给错信息** —— 一个把 numeric(38,6) 读成
+// numeric 的人,会以为这一列没有标度。
+test('\\d 的类型带长度与精度(不是光一个基础类型名)', () => {
+  const m = translateMetaSql('\\d t_order', 'dws')!
+  expect(m).toBeTruthy()
+  // format_type 给的就是 psql 那一列:character varying(128) / numeric(38,6)
+  expect(m.sql).toContain('format_type')
+  // information_schema.columns 的 data_type 正是丢精度的那条路,不能再用
+  expect(m.sql).not.toContain('information_schema.columns')
+})
+
+test('\\d 带上排序规则一列', () => {
+  const m = translateMetaSql('\\d t_order', 'postgres')!
+  expect(m.sql).toContain('Collation')
+})
+
+test('\\d 有第二段:索引', () => {
+  const m = translateMetaSql('\\d t_order', 'dws')!
+  expect(m.follow).toBeTruthy()
+  expect(m.follow!.sql).toContain('pg_get_indexdef')
+  // 两段查的必须是同一张表
+  expect(m.follow!.sql).toContain("c.relname='t_order'")
+})
+
+test('\\d 带 schema 时两段都按 schema 过滤', () => {
+  const m = translateMetaSql('\\d public.t_order', 'dws')!
+  expect(m.sql).toContain("n.nspname='public'")
+  expect(m.follow!.sql).toContain("n.nspname='public'")
+})
+
+// 名字仍然要被 ident() 洗过 —— 它进的是字符串字面量,这条是安全边界不是格式化。
+test('\\d 的表名不会把引号或分号带进 SQL', () => {
+  const m = translateMetaSql("\\d t'; DROP TABLE x; --", 'dws')!
+  expect(m.sql).not.toContain(';')
+  expect(m.sql).not.toContain("'; DROP")
+})
+
+// 列表类命令没有第二段 —— 只有"描述一张表"才既有列又有索引。
+test('列表类命令不带第二段', () => {
+  for (const cmd of ['\\dt', '\\l', '\\dn', '\\du']) {
+    expect(translateMetaSql(cmd, 'dws')!.follow).toBeUndefined()
+  }
 })

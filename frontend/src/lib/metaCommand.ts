@@ -23,6 +23,13 @@ export interface MetaTranslation {
   /** What an EMPTY result means for this command, if it means anything. Absent for
    *  listing commands, where "nothing" is a legitimate answer. */
   emptyNotice?: NoticeRef
+  /** A SECOND section, rendered under the first.
+   *
+   *  psql 的 \d 不是一张表:它先列列,再列索引(主键、分区、表空间)。只回第一段
+   *  就是把"这张表怎么建的索引"整块吞掉 —— 而那恰恰是 DBA 敲 \d 最常要看的东西。
+   *
+   *  两段是两次查询,因此也是两条审计。这是如实的:确实跑了两条目录查询。 */
+  follow?: { titleKey: string; sql: string }
 }
 
 /** ident keeps only characters valid in an identifier. The result is embedded in
@@ -57,10 +64,39 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
         if (!arg) return q(`SELECT table_schema AS "Schema", table_name AS "Name" FROM information_schema.tables WHERE table_schema ${notSys} ORDER BY 1,2`)
         const parts = ident(arg).split('.')
         const tbl = parts.pop() || ''
-        const sch = parts.length ? ` AND table_schema='${parts[0]}'` : ''
+        const sch = parts.length ? parts[0] : ''
+        // information_schema.columns 的 data_type 只给基础类型名:varchar(128) 会
+        // 变成 "character varying",numeric(38,6) 会变成 "numeric"。**长度和精度
+        // 丢了就不是"少显示一点",是给错信息** —— 同一个文件里 Oracle 分支早就为
+        // 这件事拼过一段 CASE。PG 有现成的 format_type(),一个函数就给出 psql 那一列。
+        //
+        // 顺带补上 Collation:psql 有这一列,而且只在非默认排序规则时才显示内容。
+        const relFilter =
+          `c.relname='${tbl}'` + (sch ? ` AND n.nspname='${sch}'` : '')
         return {
-          sql: `SELECT column_name AS "Column", data_type AS "Type", is_nullable AS "Nullable", column_default AS "Default" FROM information_schema.columns WHERE table_name='${tbl}'${sch} ORDER BY ordinal_position`,
+          sql:
+            `SELECT a.attname AS "Column", ` +
+            `pg_catalog.format_type(a.atttypid, a.atttypmod) AS "Type", ` +
+            `CASE WHEN cl.collname IS NULL OR cl.collname='default' THEN '' ELSE cl.collname END AS "Collation", ` +
+            `CASE WHEN a.attnotnull THEN 'not null' ELSE '' END AS "Nullable", ` +
+            `COALESCE(pg_catalog.pg_get_expr(d.adbin, d.adrelid), '') AS "Default" ` +
+            `FROM pg_catalog.pg_attribute a ` +
+            `JOIN pg_catalog.pg_class c ON c.oid = a.attrelid ` +
+            `JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace ` +
+            `LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum ` +
+            `LEFT JOIN pg_catalog.pg_collation cl ON cl.oid = a.attcollation ` +
+            `WHERE ${relFilter} AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum`,
           emptyNotice: notFound(arg),
+          follow: {
+            titleKey: 'metaSectionIndexes',
+            sql:
+              `SELECT i.relname AS "Index", pg_catalog.pg_get_indexdef(x.indexrelid) AS "Definition" ` +
+              `FROM pg_catalog.pg_index x ` +
+              `JOIN pg_catalog.pg_class i ON i.oid = x.indexrelid ` +
+              `JOIN pg_catalog.pg_class c ON c.oid = x.indrelid ` +
+              `JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace ` +
+              `WHERE ${relFilter} ORDER BY i.relname`,
+          },
         }
       }
     }
