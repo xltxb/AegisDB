@@ -298,6 +298,16 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	// SQL*Plus 的客户端命令(SHOW USER 等)翻译成等价 SQL。
+	//
+	// 位置是关键:这里已经在**判定之后**了。高危字典与规范审查匹配的是文本里的那个
+	// 词,先翻译再判定的话,一条写着 SHOW 的规则就再也匹配不到东西 —— 那是绕过。
+	// 所以判定看到的永远是用户输入的原文,只有交给驱动的这一份被改写。
+	if engineFamily(conn.Engine) == "oracle" {
+		if rewritten, ok := OracleSQLPlus(query); ok {
+			query = rewritten
+		}
+	}
 	// 三条路,而不是两条:
 	//
 	//   已知的读  → Query,取结果集
