@@ -2,7 +2,9 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -209,17 +211,47 @@ func (h *Handler) GatewayStats(c *gin.Context) {
 	})
 }
 
+// maxConsoleUploadBytes 与开放接口 (handler/openapi.go) 用同一个上限。
+//
+// 原先控制台这条路**没有任何上限**:`make([]byte, file.Size)` 直接按客户端声明的
+// 大小分配,一个数 GB 的上传就能把进程撑爆。讽刺的是开放接口那条路早就有 15MB 上限
+// 和正确的读法 —— 面向外部的入口守住了,面向内部控制台的入口反而敞着。
+const maxConsoleUploadBytes = 15 << 20
+
+// readConsoleScriptFile reads an uploaded script under an explicit cap.
+//
+// 不信 fh.Size:那是客户端说的。用 LimitReader 读,读满上限+1 就说明超了 ——
+// 这与 handler/openapi.go 的 readOpenScriptFile 是同一套做法,两条通道在同一个
+// 尺寸上拒绝。
+func readConsoleScriptFile(c *gin.Context, fh *multipart.FileHeader) (string, bool) {
+	if fh.Size > maxConsoleUploadBytes {
+		resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
+		return "", false
+	}
+	f, err := fh.Open()
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
+		return "", false
+	}
+	defer f.Close()
+	body, rerr := io.ReadAll(io.LimitReader(f, maxConsoleUploadBytes+1))
+	if rerr != nil || len(body) > maxConsoleUploadBytes {
+		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
+		return "", false
+	}
+	return string(body), true
+}
+
 // ScriptUpload stores a script file (upload page) under the current user.
 func (h *Handler) ScriptUpload(c *gin.Context) {
 	filename := "script.sql"
 	var content string
 	if file, err := c.FormFile("file"); err == nil {
-		filename = file.Filename
-		f, _ := file.Open()
-		defer f.Close()
-		buf := make([]byte, file.Size)
-		f.Read(buf)
-		content = string(buf)
+		body, ok := readConsoleScriptFile(c, file)
+		if !ok {
+			return // 拒绝已经写进响应了
+		}
+		filename, content = file.Filename, body
 	} else {
 		var req dto.ScriptScanReq
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -285,12 +317,11 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 	filename := "script.sql"
 	var content string
 	if file, err := c.FormFile("file"); err == nil {
-		filename = file.Filename
-		f, _ := file.Open()
-		defer f.Close()
-		buf := make([]byte, file.Size)
-		f.Read(buf)
-		content = string(buf)
+		body, ok := readConsoleScriptFile(c, file)
+		if !ok {
+			return // 拒绝已经写进响应了
+		}
+		filename, content = file.Filename, body
 	} else {
 		var req dto.ScriptScanReq
 		if err := c.ShouldBindJSON(&req); err != nil {

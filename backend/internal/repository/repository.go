@@ -367,6 +367,40 @@ func (r *Repo) EffectiveRoleIDs(u *model.User) []int64 {
 			out = append(out, id)
 		}
 	}
+	return r.existingRoles(out)
+}
+
+// existingRoles drops ids that name no role.
+//
+// 这是兜底,不是入口 —— 入口(加成员、改主角色)已经各自校验了。但"查无规则行 =
+// 放行"是这套能力矩阵的基础语义,而一个**不存在的角色**永远查无规则行:它会让持有
+// 它的用户每一格都读成放行、标签也不受限。历史数据里若已经躺着这样一个 id,光补
+// 入口是追不回来的,所以在权限计算的入口再滤一次。
+//
+// 查询失败时保留原样:一次数据库抖动不该让所有人瞬间失去全部角色。这个方向是安全
+// 的 —— 保留的是**真实存在过的** id 集合,而不是把未知当成放行。
+func (r *Repo) existingRoles(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return ids
+	}
+	var found []int64
+	if err := r.db.Model(&model.Role{}).Where("id IN ?", ids).Pluck("id", &found); err != nil && err.Error != nil {
+		return ids
+	}
+	if len(found) == len(ids) {
+		return ids // 常态:一个都没少,不必重建切片
+	}
+	ok := map[int64]bool{}
+	for _, id := range found {
+		ok[id] = true
+	}
+	out := ids[:0:0]
+	for _, id := range ids {
+		if ok[id] {
+			out = append(out, id)
+		}
+	}
+	slog.Warn("用户持有不存在的角色 id,已从权限计算中剔除", "kept", out, "asked", ids)
 	return out
 }
 

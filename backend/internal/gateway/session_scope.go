@@ -34,7 +34,21 @@ var (
 	//   GLOBAL / PERSIST / PERSIST_ONLY  MySQL:改服务器,PERSIST 还会写进配置文件
 	//   PASSWORD                         MySQL:改口令
 	//   ROLE / SESSION AUTHORIZATION     PostgreSQL:换掉当前身份,是提权动作
-	setEscapesSessionRe = regexp.MustCompile(`(?is)^\s*SET\s+(GLOBAL|PERSIST|PERSIST_ONLY|PASSWORD|ROLE|SESSION\s+AUTHORIZATION)\b`)
+	//
+	// 这条正则曾经有两个洞,都是"只看语句开头的第一个赋值"造成的:
+	//
+	//   SET @@GLOBAL.read_only = 0        作用域写在变量名上,SET 后面紧跟的是 @@
+	//   SET SESSION a=1, GLOBAL b=2       MySQL 允许混写,逃逸词在第二个赋值上
+	//
+	// 两条都会让 SessionScoped 误判为"只影响本会话",于是只需 select 能力就能改
+	// **整个服务器**(关全局只读、关 binlog 掩盖写入)。所以现在不锚定开头,而是
+	// 在整条语句里找作用域标记 —— 逗号/括号/空白后面的关键字形式,以及 @@ 形式。
+	//
+	// 宁可多认:一条 SET @x = 'GLOBAL' 会被判成逃逸,于是走原来的判定(按写处理)。
+	// 多拦一条无害的会话设置,好过放过一条改服务器的语句。
+	setEscapesSessionRe = regexp.MustCompile(
+		`(?is)(^\s*SET\s+|[\s,(])(GLOBAL|PERSIST|PERSIST_ONLY|PASSWORD|ROLE|SESSION\s+AUTHORIZATION)\b` +
+			`|@@\s*(GLOBAL|PERSIST|PERSIST_ONLY)\s*\.`)
 	// 一条普通的会话设置:SET [SESSION|LOCAL] …
 	setSessionRe = regexp.MustCompile(`(?is)^\s*SET\b`)
 	// Oracle:ALTER SESSION 只影响本连接;ALTER SYSTEM 影响整个实例。

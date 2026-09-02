@@ -73,6 +73,28 @@ var (
 	// untouched beside it. A mask in the wrong place is worse than no mask: it is
 	// what stops anyone looking twice.
 	rePasswordKV = regexp.MustCompile(`(?i)((?:(?:un)?encrypted\s+)?\bpassword\s*=?\s*)` + quotedVal)
+
+	// MASTER_PASSWORD / SOURCE_PASSWORD —— 复制配置里的口令。
+	//
+	// rePasswordKV 认不出它们:它要求 password 前有词边界,而 `_password` 里下划线
+	// 和字母都是词字符,\b 不成立。于是
+	// `CHANGE MASTER TO MASTER_PASSWORD='x'` 的口令明文进了审计链。
+	reReplicaPassword = regexp.MustCompile(`(?i)((?:master|source)_password\s*=?\s*)` + secretVal)
+
+	// conninfo 串里的 password=xxx。
+	//
+	// PostgreSQL 的 `CREATE SUBSCRIPTION … CONNECTION 'host=h password=secret'`
+	// 里,口令**没有自己的引号** —— 它躺在外层那对引号里面,所以所有"找引号包着的
+	// 值"的规则都够不着它。这一条按裸值匹配。
+	//
+	// 它会顺带把 `WHERE password = somecol` 这种比较也打上码。多打一处的代价是
+	// 审计里少看到一个列名;少打一处的代价是一个真口令永久留在不可篡改的链上。
+	reConninfoPassword = regexp.MustCompile(`(?i)(\bpassword\s*=\s*)([^\s'";)]+)`)
+
+	// 对象存储/外表的密钥:DWS/GaussDB 的 OBS 外表、COPY … CREDENTIALS 都用它。
+	// 原先一条规则都没有。
+	reAccessKey = regexp.MustCompile(
+		`(?i)((?:aws_)?(?:secret_access_key|access_key_id|secret_key|access_key)\s*=?\s*)` + secretVal)
 )
 
 // identifiedKeywords are words that can follow IDENTIFIED BY without being the
@@ -98,6 +120,11 @@ func RedactSecrets(sql string) string {
 	out = rePasswordFn.ReplaceAllString(out, `${1}'***'${2}`)
 	out = reSetPassword.ReplaceAllString(out, `${1}'***'`)
 	out = rePasswordKV.ReplaceAllString(out, `${1}'***'`)
+	out = reReplicaPassword.ReplaceAllString(out, `${1}'***'`)
+	out = reAccessKey.ReplaceAllString(out, `${1}'***'`)
+	// 裸值规则**放在最后**:前面几条已经把带引号的值换成了 '***',而 '***' 以引号
+	// 开头,落不进这条的值集合([^\s'";)]+),所以不会被二次改写 —— 幂等仍然成立。
+	out = reConninfoPassword.ReplaceAllString(out, `${1}***`)
 	return out
 }
 

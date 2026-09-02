@@ -534,6 +534,11 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 		}
 	}
 	if req.RoleID != nil {
+		// 多角色路径(RoleIDs)一直有 validateRoleIDs,单角色这条漏了 —— 同一个洞
+		// 的两个入口,补上另一个。
+		if err := s.validateRoleIDs([]int64{*req.RoleID}); err != nil {
+			return err
+		}
 		fields["role_id"] = *req.RoleID
 	}
 	if len(fields) > 0 {

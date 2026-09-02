@@ -45,14 +45,23 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 		return nil, err
 	}
 	// Judge (a multi-statement batch is governed by its strictest sub-statement).
-	tier, err := s.tierCodeOf(conn)
-	if err != nil {
-		return nil, ErrBadRequest // unresolvable tier — see tierOf; not judged as allow
+	// tier 由 strictestVerdict 自己解析,解析不出时它返回 Unavailable(拒绝),
+	// 与这里原先的 ErrBadRequest 同为 fail-closed —— 不重复解析一次。
+	// **无条件**拆分后再判,和同步 Exec 一模一样。
+	//
+	// 这里曾经只在 len(stmts) > 1 时才拆,单条就直接判原始串 —— 而
+	// SplitStatements(";UPDATE …") 恰好只拆出一条,于是判的是带前导分隔符的原串:
+	// verbRe 匹配不到关键字 → 动词为空 → 按 select 归类 → 只读角色在 PROD 写库。
+	//
+	// 同步路径的注释(见 Exec 与 risk.go 的 MapVerbToCapability)早就写明"绝不可
+	// 对原始串判定",Exec 照做了,这条异步通道漏了。两条通道通往同一个执行器,
+	// 判定就必须是同一套。
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) == 0 {
+		// 空输入或纯注释:没有语句可判,也没有什么可执行的。
+		return nil, ErrBadRequest
 	}
-	v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql)
-	if stmts := sqlutil.SplitStatements(sql); len(stmts) > 1 {
-		v = s.strictestVerdict(u, conn, stmts)
-	}
+	v := s.strictestVerdict(u, conn, stmts)
 	switch v.Action {
 	case gateway.ActionDeny:
 		s.recordAudit(u, conn, sql, model.RiskHigh, model.ResultRejected, "", "intercept")

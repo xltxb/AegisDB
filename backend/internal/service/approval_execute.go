@@ -29,7 +29,7 @@ import (
 
 // ExecuteApproved runs the command of a ticket that has been approved, on behalf
 // of — and at the request of — its initiator.
-func (s *Services) ExecuteApproved(actor *model.User, id int64) (*dto.ExecResp, error) {
+func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) (*dto.ExecResp, error) {
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
 		return nil, ErrNotFound
@@ -44,11 +44,34 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64) (*dto.ExecResp, 
 	}
 	applyTargetDatabase(conn, ap.Database)
 
+	// 执行是一次**真实的下发**,所以它要过和终端同一组前置检查。
+	//
+	// 这一段原先没有,而"已批准但未执行"的工单目前不会过期 —— 于是一张上周批准的
+	// 工单,在发起人的标签权限被收窄、实例进了维护态、MFA 被重置之后,今天照样跑得
+	// 掉。批准授权的是"这条命令",不是"绕过此后一切访问控制"。
+	if !s.canAccessConn(actor, conn) {
+		return nil, ErrForbidden
+	}
+	if conn.Status == "maint" {
+		return nil, fmt.Errorf("目标实例处于维护态,暂不能执行")
+	}
+	if err := s.checkMFA(actor, conn, mfaCode); err != nil {
+		return nil, err
+	}
+
 	// 下发前**再判一次**。工单可能在待执行状态里放了很久,期间字典、实例归属、
 	// 发起人的角色都可能变 —— 这与发布流水线执行阶段的规则一致(发布不是执行旁路)。
 	//
+	// tier 取**实时**的,不是工单上的快照:快照记的是"当时按哪一层判的",那是给人
+	// 事后看的;而这一次是真的要下发,该按实例**现在**属于哪一层来判。实例被挪进
+	// 更严的分层之后,拿旧快照复判等于按已经作废的规则放行。发布流水线的执行阶段
+	// 一直用实时 tier,两条路不该给出不同答案。
+	tier, terr := s.tierCodeOf(conn)
+	if terr != nil {
+		return nil, ErrBadRequest // 分层解析不出来就不执行,不按"放行"处理
+	}
 	// 只在结论变成"拒绝"时拦下:命中"需审批"是正常的,这张工单正是那次审批的结果。
-	if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(actor), conn.Engine, ap.TierCode, ap.Command); v.Action == gateway.ActionDeny {
+	if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(actor), conn.Engine, tier, ap.Command); v.Action == gateway.ActionDeny {
 		return nil, fmt.Errorf("规则已变化,该命令现在被禁止执行(%s),请重新提交", v.Rule)
 	}
 

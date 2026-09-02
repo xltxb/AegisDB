@@ -123,9 +123,17 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	// once we actually hold a task id: it is written asynchronously after
 	// dispatch, and demanding it unconditionally would reject a legitimate
 	// callback that beats our own write (see EA10).
-	if ap.ExternalTaskID != "" && strings.TrimSpace(cb.TaskID) != "" &&
-		strings.TrimSpace(cb.TaskID) != ap.ExternalTaskID {
-		slog.Warn("external callback: vendor task mismatch",
+	// 一旦我们手上有 task id,回调就**必须**带上并且对得上。
+	//
+	// 原先的条件是 `ap.ExternalTaskID != "" && cb.TaskID != ""` —— 两个都非空才比。
+	// 于是回调方只要**省掉 task_id**,整条交叉校验就被跳过:关联只剩下 ApNo,而
+	// ApNo 是一个可预测的计数器(提交人在自己的响应里就能看到)。持有 callbackSecret
+	// 的人因此可以终审任意一张待审工单,包括从未外发过的。
+	//
+	// 现在:有 task id 就必须匹配(缺失同样拒绝)。EA10 说的那个竞态仍然照顾到了 ——
+	// task id 是异步写入的,还没写上时 ap.ExternalTaskID 为空,此时无从比对,照旧放行。
+	if ap.ExternalTaskID != "" && strings.TrimSpace(cb.TaskID) != ap.ExternalTaskID {
+		slog.Warn("external callback: vendor task mismatch or missing",
 			"apNo", ap.ApNo, "expected", ap.ExternalTaskID, "got", cb.TaskID)
 		return "", ErrForbidden
 	}
@@ -145,6 +153,10 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	if strings.TrimSpace(operator) == "" {
 		operator = "审批魔方"
 	}
+	// 截断到列宽以内。tbl_audit_log.operator 是 size:128,回调方塞进一个更长的
+	// approver 会让审计 INSERT 在 STRICT 模式的 MySQL 上报错 —— 而审批已经生效了,
+	// 于是哈希链上缺一行。**由外部输入决定审计写不写得进去**,这件事本身就是问题。
+	operator = clip(operator, 128)
 	slog.Info("external callback: finalizing ticket", "apNo", ap.ApNo, "approved", approved, "operator", operator)
 	if _, ferr := s.finalizeApproval(ap, approved, operator); ferr != nil {
 		if ferr == ErrAlreadyDecided {

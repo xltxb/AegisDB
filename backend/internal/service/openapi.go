@@ -156,8 +156,8 @@ func (s *Services) CreateAPIClient(actor *model.User, req dto.APIClientReq) (*mo
 	if err != nil {
 		return nil, "", fmt.Errorf("服务账号不存在")
 	}
-	if svcUser.Status != "active" {
-		return nil, "", fmt.Errorf("服务账号 %s 未启用", svcUser.Name)
+	if err := s.requireBindableAccount(svcUser); err != nil {
+		return nil, "", err
 	}
 	scopes := normalizeScopes(req.Scopes)
 	key, secret, err := newAPICredential()
@@ -241,7 +241,11 @@ func (s *Services) UpdateAPIClient(id int64, req dto.APIClientReq) (*model.APICl
 	if req.UserID > 0 && req.UserID != cl.UserID {
 		u, uerr := s.Repo.GetUserByID(req.UserID)
 		if uerr != nil {
-			return nil, fmt.Errorf("服务账号不存在")
+			return nil, fmt.Errorf("账号不存在")
+		}
+		// 换绑走的是同一道闸。只在创建时挡、改绑时放过去,等于没挡。
+		if err := s.requireBindableAccount(u); err != nil {
+			return nil, err
 		}
 		fields["user_id"], fields["user_name"] = u.ID, u.Name
 	}
@@ -555,4 +559,35 @@ func APIClientLastUsed(c model.APIClient) string {
 		return ""
 	}
 	return c.LastUsedAt.Format(time.RFC3339)
+}
+
+// requireBindableAccount refuses the principals an API credential must not act as.
+//
+// 白盒审计(M-5)提的是"凭据可绑任意人类账号,含 admin,成免登录替身"。它指出的风险
+// 是真的,但**直接禁掉绑真人是过头的**:控制台的凭据创建界面本来就把全部用户列出来
+// 供选择(服务账号加 🤖 排在前面,真人显示邮箱),把机器凭据挂在某个负责人名下是这套
+// 产品有意提供的用法,不是疏漏。按报告原样改会砍掉一个在用的功能。
+//
+// 所以只挡最锋利的那一刀:**不能绑平台管理员**。
+//
+// 差别在于后果的量级。绑一个普通成员,凭据拿到的是那个人本来就有的那点权限,而且
+// 审计里写着他的名字 —— 这正是"每个集成方各自一把凭据"想要的归属。绑管理员则等于
+// 把一把可以改权限矩阵、建凭据、停用账户的钥匙,变成一个没有登录、没有 MFA、只靠
+// 一串密钥就能用的身份;而 admin 恰恰是唯一一个"权限大到审计归属也救不回来"的角色。
+//
+// 服务账号本来就登不进控制台(Login 直接拒绝 kind=service)。人走登录、机器走凭据,
+// 这条边界还在;这里补的是"别让凭据变成管理员"。
+func (s *Services) requireBindableAccount(u *model.User) error {
+	if u == nil {
+		return fmt.Errorf("账号不存在")
+	}
+	if u.Status != "active" {
+		return fmt.Errorf("账号 %s 未启用", u.Name)
+	}
+	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(u)) {
+		if code == "admin" {
+			return fmt.Errorf("不能把 API 凭据绑到平台管理员 %s:那会让一串密钥拥有管理员权限,且不经登录与 MFA。请改用服务账号或权限更小的成员", u.Name)
+		}
+	}
+	return nil
 }

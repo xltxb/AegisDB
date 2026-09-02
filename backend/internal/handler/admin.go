@@ -277,6 +277,13 @@ func (h *Handler) AddRoleMember(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
+	// 角色必须真的存在。一个不存在的角色 id 写进成员表,会让这个用户的每一格
+	// 能力都读成"放行"——因为"查无规则行 = 放行"是这套矩阵的基础语义,而幽灵角色
+	// 永远查无规则行。入口不挡,后面每一层都拦不住它。
+	if _, rerr := h.Repo.GetRole(pathID(c)); rerr != nil {
+		resp.Fail(c, resp.CodeBadRequest, "角色不存在")
+		return
+	}
 	if err := h.Repo.AddMember(pathID(c), req.UserID); err != nil {
 		resp.Fail(c, resp.CodeInternalError, "添加失败")
 		return

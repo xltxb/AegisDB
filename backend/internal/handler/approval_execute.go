@@ -13,7 +13,12 @@ import (
 // 它是一个独立的动作,不是 approve 的副作用:审批人按下的是"我同意",执行时机由
 // 发起人决定 —— 业务低峰、应用是否已停、备份是否就绪,只有他知道。
 func (h *Handler) ExecuteApproval(c *gin.Context) {
-	res, err := h.Svc.ExecuteApproved(middleware.CurrentUser(c), pathID(c))
+	// 可选的 TOTP:执行是一次真实下发,PROD 上要求二次验证时由这里带上来。
+	var req struct {
+		MFACode string `json:"mfaCode"`
+	}
+	_ = c.ShouldBindJSON(&req) // 无 body 是正常的:只有要求 MFA 的分层才需要它
+	res, err := h.Svc.ExecuteApproved(middleware.CurrentUser(c), pathID(c), req.MFACode)
 	if err == service.ErrNotFound {
 		resp.Fail(c, resp.CodeBadRequest, "工单不存在")
 		return
