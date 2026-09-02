@@ -36,6 +36,14 @@ var (
 	// SHOW PARAMETER <名字片段> —— sqlplus 是按子串模糊匹配的,这里保持一致。
 	oraShowParamRe = regexp.MustCompile(`(?is)^\s*SHOW\s+PARAM(?:ETER)?S?\s+([A-Za-z0-9_$#]+)\s*;?\s*$`)
 
+	// EXEC[UTE] <过程> —— SQL*Plus 对 BEGIN <过程>; END; 的简写,服务端不认得。
+	//
+	// 这里只认"看起来像一次调用"的形状(标识符,可带 schema 前缀,可带参数表)。
+	// 参数原样搬进 BEGIN…END,因为那本来就是一段 PL/SQL —— 但正因如此,调用它
+	// 需要的权限一点不能少:判定看到的是原文 EXEC,而未知动词一律按 write 判,
+	// 这与今天 CALL 的待遇一致(存储过程能干任何事,所以按写处理)。
+	oraExecRe = regexp.MustCompile(`(?is)^\s*EXEC(?:UTE)?\s+([A-Za-z0-9_$#.]+(?:\s*\([^;]*\))?)\s*;?\s*$`)
+
 	// DESC[RIBE] [schema.]<表>。
 	//
 	// 名字被限死在标识符字符集里。它最终会拼进一个字符串字面量,所以这条正则是一道
@@ -54,6 +62,10 @@ func OracleSQLPlus(sql string) (string, bool) {
 		return oracleShow(s)
 	case "DESC", "DESCRIBE":
 		return oracleDescribe(s)
+	case "EXEC", "EXECUTE":
+		if m := oraExecRe.FindStringSubmatch(s); m != nil {
+			return "BEGIN " + strings.TrimSpace(m[1]) + "; END;", true
+		}
 	}
 	return sql, false
 }

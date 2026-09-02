@@ -442,7 +442,17 @@ func MapVerbToCapability(verb string) string {
 	switch strings.ToUpper(strings.TrimSpace(verb)) {
 	case "SELECT", "SHOW", "DESC", "DESCRIBE", "EXPLAIN", "USE",
 		// 独立的查询语句,只是关键字不叫 SELECT —— 见 readVerbs 的说明。
-		"TABLE", "VALUES", "FETCH", "HELP":
+		"TABLE", "VALUES", "FETCH", "HELP",
+		// 事务控制。它们自己不改任何数据,只是决定前面那些改动作不作数 —— 而
+		// 那些改动各自已经按自己的动词判过了。要求 write 才能 COMMIT,挡住的是
+		// "把一组 SELECT 包进事务里"这种正当用法,挡不住任何东西。
+		//
+		// 刻意不含 BEGIN 与 START:
+		//   BEGIN 在 Oracle 里是匿名 PL/SQL 块的开头,块里可以 DELETE —— 判成
+		//         select 就是把整块代码放行了。
+		//   START 在 MySQL 里还有 START REPLICA / START SLAVE,是复制管理。
+		// 两个词都得看后面跟着什么才知道是哪一件事,而这里只拿得到动词本身。
+		"COMMIT", "ROLLBACK", "SAVEPOINT":
 		return "select"
 	case "INSERT", "UPDATE", "DELETE", "REPLACE", "MERGE":
 		return "write"
