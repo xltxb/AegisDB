@@ -13,7 +13,15 @@
 -- 它同时是一次性的闸:执行前用 `WHERE executed_at IS NULL` 原子占位,占住才允许跑,
 -- 所以一次批准只换一次执行 —— 批准是对一次执行的授权,不是一张可反复使用的通行证。
 --
--- 存量数据不需要回填:历史工单在旧行为下批准即执行,executed_at 为 NULL 只表示
--- "那时还没有这个字段",而它们的 status/result 已经如实记着当时发生了什么。新逻辑
--- 只作用于此后新建的工单。
+-- 存量数据**必须**回填,由 bootstrap.backfillApprovalExecuted 完成(两条 schema 路径
+-- 都挂了)。这里原先写着"不需要回填",那句话是错的:
+--
+-- 历史工单在旧行为下批准即执行,但 executed_at 是空的 —— 而"已批准 + executed_at 为空
+-- + 非发布单"恰好就是"这张单可以执行"的条件。于是一条几个月前就跑过的 DROP TABLE,
+-- 会重新变成可以被发起人一键再跑。不是显示问题,是一条通往重复执行的路。
+--
+-- 回填不按时间猜(猜错的两个方向都很糟:少标则历史单可重跑,多标则待执行的命令再也
+-- 不会跑)。判据是新代码自己写下的那句话 model.AwaitingExecution:带着它的是真的在等
+-- 执行,其余 executed_at 为空的 approved 单都是旧行为的产物。这个条件不依赖时间点,
+-- 所以天然幂等。
 ALTER TABLE tbl_approval ADD COLUMN executed_at DATETIME(3) NULL;

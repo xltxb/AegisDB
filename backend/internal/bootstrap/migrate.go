@@ -57,7 +57,13 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	}
 	// …and for the release pipeline + review library: an absent menu key reads as
 	// denied for everyone, and an empty rule library passes every script.
-	return seedPipelineReference(db)
+	if err := seedPipelineReference(db); err != nil {
+		return err
+	}
+	// 历史审批单的执行时刻:不回填的话,旧行为下已经跑过的命令会重新变成"可执行"。
+	// 两条 schema 路径都要挂 —— 生产走 SQL 迁移,dev/测试走 AutoMigrate,漏掉任何
+	// 一条,那条路上的库就带着一批可以被再跑一次的历史单。
+	return backfillApprovalExecuted(db)
 }
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).
@@ -72,6 +78,9 @@ func autoMigrate(db *gorm.DB) error {
 	// directly), so the reference backfills have to hang off it too — see
 	// seedPipelineReference.
 	if err := seedPipelineReference(db); err != nil {
+		return err
+	}
+	if err := backfillApprovalExecuted(db); err != nil {
 		return err
 	}
 	slog.Info("schema migrated (auto-migrate)")

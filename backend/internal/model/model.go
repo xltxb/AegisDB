@@ -514,6 +514,14 @@ type Approval struct {
 
 func (Approval) TableName() string { return "tbl_approval" }
 
+// AwaitingExecution 是审批通过、尚未执行的工单写在 Result 里的那句话。
+//
+// 它同时是一个**判据**:升级到"通过不再代执行"之后,历史工单(旧行为下批准即执行)
+// 的 executed_at 是空的,与一张真正在等执行的新工单在行级别一模一样 —— 唯一分得开
+// 它们的,就是这句话是不是新代码写下的。所以它必须是一个常量:写它的地方和读它的地方
+// 各写一遍字面量,哪天改一个字,回填就会把等待执行的工单当成历史单标成已执行。
+const AwaitingExecution = "· 已批准,等待发起人执行"
+
 // ApprovalStep — one node in an approval chain.
 type ApprovalStep struct {
 	ID         int64      `gorm:"primaryKey;autoIncrement" json:"id"`

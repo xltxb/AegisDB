@@ -462,7 +462,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			//
 			// 工单就停在这里等发起人来执行(ExecuteApproved)。审计行同样记 pending:
 			// 已批准、尚未执行,真正的执行由执行它的那一刻自己写审计。
-			res.Output = "· 已批准,等待发起人执行"
+			res.Output = model.AwaitingExecution
 		}
 		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
 		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
