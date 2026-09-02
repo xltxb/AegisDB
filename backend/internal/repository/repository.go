@@ -4,6 +4,7 @@ package repository
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -1158,6 +1159,29 @@ func (r *Repo) GetExportJob(id int64) (*model.ExportJob, error) {
 
 func (r *Repo) UpdateExportJob(id int64, fields map[string]any) error {
 	return r.db.Model(&model.ExportJob{}).Where("id = ?", id).Updates(fields).Error
+}
+
+// LinkExportApproval records which ticket gates this job.
+func (r *Repo) LinkExportApproval(jobID, approvalID int64, apNo string) error {
+	return r.db.Model(&model.ExportJob{}).Where("id = ?", jobID).
+		Updates(map[string]any{"approval_id": approvalID, "ap_no": apNo}).Error
+}
+
+// SetExportStatus moves a job between states.
+//
+// 放行含敏感字段的导出时,条件里带上**当前状态**:同一张审批单被处理两次(重复回调、
+// 手快点了两下)只有一次能改动那一行,否则会产出两份带原值的归档,而人只知道有一份。
+func (r *Repo) SetExportStatus(id int64, status string) error {
+	res := r.db.Model(&model.ExportJob{}).
+		Where("id = ? AND status = ?", id, model.ExportAwaiting).
+		Updates(map[string]any{"status": status})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return fmt.Errorf("导出任务 %d 不在待审批状态,未放行", id)
+	}
+	return nil
 }
 
 // ClaimExportJob atomically transitions a job from pending → running, returning

@@ -377,6 +377,23 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 // whole-job timeout (was hard-coded 30min here; now that the export row cap is
 // configurable, a legitimate export can outlast any fixed value).
 func RealQueryEach(conn *model.Connection, query string, timeout time.Duration, onHeader func([]string) error, onRow func([]string) error) error {
+	return realQueryEach(conn, query, timeout, false, onHeader, onRow)
+}
+
+// RealQueryEachRaw is RealQueryEach with masking OFF.
+//
+// 这是整套脱敏机制**唯一**的旁路,所以它有一个刺眼的名字,而不是在 RealQueryEach
+// 上加一个默认 false 的参数 —— 后者会让"这一次到底脱没脱敏"藏在一个布尔值里,
+// 读代码的人看不出这行调用是不是把身份证号原样写进了 CSV。
+//
+// 唯一的合法调用方是导出 worker,而且只在任务已经因"包含敏感字段"被批准之后。
+// 调用点自己会再核一次审批状态(见 sensitiveExportApproved):这道旁路不能只靠
+// "调用方应该先检查"来守 —— 它守的东西一旦漏了就是明文数据流出去。
+func RealQueryEachRaw(conn *model.Connection, query string, timeout time.Duration, onHeader func([]string) error, onRow func([]string) error) error {
+	return realQueryEach(conn, query, timeout, true, onHeader, onRow)
+}
+
+func realQueryEach(conn *model.Connection, query string, timeout time.Duration, raw bool, onHeader func([]string) error, onRow func([]string) error) error {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return err
@@ -405,6 +422,11 @@ func RealQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 		//
 		// 导出尤其不能漏:一份 CSV 落到磁盘、发进聊天工具,比终端上看一眼跑得远得多。
 		maskRow, _ := maskStream(query, cols)
+		if raw {
+			// 已批准的敏感字段导出:原值写出去。这一行是这套机制里唯一让明文通过的
+			// 地方,它的授权来自一张有人签字的审批单。
+			maskRow = func([]string) {}
+		}
 		vals := make([]any, len(cols))
 		ptrs := make([]any, len(cols))
 		for i := range vals {

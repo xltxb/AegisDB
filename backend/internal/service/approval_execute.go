@@ -92,6 +92,11 @@ func (s *Services) canExecuteApproved(actor *model.User, ap *model.Approval) err
 	if ap.ReleaseID > 0 {
 		return fmt.Errorf("这是升级单的审批工单,执行由发布流水线的执行阶段完成,不能在这里执行")
 	}
+	if ap.ExportJobID > 0 {
+		// 导出单的 Command 是一句描述("EXPORT [含敏感字段(原值)] …"),不是可执行的
+		// 语句。放它走这条路,网关会把那句描述当成命令发给数据库。
+		return fmt.Errorf("这是导出申请的审批工单,批准后由导出任务后台执行,不能在这里执行")
+	}
 	if ap.Status != model.StatusApproved {
 		switch ap.Status {
 		case model.StatusPending:

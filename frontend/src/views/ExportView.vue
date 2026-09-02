@@ -88,9 +88,14 @@ async function submit() {
   err.value = ''
   needPath.value = false
   try {
-    const env = await api.exportData(connId.value, q, name.value.trim(), db.value)
+    const env = await api.exportData(connId.value, q, name.value.trim(), db.value, includeSensitive.value)
     if (env.code === CODE_EXPORT_PATH_UNSET) { needPath.value = true; return }
-    if (env.code === CODE_OK) { await loadJobs(); return } // job queued
+    if (env.code === CODE_OK) {
+      // 勾了原值的任务停在待审批，不会自己开始。不说这一句，人会一直等在下载那一栏。
+      awaiting.value = includeSensitive.value
+      await loadJobs()
+      return
+    }
     err.value = env.msg || t('submitFailed')
   } catch { err.value = t('submitFailed') }
   finally { busy.value = false }
@@ -137,8 +142,16 @@ const stMeta: Record<string, { t: string; icon: any; cls: string }> = {
   failed: { t: 'exportStFailed', icon: CircleX, cls: 'bad' },
   // 归档已被保留策略清理:任务行还在,文件没了。
   expired: { t: 'exportStExpired', icon: Trash2, cls: 'wait' },
+  // 含敏感字段的导出在批准之前停在这里，不进队列。借用"等待"的样式：它和排队中
+  // 一样是"还没开始"，但等的是人不是机器。
+  awaiting: { t: 'exportStAwaiting', icon: Clock, cls: 'wait' },
 }
 const meta = (s: string) => stMeta[s] || stMeta.pending
+
+// 要不要敏感字段的原值。默认 false —— 打码是常态，放开才需要理由。
+const includeSensitive = ref(false)
+// 上一次提交是否停在了待审批（用于提交后的那句提示）。
+const awaiting = ref(false)
 </script>
 
 <template>
@@ -175,6 +188,12 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 
           <div class="lbl">{{ $t('exportSql') }}</div>
           <textarea v-model="sql" class="sqlarea" rows="4" spellcheck="false" placeholder="SELECT ... FROM ..." />
+          <label class="senschk">
+            <input v-model="includeSensitive" type="checkbox" />
+            <span class="senstxt">{{ $t('exportSensitive') }}</span>
+          </label>
+          <div v-if="includeSensitive" class="senshint"><TriangleAlert :size="13" />{{ $t('exportSensitiveHint') }}</div>
+          <div v-if="awaiting" class="notice">{{ $t('exportAwaitingNotice') }}</div>
           <div v-if="err" class="err">{{ err }}</div>
 
           <div class="acts">
@@ -277,6 +296,11 @@ const meta = (s: string) => stMeta[s] || stMeta.pending
 .jinst { font: 600 13px var(--font-mono); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jdb { color: var(--text-faint); font-weight: 500; }
 .jbadge { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
+.senschk { display: flex; align-items: center; gap: 8px; margin-top: 12px; cursor: pointer; }
+.senstxt { font: 500 12.5px var(--font-body); color: var(--text-body); }
+.senshint { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; padding: 8px 10px;
+  border-radius: 8px; background: var(--warning-subtle); color: var(--warning-text);
+  font: 500 11.5px var(--font-body); line-height: 1.5; }
 .jbadge.wait { background: var(--surface-sunken); color: var(--text-muted); }
 .jbadge.run { background: var(--accent-subtle); color: var(--accent-text); }
 .jbadge.ok { background: var(--success-subtle); color: var(--success-text); }

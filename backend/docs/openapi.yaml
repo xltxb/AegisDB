@@ -733,7 +733,33 @@ paths:
     post:
       tags: [export]
       summary: '[terminal] 提交导出任务(仅限单条只读查询)'
-      responses: { '200': { description: 'OK / 42601 保存路径未配置 / 40001 非只读语句' } }
+      description: |
+        导出**默认脱敏**:命中敏感字段规则的列在服务端打码后才写进归档
+        (ADR 0009 —— 一份带原值的 CSV 落到磁盘、发进聊天工具,比在终端上看一眼跑得远得多)。
+
+        `includeSensitive: true` 要的是原值。它不会让这次导出立刻跑:任务停在
+        `awaiting`、生成一张高危审批单,批准之后才由 worker 后台执行。
+        那张单**不能**用 `/approvals/{id}/execute` 手动执行 —— 它授权的是"让导出任务去跑",
+        而它的 command 是一句描述而不是可执行的语句。
+
+        放行原值的那一刻 worker 还会再核一次审批状态:这道复核是重复的,故意的 ——
+        这类旁路最常见的失效方式是后来有人加了新路径、忘了先检查。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connectionId, sql]
+              properties:
+                connectionId: { type: integer }
+                sql: { type: string, description: 单条只读查询 }
+                name: { type: string }
+                database: { type: string }
+                includeSensitive:
+                  type: boolean
+                  default: false
+                  description: 要敏感字段的原值。为 true 时任务停在 awaiting 等审批,不直接执行。
+      responses: { '200': { description: 'OK(includeSensitive 时任务为 awaiting)/ 42601 保存路径未配置 / 40001 非只读语句' } }
   /export/jobs:
     get:
       tags: [export]

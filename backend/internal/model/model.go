@@ -281,7 +281,9 @@ func (DatabaseProject) TableName() string { return "tbl_database_project" }
 
 // Export job / task states.
 const (
-	ExportPending = "pending"
+	// ExportAwaiting:含敏感字段的导出在批准之前停在这里,不进队列。
+	ExportAwaiting = "awaiting"
+	ExportPending  = "pending"
 	ExportRunning = "running"
 	ExportDone    = "done"
 	ExportFailed  = "failed"
@@ -304,7 +306,15 @@ type ExportJob struct {
 	Database     string     `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
 	SQL          string     `gorm:"type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
 	Name         string     `gorm:"size:128" json:"name"`
-	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
+	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
+	// IncludeSensitive:这份导出要不要**原值**。默认(false)敏感字段照常打码。
+	//
+	// 它不是一个可以自己勾了就生效的开关:带着它的任务不会直接进队列,而是停在
+	// awaiting 等审批。一份带原值的 CSV 落到磁盘、发进聊天工具,比在终端上看一眼
+	// 跑得远得多 —— 这正是脱敏在导出这一路最要紧的原因,所以放开它要有人签字。
+	IncludeSensitive bool  `gorm:"not null;default:false" json:"includeSensitive"`
+	ApprovalID       int64 `gorm:"index:idx_export_approval;not null;default:0" json:"approvalId"`
+	ApNo             string `gorm:"size:32" json:"apNo"`
 	Rows         int        `json:"rows"`
 	Bytes        int64      `json:"bytes"`                              // total encrypted size across parts
 	Parts        int        `json:"parts"`                             // number of ~100MB CSV files
@@ -497,6 +507,13 @@ type Approval struct {
 	// there, once in the pipeline that still believes it has not run yet.
 	// Zero for every ordinary ticket.
 	ReleaseID int64 `gorm:"not null;default:0;index:idx_approval_release" json:"releaseId,omitempty"`
+	// ExportJobID links a ticket raised by a sensitive-field export back to its
+	// job. 它和 ReleaseID 起的是同一个作用:把这张单挡在**手动执行**那条路之外。
+	//
+	// 这里不挡的后果很具体:导出单的 Command 是一句描述("EXPORT [含敏感字段] …"),
+	// 发起人若能点"执行",网关会把它当成一条命令发给数据库。而这张单真正授权的事
+	// 情是"让导出 worker 去跑",不是"在终端里执行一句 SQL"。
+	ExportJobID int64 `gorm:"not null;default:0;index:idx_approval_export" json:"exportJobId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
 	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)

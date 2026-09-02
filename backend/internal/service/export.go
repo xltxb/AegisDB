@@ -171,6 +171,16 @@ func (s *Services) UserExportDir(u *model.User) string {
 // job is processed by the worker pool (see service.New) so multiple exports run
 // in parallel; poll ListExportJobs for status and the finished download.
 func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, database string) (*model.ExportJob, error) {
+	return s.enqueueExport(u, connID, sql, name, database, false)
+}
+
+// EnqueueExportWithSensitive is EnqueueExport plus the "give me the raw values"
+// request. includeSensitive 为真时任务不进队列,先去等审批。
+func (s *Services) EnqueueExportWithSensitive(u *model.User, connID int64, sql, name, database string, includeSensitive bool) (*model.ExportJob, error) {
+	return s.enqueueExport(u, connID, sql, name, database, includeSensitive)
+}
+
+func (s *Services) enqueueExport(u *model.User, connID int64, sql, name, database string, includeSensitive bool) (*model.ExportJob, error) {
 	if s.ExportSavePath() == "" {
 		return nil, ErrExportPathUnset
 	}
@@ -221,13 +231,29 @@ func (s *Services) EnqueueExport(u *model.User, connID int64, sql, name, databas
 	if db == "" && strings.TrimSpace(conn.Database) == "" && gateway.RealExecSupported(conn) {
 		return nil, ErrNoDatabase
 	}
+	// 含敏感字段的导出停在 awaiting:它不进队列,而且 ClaimExportJob 只认 pending,
+	// 所以即便有人把这个 id 塞进队列,worker 也拿不到它。
+	status := model.ExportPending
+	if includeSensitive {
+		status = model.ExportAwaiting
+	}
 	job := &model.ExportJob{
 		UserID: u.ID, ConnectionID: connID, Instance: conn.Env + "-" + conn.Name,
 		Database: db,
-		SQL:      sql, Name: strings.TrimSpace(name), Status: model.ExportPending,
+		SQL:      sql, Name: strings.TrimSpace(name), Status: status,
+		IncludeSensitive: includeSensitive,
 	}
 	if err := s.Repo.CreateExportJob(job); err != nil {
 		return nil, err
+	}
+	if includeSensitive {
+		// 建单失败就让整个请求失败:一个 awaiting 却没有审批单的任务谁也放行不了,
+		// 它会永远停在那里,而人以为自己提交成功了。
+		if err := s.raiseSensitiveExportApproval(u, conn, job); err != nil {
+			s.failExport(job.ID, "创建审批单失败,请重试")
+			return nil, err
+		}
+		return job, nil
 	}
 	// The SUBMISSION is the auditable event — it is the moment someone asked for
 	// the data, and it is the only point guaranteed to be reached (a job can fail,
@@ -304,9 +330,18 @@ func (s *Services) runExportJob(id int64) {
 		s.failExport(id, "导出仅允许单条只读查询语句")
 		return
 	}
+	// 放行原值之前**再核一次**审批。调用方本来就只在 IncludeSensitive 为真时走到
+	// 这里,所以这次复核是重复的 —— 故意的:这类旁路最常见的失效方式不是逻辑写错,
+	// 是后来有人加了一条新路径、忘了先检查。把它放在放行的那一刻,新路径绕不过去。
+	if job.IncludeSensitive {
+		if err := s.SensitiveExportApproved(job); err != nil {
+			s.failExport(id, "敏感字段导出未获批准: "+err.Error())
+			return
+		}
+	}
 	// simulate real export latency so parallel jobs are observable in the UI
 	time.Sleep(time.Duration(700+rand.Intn(1600)) * time.Millisecond)
-	files, password, rows, size, err := s.produceExport(u, conn, job.SQL, job.Name)
+	files, password, rows, size, err := s.produceExport(u, conn, job.SQL, job.Name, job.IncludeSensitive)
 	if err != nil {
 		s.failExport(id, err.Error())
 		return
@@ -365,7 +400,7 @@ func (s *Services) failExport(id int64, msg string) {
 // records no files, so they would be neither downloadable (ownsExportFile
 // matches recorded files only) nor ever cleaned up — a big export failing at
 // the cap otherwise stranded gigabytes of undownloadable archives (B3).
-func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, name string) ([]string, string, int, int64, error) {
+func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, name string, raw bool) ([]string, string, int, int64, error) {
 	// Execute the single NORMALISED statement, never the raw text. The raw form
 	// may end with a semicolon (finger habit from the terminal, which strips it
 	// client-side before submitting) or a trailing comment line, and some
@@ -412,7 +447,11 @@ func (s *Services) produceExport(u *model.User, conn *model.Connection, sql, nam
 
 	if gateway.RealExecSupported(conn) {
 		timeout := s.exportExecTimeout()
-		if err := gateway.RealQueryEach(conn, sql, timeout, setHeader, writeRow); err != nil {
+		read := gateway.RealQueryEach
+		if raw {
+			read = gateway.RealQueryEachRaw // 已批准的敏感字段导出 —— 这是唯一的旁路
+		}
+		if err := read(conn, sql, timeout, setHeader, writeRow); err != nil {
 			return fail(exportExecErr(err, pw.rows, timeout)) // translated — see exportExecErr
 		}
 	} else {

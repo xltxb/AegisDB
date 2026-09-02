@@ -304,7 +304,10 @@ export interface ExportJob {
   database: string
   sql: string
   name: string
-  status: 'pending' | 'running' | 'done' | 'failed' | 'expired' | string
+  /** awaiting = 含敏感字段,批准之前不进队列 */
+  status: 'awaiting' | 'pending' | 'running' | 'done' | 'failed' | 'expired'
+  includeSensitive?: boolean
+  apNo?: string
   rows: number
   bytes: number
   parts: number

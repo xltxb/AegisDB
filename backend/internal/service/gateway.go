@@ -446,7 +446,13 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
 		result, title := model.ResultPending, "审批已通过,请前往执行"
-		if ap.ReleaseID > 0 {
+		if ap.ExportJobID > 0 {
+			// 导出单授权的是"让导出 worker 去跑这次导出",不是"执行一条命令" ——
+			// 所以它不停在等发起人,批准即入队。
+			res.Output = "· 已批准,导出任务已进入队列"
+			title = "导出审批已通过,任务已开始"
+			s.releaseApprovedExport(ap)
+		} else if ap.ReleaseID > 0 {
 			// A release ticket authorises the pipeline; it does not run anything.
 			// The execute stage owns execution (and re-judges the statement before
 			// applying it), so running the command here as well would apply the same
@@ -474,7 +480,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		// 命令就一直挂在那里,直到有人发现变更根本没生效。
 		body := fmt.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
 			operatorName, safeClip(ap.Command, 60))
-		if ap.ReleaseID > 0 {
+		if ap.ExportJobID > 0 {
+			body = fmt.Sprintf("%s 通过了你的导出申请：%s\n任务已进入队列,完成后会再通知你。",
+				operatorName, safeClip(ap.Command, 60))
+		} else if ap.ReleaseID > 0 {
 			body = fmt.Sprintf("%s 通过了发布单里的这一步：%s\n流水线将继续执行,无需手动操作。",
 				operatorName, safeClip(ap.Command, 60))
 		}

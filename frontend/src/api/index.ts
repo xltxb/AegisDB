@@ -61,8 +61,9 @@ export const api = {
   exportConfig: () =>
     http.get<any, Envelope<{ enabled: boolean; savePath: string; retentionDays: number }>>('/export/config').then(ok),
   // raw envelope so callers can detect 42601 (path unset); returns the new job.
-  exportData: (connectionId: number, sql: string, name = '', database = '') =>
-    http.post<any, Envelope<ExportJob>>('/export', { connectionId, sql, name, database }),
+  // includeSensitive 要的是敏感字段的原值。勾上它的任务不会直接进队列，先去等审批。
+  exportData: (connectionId: number, sql: string, name = '', database = '', includeSensitive = false) =>
+    http.post<any, Envelope<ExportJob>>('/export', { connectionId, sql, name, database, includeSensitive }),
   exportJobs: () => http.get<any, Envelope<ExportJob[]>>('/export/jobs').then(ok),
   exportDownload: (file: string) =>
     http.get<any, Blob>(`/export/download?file=${encodeURIComponent(file)}`, { responseType: 'blob' }),

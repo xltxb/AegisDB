@@ -87,6 +87,11 @@ type ExportReq struct {
 	SQL          string `json:"sql" binding:"required"`
 	Name         string `json:"name"`
 	Database     string `json:"database"` // target database within the instance (optional)
+	// IncludeSensitive 要的是敏感字段的**原值**。默认 false = 照常打码。
+	//
+	// 勾上它不会让这次导出立刻跑:任务停在 awaiting 等审批,批准之后才由 worker
+	// 后台执行。一份带原值的 CSV 出了网关就再也管不到了,放开它要有人签字。
+	IncludeSensitive bool `json:"includeSensitive"`
 }
 
 // ExportResp describes an encrypted+compressed export archived on the server.

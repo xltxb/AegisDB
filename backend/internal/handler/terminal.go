@@ -439,7 +439,7 @@ func (h *Handler) ExportData(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	job, err := h.Svc.EnqueueExport(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Name, req.Database)
+	job, err := h.Svc.EnqueueExportWithSensitive(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Name, req.Database, req.IncludeSensitive)
 	if err == service.ErrExportPathUnset {
 		resp.Fail(c, resp.CodeExportPathUnset, "请先在【系统设置 · 网关】配置数据导出保存路径")
 		return

@@ -235,6 +235,12 @@
   exportRun: '导出', exportRunning: '提交中…', exportDownload: '下载文件', exportSubmit: '提交导出任务',
   exportTasks: '导出任务', exportTasksSub: '任务后台并行执行;结果按每 100MB 切分为 CSV 分片,完成后可下载', exportNoTasks: '暂无导出任务', exportParts: '个文件',
   exportStPending: '排队中', exportStRunning: '进行中', exportStDone: '完成', exportStFailed: '失败', exportStExpired: '已清理',
+  exportStAwaiting: '待审批',
+  // 勾选项旁边这句话要把"勾了就不会马上跑"说在前面 —— 人以为点了导出就在跑,
+  // 结果任务停在待审批,而他等在下载那一栏。
+  exportSensitive: '包含敏感字段(原值)',
+  exportSensitiveHint: '默认导出会把敏感字段打码。需要原值请勾选——勾选后任务不会立即执行，要先经过审批。',
+  exportAwaitingNotice: '已提交，等待审批。批准后任务会自动开始，完成时通知你。',
   exportRetentionNote: '归档在服务器保留 {d} 天', exportExpiredHint: '归档已超过 {d} 天保留期,文件已清理;任务记录保留',
   exportDone: '导出成功 · {rows} 行', exportPassword: '加密密码(请立即保存)', exportPwHint: '文件为加密 ZIP,解压时输入此密码即可(Windows 资源管理器 / 7-Zip / WinRAR / macOS 均可)',
   exportServerFile: '服务器文件路径', exportNoPath: '尚未配置数据导出保存路径', copy: '复制',
