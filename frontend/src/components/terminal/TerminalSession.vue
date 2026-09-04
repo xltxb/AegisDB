@@ -2,7 +2,7 @@
 import { ref, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download, Command } from 'lucide-vue-next'
+import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download, Command, ClipboardPaste } from 'lucide-vue-next'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -808,6 +808,41 @@ function runSlot(slot: number) {
   editor.feed(text)
 }
 
+// ---- paste SQL through a dialog ----
+//
+// A textarea for SQL copied from elsewhere. Keyboard paste into xterm works, but
+// it is invisible until it runs: a long batch scrolls past as it is echoed, and
+// the operator has no chance to look at what they are about to hand to PROD.
+// The dialog shows the text first; confirming feeds it to the line editor the
+// same way a keyboard paste (or a snippet hotkey) does, so every statement
+// leaves through handleSubmit — risk pre-check, approval prompt, MFA step-up —
+// one after another. There is no separate "run this text" call to the server.
+const pasteOpen = ref(false)
+const pasteText = ref('')
+
+function openPaste() {
+  // Feeding while a statement runs would queue the text behind it and execute
+  // seconds later, against whatever the session looks like by then (see runSlot).
+  if (editor.running) { notice(c(ANSI.yellow, '· ' + t('pasteBusy'))); return }
+  pasteText.value = ''
+  pasteOpen.value = true
+}
+
+function closePaste() {
+  pasteOpen.value = false
+  nextTick(() => term?.focus())
+}
+
+function submitPaste() {
+  // Same normalisation as a snippet: CRLF → LF, and a terminator appended when
+  // the last statement has none, so the final line submits instead of sitting
+  // in the editor waiting for Enter.
+  const text = snippetSubmitText(pasteText.value)
+  closePaste()
+  if (!text) return
+  editor.feed(text)
+}
+
 // ---- script upload/scan ----
 function onUploadClick() {
   if (!enabled.value) { pathPromptOpen.value = true; return }
@@ -940,6 +975,7 @@ async function runScript() {
             </div>
           </template>
         </Teleport>
+        <div class="upload" :title="$t('pasteBtnTitle')" @click="openPaste"><ClipboardPaste :size="13" />{{ $t('pasteBtn') }}</div>
         <div class="upload" :title="$t('snipBtnTitle')" @click="snipOpen = true"><Command :size="13" />{{ $t('snipBtn') }}</div>
         <div class="sample" @click="onSampleClick"><FileCode2 :size="13" />{{ $t('sampleScript') }}</div>
         <!-- Disabled until something has actually been printed: an empty file is
@@ -970,6 +1006,31 @@ async function runScript() {
     <ScriptScanModal :open="scOpen" :scan="scScan" :submitted="scSubmitted" :save-path="scriptSavePath"
       :instance="conn.name" :databases="dbOptions" v-model:target-db="targetDb" @close="scOpen = false" @run="runScript" />
     <SnippetModal :open="snipOpen" @close="closeSnippets" />
+
+    <div v-if="pasteOpen" class="mfa-overlay">
+      <div class="mfa-mask" @click="closePaste" />
+      <div class="mfa-modal paste-modal">
+        <div class="mfa-top info" />
+        <div class="mfa-pad">
+          <div class="mfa-title acc"><ClipboardPaste :size="18" />{{ $t('pasteTitle') }}</div>
+          <div class="mfa-desc">{{ $t('pasteDesc', { env: conn.env.toUpperCase(), inst: conn.name }) }}</div>
+          <textarea
+            v-autofocus
+            v-model="pasteText"
+            class="paste-box"
+            spellcheck="false"
+            :placeholder="$t('pastePh')"
+            @keydown.ctrl.enter.prevent="submitPaste"
+            @keydown.esc.prevent="closePaste"
+          />
+          <div class="paste-hint">{{ $t('pasteHint') }}</div>
+          <div class="mfa-acts">
+            <button class="mfa-btn ghost" @click="closePaste">{{ $t('btnCancel') }}</button>
+            <button class="mfa-btn primary" :disabled="!pasteText.trim()" @click="submitPaste">{{ $t('pasteRun') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div v-if="pathPromptOpen" class="mfa-overlay">
       <div class="mfa-mask" @click="pathPromptOpen = false" />
@@ -1072,6 +1133,16 @@ async function runScript() {
 }
 .mfa-code:focus { border-color: var(--accent-text); }
 .mfa-err { margin-top: 8px; font: 600 12px var(--font-body); color: var(--danger-text); }
+.paste-modal { width: 640px; }
+.paste-box {
+  margin-top: 14px; width: 100%; height: 240px; resize: vertical; box-sizing: border-box;
+  padding: 10px 12px; border: 1px solid var(--border-default); border-radius: 10px;
+  background: var(--surface-sunken); color: var(--text-strong);
+  font: 500 13px/1.5 var(--font-mono); outline: none; white-space: pre; overflow: auto;
+}
+.paste-box:focus { border-color: var(--accent-text); }
+.paste-hint { margin-top: 6px; font: 400 11.5px var(--font-body); color: var(--text-faint); }
+.mfa-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .mfa-acts { margin-top: 16px; display: flex; justify-content: flex-end; gap: 10px; }
 .mfa-btn { height: 36px; padding: 0 16px; border-radius: 9px; font: 600 12px var(--font-body); cursor: pointer; border: 1px solid var(--border-default); }
 .mfa-btn.ghost { background: transparent; color: var(--text-body); }

@@ -45,6 +45,11 @@
   uploadScript: '上传脚本', sampleScript: '示例',
   logExport: '导出日志', logExportHint: '把本次会话(命令与输出)存成文本文件 · 口令已按审计同规则打码 · 导出会写入审计',
   logExportAuditFailed: '文件已下载,但导出记录未能写入审计',
+  // 粘贴 SQL 弹窗
+  pasteBtn: '粘贴 SQL', pasteBtnTitle: '把复制来的 SQL 粘到弹窗里,确认后逐条执行',
+  pasteTitle: '粘贴 SQL', pasteDesc: '将在 {env} · {inst} 上逐条执行,每条都照常经过风险判定、审批与 MFA。',
+  pastePh: '在这里粘贴一条或多条 SQL,以分号分隔', pasteHint: 'Ctrl+Enter 执行 · Esc 关闭',
+  pasteRun: '执行', pasteBusy: '上一条语句还在执行,请等它完成再粘贴',
   // 快捷脚本(Alt+1…9)
   snipBtn: '快捷脚本', snipBtnTitle: '存好的脚本,按 Alt+1…9 执行',
   snipTitle: '快捷脚本', snipSub: '把常用脚本存下来,绑一个快捷键 —— Alt+1 到 Alt+9',

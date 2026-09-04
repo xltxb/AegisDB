@@ -41,6 +41,11 @@
   uploadScript: 'Upload script', sampleScript: 'Sample',
   logExport: 'Export log', logExportHint: 'Save this session (commands and output) as a text file · credentials masked as the audit log masks them · the export is audited',
   logExportAuditFailed: 'File downloaded, but the export could not be recorded in the audit log',
+  // paste-SQL dialog
+  pasteBtn: 'Paste SQL', pasteBtnTitle: 'Paste copied SQL into a dialog and run it statement by statement',
+  pasteTitle: 'Paste SQL', pasteDesc: 'Runs on {env} · {inst} one statement at a time; each goes through the risk check, approval and MFA as usual.',
+  pastePh: 'Paste one or more SQL statements here, separated by semicolons', pasteHint: 'Ctrl+Enter to run · Esc to close',
+  pasteRun: 'Run', pasteBusy: 'A statement is still running; wait for it before pasting',
   // saved scripts on hotkeys Alt+1…9
   snipBtn: 'Snippets', snipBtnTitle: 'Saved scripts on Alt+1…9',
   snipTitle: 'Script snippets', snipSub: 'Save a script you run often and give it a hotkey — Alt+1 to Alt+9',
