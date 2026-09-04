@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -129,8 +128,14 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 // leading verb. Ranking by action alone let the FIRST approve-ranked statement
 // freeze the verdict: `UPDATE …(mid); DELETE …(high)` produced a ticket graded
 // mid with the DELETE's dictionary rule dropped, so the approver reviewed a
-// high-risk batch under a mid-risk label. Every triggered rule is kept on the
-// verdict, not just the winner's — the ticket must show all of what fired.
+// high-risk batch under a mid-risk label.
+//
+// For a batch the rule names EVERY gated statement — position and verb — not
+// just the winner's. Collapsing identical rule texts hid the count: three DROPs
+// pasted as one command produced the single line "高危命令字典 · PROD 禁止直接执行"
+// with Command = "DROP", which read as "only the first statement was caught"
+// while the other two were in fact judged and gated too. The judgement was
+// never the gap; the report was.
 func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
@@ -138,21 +143,43 @@ func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts
 	}
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	roleIDs := s.Repo.EffectiveRoleIDs(u)
-	var rules []string
-	for _, st := range stmts {
+	var hits []string // one entry per gated statement, in script order
+	for i, st := range stmts {
 		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, tier, st)
-		if v.Action != gateway.ActionAllow && v.Rule != "" && !slices.Contains(rules, v.Rule) {
-			rules = append(rules, v.Rule)
+		if v.Action != gateway.ActionAllow && v.Rule != "" {
+			hits = append(hits, batchHitLabel(i+1, v))
 		}
 		if actionRank(v.Action) > actionRank(strict.Action) ||
 			(actionRank(v.Action) == actionRank(strict.Action) && riskRank(v.Risk) > riskRank(strict.Risk)) {
 			strict = v
 		}
 	}
-	if len(rules) > 1 {
-		strict.Rule = strings.Join(rules, " + ")
+	if len(stmts) > 1 && len(hits) > 0 {
+		strict.Rule = joinBatchHits(hits)
 	}
 	return strict
+}
+
+// maxBatchHits bounds how many per-statement hits the rule text spells out. A
+// pasted script can run to hundreds of statements; the ticket and the terminal
+// line both need the first few and the total, not the whole list.
+const maxBatchHits = 8
+
+// batchHitLabel renders one gated statement of a batch: "第2条 TRUNCATE · 高危命令字典 · …".
+func batchHitLabel(pos int, v gateway.Verdict) string {
+	if v.Command == "" {
+		return fmt.Sprintf("第%d条 · %s", pos, v.Rule)
+	}
+	return fmt.Sprintf("第%d条 %s · %s", pos, v.Command, v.Rule)
+}
+
+// joinBatchHits joins the per-statement hits, truncating past maxBatchHits with
+// the count of what was left out.
+func joinBatchHits(hits []string) string {
+	if len(hits) <= maxBatchHits {
+		return strings.Join(hits, " + ")
+	}
+	return strings.Join(hits[:maxBatchHits], " + ") + fmt.Sprintf(" + …另有 %d 条命中", len(hits)-maxBatchHits)
 }
 
 // riskRank orders risk grades so equal-action verdicts can still escalate.
