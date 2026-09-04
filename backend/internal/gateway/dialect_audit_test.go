@@ -110,7 +110,8 @@ func TestAudit_SessionSettingPassesTheFullJudgementChain(t *testing.T) {
 			"ddl|prod":    model.LevelDeny,
 		},
 	}
-	e := NewRiskEngine(store, true) // 严格模式也开着
+	store.strict = true // 该分层的严格模式也开着
+	e := NewRiskEngine(store)
 
 	if v := e.EvaluateFor([]int64{1}, "oracle", "PROD", `ALTER SESSION SET CURRENT_SCHEMA = G04`); v.Action != ActionAllow {
 		t.Errorf("ALTER SESSION 应放行,实际 %s / %s —— 它只改这条连接,而切 schema 是读数据的前置步骤", v.Action, v.Rule)
@@ -130,7 +131,7 @@ func TestAudit_SessionSettingPassesTheFullJudgementChain(t *testing.T) {
 	}
 	// 只读被明确拒绝的角色,连会话设置也不该放行 —— 放宽的是走哪道闸,不是不走闸。
 	denied := &fakeStore{caps: map[string]string{"select|prod": model.LevelDeny}}
-	e2 := NewRiskEngine(denied, false)
+	e2 := NewRiskEngine(denied)
 	if v := e2.EvaluateFor([]int64{1}, "dws", "PROD", `SET search_path TO dwd`); v.Action != ActionDeny {
 		t.Errorf("select 被拒的角色不该能设置会话,实际 %s", v.Action)
 	}

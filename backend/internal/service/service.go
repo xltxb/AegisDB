@@ -23,7 +23,6 @@ type Services struct {
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager
 	Webhook    *Dispatcher
-	StrictMode atomic.Bool
 
 	apCounter    atomic.Int64
 	auditCounter atomic.Int64
@@ -48,7 +47,7 @@ type Services struct {
 
 const exportWorkers = 3 // how many export jobs run in parallel
 
-func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager, strict bool) *Services {
+func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager) *Services {
 	s := &Services{
 		Repo:     repo,
 		Engine:   engine,
@@ -56,7 +55,6 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager,
 		JWT:      jwtMgr,
 		Webhook:  NewDispatcher(repo),
 	}
-	s.StrictMode.Store(strict)
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
 	if m := repo.MaxApprovalSeq(); m >= 2294 {

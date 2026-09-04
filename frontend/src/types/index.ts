@@ -29,6 +29,7 @@ export interface EnvTier {
   dangerBanner: boolean
   countsInPending: boolean
   scanBaseline: boolean
+  strictNoWhere: boolean
   connLayer: string
   defaultRole: string
 }
@@ -616,7 +617,6 @@ export interface ReleasePage {
 export interface SettingsResp {
   settings: Record<string, string>
   webhook: WebhookConfig | null
-  strictMode: boolean
   // Secret values are never returned; these flags say whether one is on file so
   // the UI can show "已配置" and treat a blank input as "keep unchanged".
   secretsSet?: Record<string, boolean>

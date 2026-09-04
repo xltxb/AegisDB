@@ -28,6 +28,7 @@ jwt:
 
 gateway:
   default_policy: "strict"
+  # 仅用于升级到迁移 0030 时的一次性回填,之后按分层开关(【环境分层】页)。
   strict_mode: true
   exec_timeout_seconds: 30
 

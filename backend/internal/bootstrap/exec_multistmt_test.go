@@ -64,8 +64,13 @@ func TestExec_BatchVerdictEscalatesToStrictestStatement(t *testing.T) {
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
 		"connectionId": prodConn,
-		"sql":          "UPDATE orders SET status='x'; DELETE FROM orders",
-		"reason":       "batch with a high-risk tail",
+		// Both statements are SCOPED, so neither trips the no-WHERE gate: the
+		// point here is that a MATRIX-gated statement and a DICTIONARY-gated one
+		// in the same batch both survive onto the verdict. A bare UPDATE/DELETE
+		// would be caught by the strict layer first and report its rule for both,
+		// which tests a different thing (see TestStrictNoWhere_IsPerTier).
+		"sql":    "UPDATE orders SET status='x' WHERE id = 1; DROP TABLE orders_2024_q3",
+		"reason": "batch with a high-risk tail",
 	})
 	eq(t, r.Code, resp.CodeIntercepted, "batch with approve statements intercepted")
 	var d struct {

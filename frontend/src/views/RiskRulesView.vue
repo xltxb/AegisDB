@@ -24,7 +24,6 @@ const cmds = ref<RiskCommandView[]>([])
 const env = ref<string>('prod')
 const draft = ref('')
 const ruleForm = ref(false)
-const strictMode = ref(false)
 
 // new-rule form state (functional: creates dictionary entries)
 const rfName = ref('')
@@ -89,7 +88,6 @@ async function load() {
     ui.notifyError(e, t('loadFailed'))
   }
   try {
-    strictMode.value = (await api.settings()).strictMode
   } catch { /* keep default */ }
   try {
     hits.value = (await api.gatewayStats()).intercepts || 0
@@ -107,16 +105,10 @@ const coverage = computed(() => {
   return Math.round((gated / total) * 1000) / 10
 })
 
-async function toggleStrict() {
-  if (!isAdmin.value) return
-  // M14: 保存严格模式失败以 toast 呈现
-  try {
-    strictMode.value = !strictMode.value
-    await api.saveSettings({ strictMode: strictMode.value })
-  } catch (e) {
-    ui.notifyError(e, t('actionFailed'))
-  }
-}
+// 无 WHERE 的 DELETE / UPDATE 现在按分层开关,存在分层上(迁移 0030),和它上面
+// 两层规则一样。这里只呈现哪些分层开着 —— 改在【环境分层】页,那里是所有按分层
+// 生效的开关的所在地,不再在两个页面各放一个能改同一件事的控件。
+const strictTiers = computed(() => envtier.tiers.filter((x) => x.strictNoWhere).map((x) => x.code))
 
 function lvlMeta(l: string) {
   if (l === 'high') return { bg: 'var(--danger-subtle)', c: 'var(--danger-text)', tag: t('block') }
@@ -187,7 +179,7 @@ async function removeCmd(c: RiskCommandView) {
 const policies = computed(() => {
   const cards: {
     key: string; label: string; tag: string; border: string
-    tagBg: string; tagC: string; expr: string; toggle?: boolean; on?: boolean
+    tagBg: string; tagC: string; expr: string; hint?: string
   }[] = []
 
   const highProd = cmds.value.filter((c) => c.tiers.prod === 'high').map((c) => c.command)
@@ -199,12 +191,15 @@ const policies = computed(() => {
     })
   }
 
-  // Strict mode is a real global toggle; the card reflects and controls it.
+  // 第三层:按分层生效,卡片照实说它在哪些分层上开着。
+  const on = strictTiers.value.length > 0
   cards.push({
-    key: 'pStrict', label: t('pStrict'), tag: t('actBlockAppr'), border: 'var(--danger)',
-    tagBg: 'var(--danger-subtle)', tagC: 'var(--danger-text)',
-    expr: `cmd IN (DELETE, UPDATE) AND NOT contains(WHERE) → ${strictMode.value ? t('block') : t('allow')}`,
-    toggle: true, on: strictMode.value,
+    key: 'pStrict', label: t('pStrict'), tag: on ? t('actBlockAppr') : t('actOff'), border: on ? 'var(--danger)' : 'var(--border-default)',
+    tagBg: on ? 'var(--danger-subtle)' : 'var(--surface-sunken)', tagC: on ? 'var(--danger-text)' : 'var(--text-faint)',
+    expr: on
+      ? `env IN (${strictTiers.value.join(', ').toUpperCase()}) AND cmd IN (DELETE, UPDATE) AND NOT contains(WHERE) → ${t('block')}`
+      : `cmd IN (DELETE, UPDATE) AND NOT contains(WHERE) → ${t('allow')}`,
+    hint: t('pStrictWhere'),
   })
 
   const midAny = cmds.value
@@ -284,15 +279,16 @@ const policies = computed(() => {
 
     <!-- policies (derived from the live dictionary + strict mode) -->
     <div class="rules">
-      <div v-for="r in policies" :key="r.key" class="rule" :style="{ borderLeftColor: r.border, opacity: r.toggle && !r.on ? 0.5 : 1 }">
+      <div v-for="r in policies" :key="r.key" class="rule" :style="{ borderLeftColor: r.border }">
         <div class="rgrow">
           <div class="rtop">
             <span class="rn">{{ r.label }}</span>
             <span class="rtag" :style="{ background: r.tagBg, color: r.tagC }">{{ r.tag }}</span>
           </div>
           <div class="rexpr">{{ r.expr }}</div>
+          <div v-if="r.hint" class="rhint">{{ r.hint }}</div>
         </div>
-        <VSwitch v-if="r.toggle" :model-value="!!r.on" :disabled="!isAdmin" @update:model-value="toggleStrict" />
+        <RouterLink v-if="r.hint" class="rlink" to="/env-tiers">{{ $t('pStrictGo') }}</RouterLink>
       </div>
     </div>
 
@@ -391,6 +387,9 @@ const policies = computed(() => {
 .stat .n.grad { background: linear-gradient(135deg, #5e83fb, #2dcde6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .stat .l { font: 500 12px var(--font-mono); color: var(--text-muted); margin-top: 2px; }
 .rules { display: flex; flex-direction: column; gap: 12px; }
+.rhint { margin-top: 5px; font: 400 11.5px var(--font-body); color: var(--text-faint); }
+.rlink { flex-shrink: 0; font: 600 12px var(--font-body); color: var(--accent-text); text-decoration: none; white-space: nowrap; }
+.rlink:hover { text-decoration: underline; }
 .rule { border: 1px solid var(--border-subtle); border-left: 3px solid; border-radius: 12px; background: var(--surface-card); padding: 16px 18px; display: flex; align-items: center; gap: 18px; transition: opacity 0.2s ease; }
 .rgrow { flex: 1; min-width: 0; }
 .rtop { display: flex; align-items: center; gap: 10px; }

@@ -164,8 +164,8 @@ func TestDialectFor_DefaultsToSQL(t *testing.T) {
 // Mongo command. Judged as SQL, `db.orders.drop()` parses to the verb "db",
 // maps to the read capability and sails through; judged as Mongo it is DDL.
 func TestEvaluate_MongoCommandIsJudgedByItsOwnDialect(t *testing.T) {
-	store := &fakeStore{caps: map[string]string{"ddl|prod": "deny", "select|prod": "allow"}}
-	e := NewRiskEngine(store, true)
+	store := &fakeStore{caps: map[string]string{"ddl|prod": "deny", "select|prod": "allow"}, strict: true}
+	e := NewRiskEngine(store)
 
 	deny := e.EvaluateFor([]int64{1}, "mongodb", "prod", `db.orders.drop()`)
 	if deny.Action != ActionDeny {

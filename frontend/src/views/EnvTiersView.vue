@@ -54,14 +54,14 @@ const boundEnvs = (code: string) => envtier.environments.filter((e) => e.tierCod
 const tierForm = ref(false)
 const tf = ref({
   code: '', displayName: '', templateCode: '', sortOrder: 0,
-  requireMfa: false, dangerBanner: false, countsInPending: false,
+  requireMfa: false, dangerBanner: false, countsInPending: false, strictNoWhere: true,
   connLayer: '', defaultRole: 'dba_l2',
 })
 function openTierForm() {
   if (!isAdmin.value) return
   tf.value = {
     code: '', displayName: '', templateCode: envtier.tierCodes[0] ?? '', sortOrder: envtier.tiers.length,
-    requireMfa: false, dangerBanner: false, countsInPending: false,
+    requireMfa: false, dangerBanner: false, countsInPending: false, strictNoWhere: true,
     connLayer: '', defaultRole: 'dba_l2',
   }
   tierForm.value = true
@@ -239,6 +239,7 @@ const moveTargets = computed(() =>
           <div class="th">
             <span>{{ $t('etColTier') }}</span><span class="ctr">{{ $t('etColMfa') }}</span>
             <span class="ctr">{{ $t('etColBanner') }}</span><span class="ctr">{{ $t('etColPending') }}</span>
+            <span class="ctr" :title="$t('etColStrictHint')">{{ $t('etColStrict') }}</span>
             <span class="ctr">{{ $t('etColBaseline') }}</span><span>{{ $t('etColBound') }}</span><span />
           </div>
           <div v-for="tier in envtier.tiers" :key="tier.code" class="tr">
@@ -250,6 +251,9 @@ const moveTargets = computed(() =>
             <div class="ctr"><VSwitch :model-value="tier.requireMfa" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { requireMfa: v })" /></div>
             <div class="ctr"><VSwitch :model-value="tier.dangerBanner" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { dangerBanner: v })" /></div>
             <div class="ctr"><VSwitch :model-value="tier.countsInPending" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { countsInPending: v })" /></div>
+            <!-- 判定的第三层。前两层(能力矩阵、高危命令字典)本来就按分层存,
+                 这一层过去是个全局开关,于是它是唯一一道瞄不准的闸。 -->
+            <div class="ctr" :title="$t('etColStrictHint')"><VSwitch :model-value="tier.strictNoWhere" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { strictNoWhere: v })" /></div>
             <!-- Radio semantics, not a switch: exactly one tier holds it, and
                  turning it off is never an option — only moving it elsewhere. -->
             <div class="ctr">
@@ -287,6 +291,7 @@ const moveTargets = computed(() =>
           <label class="chk"><VSwitch v-model="tf.requireMfa" />{{ $t('etColMfa') }}</label>
           <label class="chk"><VSwitch v-model="tf.dangerBanner" />{{ $t('etColBanner') }}</label>
           <label class="chk"><VSwitch v-model="tf.countsInPending" />{{ $t('etColPending') }}</label>
+          <label class="chk" :title="$t('etColStrictHint')"><VSwitch v-model="tf.strictNoWhere" />{{ $t('etColStrict') }}</label>
         </div>
         <div class="ffoot">
           <VButton variant="secondary" height="34px" @click="tierForm = false">{{ $t('btnCancel') }}</VButton>
@@ -383,7 +388,7 @@ const moveTargets = computed(() =>
 
 /* Both tables scroll inside their own card; the page body never moves sideways. */
 .tgrid, .egrid { min-width: max-content; }
-.tgrid .th, .tgrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) 88px 88px 88px 120px minmax(160px, 1.4fr) 90px; gap: 10px; align-items: center; }
+.tgrid .th, .tgrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) 88px 88px 88px 96px 120px minmax(160px, 1.4fr) 90px; gap: 10px; align-items: center; }
 .egrid .th, .egrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) minmax(220px, 1.6fr) 96px 90px; gap: 10px; align-items: center; }
 .th { padding: 11px 18px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
 .tr { padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); }

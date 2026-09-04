@@ -85,9 +85,9 @@ func main() {
 		slog.Warn("webhook.allow_private 已开启：出站 Webhook/飞书 SSRF 防护对内网/环回地址放行，请确认目标网络可信")
 	}
 
-	engine := gateway.NewRiskEngine(repo, cfg.Gateway.StrictMode)
+	engine := gateway.NewRiskEngine(repo)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
-	svc := service.New(repo, engine, jwtMgr, cfg.Gateway.StrictMode)
+	svc := service.New(repo, engine, jwtMgr)
 	// Ensure the default upload/export directories exist under the run dir at startup.
 	_ = os.MkdirAll(svc.ScriptSavePath(), 0o755)
 	_ = os.MkdirAll(svc.ExportSavePath(), 0o755)

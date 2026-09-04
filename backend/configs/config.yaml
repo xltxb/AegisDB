@@ -30,7 +30,10 @@ jwt:
 
 gateway:
   default_policy: "strict"   # strict | approve-1 | audit-only
-  strict_mode: true          # block DELETE/UPDATE without WHERE
+  # 无 WHERE 的 DELETE/UPDATE 现在按分层开关(迁移 0030,存在 tbl_env_tier)。
+  # 这里只剩一个作用:升级到 0030 那一次,把旧的全局值折进各分层。之后改这里没有效果,
+  # 开关在【环境分层】页。
+  strict_mode: true
   exec_timeout_seconds: 30
 
 webhook:

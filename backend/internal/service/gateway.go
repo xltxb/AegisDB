@@ -785,12 +785,6 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	return executed, nil
 }
 
-// SetStrict toggles strict mode on the live engine.
-func (s *Services) SetStrict(v bool) {
-	s.StrictMode.Store(v)
-	s.Engine.SetStrict(v)
-}
-
 // SweepApprovalTimeouts applies the configured timeout policy to overdue pending
 // approvals (FR-APPR-05 / backend doc §7). Called periodically from a goroutine.
 func (s *Services) SweepApprovalTimeouts() {

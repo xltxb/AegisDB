@@ -58,18 +58,31 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 // ConnLayer/DefaultRole are display defaults only (nothing about access control
 // reads them) and are editable per tier in the console, so the layer strings
 // below are a starting point rather than a claim about anyone's L-numbering.
+// StrictNoWhere is spelled out on every row, including the ones that set it
+// false. It must never be left to the zero value: a tier created with the flag
+// unset would come up with the no-WHERE gate OFF, and a gate that is missing is
+// the one failure this file cannot afford (ED1).
+//
+// DEV is the deliberate false. It is the same statement its dictionary already
+// makes — every command seeded `off` below — that a full-table DELETE on a
+// scratch database is ordinary work, not an incident.
+//
+// An UPGRADED install looks different here: migration 0030 turns the flag on for
+// every existing tier, DEV included, because it can only preserve what was
+// already in force and must not loosen a gate on its own. Un-ticking DEV there
+// is one click, and it is the operator's to make.
 var builtinTiers = []model.EnvTier{
 	{Code: model.EnvProd, DisplayName: "生产环境 · PROD", SortOrder: 0,
 		RequireMFA: true, DangerBanner: true, CountsInPending: true, ScanBaseline: true,
-		ConnLayer: "L1 核心 · 写", DefaultRole: "dba_l2"},
+		StrictNoWhere: true, ConnLayer: "L1 核心 · 写", DefaultRole: "dba_l2"},
 	{Code: model.EnvGli, DisplayName: "法务环境 · GLI", SortOrder: 1,
-		ConnLayer: "L2 法务", DefaultRole: "dba_l2"},
+		StrictNoWhere: true, ConnLayer: "L2 法务", DefaultRole: "dba_l2"},
 	{Code: model.EnvStaging, DisplayName: "预发布环境 · STAGING", SortOrder: 2,
-		ConnLayer: "L3 预发布", DefaultRole: "dba_l2"},
+		StrictNoWhere: true, ConnLayer: "L3 预发布", DefaultRole: "dba_l2"},
 	{Code: model.EnvUat, DisplayName: "演练环境 · UAT", SortOrder: 3,
-		ConnLayer: "L3 演练", DefaultRole: "dba_l2"},
+		StrictNoWhere: true, ConnLayer: "L3 演练", DefaultRole: "dba_l2"},
 	{Code: model.EnvDev, DisplayName: "开发环境 · DEV", SortOrder: 4,
-		ConnLayer: "L4 沙盒", DefaultRole: "developer"},
+		StrictNoWhere: false, ConnLayer: "L4 沙盒", DefaultRole: "developer"},
 }
 
 // backfillEnvTiers initialises the tier/environment split on a database that
@@ -90,7 +103,17 @@ func backfillEnvTiers(db *gorm.DB) error {
 	}
 	if tiers == 0 {
 		for _, t := range builtinTiers {
+			// Read the intended value BEFORE the insert: Create both omits a
+			// zero-valued `default`-tagged field AND writes the applied default back
+			// into the struct, so after it runs t.StrictNoWhere reports true even for
+			// DEV, which seeds the no-WHERE gate OFF. Same reason as
+			// Repo.CreateEnvTierFrom.
+			want := t.StrictNoWhere
 			if err := db.Create(&t).Error; err != nil {
+				return err
+			}
+			if err := db.Model(&model.EnvTier{}).Where("code = ?", t.Code).
+				Update("strict_nowhere", want).Error; err != nil {
 				return err
 			}
 		}

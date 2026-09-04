@@ -21,7 +21,7 @@ func TestExport_StuckJobsFailedOnStartup(t *testing.T) {
 	}
 
 	// simulate a restart: constructing a fresh Services reconciles orphans
-	_ = service.New(repo, app.svc.Engine, app.svc.JWT, false)
+	_ = service.New(repo, app.svc.Engine, app.svc.JWT)
 
 	jobs, _ := repo.ListExportJobs(u.ID, 0)
 	found := false

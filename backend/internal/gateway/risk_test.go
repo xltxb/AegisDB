@@ -8,8 +8,9 @@ import (
 )
 
 type fakeStore struct {
-	cmds []model.RiskCommand
-	caps map[string]string // "cap|env" (lowercased) -> level
+	cmds   []model.RiskCommand
+	caps   map[string]string // "cap|env" (lowercased) -> level
+	strict bool              // does the tier block a no-WHERE DELETE/UPDATE?
 }
 
 func (f *fakeStore) CapabilityLevel(_ int64, capability, env string) (string, error) {
@@ -18,7 +19,8 @@ func (f *fakeStore) CapabilityLevel(_ int64, capability, env string) (string, er
 	}
 	return model.LevelAllow, nil
 }
-func (f *fakeStore) RiskCommands() ([]model.RiskCommand, error) { return f.cmds, nil }
+func (f *fakeStore) RiskCommands() ([]model.RiskCommand, error)  { return f.cmds, nil }
+func (f *fakeStore) StrictNoWhere(string) (bool, error)          { return f.strict, nil }
 
 func lower(s string) string { // tiny local helper to keep the fake honest
 	b := []byte(s)
@@ -48,7 +50,7 @@ func TestMapVerbToCapability_CaseInsensitive(t *testing.T) {
 // with '!=' (case-sensitive) which silently skipped the rule.
 func TestEvaluate_DictionaryMatchCaseInsensitive(t *testing.T) {
 	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
-	e := NewRiskEngine(store, false)
+	e := NewRiskEngine(store)
 
 	for _, sql := range []string{"drop table x", "DROP TABLE x", "DrOp TaBlE x"} {
 		v := e.Evaluate(1, "prod", sql) // conn env lower-case
@@ -67,7 +69,7 @@ func TestEvaluate_DictionaryMatchCaseInsensitive(t *testing.T) {
 // for StripComments deleting the comment body and letting DROP fall to allow.
 func TestEvaluate_ExecutableCommentNotBypassed(t *testing.T) {
 	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
-	e := NewRiskEngine(store, false)
+	e := NewRiskEngine(store)
 
 	for _, sql := range []string{
 		"/*!32302 DROP TABLE users */",
@@ -85,8 +87,8 @@ func TestEvaluate_ExecutableCommentNotBypassed(t *testing.T) {
 // DROP/DELETE must be judged on its real verb, not treated as a read. Regression
 // for ParseVerb returning EXPLAIN → mapped to select → allow.
 func TestEvaluate_ExplainAnalyzeUsesRealVerb(t *testing.T) {
-	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}}
-	e := NewRiskEngine(store, true) // strict mode on (catches no-WHERE DML too)
+	store := &fakeStore{cmds: []model.RiskCommand{{Command: "DROP", TierCode: "PROD", Level: model.RiskHigh}}, strict: true}
+	e := NewRiskEngine(store) // 该分层的严格模式开着(顺带覆盖无 WHERE 的 DML)
 
 	// dictionary-matched DROP behind EXPLAIN ANALYZE
 	if v := e.Evaluate(1, "prod", "EXPLAIN ANALYZE DROP TABLE users"); v.Action == ActionAllow {
@@ -114,9 +116,10 @@ func (b *brokenStore) CapabilityLevel(int64, string, string) (string, error) {
 	return "", b.err
 }
 func (b *brokenStore) RiskCommands() ([]model.RiskCommand, error) { return nil, b.err }
+func (b *brokenStore) StrictNoWhere(string) (bool, error)         { return false, b.err }
 
 func TestEvaluate_FailsClosedWhenStoreErrors(t *testing.T) {
-	e := NewRiskEngine(&brokenStore{err: errors.New("driver: bad connection")}, false)
+	e := NewRiskEngine(&brokenStore{err: errors.New("driver: bad connection")})
 
 	v := e.Evaluate(1, "prod", "DROP TABLE orders")
 	if v.Action == ActionAllow {

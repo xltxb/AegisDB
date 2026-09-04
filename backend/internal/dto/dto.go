@@ -211,6 +211,7 @@ type EnvTierCreateReq struct {
 	DangerBanner    bool   `json:"dangerBanner"`
 	CountsInPending bool   `json:"countsInPending"`
 	ScanBaseline    bool   `json:"scanBaseline"`
+	StrictNoWhere   bool   `json:"strictNoWhere"`
 	ConnLayer       string `json:"connLayer"`
 	DefaultRole     string `json:"defaultRole"`
 }
@@ -224,6 +225,7 @@ type EnvTierUpdateReq struct {
 	DangerBanner    bool   `json:"dangerBanner"`
 	CountsInPending bool   `json:"countsInPending"`
 	ScanBaseline    bool   `json:"scanBaseline"`
+	StrictNoWhere   bool   `json:"strictNoWhere"`
 	ConnLayer       string `json:"connLayer"`
 	DefaultRole     string `json:"defaultRole"`
 }

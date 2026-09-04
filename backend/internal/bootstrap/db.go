@@ -65,6 +65,15 @@ func OpenDB(cfg *Config) (*gorm.DB, error) {
 			}
 			return nil, err
 		}
+		// This path never goes through Migrate, so the fold of the retired global
+		// strict switch has to hang off it too — the same reason autoMigrate
+		// carries the other backfills.
+		if err := backfillStrictNoWhere(db, cfg.Gateway.StrictMode); err != nil {
+			if sqlDB, derr := db.DB(); derr == nil {
+				_ = sqlDB.Close()
+			}
+			return nil, err
+		}
 	} else if cfg.Database.AutoMigrate && cfg.Database.Driver == "mysql" {
 		slog.Warn("ignoring auto_migrate for mysql: schema is owned by SQL migrations — run `server migrate`/`server init`")
 	}

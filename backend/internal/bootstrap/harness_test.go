@@ -66,9 +66,9 @@ func newTestApp(t *testing.T) *testApp {
 	seedTestFixtures(t, repo) // demo users/connections/approvals/audit the suite asserts on
 	crypto.SetSecretKey(cfg.JWT.Secret)
 	service.AllowPrivateWebhookTargets = true // stub webhook/Lark servers run on loopback
-	engine := gateway.NewRiskEngine(repo, cfg.Gateway.StrictMode)
+	engine := gateway.NewRiskEngine(repo)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
-	svc := service.New(repo, engine, jwtMgr, cfg.Gateway.StrictMode)
+	svc := service.New(repo, engine, jwtMgr)
 	// 与 main.go 保持一致:不挂上这个 provider,脱敏在测试里根本不会发生,
 	// 而"测试通过了但线上才是另一套接线"是最不该有的一种绿。
 	gateway.SensitiveRulesProvider = svc.SensitiveRulesForGateway

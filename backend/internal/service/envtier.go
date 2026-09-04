@@ -76,6 +76,7 @@ func (s *Services) CreateEnvTier(req dto.EnvTierCreateReq) (*model.EnvTier, erro
 		DangerBanner:    req.DangerBanner,
 		CountsInPending: req.CountsInPending,
 		ScanBaseline:    req.ScanBaseline,
+		StrictNoWhere:   req.StrictNoWhere,
 		ConnLayer:       strings.TrimSpace(req.ConnLayer),
 		DefaultRole:     strings.TrimSpace(req.DefaultRole),
 	}
@@ -107,6 +108,7 @@ func (s *Services) UpdateEnvTier(code string, req dto.EnvTierUpdateReq) (*model.
 	t.DangerBanner = req.DangerBanner
 	t.CountsInPending = req.CountsInPending
 	t.ScanBaseline = req.ScanBaseline
+	t.StrictNoWhere = req.StrictNoWhere
 	t.ConnLayer = strings.TrimSpace(req.ConnLayer)
 	t.DefaultRole = strings.TrimSpace(req.DefaultRole)
 	if err := s.Repo.UpdateEnvTier(t); err != nil {

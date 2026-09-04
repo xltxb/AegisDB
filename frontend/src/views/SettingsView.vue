@@ -57,7 +57,6 @@ async function onIpSave(payload: { enabled: boolean; list: string }) {
 }
 
 const policy = ref('strict')
-const strict = ref(true)
 const apprTimeout = ref('')
 const escalate = ref(true)
 const allowSelf = ref(false)
@@ -130,7 +129,6 @@ onMounted(async () => {
   try {
     const s = await api.settings()
     const g = s.settings || {}
-    strict.value = s.strictMode
     policy.value = parse(g['gateway.defaultPolicy'], 'strict')
     escalate.value = parse(g['approval.escalate'], true)
     allowSelf.value = parse(g['approval.allowSelfApprove'], false)
@@ -175,17 +173,6 @@ onMounted(async () => {
   try { approvers.value = (await api.approvalChain()).chain } catch { /* ignore */ }
 })
 
-async function toggleStrict() {
-  const next = !strict.value
-  strict.value = next // optimistic
-  try {
-    await api.saveSettings({ strictMode: next })
-  } catch (e) {
-    strict.value = !next // roll back so the UI matches the server (R28)
-    ui.notifyError(e, t('saveFailed'))
-  }
-}
-
 async function save() {
   // The model holds the stored key, so saving needs no reverse lookup against
   // the current language (EF11).
@@ -193,7 +180,6 @@ async function save() {
   const ttlKey = keyOf(ttl.value, SESSION_TTL_KEYS, '8h')
   try {
     await api.saveSettings({
-      strictMode: strict.value,
       'gateway.defaultPolicy': policy.value,
       'approval.onTimeout': onTimeout,
       'approval.escalate': escalate.value,
@@ -254,7 +240,9 @@ async function save() {
       <section v-show="activeTab === 'gateway'" class="card">
         <div class="shead"><div class="sic"><Shield :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setGw') }}</div><div class="ss">{{ $t('setGwSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefPolicy') }}</div><div class="rd">{{ $t('setDefPolicyD') }}</div></div><div class="w180"><VSelect v-model="policy" :options="policyOpts" /></div></div>
-        <div class="srow"><div class="grow"><div class="rt">{{ $t('setStrict') }}</div><div class="rd">{{ $t('setStrictD') }}</div></div><VSwitch :model-value="strict" @update:model-value="toggleStrict" /></div>
+        <!-- 无 WHERE 的 DELETE / UPDATE 按分层开关(迁移 0030),开关在【环境分层】页 —— 
+             判定的另外两层也在那套按分层的规则里,不该有第二个能改同一件事的地方。 -->
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setStrict') }}</div><div class="rd">{{ $t('setStrictD') }}</div></div><RouterLink class="srlink" to="/env-tiers">{{ $t('pStrictGo') }}</RouterLink></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setTimeout') }}</div><div class="rd">{{ $t('setTimeoutD') }}</div></div><div class="w160"><input v-model.number="execTimeout" type="number" min="1" max="3600" class="lkin" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setScriptPath') }}</div><div class="rd">{{ $t('setScriptPathD') }}</div></div><input v-model="scriptPath" class="pathinput" :placeholder="$t('setScriptPathPlaceholder')" /></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportPath') }}</div><div class="rd">{{ $t('setExportPathD') }}</div></div><input v-model="exportPath" class="pathinput" :placeholder="$t('setExportPathPlaceholder')" /></div>
@@ -375,6 +363,8 @@ async function save() {
 .sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
 .st { font: 600 14px var(--font-display); color: var(--text-strong); }
 .ss { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
+.srlink { flex-shrink: 0; font: 600 12px var(--font-body); color: var(--accent-text); text-decoration: none; white-space: nowrap; }
+.srlink:hover { text-decoration: underline; }
 .srow { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-bottom: 1px solid var(--border-subtle); }
 .larkcfg { padding: 6px 20px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 10px; }
 .lkrow { display: flex; align-items: center; gap: 12px; }

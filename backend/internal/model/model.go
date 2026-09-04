@@ -41,6 +41,20 @@ type EnvTier struct {
 	RequireMFA      bool `gorm:"not null;default:false" json:"requireMfa"`
 	DangerBanner    bool `gorm:"not null;default:false" json:"dangerBanner"`
 	CountsInPending bool `gorm:"not null;default:false" json:"countsInPending"`
+	// StrictNoWhere gates a DELETE / UPDATE carrying no WHERE — the third
+	// judgement layer, after the capability matrix and the high-risk dictionary.
+	//
+	// It lives HERE, on the tier, because the other two layers do. It used to be
+	// one process-wide flag, which made it the only layer an estate could not aim:
+	// dev deliberately sets its whole dictionary to `off` so a developer can empty
+	// a scratch table, yet strict mode still graded that DELETE high and demanded
+	// an approval, and the only way to stop it was to switch the layer off for
+	// PROD as well.
+	// The column name is pinned rather than inflected: GORM turns StrictNoWhere
+	// into `strict_no_where`, while migration 0030 (the authoritative schema on
+	// MySQL) adds `strict_nowhere`. Left to the inflector the two schema paths
+	// disagree, and the MySQL side then reads a column GORM never writes.
+	StrictNoWhere bool `gorm:"column:strict_nowhere;not null;default:true" json:"strictNoWhere"`
 	// ScanBaseline marks the tier whose dictionary ScanScript judges uploaded
 	// scripts against. Exactly one tier holds it: with none, matchCommand finds
 	// no rows and every script scans clean with no error at all.

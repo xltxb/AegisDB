@@ -34,14 +34,16 @@ func TestStrictMode_NoWhereDeleteIntercepted(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	devConn := app.connIDByEnv(token, "dev")
 
-	// Baseline (strict off): a bare DELETE on DEV is allowed.
+	// Baseline: DEV seeds the no-WHERE gate OFF, so a bare DELETE runs there.
+	app.tierStrict(token, "dev", false)
 	if before := app.riskCheck(token, devConn, "DELETE FROM orders"); before.RequiresApproval {
-		t.Fatalf("precondition: bare DELETE on DEV should be allowed when strict is off, got %q", before.Action)
+		t.Fatalf("precondition: bare DELETE on DEV should be allowed with the gate off, got %q", before.Action)
 	}
 
-	// Flip strict mode on via the settings endpoint (hot, no restart).
-	r := app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"strictMode": true})
-	eq(t, r.Code, 0, "enable strict mode response code")
+	// Switch the gate on for DEV. It is a per-tier flag now, not the process-wide
+	// setting this test used to flip: that switch could only be moved for every
+	// environment at once, which is what migration 0030 exists to undo.
+	app.tierStrict(token, "dev", true)
 
 	noWhere := app.riskCheck(token, devConn, "DELETE FROM orders")
 	if !noWhere.RequiresApproval {

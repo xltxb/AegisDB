@@ -95,6 +95,7 @@
   lv_high: '拦截', lv_mid: '审批', lv_off: '放行',
   statBlock: '拦截类规则', statAlert: '仅告警规则', statHits: '本月命中拦截', statCover: '策略覆盖率',
   pHigh: 'PROD 高危命令拦截', pStrict: '无 WHERE 的 DELETE / UPDATE', pAppr: '需审批命令',
+  actOff: '未启用', pStrictWhere: '按环境分层开关,与能力矩阵、高危命令字典同处一套规则', pStrictGo: '去环境分层设置',
   actBlockAppr: '拦截 + 审批', actAppr: '审批', actAlert: '告警', block: '拦截', approve: '审批', allow: '放行',
   // perms
   tabRoleView: '角色视图', tabUserView: '用户视图', rolesTier: '角色 · 分层',
@@ -173,7 +174,7 @@
   urNeedOne: '至少保留一个角色', urSaved: '✓ 角色已更新', urFailed: '保存失败',
   // settings
   setGw: '网关策略', setGwSub: '全局命令代理与拦截策略', setDefPolicy: '默认网关策略', setDefPolicyD: '新接入实例的默认策略',
-  setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断(单位秒,1–3600)',
+  setStrict: '严格模式', setStrictD: '拦截无 WHERE 的 DELETE / UPDATE —— 已改为按环境分层开关', setTimeout: '命令执行超时', setTimeoutD: '超时自动中断(单位秒,1–3600)',
   setAppr: '审批', setApprSub: '审批流转与超时策略', setApprTimeout: '审批超时处理', setApprTimeoutD: '超时未审批的处理方式',
   setDefApprovers: '默认审批人', setDefApproversD: "审批链 = 「DBA 负责人」角色成员(无则回落管理员),在权限页管理", setApproversEmpty: '未设置审批人', setApproversManage: '前往权限管理', setEscalate: '升级到负责人', setEscalateD: '组长超时后升级终审', setSelfApprove: '允许自审', setSelfApproveD: '允许发起人审批自己的单子(默认关,关闭时强制双人制)',
   setSec: '会话与安全', setSecSub: '登录会话与访问控制', setTtl: '会话有效期', setTtlD: '超过后需重新登录',
@@ -318,6 +319,7 @@
   etEnvTitle: '环境 · 实例分组', etEnvSub: '实例按它归属。环境本身不持有任何规则,规则来自它绑定的分层标签。',
   etNewTier: '新建分层标签', etNewEnv: '新建环境',
   etColTier: '分层标签', etColMfa: '强制 MFA', etColBanner: '终端红色警告', etColPending: '计入待审批',
+  etColStrict: '无 WHERE 拦截', etColStrictHint: '拦截这一分层上不带 WHERE 的 DELETE / UPDATE。开发分层默认关闭 —— 清空一张临时表是日常,不是事故。',
   etColBaseline: '脚本扫描基准', etColBound: '已绑定环境', etColEnv: '环境', etColTierBind: '绑定分层标签', etColInsts: '实例数',
   etNoEnv: '无', etDelete: '删除',
   etBaselineOn: '当前基准', etBaselineSet: '设为基准', etBaselineHeld: '脚本扫描按该标签的命令字典判定',

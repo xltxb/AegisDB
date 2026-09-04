@@ -732,7 +732,7 @@ func (h *Handler) GetSettings(c *gin.Context) {
 		wh.Secret = "" // GetWebhook returns a fresh row; never expose the secret
 	}
 	resp.OK(c, gin.H{
-		"settings": all, "webhook": wh, "strictMode": h.Svc.StrictMode.Load(),
+		"settings": all, "webhook": wh,
 		"secretsSet": secretsSet, "webhookHasSecret": webhookHasSecret,
 	})
 }
@@ -744,10 +744,10 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		return
 	}
 	for k, v := range body {
+		// "无 WHERE 的 DELETE / UPDATE" 不再是这里的全局开关,它按分层存在 tbl_env_tier
+		// 上(迁移 0030)。旧客户端可能还在发这个键,静默丢弃 —— 若把它写进 tbl_setting,
+		// 界面上会出现一个看着像开关、其实什么也不控制的东西。
 		if k == "strictMode" {
-			if b, ok := v.(bool); ok {
-				h.Svc.SetStrict(b)
-			}
 			continue
 		}
 		// A secret key with an empty value means "keep the existing secret" — the

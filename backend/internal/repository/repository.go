@@ -613,9 +613,21 @@ func (r *Repo) CreateEnvTierFrom(t *model.EnvTier, templateCode string) error {
 		if err := tx.First(&tmpl, "code = ?", templateCode).Error; err != nil {
 			return err
 		}
+		// The intended gate value has to be read BEFORE the insert. GORM omits a
+		// field that is both zero-valued and `default`-tagged, then writes the
+		// applied default back into the struct — so a tier created with the
+		// no-WHERE gate switched OFF is inserted without the column, the database
+		// default puts it back ON, and t itself now says ON too. The switch looked
+		// saved and was not. Capture, insert, then name the column in an UPDATE.
+		want := t.StrictNoWhere
 		if err := tx.Create(t).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&model.EnvTier{}).Where("code = ?", t.Code).
+			Update("strict_nowhere", want).Error; err != nil {
+			return err
+		}
+		t.StrictNoWhere = want
 
 		var caps []model.RoleCapability
 		if err := tx.Where("tier_code = ?", templateCode).Find(&caps).Error; err != nil {
@@ -736,6 +748,23 @@ func (r *Repo) RiskCommands() ([]model.RiskCommand, error) {
 		return nil, err
 	}
 	return rc, nil
+}
+
+// StrictNoWhere implements gateway.Store: does this tier block a DELETE /
+// UPDATE with no WHERE?
+//
+// A tier that is not there is NOT "no rule, so allowed". The other two layers
+// can read a missing row as allow because a missing row means nobody wrote a
+// restriction; here the row IS the tier, and its absence means the caller handed
+// us a code that does not name anything. That is the same unresolvable-tier
+// situation gateway.Unavailable exists for, so it comes back as an error and the
+// engine refuses (ED3).
+func (r *Repo) StrictNoWhere(tier string) (bool, error) {
+	var t model.EnvTier
+	if err := r.db.Select("strict_nowhere").First(&t, "code = ?", tier).Error; err != nil {
+		return false, err
+	}
+	return t.StrictNoWhere, nil
 }
 
 // RiskCommandsGrouped returns command -> TIER -> level, preserving insertion order of commands.

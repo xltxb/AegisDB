@@ -63,7 +63,11 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	// 历史审批单的执行时刻:不回填的话,旧行为下已经跑过的命令会重新变成"可执行"。
 	// 两条 schema 路径都要挂 —— 生产走 SQL 迁移,dev/测试走 AutoMigrate,漏掉任何
 	// 一条,那条路上的库就带着一批可以被再跑一次的历史单。
-	return backfillApprovalExecuted(db)
+	if err := backfillApprovalExecuted(db); err != nil {
+		return err
+	}
+	// 把退役的全局严格模式折进各分层。只有"显式关掉"的部署需要写库,见该函数。
+	return backfillStrictNoWhere(db, cfg.Gateway.StrictMode)
 }
 
 // autoMigrate creates/updates every table from the GORM models (dev/sqlite).

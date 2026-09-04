@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
-	"sync/atomic"
 
 	"velagateway/internal/model"
 )
@@ -37,21 +36,20 @@ type Store interface {
 	// RiskCommands returns the full high-risk dictionary (all tiers). An error
 	// means the dictionary is unavailable, not that it is empty.
 	RiskCommands() ([]model.RiskCommand, error)
+	// StrictNoWhere reports whether TIER blocks a DELETE / UPDATE carrying no
+	// WHERE. An error means the answer is UNKNOWN — like the other two layers,
+	// it must not be read as "not blocked" (ED3).
+	StrictNoWhere(tier string) (bool, error)
 }
 
-// RiskEngine evaluates commands against the three layers + strict mode.
+// RiskEngine evaluates commands against the three layers.
 type RiskEngine struct {
-	store  Store
-	strict atomic.Bool // toggled at runtime from the settings API; read on every eval
+	store Store
 }
 
-func NewRiskEngine(store Store, strict bool) *RiskEngine {
-	e := &RiskEngine{store: store}
-	e.strict.Store(strict)
-	return e
+func NewRiskEngine(store Store) *RiskEngine {
+	return &RiskEngine{store: store}
 }
-
-func (e *RiskEngine) SetStrict(v bool) { e.strict.Store(v) }
 
 var verbRe = regexp.MustCompile(`(?i)^\s*([a-z_]+)`)
 
@@ -536,10 +534,18 @@ func (e *RiskEngine) ScanStatement(tier, sql string) (string, string, bool) {
 		verb = ParseVerb(sql)
 	}
 	noWhere := NoWhere(sql)
+	// The baseline tier's own setting governs the scan, exactly as its dictionary
+	// does. An unreadable flag is treated as ON: the scan already reports a
+	// statement high when the dictionary cannot be read, and clearing one here
+	// would be the same silent downgrade in a different layer (ED3).
+	strict, serr := e.store.StrictNoWhere(tier)
+	if serr != nil {
+		strict = true
+	}
 	switch {
 	case lvl == model.RiskHigh:
 		return verb, "high", noWhere
-	case e.strict.Load() && noWhere:
+	case strict && noWhere:
 		return verb, "high", noWhere
 	case lvl == model.RiskMid:
 		return verb, "mid", noWhere
@@ -696,7 +702,14 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 		verb = matched
 	}
 	rule := ""
-	if e.strict.Load() && d.UnscopedMutation(sql) {
+	// Layer ③, keyed by the same tier as the two layers above it. A tier that
+	// switches this off is saying "a full-table write is ordinary here" — which is
+	// what dev means by setting its whole dictionary to `off`.
+	strict, serr := e.store.StrictNoWhere(tier)
+	if serr != nil {
+		return unavailableVerdict(verb, serr) // gate unreadable → refuse, never wave through (ED3)
+	}
+	if strict && d.UnscopedMutation(sql) {
 		lvl = model.RiskHigh
 		rule = "严格模式 · 无 WHERE 的 DELETE / UPDATE"
 	}
