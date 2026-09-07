@@ -79,3 +79,42 @@ test('Ctrl+C abandons the rest of the pasted batch', () => {
   editor.resume()
   expect(submitted).toEqual(['SELECT 1;'])
 })
+
+// 多行语句的历史记录。两件事一起坏过:
+//
+//  1. 每敲一次回车就记一条,于是一条六行的语句在历史里留下六个越来越长的前缀,
+//     上翻要在半截 SQL 里一路翻过去。
+//  2. 记进去时把换行压成空格,而换行是 `--` 注释的终止符 —— 注释于是吃掉了它后面
+//     的整条语句。首次执行是好的(那时换行还在),上翻再执行就只剩半截,Oracle 报
+//     ORA-00936: missing expression。
+test('a multi-line statement is remembered once, and stays executable', () => {
+  const submitted: string[] = []
+  let handler: (d: string) => void = () => {}
+  const term = { cols: 100, onData(cb: (d: string) => void) { handler = cb }, write() {}, clear() {} }
+  const editor = new LineEditor(term as any, {
+    prompt: () => '> ', promptLen: () => 2, contPrompt: () => '. ', contPromptLen: () => 2,
+    onSubmit: (s: string) => submitted.push(s),
+  })
+  editor.start()
+
+  for (const l of [
+    'SELECT u.username FROM dba_users u',
+    'WHERE u.username NOT IN (',
+    '  -- 系统自带/官方工具',
+    "  'SYS', 'SYSTEM'",
+    ')',
+    'ORDER BY u.username;',
+  ]) handler(l + '\r')
+  editor.resume()
+
+  // 六行只留下一条历史,不是六个前缀。
+  expect((editor as any).history).toHaveLength(1)
+
+  // 上翻并回车:送出去的必须还是一条完整可执行的语句。
+  handler('\x1b[A')
+  handler('\r')
+  const replayed = submitted[1]
+  expect(replayed).toContain("'SYS', 'SYSTEM'")
+  expect(replayed).toContain('ORDER BY u.username;')
+  expect(replayed).not.toContain('--')
+})

@@ -10,6 +10,7 @@
 
 import type { Terminal } from '@xterm/xterm'
 import { dispWidth, isWideChar } from './textWidth'
+import { flattenStatement } from './sqlFlatten'
 
 export interface LineEditorOpts {
   /** ANSI-coloured primary prompt, e.g. `orders ❯ ` */
@@ -228,16 +229,20 @@ export class LineEditor {
       this.term.write(this.opts.prompt())
       return
     }
-    // remember non-empty statements for history (collapse multi-line to spaces)
-    if (line.trim()) {
-      const entry = full.replace(/\s*\n\s*/g, ' ')
-      if (this.history[this.history.length - 1] !== entry) this.history.push(entry)
-    }
-
     // A statement completes on ';', a leading backslash meta-command, or a MySQL
     // display terminator \g (horizontal) / \G (vertical).
     const complete = full.startsWith('\\') || full.endsWith(';') || /\\[gG]$/.test(full)
     if (complete) {
+      // 只有**完整的语句**进历史。从前每敲一次回车就记一条,于是一条六行的语句会
+      // 在历史里留下六个越来越长的前缀,上翻时要在半截 SQL 里一路翻过去才找得到
+      // 真正执行过的那条。
+      //
+      // 压平必须是语义安全的:换行是 `--` 注释的终止符,直接换成空格会让注释吃掉
+      // 它后面的一切 —— 首次执行没事(那时换行还在),上翻再执行就变成半截语句。
+      // 见 flattenStatement。
+      const entry = flattenStatement(full)
+      if (entry && this.history[this.history.length - 1] !== entry) this.history.push(entry)
+
       const stmt = this.pending
       this.busy = true
       this.reset()
