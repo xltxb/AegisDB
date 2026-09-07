@@ -55,9 +55,14 @@ type EnvTier struct {
 	// MySQL) adds `strict_nowhere`. Left to the inflector the two schema paths
 	// disagree, and the MySQL side then reads a column GORM never writes.
 	StrictNoWhere bool `gorm:"column:strict_nowhere;not null;default:true" json:"strictNoWhere"`
-	// ScanBaseline marks the tier whose dictionary ScanScript judges uploaded
-	// scripts against. Exactly one tier holds it: with none, matchCommand finds
-	// no rows and every script scans clean with no error at all.
+	// ScanBaseline marks the REFERENCE tier — the strictest one, held by exactly
+	// one tier. Two things read it: a newly added dictionary command prefills at
+	// the strictest level here (defaultRiskLevel), and the tier cannot be deleted.
+	//
+	// It no longer governs script scanning. That used to be its whole job, and it
+	// meant a script bound for UAT was graded by PROD's dictionary — the report
+	// described a run that was never going to happen. Scanning now uses the target
+	// instance's own tier (see Services.ScanScript).
 	ScanBaseline bool `gorm:"not null;default:false" json:"scanBaseline"`
 
 	// Derived connection defaults, previously the hardcoded connEnvMeta map.

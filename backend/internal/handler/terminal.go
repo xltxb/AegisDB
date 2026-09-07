@@ -316,12 +316,17 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 	// Accept either multipart (.sql file) or JSON { content, filename }.
 	filename := "script.sql"
 	var content string
+	// 扫描按目标实例的分层判定,所以两条分支都必须带上它。multipart 上传里它是一个
+	// 表单字段;取不到就是 0,GetConnection 随即失败 —— 这正是要的方向:宁可拒绝扫描,
+	// 也不要退回到某个固定分层去判,那会让报告说的和将要发生的事对不上。
+	var connID int64
 	if file, err := c.FormFile("file"); err == nil {
 		body, ok := readConsoleScriptFile(c, file)
 		if !ok {
 			return // 拒绝已经写进响应了
 		}
 		filename, content = file.Filename, body
+		connID, _ = strconv.ParseInt(c.PostForm("connectionId"), 10, 64)
 	} else {
 		var req dto.ScriptScanReq
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -329,6 +334,7 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 			return
 		}
 		content = req.Content
+		connID = req.ConnectionID
 		if req.Filename != "" {
 			filename = req.Filename
 		}
@@ -344,11 +350,11 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 			content, filename = c2, name
 		}
 	}
-	scan, err := h.Svc.ScanScript(filename, content)
+	// 按**目标实例的分层**扫描 —— 报告要描述这个脚本在这台实例上会怎样。
+	scan, err := h.Svc.ScanScript(connID, filename, content)
 	if err != nil {
-		// No scan baseline tier: the scan cannot judge anything, and an empty
-		// result would render as a clean bill of health for the script.
-		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		// 目标实例或它的分层解析不出来:扫描无从判起,而空结果会被渲染成"脚本干净"。
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:目标实例的分层标签解析失败")
 		return
 	}
 	resp.OK(c, scan)
@@ -411,11 +417,10 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		// file, never the whole body (see SubmitScriptForApproval).
 		req.UploadID = up.ID
 	}
-	scan, err := h.Svc.ScanScript(req.Filename, req.Content)
+	scan, err := h.Svc.ScanScript(req.ConnectionID, req.Filename, req.Content)
 	if err != nil {
-		// Refuse the whole execution: without a baseline every statement would
-		// scan as safe and the script would run unreviewed.
-		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:未配置扫描基准分层标签")
+		// 整个执行都拒掉:分层判不出来时每条语句都会扫成安全,脚本就会不经复核直接跑。
+		resp.Fail(c, resp.CodeInternalError, "脚本扫描不可用:目标实例的分层标签解析失败")
 		return
 	}
 	if scan.HasRisky {

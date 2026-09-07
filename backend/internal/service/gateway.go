@@ -273,9 +273,9 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return nil, err
 	}
-	scan, err := s.ScanScript(filename, content)
+	scan, err := s.scanScriptFor(conn, filename, content)
 	if err != nil {
-		return nil, err // no scan baseline — see ScanScript; refusing beats "all clear"
+		return nil, err // 分层解析不出来 —— 见 ScanScript,拒绝好过"一切正常"
 	}
 	risk := model.RiskMid
 	if scan.High > 0 {
@@ -705,29 +705,40 @@ func sanitizeFilename(name string) string {
 	return strings.TrimSpace(name)
 }
 
-// ScanScript scans a .sql script statement-by-statement (dictionary + strict),
-// mirroring the prototype scanner.
+// ScanScript scans a .sql script statement-by-statement (dictionary + strict).
 //
-// A script is scanned against the dictionary of the tier holding ScanBaseline —
-// previously always PROD, now whichever tier the operator designated. It is
-// deliberately one fixed lens rather than the target connection's own tier: the
-// scan happens on upload, before a target is necessarily chosen, and grading a
-// script leniently because it is bound for dev would let the same file move to
-// prod already marked clean.
+// 判定用的是**目标实例所属分层**的字典,而不是某个固定的基准分层。
 //
-// Returns an error when no baseline tier can be read, and the caller MUST
-// surface it. Scanning against an empty tier code matches no dictionary rows and
-// reports every statement — DROP TABLE included — as safe, with no failure
-// anywhere to notice (ED3, same stance as unavailableVerdict).
-func (s *Services) ScanScript(filename, content string) (*dto.ScriptScanResp, error) {
-	base, err := s.Repo.ScanBaselineTier()
+// 从前是后者(哪个分层挂着 ScanBaseline 就用哪个,发行默认是 prod),理由是"扫描发生
+// 在上传时,目标未必已经选定;按 dev 宽松地判,同一个文件转头就能带着'已扫干净'去
+// prod"。但实际的接口里,扫描和执行拿的是同一个 connectionId —— 目标一直是知道的,
+// 而执行时每条语句本来就按目标分层重判一次(见 ExecuteSafeScript → execJudged)。
+// 于是那道固定镜头没有拦住任何东西,只是让报告说的和将要发生的事对不上:一个只准备
+// 在 UAT 跑的菜单初始化脚本,被按 prod 的尺子判成高危 P1。
+//
+// 扫描报告的职责是描述"这个脚本在这台实例上会怎样",所以它必须和执行用同一把尺子。
+//
+// 解析不出目标分层就报错,调用方必须把错误透出去:拿空分层去扫,字典一行都匹配不到,
+// 每条语句(包括 DROP TABLE)都会报安全,而且没有任何地方会失败(ED3,与
+// unavailableVerdict 同一立场)。
+func (s *Services) ScanScript(connID int64, filename, content string) (*dto.ScriptScanResp, error) {
+	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
-		return nil, fmt.Errorf("no scan baseline tier: %w", err)
+		return nil, ErrNotFound
+	}
+	return s.scanScriptFor(conn, filename, content)
+}
+
+// scanScriptFor is ScanScript for callers that already hold the connection.
+func (s *Services) scanScriptFor(conn *model.Connection, filename, content string) (*dto.ScriptScanResp, error) {
+	tier, err := s.tierCodeOf(conn)
+	if err != nil {
+		return nil, fmt.Errorf("unresolvable tier for %s: %w", conn.Name, err)
 	}
 	stmts := splitStatements(content)
 	out := &dto.ScriptScanResp{Filename: filename, Statements: []dto.ScannedStmt{}}
 	for i, sql := range stmts {
-		cmd, risk, noWhere := s.Engine.ScanStatement(base.Code, sql)
+		cmd, risk, noWhere := s.Engine.ScanStatement(tier, sql)
 		out.Statements = append(out.Statements, dto.ScannedStmt{
 			Index: i + 1, SQL: sql, Command: cmd, Risk: risk, NoWhere: noWhere,
 		})
