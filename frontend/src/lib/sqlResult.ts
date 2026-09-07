@@ -4,6 +4,8 @@
 // so we synthesise plausible demo rows here purely for presentation. Columns are
 // parsed from the SQL when explicit; values are heuristic by column name.
 
+import { dispWidth, isWideChar } from './textWidth'
+
 // ---- ANSI helpers -------------------------------------------------------
 export const ANSI = {
   reset: '\x1b[0m',
@@ -143,27 +145,6 @@ export function buildTable(columns: string[], rows: string[][]): SynthTable {
 
 // ---- rendering ----------------------------------------------------------
 
-// isWideChar reports whether a code point occupies two terminal cells (CJK, kana,
-// fullwidth forms), so alignment holds for mixed ASCII/CJK data.
-function isWideChar(cp: number): boolean {
-  return (
-    (cp >= 0x1100 && cp <= 0x115f) ||
-    (cp >= 0x2e80 && cp <= 0xa4cf) ||
-    (cp >= 0xac00 && cp <= 0xd7a3) ||
-    (cp >= 0xf900 && cp <= 0xfaff) ||
-    (cp >= 0xfe30 && cp <= 0xfe4f) ||
-    (cp >= 0xff00 && cp <= 0xff60) ||
-    (cp >= 0xffe0 && cp <= 0xffe6) ||
-    (cp >= 0x1f300 && cp <= 0x1faff) ||
-    (cp >= 0x20000 && cp <= 0x3fffd)
-  )
-}
-// dispWidth is the on-screen column count of a string (CJK = 2).
-function dispWidth(s: string): number {
-  let w = 0
-  for (const ch of s) w += isWideChar(ch.codePointAt(0) || 0) ? 2 : 1
-  return w
-}
 // truncateDisp cuts a string to a max display width, appending … when clipped.
 function truncateDisp(s: string, max: number): string {
   if (dispWidth(s) <= max) return s

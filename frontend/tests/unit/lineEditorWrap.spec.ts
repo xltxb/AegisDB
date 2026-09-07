@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 import { LineEditor } from '../../src/lib/lineEditor'
+import { isWideChar } from '../../src/lib/textWidth'
 
 // A minimal terminal screen model: enough of xterm's behaviour to tell whether a
 // redraw actually REPLACED what it drew before, or merely drew again below it.
@@ -52,8 +53,12 @@ class Screen {
       if (ch === '\r') { this.col = 0; continue }
       if (ch === '\n') { this.row++; this.col = 0; continue }
       if (ch === '\b') { this.col = Math.max(0, this.col - 1); continue } // move left, erase nothing
+      // 宽字符占两格,和真实终端一致。模型若按一格算,就永远复现不出"按字符数
+      // 算列宽"这类错位 —— 测试会跟着被测代码一起错。
+      const w = isWideChar(ch.codePointAt(0) || 0) ? 2 : 1
       this.cell(this.row, this.col)[this.col] = ch
-      this.col++
+      if (w === 2) this.cell(this.row, this.col + 1)[this.col + 1] = ''
+      this.col += w
       if (this.col >= this.cols) { this.row++; this.col = 0 }
     }
   }
@@ -206,4 +211,38 @@ test('appending a character does not repaint the whole line', () => {
 
   // …and the screen is still right.
   expect(screen.text()).toBe('> ' + long + 'X')
+})
+
+// 上翻历史命令时输入行错乱:一条 40 个字符的中文语句占 58 列,而重绘按字符个数算
+// 列宽,于是它以为这行没折行,重绘时少上移一行 —— 旧内容的第一行连同提示符一起留
+// 在屏幕上,看起来像凭空多出一个命令行。
+//
+// 换成显示宽度就对了。这条用例锁住的是"换掉一行更宽的内容之后,屏幕上只剩一份"。
+test('recalling a wrapped CJK command then a shorter one leaves one line', () => {
+  const { screen, editor, type } = editorOn(40)
+  const cjk = "SELECT '华东仓补货订单明细汇总' AS 名称;"
+  const short = 'SELECT 1;'
+
+  type(cjk + '\r'); editor.resume()
+  type(short + '\r'); editor.resume()
+
+  type('\x1b[A') // 上翻:short
+  type('\x1b[A') // 再上翻:中文那条(它会折行)
+  type('\x1b[B') // 下翻回 short
+
+  // 已提交的命令会留在屏幕上,那是正常回显,所以不能按提示符个数判断。
+  // 真正的判据是那条中文命令出现了几次:回显一次是对的,再多出来的就是没被擦掉的
+  // 残留 —— 修复前它正好多出一行(折行的第一行连着提示符一起留下)。
+  const cjkLines = screen.lines().filter((l) => l.includes('华东仓补货'))
+  expect(cjkLines.length).toBe(1)
+  // 当前输入行就是 short 本身,没有前一条的尾巴。
+  expect(screen.lines().pop()).toBe('> ' + short)
+})
+
+// 同一根因的另一面:宽字符的退格要退两格、擦两格,只擦一格会留下半个汉字。
+test('backspacing a wide character clears both of its cells', () => {
+  const { screen, type } = editorOn(40)
+  type('ab中')
+  type('\x7f')
+  expect(screen.text()).toBe('> ab')
 })

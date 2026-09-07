@@ -9,6 +9,7 @@
 // until the caller invokes resume(). Ctrl+C always works.
 
 import type { Terminal } from '@xterm/xterm'
+import { dispWidth, isWideChar } from './textWidth'
 
 export interface LineEditorOpts {
   /** ANSI-coloured primary prompt, e.g. `orders ❯ ` */
@@ -159,7 +160,10 @@ export class LineEditor {
     this.term.write(this.curPrompt() + (this.opts.highlight?.(this.buf) ?? this.buf))
 
     const promptLen = this.curPromptLen()
-    const end = promptLen + this.buf.length
+    // 列数按**显示宽度**算,不是字符个数。一条 40 个字符的中文语句占 58 列;
+    // 按个数算会把折行算少,重绘时就少上移一行,旧内容的第一行连同提示符一起留在
+    // 屏幕上 —— 上翻历史命令时最容易撞见,因为那一下整行内容都被换掉了。
+    const end = promptLen + dispWidth(this.buf)
     // A buffer ending exactly at the right edge leaves the terminal in "pending
     // wrap": the cursor is still on the last full row rather than the next one,
     // which would make the row arithmetic below off by one. Emit one space to
@@ -167,7 +171,7 @@ export class LineEditor {
     // next redraw.
     if (end > 0 && end % cols === 0) this.term.write(' ')
 
-    const target = promptLen + this.cur
+    const target = promptLen + dispWidth(this.buf.slice(0, this.cur))
     const endRow = Math.floor(end / cols)
     const targetRow = Math.floor(target / cols)
     const targetCol = target % cols
@@ -179,11 +183,11 @@ export class LineEditor {
 
   private insert(s: string) {
     const cols = this.cols()
-    const before = this.curPromptLen() + this.buf.length
+    const before = this.curPromptLen() + dispWidth(this.buf)
     const appending = this.cur === this.buf.length
     this.buf = this.buf.slice(0, this.cur) + s + this.buf.slice(this.cur)
     this.cur += s.length
-    const after = this.curPromptLen() + this.buf.length
+    const after = this.curPromptLen() + dispWidth(this.buf)
 
     // Typing at the end of a line, without crossing a row boundary, needs no
     // repaint at all — the characters can simply be emitted where the cursor
@@ -317,14 +321,20 @@ export class LineEditor {
   private backspace() {
     if (this.cur <= 0) return
     const cols = this.cols()
-    const before = this.curPromptLen() + this.buf.length
+    const before = this.curPromptLen() + dispWidth(this.buf)
+    const removed = this.buf[this.cur - 1] ?? ''
     const atEnd = this.cur === this.buf.length
     this.buf = this.buf.slice(0, this.cur - 1) + this.buf.slice(this.cur)
     this.cur--
     // Same reasoning as insert: deleting the last character of a line that does
     // not sit on a row boundary is "back up, blank it, back up" — no repaint.
-    if (atEnd && before % cols !== 0) {
-      this.term.write('\b \b')
+    //
+    // 宽字符占两格,要退两格、擦两格。只擦一格会留下半个汉字的残影,而那半格之后
+    // 还会被当成一格参与计算,错位一路带下去。删掉它之后如果正好落在行边界上,
+    // 这条快捷路径就不成立了(光标要跨行回去),交给 redraw。
+    const cells = isWideChar(removed.codePointAt(0) || 0) ? 2 : 1
+    if (atEnd && before % cols !== 0 && (before - cells) % cols !== 0) {
+      this.term.write('\b'.repeat(cells) + ' '.repeat(cells) + '\b'.repeat(cells))
       return
     }
     this.redraw()
