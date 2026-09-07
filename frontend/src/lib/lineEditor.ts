@@ -214,6 +214,11 @@ export class LineEditor {
     const line = this.buf
     this.pending += (this.pending ? '\n' : '') + line
     this.term.write('\r\n')
+    // 这一行结束了,光标已经在全新的一行上,输入块不再有任何一行在光标上方。
+    // 不清零的话,下一次 redraw 会带着**上一条**语句的行数往上移,然后 \x1b[0J
+    // 从那里往下擦 —— 擦掉的是上一条命令的回显和它的结果。只有上一条折过行时
+    // 才会发作,所以长语句、多行语句、含中文的语句中招,短英文语句不会。
+    this.renderedRow = 0
     const full = this.pending.trim()
 
     if (full === '') {

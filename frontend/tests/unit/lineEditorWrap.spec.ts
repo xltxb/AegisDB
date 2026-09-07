@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 
 import { LineEditor } from '../../src/lib/lineEditor'
 import { isWideChar } from '../../src/lib/textWidth'
+import { highlightSqlAnsi } from '../../src/lib/sqlHighlight'
 
 // A minimal terminal screen model: enough of xterm's behaviour to tell whether a
 // redraw actually REPLACED what it drew before, or merely drew again below it.
@@ -88,6 +89,9 @@ function editorOn(cols: number) {
     contPrompt: () => '. ',
     contPromptLen: () => 2,
     onSubmit: () => {},
+    // 与生产一致:终端是接了语法高亮的。高亮会让更多按键走 redraw 而不是快捷路径,
+    // 而这类缺陷正是在 redraw 上暴露的,不接就测不到。
+    highlight: highlightSqlAnsi,
   })
   editor.start()
   return { screen, editor, type: (d: string) => handler(d) }
@@ -245,4 +249,29 @@ test('backspacing a wide character clears both of its cells', () => {
   type('ab中')
   type('\x7f')
   expect(screen.text()).toBe('> ab')
+})
+
+// 提交一条折行的语句之后,它的回显被下一行输入吃掉。
+//
+// renderedRow 记的是"上一次渲染时光标停在输入块的第几行",redraw 靠它先上移再擦。
+// 但提交语句时光标已经通过 \r\n 走到全新的一行,输入块结束了 —— 这个数却没有清零。
+// 于是下一次 redraw 会带着上一条命令的行数往上移,擦掉的是**别人的**内容:上一条
+// 命令的回显、它的结果,都在那几行里。
+//
+// 触发条件是"上一条输入折过行",所以长语句、多行语句、含中文的语句都会中招,而短的
+// 英文语句不会 —— 正是它一直没被发现的原因。上翻历史命令时最明显,因为召回必然重绘。
+test('submitting a wrapped line does not let the next redraw eat its echo', () => {
+  const { screen, editor, type } = editorOn(40)
+  const long = 'SELECT id, name, email, status, amount FROM orders WHERE tenant = 42 AND status IN (1,2,3) ORDER BY id DESC;'
+  expect(long.length + 2).toBeGreaterThan(40 * 2) // 确实折了不止一行
+
+  type(long + '\r')
+  const echoed = screen.lines()
+  editor.resume()
+
+  // 新提示符上随便敲点会触发重绘的东西(带高亮时一个空格就够)。
+  type('SELECT 1;')
+
+  // 上一条命令的回显必须原样还在。
+  for (const l of echoed) expect(screen.lines()).toContain(l)
 })
