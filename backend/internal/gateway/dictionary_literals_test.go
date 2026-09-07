@@ -93,3 +93,27 @@ func TestDictionary_DataSayingExecuteIsNotDynamicSQL(t *testing.T) {
 		t.Errorf("字段值里的 execute 不该开启载荷扫描,实际命中 %q", cmd)
 	}
 }
+
+// 没有任何角色 = 拒绝,不是放行。
+//
+// 从前返回 allow,理由是"这个状态到不了" —— 用户总有一个主角色,接口也拒绝保存空的
+// 角色集。停用账户会收回角色之后,这个状态就到得了了,而 allow 意味着一个被剥光角色
+// 的账户,一旦哪一处状态检查漏掉,就手握全部能力。权限是**从角色来的**,没有角色就
+// 没有来源。
+func TestCapability_NoRolesMeansDeny(t *testing.T) {
+	e := NewRiskEngine(&fakeStore{})
+	for _, cap := range []string{"select", "write", "ddl", "grant"} {
+		lvl, err := e.capabilityLevelUnion(nil, cap, "prod")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if lvl != model.LevelDeny {
+			t.Errorf("空角色集在 %s 上应当拒绝,实际 %q", cap, lvl)
+		}
+	}
+	// 端到端:一个没有角色的用户,连只读查询都不该放行。
+	v := e.EvaluateFor(nil, "", "prod", "SELECT 1")
+	if v.Action != ActionDeny {
+		t.Errorf("没有角色的用户执行 SELECT 应被拒绝,实际 %s/%s", v.Action, v.Rule)
+	}
+}

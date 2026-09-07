@@ -546,6 +546,25 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 			return err
 		}
 	}
+	// 停用即收回角色。
+	//
+	// 停用本身已经被四道状态检查拦住(登录、JWT 中间件、WS 握手、每条命令前复核),
+	// 收回角色是纵深防御:一个停用的账户不该继续以"某某角色的成员"出现在权限视图里,
+	// 也不该在任何一处漏检时还带着能力。
+	//
+	// 同一个请求里若还带着角色改动,以停用为准 —— 结果是没有角色。停用与"给他换个
+	// 角色"是矛盾的意图,而两者之中只有一个是安全的方向。
+	//
+	// 这一步不可逆:原来的角色不再记录在任何地方。重新启用的账户是没有角色的,管理员
+	// 必须重新指派 —— 而在指派之前,它在能力矩阵里处处被拒(见 capabilityLevelUnion
+	// 对空角色集的处理),不是处处放行。
+	if req.Status == "disabled" {
+		if err := s.Repo.ClearUserRoles(id); err != nil {
+			return err
+		}
+		s.auditPatchUser(actor, target, req)
+		return nil
+	}
 	// A full multi-role assignment replaces the membership set and repoints the
 	// primary role to the first id (union permissions follow from the set).
 	if req.RoleIDs != nil {

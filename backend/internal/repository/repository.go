@@ -406,6 +406,26 @@ func (r *Repo) existingRoles(ids []int64) []int64 {
 
 // SetUserRoles replaces a user's role membership set atomically. The first id is
 // also written to tbl_user.role_id as the primary role (drives display/JWT).
+// ClearUserRoles strips every role from a user: the membership rows and the
+// primary role both go, in one transaction.
+//
+// SetUserRoles(id, nil) is NOT the same thing — it deletes the membership rows
+// but leaves tbl_user.role_id standing, so the account keeps the role that
+// actually drives its permissions.
+//
+// role_id is set to 0 rather than NULL: the column is NOT NULL, and
+// EffectiveRoleIDs already skips a zero id, so the account resolves to an empty
+// role set. What an empty set MEANS is decided in gateway.capabilityLevelUnion,
+// and it means deny — see the note there, because it did not always.
+func (r *Repo) ClearUserRoles(userID int64) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("user_id = ?", userID).Delete(&model.RoleMember{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&model.User{}).Where("id = ?", userID).Update("role_id", 0).Error
+	})
+}
+
 func (r *Repo) SetUserRoles(userID int64, roleIDs []int64) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("user_id = ?", userID).Delete(&model.RoleMember{}).Error; err != nil {

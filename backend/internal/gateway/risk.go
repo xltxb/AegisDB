@@ -616,11 +616,20 @@ func (e *RiskEngine) ScanStatement(tier, sql string) (string, string, bool) {
 // capabilityLevelUnion returns the most permissive capability level across the
 // user's roles (allow ≺ approve ≺ deny). No rows / unknown role default to allow
 // via the store, so a single permissive role is enough to grant the capability.
+//
+// NO ROLES AT ALL is the opposite case, and it means DENY.
+//
+// It used to return allow, on the reasoning that the state was unreachable — a
+// user always had a primary role, and the API refuses to save an empty role set.
+// Disabling an account now strips its roles (Repo.ClearUserRoles), so the state
+// is reachable, and "allow" would have meant a stripped account holds every
+// capability the moment anything let it past the status gate. Permission comes
+// FROM a role; with none there is nothing to derive it from.
 func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (string, error) {
 	best := model.LevelDeny
 	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 	if len(roleIDs) == 0 {
-		return model.LevelAllow, nil
+		return model.LevelDeny, nil
 	}
 	for _, id := range roleIDs {
 		lvl, err := e.store.CapabilityLevel(id, cap, tier)

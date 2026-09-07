@@ -20,9 +20,17 @@ import (
 
 // BuildMe assembles the /auth/me payload (user + menus + capabilities).
 func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
-	role, err := s.Repo.GetRole(u.RoleID)
-	if err != nil {
-		return nil, err
+	// 主角色可能压根不存在,而这不是错误。
+	//
+	// 停用账户会收回它的全部角色(见 PatchUser),所以"重新启用之后、管理员重新指派
+	// 之前"是一个合法状态:账户能登录,但没有任何菜单,能力矩阵里处处被拒
+	// (capabilityLevelUnion 对空角色集返回 deny)。
+	//
+	// 从前这里查不到角色就直接返回错误,于是重新启用的账户一登录就是 500 —— 界面上
+	// 看到的是"服务器错误",而不是"这个人还没有角色",管理员无从下手。
+	role := &model.Role{}
+	if r, rerr := s.Repo.GetRole(u.RoleID); rerr == nil && r != nil {
+		role = r
 	}
 	// Permissions compose across every role the user holds (union): menus and the
 	// capability matrix merge (most permissive), and CanApprove is true if any role
