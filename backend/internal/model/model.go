@@ -239,6 +239,14 @@ type Connection struct {
 	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name        string    `gorm:"size:64;uniqueIndex:idx_connection_name;not null" json:"name"`
 	Engine      string    `gorm:"size:32;not null" json:"engine"`
+	// TargetSchema 是本次请求选中的 schema,只活在内存里(gorm:"-",不入库、不出 JSON)。
+	//
+	// 它为 Oracle 而存在。别的引擎里"切库"就是换 Database 字段,而 Oracle 的 Database
+	// 装的是**服务名**,不是 schema —— 覆盖它会连错实例。Oracle 换 schema 的正确做法
+	// 是在会话上 ALTER SESSION SET CURRENT_SCHEMA,所以选中的 owner 得单独带到执行层。
+	//
+	// 见 service.applyTargetDatabase(写入)与 gateway.RealRun(生效)。
+	TargetSchema string `gorm:"-" json:"-"`
 	Host        string    `gorm:"size:128;not null" json:"host"`
 	Port        int       `gorm:"not null" json:"port"`
 	// Env holds an Environment.Code, so it must be as wide as one (32). It was

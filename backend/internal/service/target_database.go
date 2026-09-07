@@ -29,10 +29,16 @@ func applyTargetDatabase(conn *model.Connection, database string) {
 	if database = strings.TrimSpace(database); database == "" {
 		return
 	}
-	// Oracle: the caller's "database" is an owner, and the field it would
-	// overwrite is the service name. Keep what the instance was configured with;
-	// the owner already travels separately as the query scope.
+	// Oracle: the caller's "database" is an owner (schema), and the field it would
+	// overwrite is the service name. Keep what the instance was configured with —
+	// 覆盖它会连到别的实例去。
+	//
+	// 但也不能就这么把它丢掉:树上点一个 schema,本意就是"接下来在这个 schema 里操作"。
+	// 从前这里直接 return,于是那一下只改了界面上的标签,会话里从来没切过,`SELECT *
+	// FROM t` 仍然解析到登录用户自己的 schema。改为把它带到执行层,由 RealRun 在会话上
+	// ALTER SESSION SET CURRENT_SCHEMA —— 那才是 Oracle 换 schema 的做法。
 	if !gateway.TargetDatabaseSwitchable(conn.Engine) {
+		conn.TargetSchema = database
 		return
 	}
 	conn.Database = database

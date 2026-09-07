@@ -283,6 +283,35 @@ func isPgNoSSL(err error) bool {
 // (RealQueryEach) are unbounded — this only applies to the interactive terminal.
 const maxResultRows = 200
 
+// sqlRunner is what RealRun executes through: either the pool (*sql.DB) or one
+// pinned connection (*sql.Conn). Both carry these two methods with identical
+// signatures, which is what lets the Oracle schema switch pin a session without
+// the rest of the function knowing.
+type sqlRunner interface {
+	QueryContext(ctx context.Context, q string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
+}
+
+// oracleTargetSchema returns the schema this execution should run in, or "".
+//
+// 只对 Oracle 生效,并且名字必须是一个规规矩矩的标识符 —— 它要拼进
+// ALTER SESSION SET CURRENT_SCHEMA,不能带引号、分号或空格。校验不过就当没选,
+// 让语句在登录用户自己的 schema 里跑(而不是把一段可疑文本拼进 SQL)。
+func oracleTargetSchema(conn *model.Connection) string {
+	if conn == nil || !IsOracleEngine(conn.Engine) {
+		return ""
+	}
+	s := strings.TrimSpace(conn.TargetSchema)
+	if s == "" || !schemaIdentRe.MatchString(s) {
+		return ""
+	}
+	return s
+}
+
+// schemaIdentRe 比 objectIdentRe 严:不允许点和连字符。这里拼的是一个 schema 名,
+// 不是可能带库名前缀的对象名。
+var schemaIdentRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_$#]*$`)
+
 // RealRun executes sql against the real target instance within the given timeout
 // (0 falls back to 30s). A read returns the actual result set (columns + up to
 // maxResultRows rows, marking Truncated if there are more); a write returns
@@ -298,6 +327,28 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// Oracle 换 schema:必须钉住**同一个物理会话**。
+	//
+	// ALTER SESSION 改的是会话状态,而 db 是连接池 —— 在池上先发 ALTER SESSION 再发
+	// 查询,两条语句可能落在不同的物理连接上,切了等于没切。db.Conn 取一条独占连接,
+	// 两条语句都走它,用完归还(归还前把 CURRENT_SCHEMA 留在那条连接上是无所谓的:
+	// 下一次执行仍会显式设置,不依赖继承来的状态)。
+	//
+	// 与 RealRunAsync 里为 NOTICE 处理器取独占连接是同一个理由。
+	var runner sqlRunner = db
+	if schema := oracleTargetSchema(conn); schema != "" {
+		sc, cerr := db.Conn(ctx)
+		if cerr != nil {
+			return ExecResult{}, cerr
+		}
+		defer sc.Close()
+		if _, aerr := sc.ExecContext(ctx, `ALTER SESSION SET CURRENT_SCHEMA = "`+schema+`"`); aerr != nil {
+			return ExecResult{}, fmt.Errorf("切换 schema 到 %s 失败: %w", schema, aerr)
+		}
+		runner = sc
+	}
+
 	// 客户端命令翻译成等价 SQL:SQL*Plus 的 SHOW/DESC/EXEC、psql 的反斜杠、
 	// mysql 客户端结尾的 \G。它们都不是 SQL —— 是说给客户端听的话,由客户端解释掉,
 	// 从来不会发到服务端。网关走驱动,不翻译就是一个语法错误。
@@ -322,7 +373,7 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 	// 判断语句到底执行了没有,再跑一次就可能是重复执行 —— 对一条 INSERT 来说,
 	// 重复执行比报错严重得多。报错就照实报错。
 	if IsRead(query) || !KnownVerb(ParseVerb(query)) {
-		rows, err := db.QueryContext(ctx, query)
+		rows, err := runner.QueryContext(ctx, query)
 		if err != nil {
 			return ExecResult{}, err
 		}
@@ -371,7 +422,7 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 		return ExecResult{Output: out, Rows: len(data), Columns: cols, Data: data,
 			Truncated: truncated, MaskedColumns: masked}, nil
 	}
-	res, err := db.ExecContext(ctx, query)
+	res, err := runner.ExecContext(ctx, query)
 	if err != nil {
 		return ExecResult{}, err
 	}
@@ -412,8 +463,22 @@ func realQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	// 与 RealRun 同样的理由:Oracle 选了 schema 就得钉住会话再切,否则导出读到的是
+	// 登录用户自己的 schema —— 而终端里看到的是另一个,同一条 SQL 两个结果。
+	var runner sqlRunner = db
+	if schema := oracleTargetSchema(conn); schema != "" {
+		sc, cerr := db.Conn(ctx)
+		if cerr != nil {
+			return cerr
+		}
+		defer sc.Close()
+		if _, aerr := sc.ExecContext(ctx, `ALTER SESSION SET CURRENT_SCHEMA = "`+schema+`"`); aerr != nil {
+			return fmt.Errorf("切换 schema 到 %s 失败: %w", schema, aerr)
+		}
+		runner = sc
+	}
 	err = func() error {
-		rows, err := db.QueryContext(ctx, query)
+		rows, err := runner.QueryContext(ctx, query)
 		if err != nil {
 			return err
 		}
