@@ -45,7 +45,17 @@ function openReleases(p: Project) {
 </script>
 
 <template>
-  <div class="wrap">
+  <div class="scy page">
+    <!-- 页眉沿用其余内容页的同一套写法(eyebrow + sub):这一页原先直接从统计卡开始,
+         没有页眉,也没有页面容器 —— 内容一路顶到窗口边缘,右边第三张统计卡还被裁掉。
+         在一堆都缩进、都带页眉的兄弟页面里,它看着像另一个产品的页面。 -->
+    <div class="head">
+      <div>
+        <div class="eyebrow">PROJECTS</div>
+        <div class="sub">{{ $t('prPageSub', { n: totals.projects }) }}</div>
+      </div>
+    </div>
+
     <div class="stats">
       <div class="stat"><div class="sv">{{ totals.projects }}</div><div class="sl">{{ $t('prStatProjects') }}</div></div>
       <div class="stat"><div class="sv">{{ totals.databases }}</div><div class="sl">{{ $t('prStatDatabases') }}</div></div>
@@ -78,8 +88,14 @@ function openReleases(p: Project) {
 </template>
 
 <style scoped>
-.wrap { display: flex; flex-direction: column; gap: 16px; }
-.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+/* 与其余内容页同源:留白、最大宽度、超宽屏居中都来自同两个 token。 */
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+.head { display: flex; align-items: center; margin-bottom: 2px; }
+.eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
+.sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
+/* auto-fit 而不是写死三列:窄屏上三张并排会把"已归属的数据库"这类标签挤到换行,
+   放不下时自己换行更稳。 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .stat { padding: 16px 20px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); }
 .sv { font: 700 26px var(--font-display); color: var(--text-strong); }
 .sl { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
@@ -88,10 +104,17 @@ function openReleases(p: Project) {
 .cic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
 .ct { font: 600 14px var(--font-display); color: var(--text-strong); }
 .cs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
-.rows { padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
-.row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 11px; }
+/* 与上面那块面板(ProjectsPanel .list/.item)取同一套行样式:同一页里出现的是同一种
+   东西 —— 一个项目 —— 从前上面是带边框的沉底行、下面是纯白无分隔的行,两份列表并排,
+   看着像两个页面拼起来的。内边距、圆角、底色、间距都对齐它。 */
+.rows { padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+.row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--border-default); border-radius: 11px; background: var(--surface-sunken);
+  transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease);
+}
 .row.click { cursor: pointer; }
-.row.click:hover { background: var(--surface-sunken); }
+.row.click:hover { border-color: var(--accent-text); }
 .grow { flex: 1; min-width: 0; }
 .rn { font: 600 13px var(--font-body); color: var(--text-strong); }
 .rm { margin-top: 3px; display: flex; align-items: center; gap: 7px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
