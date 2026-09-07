@@ -90,6 +90,11 @@ function openReleases(p: Project) {
 <style scoped>
 /* 与其余内容页同源:留白、最大宽度、超宽屏居中都来自同两个 token。 */
 .page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+/* 弹性子项默认可被压缩(flex-shrink:1)。页面高度有限时,这两块卡片会被压扁到刚好
+   填满视口,而它们是 overflow:hidden 的 —— 于是项目一多,后面的就被裁掉看不见了,
+   看着像"只显示前 5 个",其实 14 条都在 DOM 里,只是被挡住。
+   让它们保持自身高度,由页面(.scy 带 overflow-y:auto)去滚。 */
+.page > * { flex-shrink: 0; }
 .head { display: flex; align-items: center; margin-bottom: 2px; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
 .sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
