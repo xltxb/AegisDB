@@ -373,7 +373,7 @@ const moveTargets = computed(() =>
 </template>
 
 <style scoped>
-.page { padding: 24px 30px 40px; }
+.page { padding: var(--page-pad); padding-bottom: 40px; max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
 .eyebrow { font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); }
 .sub { margin-top: 6px; font: 400 12.5px/1.6 var(--font-body); color: var(--text-muted); max-width: 720px; }

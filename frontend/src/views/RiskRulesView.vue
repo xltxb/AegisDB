@@ -354,7 +354,7 @@ const policies = computed(() => {
 .apseg span.on.lv-mid { background: var(--warning-subtle); color: var(--warning-text); border-color: var(--warning-text); }
 .apseg span.on.lv-off { background: var(--surface-card); color: var(--text-body); border-color: var(--border-strong); }
 .apfoot { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .head .roflag { margin-left: auto; }
 .roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }

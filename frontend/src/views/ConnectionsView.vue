@@ -643,7 +643,7 @@ async function add() {
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 14px; }
 .prpanel { margin-bottom: 16px; }
 .dbtoggle { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 5px; border: 1px dashed var(--border-strong); color: var(--text-muted); font: 600 10px var(--font-body); cursor: pointer; }

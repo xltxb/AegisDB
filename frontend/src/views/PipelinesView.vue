@@ -357,7 +357,7 @@ async function remove(p: Pipeline) {
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .head :deep(.vbtn), .head .roflag { margin-left: auto; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }

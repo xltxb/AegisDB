@@ -120,7 +120,7 @@ const kb = (n: number) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixe
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .col { max-width: 720px; display: flex; flex-direction: column; gap: 18px; }
 .card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }

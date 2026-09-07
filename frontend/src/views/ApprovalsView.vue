@@ -321,7 +321,7 @@ function chainText(a: Approval) {
   border-top: 1px solid var(--border-subtle); }
 .waitc { font: 500 12px var(--font-body); color: var(--text-muted); }
 
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
 .sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }

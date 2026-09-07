@@ -149,7 +149,7 @@ function fmt(s: string | null) { return s ? new Date(s).toLocaleString('en-GB') 
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; overflow: auto; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; overflow: auto; }
 .head { margin-bottom: 16px; }
 .eyebrow { font: 600 15px var(--font-display); color: var(--text-strong); }
 .sub { font: 500 12.5px var(--font-body); color: var(--text-muted); margin-top: 3px; }

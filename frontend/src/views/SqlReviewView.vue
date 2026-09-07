@@ -395,7 +395,7 @@ function dialectsOf(r: ReviewRule) {
 .rsrc { margin-top: 4px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .sbadge { padding: 1px 7px; border-radius: 5px; font: 600 10px var(--font-body); }
 .sref { font: 500 10.5px var(--font-body); color: var(--text-faint); }
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .head :deep(.vbtn), .head .roflag { margin-left: auto; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }

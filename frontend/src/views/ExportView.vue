@@ -252,7 +252,7 @@ const awaiting = ref(false)
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 /* Wide screens: submit form on the left (sticky, so it stays at hand while the
    job history scrolls), job list filling the rest — the single 760px column
    left half the viewport blank. Narrow screens fall back to one column. */

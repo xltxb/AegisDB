@@ -423,7 +423,7 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .head { display: flex; align-items: center; margin-bottom: 18px; }
 .hacts { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .eyebrow { font: 600 10.5px var(--font-mono); letter-spacing: var(--tracking-caps); color: var(--accent-text); text-transform: uppercase; }

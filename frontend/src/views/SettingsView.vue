@@ -342,8 +342,8 @@ async function save() {
 </template>
 
 <style scoped>
-.page { flex: 1; min-height: 0; padding: 24px 28px; }
-.col { max-width: 820px; display: flex; flex-direction: column; gap: 18px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max-narrow); margin-inline: auto; width: 100%; }
+.col { max-width: 100%; display: flex; flex-direction: column; gap: 18px; }
 /* Tab bar — switch between setting groups so only one panel shows at a time.
    它在 .col **外面**:820px 是正文的阅读宽度(一行设置项拉得太宽就难读),而页签是
    导航,不该跟着受限。八个页签一共约 830px,只差 10px 就挤不下,最后一个会孤零零
