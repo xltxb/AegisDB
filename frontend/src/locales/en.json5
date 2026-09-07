@@ -230,6 +230,7 @@
   exportServerFile: 'Server file path', exportNoPath: 'Data export save path not configured', copy: 'Copy',
   scPathTitle: 'Upload path not configured', scPathDesc: 'Configure a save path in Settings › Gateway before uploading scripts.', scPathGo: 'Go to settings', scArchiveAt: 'Archived to',
   tabClose: 'Close tab', tabEmpty: 'Pick a database instance on the left to open a tab',
+  splitHint: 'Drag to resize the terminal and the result grid · double-click to reset · arrow keys to nudge',
   gridToggle: 'Grid view', gridResult: 'Result', gridRows: '{n} rows', gridCopyTsv: 'Copy as TSV', gridClose: 'Close grid', gridEmpty: 'No rows', copied: 'Copied',
   edit: 'Edit', tagAdd: 'Tag', tagAssign: 'Assign tags', tagNone: 'No tags', tagAddPh: 'Type a tag and press Enter', tagSuggest: 'Existing tags',
   tagConnTitle: 'Edit database tags', tagRoleTitle: 'Assign accessible DB tags',

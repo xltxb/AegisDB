@@ -186,12 +186,20 @@ const ui = useUIStore()
 // contrast for its background. Surface/foreground read the live CSS tokens.
 function xtermTheme() {
   const light = ui.resolvedTheme() === 'light'
+  // 终端有自己的底色,不再直接借用页面底色:它被包在一块带边框的面板里(见
+  // .xterm-wrap),底色和页面一样就没有"这是一块控制台"的边界,只是一片会滚动的
+  // 页面背景。亮色用卡片白,暗色用最沉的那一档。
   const base = {
-    background: cssVar('--surface-page', light ? '#f6f8fb' : '#0d1117'),
+    background: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
     foreground: cssVar('--text-body', light ? '#232838' : '#d7dee8'),
     cursor: cssVar('--accent-text', light ? '#2553e0' : '#58a6ff'),
-    cursorAccent: cssVar('--surface-page', light ? '#ffffff' : '#0d1117'),
-    selectionBackground: light ? 'rgba(59,110,246,0.20)' : 'rgba(88,166,255,0.35)',
+    cursorAccent: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
+    selectionBackground: light ? 'rgba(59,110,246,0.20)' : 'rgba(88,166,255,0.32)',
+    // 失去焦点后选区仍然看得见,但明显退一档 —— 复制粘贴要跨窗口,选完切出去
+    // 再切回来,选区不该消失,也不该看着仍然是活动的。
+    // 刻意不设 selectionForeground:设了会把选中的整段刷成同一个前景色,
+    // 语法高亮当场消失,而选中一段 SQL 正是为了看清它。
+    selectionInactiveBackground: light ? 'rgba(80,96,130,0.16)' : 'rgba(139,147,167,0.22)',
   }
   if (light) {
     return {
@@ -270,8 +278,40 @@ onMounted(() => {
   term = new Terminal({
     fontFamily: cssVar('--font-mono', 'ui-monospace, Menlo, Consolas, monospace'),
     fontSize: 14,
-    lineHeight: 1.4,
+    fontWeight: 400,
+    fontWeightBold: 600,
+    // 行距放到 1.5:这块屏幕上主要是被人**读**的东西 —— 结果表格、报错、审计行,
+    // 不是滚动的日志流。行挨得太紧,一列数字看串行的代价比省下的几行高。
+    lineHeight: 1.5,
+    // letterSpacing 保持 0。结果集是用制表符画的框(renderTable:┌┬┐ ├┼┤ └┴┘ ─ │),
+    // 而这些框线在 DOM 渲染器下本来就已经是断的(见下面 customGlyphs 的说明);
+    // 再加字距只会把缝拉得更宽。行距只推开行,不会拆散同一行里的连续字符,所以
+    // 上面那个 1.5 是安全的。
+    letterSpacing: 0,
+    // customGlyphs(默认 true)本可以让 xterm 自己画框线、接得严丝合缝,但它
+    // **对 DOM 渲染器无效** —— 这是 xterm 自己的说明。本项目只装了 fit 插件,
+    // 没有 canvas/webgl 渲染器,所以框线完全交给字体,JetBrains Mono 的 ─ 字形
+    // advance 比单元格窄一点,于是每两个之间留一道缝,横线看着像虚线。
+    //
+    // 根治要装 @xterm/addon-webgl(装上后这行 customGlyphs 才真正生效)。本机的
+    // npm 源对该包返回 403,装不了,所以先记在这里,别再把这条虚线错怪到行距或
+    // 字距头上 —— 已经分别验证过,两者都不是原因。
+    customGlyphs: true,
+    // 竖线光标配 SQL 提示符,比方块少挡一个字符;失焦时改成空心,因为这个终端
+    // 经常被审批框、MFA 框抢走焦点,光标长什么样是"敲下去有没有用"的唯一提示。
     cursorBlink: true,
+    cursorStyle: 'bar',
+    cursorWidth: 2,
+    cursorInactiveStyle: 'outline',
+    // 加粗只加粗,不改颜色。语法高亮已经用颜色区分了关键字,再让粗体跳到
+    // 亮色版本,同一个词会有两种色 —— 那不是强调,是噪声。
+    drawBoldTextInBrightColors: false,
+    // 兜底可读性:主题里那些低对比的 ANSI 色(目标库自己吐出来的转义序列也能
+    // 用),自动提到 3:1 再画。设得更高会把刻意的柔和色也拉爆,3 只救真正看不清的。
+    minimumContrastRatio: 3,
+    // 一次导出前的排查经常要往回翻几百行,默认 1000 行不够。
+    scrollback: 5000,
+    smoothScrollDuration: 120,
     theme: xtermTheme(),
   })
   fit = new FitAddon()
@@ -1079,7 +1119,13 @@ async function runScript() {
 .curdb { color: var(--accent-text); }
 .online { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; transition: background var(--dur-fast) var(--ease-out); }
 .online.off { background: var(--warning); }
-.actions { flex-shrink: 0; display: flex; align-items: center; gap: 10px; font: 500 11px var(--font-mono); color: var(--text-muted); }
+/* 放不下时横向滚动,而不是被 .actionbar 的 overflow:hidden 一刀切掉。
+   原先窄屏上最后一两个按钮(快捷脚本、导出日志)是**看不见也点不到**的,
+   而且没有任何迹象表明它们存在。 */
+.actions { flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; overflow-x: auto; scrollbar-width: none; font: 500 11px var(--font-mono); color: var(--text-muted); }
+.actions::-webkit-scrollbar { display: none; }
+/* 实例名可以被压缩(它有省略号兜底),但不能压到没有。 */
+.host { flex: 1 1 120px; }
 .upload {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
   border: 1px solid var(--accent-subtle-border); background: var(--accent-subtle); border-radius: 8px;
@@ -1101,9 +1147,50 @@ async function runScript() {
 .pm { flex-shrink: 0; font: 500 10px var(--font-mono); color: var(--text-faint); }
 .refresh { color: var(--text-muted); cursor: pointer; transition: color var(--dur-fast) var(--ease-out); }
 .refresh:hover { color: var(--accent-text); }
-.xterm-wrap { flex: 1; min-height: 0; padding: 10px 12px 4px; overflow: hidden; }
+/* ---- 终端面板 ----
+   xterm 自己只画字符网格,周围的一切都要外面给。这块把它做成一块控制台面板:
+   自己的底色、一圈边框、内圈留白,让它在页面上是一个"东西",而不是一片恰好
+   有等宽字的区域。 */
+.xterm-wrap {
+  flex: 1; min-height: 0; overflow: hidden;
+  margin: 10px 12px; padding: 12px 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease),
+              box-shadow var(--dur-fast, 0.15s) var(--ease-out, ease);
+}
+/* 暗色下换成最沉的一档,并去掉投影 —— 这套暗色主题靠边框和辉光分层,不用投影。 */
+[data-theme='dark'] .xterm-wrap { background: var(--surface-sunken); box-shadow: none; }
+
+/* 有焦点时描一圈强调色。这个终端经常被审批框、MFA 框、快捷脚本弹窗抢走焦点,
+   而"我现在敲字会进到哪里"在一个能对生产库下命令的界面里不是装饰问题。
+   xterm 的输入落在一个隐藏 textarea 上,所以 :focus-within 正好命中。 */
+.xterm-wrap:focus-within {
+  border-color: var(--accent-subtle-border, var(--accent));
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
 .xterm-host { width: 100%; height: 100%; }
 .xterm-host :deep(.xterm) { height: 100%; }
+
+/* 细滚动条。xterm 的视口默认用系统滚动条,在这套深色面板里是一条突兀的浅灰。
+   只在悬停时提亮,不抢内容。 */
+.xterm-host :deep(.xterm-viewport) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+  background-color: transparent !important;
+}
+.xterm-host :deep(.xterm-viewport)::-webkit-scrollbar { width: 10px; }
+.xterm-host :deep(.xterm-viewport)::-webkit-scrollbar-track { background: transparent; }
+.xterm-host :deep(.xterm-viewport)::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border: 3px solid transparent;
+  border-radius: var(--radius-full);
+  background-clip: padding-box;
+}
+.xterm-host :deep(.xterm-viewport)::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: padding-box; }
 .statusbar { height: 36px; background: var(--surface-raised); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 16px; padding: 0 16px; font: 500 11px var(--font-mono); color: var(--text-muted); }
 .statusbar .ok { color: var(--success-text); }
 .statusbar .ok.warn { color: var(--warning-text); }
