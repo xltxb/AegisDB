@@ -313,6 +313,47 @@ func blankQuoted(sql string) string {
 	return string(b)
 }
 
+// quotedContents is blankQuoted's mirror: it returns only what was INSIDE the
+// string literals and quoted identifiers, joined by spaces. Used to look into
+// the payload of dynamic SQL — see dynamicExecRe.
+func quotedContents(sql string) string {
+	var out []byte
+	b := []byte(sql)
+	for i := 0; i < len(b); i++ {
+		q := b[i]
+		if q != '\'' && q != '"' && q != '`' {
+			continue
+		}
+		i++
+		for i < len(b) {
+			if b[i] == q {
+				if i+1 < len(b) && b[i+1] == q { // doubled quote = escaped, stay inside
+					out = append(out, q)
+					i += 2
+					continue
+				}
+				break // closing delimiter
+			}
+			out = append(out, b[i])
+			i++
+		}
+		out = append(out, ' ')
+	}
+	return string(out)
+}
+
+// dynamicExecRe marks the constructs that RUN a string as SQL: Oracle
+// `EXECUTE IMMEDIATE '…'`, SQL Server `sp_executesql N'…'` / `EXEC('…')`,
+// MySQL `PREPARE s FROM '…'`, PL/pgSQL `EXECUTE '…'`.
+//
+// Matched against the BLANKED structure, so the word "execute" sitting inside
+// somebody's data does not turn that row into dynamic SQL.
+//
+// Deliberately loose: over-matching only causes the payload to be scanned too,
+// which is the safe direction. Missing a dialect's form is the direction that
+// costs coverage, so a bare EXECUTE counts as well.
+var dynamicExecRe = regexp.MustCompile(`(?i)\b(execute|exec|sp_executesql|prepare)\b`)
+
 // readVerbs are the non-mutating leading verbs. Bare EXPLAIN only plans (no
 // execution), so it counts as a read; EXPLAIN ANALYZE is handled by IsRead via
 // the wrapped verb.
@@ -500,7 +541,25 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 		return "", model.RiskOff, nil
 	}
 	re := regexp.MustCompile(`(?i)\b(` + strings.Join(names, "|") + `)\b`)
-	m := re.FindString(StripComments(sql))
+	// 扫的是**抹掉字面量之后**的结构,不是原文。
+	//
+	// 这曾是全项目唯一一处还在读字符串内容的关键词启发式:无 WHERE 判断、CTE 里的
+	// 写操作识别、EXPLAIN 解析、敏感字段识别,五处早就先抹字面量了。字典漏了这一步,
+	// 于是一份只有 INSERT 的菜单初始化脚本,因为权限串写作 'system:menu:delete',
+	// 被判成高危 DELETE 并整脚本送审。数据里的词不是语法。
+	clean := StripComments(sql)
+	structure := blankQuoted(clean)
+	m := re.FindString(structure)
+
+	// 但字符串里的关键词有一种情况确实会执行:动态 SQL。抹掉字面量会连
+	// `EXECUTE IMMEDIATE 'DROP TABLE t'` 里那个真的要跑的 DROP 一起抹掉。所以只要
+	// 结构里出现动态执行的构造,就把所有字面量的内容也拿来扫一遍。
+	//
+	// 从前这类语句是**碰巧**被覆盖的(字典扫原文,顺带扫到了引号里)。现在是明确的
+	// 规则:命中时能说清这是动态 SQL 的载荷,而不是某个字段的值。
+	if m == "" && dynamicExecRe.MatchString(structure) {
+		m = re.FindString(quotedContents(clean))
+	}
 	if m == "" {
 		return "", model.RiskOff, nil
 	}
