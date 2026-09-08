@@ -269,8 +269,8 @@ const awaiting = ref(false)
           <!-- 轮询只在有任务真的在跑时才发请求,所以这里说的是"此刻会不会自己动",
                而不是一个长亮的转圈。 -->
           <span v-if="anyActive" class="poll"><Loader :size="13" class="spin" />{{ $t('exportPolling') }}</span>
-          <button class="refresh" :disabled="refreshing" :title="$t('exportRefresh')" @click="refresh">
-            <RotateCw :size="14" :class="{ spin: refreshing }" />{{ $t('exportRefresh') }}
+          <button class="refresh" :disabled="refreshing" :title="$t('btnRefresh')" @click="refresh">
+            <RotateCw :size="14" :class="{ spin: refreshing }" />{{ $t('btnRefresh') }}
           </button>
         </div>
 

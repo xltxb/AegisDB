@@ -262,7 +262,7 @@ function chainText(a: Approval) {
             <div class="tab" :class="{ active: scope === 'mine' }" @click="setScope('mine')">{{ $t('mineAppr') }}</div>
             <div class="tab" :class="{ active: scope === 'all' }" @click="setScope('all')">{{ $t('allAppr') }}</div>
           </div>
-          <button class="refresh" :disabled="refreshing" :title="$t('exportRefresh')" @click="refresh">
+          <button class="refresh" :disabled="refreshing" :title="$t('btnRefresh')" @click="refresh">
             <RotateCw :size="14" :class="{ spin: refreshing }" />
           </button>
         </div>

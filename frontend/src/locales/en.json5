@@ -168,7 +168,7 @@
   apEmptyFiltered: 'No tickets match the current filters',
   apClearFilters: 'Clear filters',
   // Export page: refresh, polling, list header, empty state, retry entry point
-  exportRefresh: 'Refresh',
+  btnRefresh: 'Refresh',
   exportPolling: 'Running · auto-refresh every 2s',
   exportReuse: 'Reuse',
   exportColStatus: 'Status', exportColJob: 'Instance and SQL', exportColTime: 'Submitted', exportColAct: 'Actions',

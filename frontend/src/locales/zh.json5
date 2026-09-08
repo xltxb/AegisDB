@@ -182,7 +182,7 @@
   apEmptyFiltered: '没有符合当前条件的工单',
   apClearFilters: '清空筛选条件',
   // 导出页:刷新、轮询、列表表头、空态与失败任务的出口
-  exportRefresh: '刷新',
+  btnRefresh: '刷新',
   exportPolling: '运行中,每 2 秒自动刷新',
   exportReuse: '重新填入',
   exportColStatus: '状态', exportColJob: '实例与语句', exportColTime: '提交时间', exportColAct: '操作',
