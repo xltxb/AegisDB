@@ -927,6 +927,7 @@ func (r *Repo) CreateApproval(a *model.Approval, steps []model.ApprovalStep) err
 // visible to its initiator and to the members on its approval chain:
 //   - scope "mine": approvals the user must act on (they are a chain approver)
 //   - scope "all":  approvals the user initiated OR is a chain approver of
+//
 // approvalScope builds the visibility predicate for a caller: tickets they raised,
 // plus tickets they sit on the approval chain of. "mine" narrows to the latter —
 // the queue awaiting this person.
@@ -1149,9 +1150,9 @@ func (r *Repo) PendingApprovals() ([]model.Approval, error) {
 // 它**不碰 decided_at**:那是"什么时候批的",而现在批准与执行是两个时刻,
 // 沿用 SetApprovalResult 会把审批时间改成执行时间 —— 一张周一批、周三执行的单子,
 // 事后看就成了周三才批的。executed_at 已经在占位时盖过章了,这里只补结果。
-func (r *Repo) SetApprovalExecResult(id int64, output string, rows int) error {
+func (r *Repo) SetApprovalExecResult(id int64, output string, rows int, execStatus string) error {
 	return r.db.Model(&model.Approval{}).Where("id = ?", id).Updates(map[string]any{
-		"result": output, "result_rows": rows,
+		"result": output, "result_rows": rows, "exec_status": execStatus,
 	}).Error
 }
 

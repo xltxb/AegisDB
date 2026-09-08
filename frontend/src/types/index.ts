@@ -278,6 +278,9 @@ export interface Approval {
   /** >0 表示这张单属于一张发布单:它的执行归流水线,走不了发起人手动执行那条路 */
   releaseId?: number
   status: 'pending' | 'approved' | 'rejected' | 'expired'
+  /** 那一次下发的结果:空 = 还没执行,或是这一列存在之前跑过的历史单(成败无从得知)。
+   *  它和 status 是两件事 —— 跑挂了不会把一张已批准的工单变回没批准。 */
+  execStatus?: 'success' | 'failed' | ''
   auditId: string
   result: string
   resultRows: number

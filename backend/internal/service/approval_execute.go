@@ -21,6 +21,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 
 	"velagateway/internal/dto"
 	"velagateway/internal/gateway"
@@ -98,7 +99,19 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) 
 		res = s.Executor.Run(conn, ap.Command, s.execTimeout())
 	}
 
-	_ = s.Repo.SetApprovalExecResult(ap.ID, res.Output, res.Rows)
+	// 这张单最后怎么样了,以**库那边收没收下**为准。从前只存了输出和行数,失败的
+	// 原因确实写在输出里,却没有任何东西说那段文字是一次失败 —— 于是一条跑挂的
+	// DROP 和一条跑成的,在列表上是同一个"已通过"。
+	execStatus := model.ExecStatusSuccess
+	if res.Err != nil {
+		execStatus = model.ExecStatusFailed
+	}
+	// 写不进去就等于把结果丢了,工单会永远停在"已执行、结果不明"。这里不能让它
+	// 静悄悄地发生 —— 原先是 `_ =`,那时丢掉的只是一段输出,现在丢掉的是结论。
+	if err := s.Repo.SetApprovalExecResult(ap.ID, res.Output, res.Rows, execStatus); err != nil {
+		slog.Error("failed to record approval execution result",
+			"apNo", ap.ApNo, "execStatus", execStatus, "err", err)
+	}
 	s.recordAuditBy(actor, actor.Name, conn, ap.Command, ap.RiskLevel, execResultStatus(res), ap.ApNo, "exec")
 	return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 		Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil

@@ -140,6 +140,11 @@ const (
 	StatusRejected = "rejected"
 	StatusExpired  = "expired"
 
+	// 一次批准换来的那一次下发,库那边收没收下。见 Approval.ExecStatus —— 它和上面
+	// 四个是两回事:跑挂了不会把一张已批准的工单变回没批准。
+	ExecStatusSuccess = "success"
+	ExecStatusFailed  = "failed"
+
 	ResultExecuted = "executed"
 	ResultPending  = "pending"
 	ResultRejected = "rejected"
@@ -603,6 +608,16 @@ type Approval struct {
 	ExportJobID int64 `gorm:"not null;default:0;index:idx_approval_export" json:"exportJobId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
+	// ExecStatus 是命令在**目标库上真的跑成了没有**,和 Status 是两件事。
+	//
+	// Status 记的是审批的结论:批了就是批了,跑挂了并不会把它变回没批准 —— 能不能
+	// 执行、按状态筛选,走的都是它。但"这张单最后怎么样了"要看的是这一列。从前它
+	// 没有落库:失败只写进了审计行,工单本身和成功的长得一模一样,而失败的原因就写
+	// 在 Result 里,却没有任何东西说那段文字是一次失败。
+	//
+	// 空 = 还没执行,或者是这一列存在之前就跑过的历史工单 —— 后者的成败无从得知,
+	// 界面照旧只说"已执行",不替它编一个结果。
+	ExecStatus   string     `gorm:"size:16" json:"execStatus"`
 	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)
 	// ExecutedAt 把"批准了"和"跑过了"分成两件事。
 	//

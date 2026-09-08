@@ -139,6 +139,14 @@
   // 列表那一格只有一行的宽度,放不下详情页那句完整的话。但"批了还没跑"与"跑过了"
   // 必须一眼分得开 —— 扫一列全是"已通过"的人,看不出哪张还等着他。
   apStWaitRun: '待执行', apStRan: '已执行', apStDone: '已通过',
+  apStRejected: '已驳回',
+  apActions: '操作',
+  // 执行结果 —— 一张工单最后怎么样了,以库那边收没收下为准。
+  apStFailed: '执行失败',
+  apExecuteFailed: '命令已下发,但目标库拒绝了它 —— 变更没有生效',
+  apExecutedFailed: '已通过 · {at} 执行失败',
+  apResultOk: '执行成功', apResultFailed: '执行失败', apResultUnknown: '已执行(该单早于执行结果记录)',
+  apResultRows: '影响 {n} 行', apResultNoLog: '这次执行没有留下输出',
   highP1: '高危 P1', privP2: '权限 P2', awaitingYou: '项待你审批',
   // approval modal
   mApprTitle: '该命令需要审批后执行', mApprDesc: '提交后将生成 Lark 审批卡并通知审批人。通过后命令不会自动执行——会通知你回到「审批」页自己挑时机执行。',
