@@ -221,6 +221,8 @@ interface TreeGroup {
   key: string
   label: string
   dot: string
+  /** 分层代码,用作分组徽章。按类型分组时没有分层可言,留空。 */
+  tierCode?: string
   /** The tier governing this environment, shown on hover — see below. */
   hint: string
   count: number
@@ -301,6 +303,9 @@ const groups = computed<TreeGroup[]>(() => {
         key: e.code,
         label: envtier.envLabel(e.code),
         dot: envtier.dotForEnv(e.code),
+        // 徽章上印的是**分层代码**,不是环境名:决定这一组有多危险的是分层,而
+        // 环境名("香港生产")长短不一,做徽章会把整行挤走形。
+        tierCode: tier.code,
         hint: envtier.tierLabel(tier.code, t as any),
         count: conns.length,
         flat: false,
@@ -370,7 +375,9 @@ function clickInst(id: number) {
              The tier name is on the tooltip for when the colour is not enough. -->
         <div class="env" :class="{ muted: g.dot !== 'danger' }" :title="g.hint" @click="toggle(g.key)">
           <component :is="isOpen(g.key) ? ChevronDown : ChevronRight" :size="14" color="var(--text-muted)" />
-          <span class="d" :class="g.dot" />{{ g.label }}
+          <span v-if="g.tierCode" class="envbadge" :class="g.dot">{{ g.tierCode.toUpperCase() }}</span>
+          <span v-else class="d" :class="g.dot" />
+          <span class="glabel">{{ g.label }}</span>
           <span class="cnt">{{ g.count }}</span>
         </div>
         <template v-if="isOpen(g.key)">
@@ -517,6 +524,14 @@ function clickInst(id: number) {
 .searchbox input { flex: 1; background: transparent; border: none; outline: none; font: 400 12px var(--font-body); color: var(--text-body); }
 .body { flex: 1; min-height: 0; padding: 2px 8px 12px; }
 .env { display: flex; align-items: center; gap: 7px; padding: 7px 8px; font: 600 12px var(--font-body); color: var(--text-body); cursor: pointer; }
+.glabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 分组徽章按**分层**着色,颜色来自 envtier.dotForEnv —— 和分层页、审批列表上的
+   那套是同一个来源,而不是在树里另配一份。 */
+.envbadge { flex-shrink: 0; padding: 1px 6px; border-radius: 5px; font: 700 9.5px var(--font-mono); background: var(--surface-sunken); border: 1px solid var(--border-subtle); color: var(--text-muted); }
+.envbadge.danger { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envbadge.warning { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+.envbadge.success { background: var(--success-subtle); color: var(--success-text); border-color: transparent; }
+.envbadge.info { background: var(--accent-subtle); color: var(--accent-text); border-color: transparent; }
 .env.muted { color: var(--text-muted); margin-top: 4px; }
 .cnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
 .d { width: 7px; height: 7px; border-radius: 50%; }

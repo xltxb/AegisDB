@@ -1,16 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FileSearch, X, ShieldAlert, ShieldCheck, TriangleAlert, Hourglass, FolderArchive, Database } from 'lucide-vue-next'
+import { FileSearch, X, ShieldAlert, ShieldCheck, TriangleAlert, Hourglass, FolderArchive, Database, CircleCheck } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import type { ScriptScanResp } from '@/types'
 
-const props = defineProps<{ open: boolean; scan: ScriptScanResp | null; submitted: boolean; savePath?: string; instance?: string; databases?: string[]; targetDb?: string }>()
+const props = defineProps<{
+  open: boolean; scan: ScriptScanResp | null; submitted: boolean
+  savePath?: string; instance?: string; databases?: string[]; targetDb?: string
+  /** 正在下发中 —— 按钮要立刻锁住,而不是等响应回来 */
+  running?: boolean
+  /** 这次弹窗里已经跑过/提交过了。带上时刻与执行人,让人看得出是"刚刚自己点的"。 */
+  done?: { at: string; by: string; kind: 'ran' | 'submitted' } | null
+}>()
 const emit = defineEmits<{ close: []; run: []; 'update:targetDb': [string] }>()
 
 const risky = computed(() => props.scan?.hasRisky ?? false)
 // A target database must be chosen before the script can be dispatched.
 const db = computed({ get: () => props.targetDb || '', set: (v: string) => emit('update:targetDb', v) })
-const canRun = computed(() => !!db.value)
+// 能不能点执行:选了库、没有正在跑、这次还没跑过。
+// 三个条件缺一不可 —— 少了后两个,连点两下就是两次真的执行。
+const canRun = computed(() => !!db.value && !props.running && !props.done)
 const banner = computed(() =>
   risky.value
     ? { text: 'scRisky', bg: 'var(--danger-subtle)', color: 'var(--danger-text)', icon: ShieldAlert }
@@ -87,8 +96,16 @@ function badgeMeta(r: string) {
           <span v-else class="mustpick">{{ $t('scMustPick') }}</span>
         </div>
         <div class="acts">
+          <!-- 已经跑过就把话说清楚:什么时候、谁点的。一个只是变灰的按钮,人只会
+               再点两下然后以为界面卡住了。 -->
+          <span v-if="done" class="ranmark">
+            <CircleCheck :size="13" />
+            {{ done.kind === 'submitted' ? $t('scAlreadySubmitted', { at: done.at, by: done.by }) : $t('scAlreadyRan', { at: done.at, by: done.by }) }}
+          </span>
           <VButton variant="secondary" @click="emit('close')">{{ $t('scClose') }}</VButton>
-          <VButton variant="primary" :disabled="!canRun" @click="canRun && emit('run')">{{ risky ? $t('scSubmitAppr') : $t('scRun') }}</VButton>
+          <VButton variant="primary" :disabled="!canRun" @click="canRun && emit('run')">
+            {{ running ? $t('scRunning') : done ? $t('scDone') : risky ? $t('scSubmitAppr') : $t('scRun') }}
+          </VButton>
         </div>
       </div>
     </div>
@@ -151,4 +168,5 @@ function badgeMeta(r: string) {
 .fl { display: flex; align-items: center; gap: 6px; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .ok { color: var(--success-text); }
 .acts { margin-left: auto; display: flex; gap: 10px; }
+.ranmark { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--success-text); }
 </style>

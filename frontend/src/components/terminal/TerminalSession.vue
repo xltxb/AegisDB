@@ -189,16 +189,27 @@ const ui = useUIStore()
 // for dark backgrounds, so on the light theme the result table (cyan numbers, gray
 // rules) was near-invisible; each mode gets an explicit ramp with the right
 // contrast for its background. Surface/foreground read the live CSS tokens.
+// 终端**不跟随**应用主题,它永远是深色。
+//
+// 这不是审美偏好:这块区域是一台控制台,而控制台的深色底是它最强的边界信号 ——
+// 亮色主题下它和周围的白卡片糊成一片,人得靠边框去认"哪里是可以敲命令的地方"。
+// 页面其余部分照旧跟随主题;只有这一块坚持自己的身份,和 Cloud Shell、VS Code
+// 的集成终端是同一个取舍。
+//
+// 保留 light 分支的那套色阶不是浪费:结果表格用的是 16 色 ANSI,而深浅两套的对比度
+// 要求完全不同 —— 哪天要把跟随主题加回来,那份调好的色阶还在。
 function xtermTheme() {
-  const light = ui.resolvedTheme() === 'light'
+  const light = false
   // 终端有自己的底色,不再直接借用页面底色:它被包在一块带边框的面板里(见
   // .xterm-wrap),底色和页面一样就没有"这是一块控制台"的边界,只是一片会滚动的
   // 页面背景。亮色用卡片白,暗色用最沉的那一档。
+  // 底色写死,不再读 CSS 变量:变量是跟着应用主题走的,而这块要的恰恰是**不跟**。
+  const CONSOLE_BG = '#0b0f19'
   const base = {
-    background: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
-    foreground: cssVar('--text-body', light ? '#232838' : '#d7dee8'),
-    cursor: cssVar('--accent-text', light ? '#2553e0' : '#58a6ff'),
-    cursorAccent: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
+    background: CONSOLE_BG,
+    foreground: '#d7dee8',
+    cursor: '#34d399',
+    cursorAccent: CONSOLE_BG,
     selectionBackground: light ? 'rgba(59,110,246,0.20)' : 'rgba(88,166,255,0.32)',
     // 失去焦点后选区仍然看得见,但明显退一档 —— 复制粘贴要跨窗口,选完切出去
     // 再切回来,选区不该消失,也不该看着仍然是活动的。
@@ -238,10 +249,12 @@ watch(() => ui.theme, () => {
 // scrollback records which database it ran against.
 function promptText() {
   const db = targetDb.value
+  // 提示符用翠绿:它是这一屏里唯一"轮到你了"的标记,而青色和结果表里的数字、
+  // 蓝色和语法高亮里的关键字都撞色 —— 一眼扫下去分不出哪一行是提示符。
   const head = db
-    ? c(ANSI.blue, props.conn.name) + c(ANSI.gray, '/') + c(ANSI.cyan, db)
-    : c(ANSI.blue, props.conn.name)
-  return head + ' ' + c(ANSI.cyan, '❯') + ' '
+    ? c(ANSI.green, props.conn.name) + c(ANSI.gray, '/') + c(ANSI.cyan, db)
+    : c(ANSI.green, props.conn.name)
+  return head + ' ' + ANSI.bold + c(ANSI.green, '❯') + ANSI.reset + ' '
 }
 function promptLen() { return props.conn.name.length + (targetDb.value ? targetDb.value.length + 1 : 0) + 3 }
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
@@ -282,28 +295,18 @@ function cancelDanger() {
 // terminal itself (bold; red with an explicit "proceed with caution" on a tier
 // that carries the danger banner).
 //
-// The trigger is the tier's dangerBanner flag, not the name "prod". A second
-// production environment is exactly as dangerous as the first, and the red line
-// is the last warning before someone types DROP — keying it off a name means the
-// clusters an operator is least familiar with get the mildest warning.
-//
-// The label still shows the ENVIRONMENT (prod-hk), because that is where the
-// command lands; only the severity comes from the tier.
-function cautionLine() {
-  const cn = props.conn
-  const env = cn.env.toUpperCase()
-  const tier = envtier.tierOf(cn.env)
-  if (tier?.dangerBanner) return ANSI.bold + ANSI.red + t('termCautionProd', { env, name: cn.name }) + ANSI.reset
-  // An unresolved environment gets the middle warning rather than the mildest:
-  // no tier means the instance's control level is unknown, not benign.
-  if (!tier || tier.requireMfa) return ANSI.bold + ANSI.yellow + t('termCautionStaging', { env, name: cn.name }) + ANSI.reset
-  return ANSI.bold + ANSI.green + t('termCautionOther', { env, name: cn.name }) + ANSI.reset
-}
+// 环境红字曾经打在这里(cautionLine)。它现在是终端上方一条常驻的横幅,由
+// TerminalView 渲染 —— 判据仍是分层的 dangerBanner,而不是名字叫不叫 prod。
+// 这个函数没有别的调用方了,所以随之删掉,免得留一份"看着还在用"的死代码。
 
+// 开场白里**不再**打那行环境红字。
+//
+// 它现在是终端上方一条常驻的横幅(见 TerminalView 的 .safety):打在屏幕里的那行
+// 只在会话开头出现一次,滚几屏就再也看不见了 —— 而"你正在生产库上"这件事,恰恰是
+// 越往后越需要提醒的。同一句话不该说两遍,留下常驻的那一份。
 function banner() {
   const cn = props.conn
   const me = auth.me
-  out(cautionLine())
   out(c(ANSI.gray, t('termConnected', { conn: `${cn.env}-${cn.name}`, role: cn.defaultRole, policy: cn.policy, user: me?.name || '' })))
   out(c(ANSI.gray, t('termHelpLine', { bs: '\\' })))
 }
@@ -814,7 +817,8 @@ function cancelApproval() {
 }
 
 function refreshSession() {
-  editor.printAbove([cautionLine(), c(ANSI.gray, t('termReconnecting'))])
+  // 横幅一直挂在上面,这里只说重连本身。
+  editor.printAbove([c(ANSI.gray, t('termReconnecting'))])
   ws.reconnect()
 }
 
@@ -948,6 +952,9 @@ async function scanScript(text: string, filename: string, uploadId = 0) {
     // would be the second copy that can disagree with it.
     scScan.value = await api.scriptScan(uploadId > 0 ? '' : text, filename, props.conn.id, uploadId)
     scSubmitted.value = false
+    // 新的一次扫描 = 新的一张单子,重置执行记录。
+    scDone.value = null
+    scRunning.value = false
     scOpen.value = true
   } catch (e: any) {
     if (e?.code === CODE_SCRIPT_PATH_UNSET) { enabled.value = false; pathPromptOpen.value = true }
@@ -997,7 +1004,46 @@ INSERT INTO audit_log(evt) VALUES('migrate');`
   await scanScript(sample, 'migration_2026q3.sql')
 }
 
+/**
+ * 这次弹窗里,这个脚本已经跑过了没有。
+ *
+ * 两道闸,挡的是两件不同的事:
+ *
+ *   scRunning  —— **并发**。原先没有任何保护:连点两下会并发发出两次
+ *                 scriptExecute,两次完整执行同时落到库上。一个 INSERT 脚本
+ *                 因此插两遍,而两次都会"成功"。
+ *   scDone     —— **重复**。高危分支执行后弹窗是不关的(scSubmitted=true 之后
+ *                 直接 return),按钮还活着 —— 再点一次就再生成一张审批单。
+ *
+ * 这是**客户端**的闸:刷新页面、或重新扫一遍同一个文件,它就不认识了。真正的
+ * 一次性保证只在审批那条路上有(ClaimApprovalExecution 原子占位,批一次只换一次
+ * 执行);安全脚本直接执行那条路服务端没有防重。这一点在 UI 上不隐瞒。
+ */
+const scRunning = ref(false)
+const scDone = ref<{ at: string; by: string; kind: 'ran' | 'submitted' } | null>(null)
+
+function markScriptDone(kind: 'ran' | 'submitted') {
+  scDone.value = {
+    at: new Date().toLocaleTimeString('sv').slice(0, 5),
+    by: auth.me?.name || '',
+    kind,
+  }
+}
+
 async function runScript() {
+  if (!scScan.value) return
+  // 闸放在这里,而不是只靠按钮的 disabled:disabled 是渲染出来的状态,而这个函数
+  // 也可能被别的路径调到 —— 真正管用的判断要和动作待在一起。
+  if (scRunning.value || scDone.value) return
+  scRunning.value = true
+  try {
+    await doRunScript()
+  } finally {
+    scRunning.value = false
+  }
+}
+
+async function doRunScript() {
   if (!scScan.value) return
   // Reassembling the script out of the scan result only means anything while the
   // client is the one holding it. For an uploaded script the server re-reads the
@@ -1012,6 +1058,8 @@ async function runScript() {
     }
     if (env.code === CODE_INTERCEPTED || env.data?.exec?.intercepted) {
       scSubmitted.value = true
+      // 审批单已经生成 —— 再点一次只会多出一张一模一样的单子。
+      markScriptDone('submitted')
       auth.pendingCount++
       if (env.data?.savedPath) editor.printAbove([c(ANSI.gray, t('termScriptSaved', { path: env.data.savedPath }))])
       return
@@ -1024,9 +1072,11 @@ async function runScript() {
         c(ANSI.green, t('termScriptOk', { n })),
         ...(saved ? [c(ANSI.gray, t('termSavedTo', { path: saved }))] : []),
       ])
+      markScriptDone('ran')
       scOpen.value = false
       return
     }
+    // 失败**不**打标:没跑成的脚本本来就该允许改完再来一次。
     scOpen.value = false
     editor.printAbove([c(ANSI.red, t('termScriptFailMsg', { msg: env.msg || '' }))])
   } catch {
@@ -1070,13 +1120,20 @@ async function runScript() {
 
     <div class="xterm-wrap"><div ref="termEl" class="xterm-host" /></div>
 
+    <!-- 底部状态栏。左边回答"此刻这条会话是什么",右边是快捷键 —— 后者原先只写在
+         开场白里,滚两屏就再也找不到了,而它恰恰是要反复用的东西。 -->
     <div class="statusbar">
       <span class="ok" :class="{ warn: wsStatus !== 'open' }">
         {{ wsStatus === 'open' ? $t('connected') : wsStatus === 'connecting' ? $t('wsConnecting') : $t('wsDisconnected') }}
       </span>
+      <span class="hl">{{ conn.engine.toUpperCase() }}</span>
       <span>{{ conn.defaultRole }}</span><span>{{ conn.policy }}</span>
-      <span>{{ $t('tryHint') }} <span class="hl">DROP TABLE orders_2024_q3;</span></span>
-      <span class="right">{{ $t('utf8audit') }}</span>
+      <span>UTF-8</span>
+      <span class="right keyhint">
+        <span><kbd>↑</kbd><kbd>↓</kbd> {{ $t('sbHistory') }}</span>
+        <span><kbd>Ctrl</kbd><kbd>L</kbd> {{ $t('sbClear') }}</span>
+        <span><kbd>Ctrl</kbd><kbd>C</kbd> {{ $t('sbCancel') }}</span>
+      </span>
     </div>
 
     <ApprovalModal
@@ -1084,8 +1141,11 @@ async function runScript() {
       :risk="apRisk" :audit-id="apAuditId" :chain="chain" :rule="apRule"
       @cancel="cancelApproval" @submit="submitApproval"
     />
-    <ScriptScanModal :open="scOpen" :scan="scScan" :submitted="scSubmitted" :save-path="scriptSavePath"
-      :instance="conn.name" :databases="dbOptions" v-model:target-db="targetDb" @close="scOpen = false" @run="runScript" />
+    <ScriptScanModal
+      :open="scOpen" :scan="scScan" :submitted="scSubmitted" :save-path="scriptSavePath"
+      :instance="conn.name" :databases="dbOptions" :running="scRunning" :done="scDone"
+      v-model:target-db="targetDb" @close="scOpen = false" @run="runScript"
+    />
     <SnippetModal :open="snipOpen" @close="closeSnippets" />
 
     <div v-if="pasteOpen" class="mfa-overlay">
@@ -1177,7 +1237,8 @@ async function runScript() {
 </template>
 
 <style scoped>
-.session { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-page); }
+/* 会话容器同样沉下去:面板是深色的,四周留一圈亮色页面底,看着像终端浮在纸上。 */
+.session { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #080b12; }
 .actionbar { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 14px; background: var(--surface-raised); border-bottom: 1px solid var(--border-subtle); min-width: 0; overflow: hidden; }
 .host { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 600 12px var(--font-mono); color: var(--text-strong); }
 .curdb { color: var(--accent-text); }
@@ -1215,18 +1276,20 @@ async function runScript() {
    xterm 自己只画字符网格,周围的一切都要外面给。这块把它做成一块控制台面板:
    自己的底色、一圈边框、内圈留白,让它在页面上是一个"东西",而不是一片恰好
    有等宽字的区域。 */
+/* 面板底色和 xterm 的底色写同一个值。
+   终端本身已经固定深色(见 xtermTheme),而这个包裹层原先跟着应用主题走 —— 亮色
+   下就是一圈白边把深色的控制台框在中间,像贴上去的一张图。它们本来就该是同一块
+   东西,所以颜色也只能有一个来源。 */
 .xterm-wrap {
   flex: 1; min-height: 0; overflow: hidden;
   margin: 10px 12px; padding: 12px 14px;
-  background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
+  background: #0b0f19;
+  border: 1px solid rgba(255, 255, 255, .08);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-xs);
+  box-shadow: none;
   transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease),
               box-shadow var(--dur-fast, 0.15s) var(--ease-out, ease);
 }
-/* 暗色下换成最沉的一档,并去掉投影 —— 这套暗色主题靠边框和辉光分层,不用投影。 */
-[data-theme='dark'] .xterm-wrap { background: var(--surface-sunken); box-shadow: none; }
 
 /* 有焦点时描一圈强调色。这个终端经常被审批框、MFA 框、快捷脚本弹窗抢走焦点,
    而"我现在敲字会进到哪里"在一个能对生产库下命令的界面里不是装饰问题。
@@ -1255,11 +1318,15 @@ async function runScript() {
   background-clip: padding-box;
 }
 .xterm-host :deep(.xterm-viewport)::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: padding-box; }
-.statusbar { height: 36px; background: var(--surface-raised); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 16px; padding: 0 16px; font: 500 11px var(--font-mono); color: var(--text-muted); }
-.statusbar .ok { color: var(--success-text); }
-.statusbar .ok.warn { color: var(--warning-text); }
-.statusbar .hl { color: var(--text-body); }
+/* 底部状态栏:和终端同一族的暗色窄条(VS Code 那种),而不是一条跟着应用主题
+   变白的卡片色横条 —— 它贴着终端底边,颜色一旦不同就把控制台切成了两半。 */
+.statusbar { height: 28px; background: #0e1320; border-top: 1px solid rgba(255, 255, 255, .07); display: flex; align-items: center; gap: 14px; padding: 0 14px; font: 500 10.5px var(--font-mono); color: #8b93a7; }
+.statusbar .ok { color: #6ee7a0; }
+.statusbar .ok.warn { color: #fcd34d; }
+.statusbar .hl { color: #d7dee8; }
 .statusbar .right { margin-left: auto; }
+.statusbar .keyhint { display: inline-flex; align-items: center; gap: 10px; color: #69748b; }
+.statusbar kbd { padding: 0 4px; border-radius: 4px; background: rgba(255, 255, 255, .08); color: #b8c0d0; font: 600 10px var(--font-mono); }
 
 /* modals */
 .mfa-overlay { position: fixed; inset: 0; z-index: 60; }

@@ -7,7 +7,10 @@ export default { name: 'TerminalView' }
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onActivated } from 'vue'
 import { useUIStore } from '@/stores/ui'
-import { X, PanelLeftOpen, Table2 } from 'lucide-vue-next'
+import {
+  X, PanelLeftOpen, PanelRightOpen, Table2, Maximize2, Minimize2, Activity, ShieldAlert, LogOut,
+} from 'lucide-vue-next'
+import { useEnvTierStore } from '@/stores/envtier'
 import DbTree from '@/components/terminal/DbTree.vue'
 import RiskInspector from '@/components/terminal/RiskInspector.vue'
 import TerminalSession from '@/components/terminal/TerminalSession.vue'
@@ -17,6 +20,7 @@ import type { Connection, Member, RiskCommandView } from '@/types'
 import type { WsStatus } from '@/lib/wsTerminal'
 
 const ui = useUIStore()
+const envtier = useEnvTierStore()
 
 // Shared, fetched once and passed down to every session.
 const conns = ref<Connection[]>([])
@@ -30,6 +34,18 @@ interface GridResult { columns: string[]; rows: string[][] }
 interface Tab { id: number; conn: Connection; db: string; risk: 'idle' | 'safe' | 'high'; wsStatus: WsStatus; result?: GridResult }
 const tabs = ref<Tab[]>([])
 const treeCollapsed = ref(false) // collapse the left database-tree panel
+// 右侧执行上下文也可以收起。它是辅助信息(风险判定的结论终端里照样会打印),而
+// 终端本身不可替代 —— 要对着一屏宽结果核数据时,这 340px 让出来最值。
+const inspCollapsed = ref(localStorage.getItem('vela_insp_collapsed') === '1')
+function toggleInsp() {
+  inspCollapsed.value = !inspCollapsed.value
+  localStorage.setItem('vela_insp_collapsed', inspCollapsed.value ? '1' : '0')
+}
+
+// 沉浸模式:把左右两栏一起收掉,只留终端。不是浏览器全屏 —— 那会把顶栏和导航
+// 一起吞掉,而人还需要知道自己在哪个系统里。
+const zen = ref(false)
+function toggleZen() { zen.value = !zen.value }
 // HTML result-grid panel: results render in a real table (horizontal scroll,
 // select/copy) instead of an ASCII table in the terminal. Persisted per browser.
 const gridView = ref(localStorage.getItem('vela_termgrid') === '1')
@@ -96,6 +112,18 @@ function onSplitKey(e: KeyboardEvent) {
   else return
   e.preventDefault()
 }
+// 当前会话的安全等级。触发条件是**分层的 dangerBanner**,不是名字叫不叫 prod ——
+// 第二套生产环境和第一套一样危险,而按名字挑会让人最不熟悉的那些集群拿到最弱的
+// 警告。这和终端里那条红线、进入实例时那个弹窗用的是同一个判据。
+const safety = computed(() => {
+  const cn = activeTab.value?.conn
+  if (!cn) return null
+  const tier = envtier.tierOf(cn.env)
+  // 解析不出分层的按中档处理:没有分层意味着这台实例的管控级别**未知**,不是无害。
+  const level = tier?.dangerBanner ? 'danger' : (!tier || tier.requireMfa) ? 'warn' : 'ok'
+  return { level, env: cn.env.toUpperCase(), name: cn.name, role: cn.defaultRole, policy: cn.policy }
+})
+
 function setResult(id: number, r: GridResult) { const tb = tabs.value.find((t) => t.id === id); if (tb) tb.result = r }
 const activeId = ref(0)
 let seq = 0
@@ -164,12 +192,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid" :class="{ 'tree-collapsed': treeCollapsed }">
-    <div v-if="treeCollapsed" class="treerail" :title="$t('treeExpand')" @click="treeCollapsed = false"><PanelLeftOpen :size="16" /></div>
+  <div class="grid" :class="{ 'tree-collapsed': treeCollapsed, 'insp-collapsed': inspCollapsed, zen }">
+    <div v-if="treeCollapsed || zen" class="rail left" :title="$t('treeExpand')" @click="treeCollapsed = false; zen = false"><PanelLeftOpen :size="16" /></div>
     <DbTree v-else :connections="conns" :selected-id="activeTab?.conn.id || 0" :selected-db="activeTab?.db" @select="openConn" @select-db="openDb" @collapse="treeCollapsed = true" />
 
     <div class="term">
-      <!-- tab strip: one chip per open database, isolated sessions behind each -->
+      <!-- 第一行:标签页。一个标签 = 一个会话,标题写清"哪台实例的哪个库" —— 只写
+           实例名时,同一台上开两个库的两个标签长得一模一样。 -->
       <div class="tabstrip">
         <div
           v-for="tab in tabs" :key="tab.id"
@@ -177,10 +206,34 @@ onMounted(async () => {
           @click="activeId = tab.id"
         >
           <span class="dot" :class="{ off: tab.wsStatus !== 'open' }" />
-          <span class="tname">{{ tab.conn.name }}</span>
+          <span class="tname">{{ tab.conn.name }}<span v-if="tab.db" class="tdb">: {{ tab.db }}</span></span>
           <span class="close" :title="$t('tabClose')" @click.stop="closeTab(tab.id)"><X :size="12" /></span>
         </div>
-        <div class="gridtoggle" :class="{ on: gridView }" :title="$t('gridToggle')" @click="toggleGrid"><Table2 :size="14" />{{ $t('gridToggle') }}</div>
+        <div class="tabspacer" />
+        <!-- 右侧是**这个会话**的连接状态。网关整体的 p50 延迟顶栏上已经有了,
+             在这里再放一份是同一个数字说两遍。 -->
+        <span v-if="activeTab" class="wschip" :class="activeTab.wsStatus">
+          <Activity :size="12" />{{ $t('wsStatus_' + activeTab.wsStatus) }}
+        </span>
+        <button class="tbtn" :class="{ on: gridView }" :title="$t('gridToggle')" @click="toggleGrid"><Table2 :size="14" />{{ $t('gridToggle') }}</button>
+        <button class="tbtn" :title="zen ? $t('zenExit') : $t('zenEnter')" @click="toggleZen">
+          <component :is="zen ? Minimize2 : Maximize2" :size="14" />
+        </button>
+      </div>
+
+      <!-- 生产安全横幅。它取代了原先打在终端里的那一行红字 —— 那行字会被滚屏
+           顶走,而"你正在生产库上"这件事不该只在会话开头说一次。 -->
+      <div v-if="safety && safety.level !== 'ok'" class="safety" :class="safety.level">
+        <ShieldAlert :size="15" class="sbi" />
+        <span class="sbtxt">
+          <b>{{ safety.level === 'danger' ? $t('bannerProd') : $t('bannerCaution') }}</b>
+          <span class="sbsep">·</span>{{ $t('bannerInst') }} <code>{{ safety.env }} / {{ safety.name }}</code>
+          <span class="sbsep">·</span>{{ $t('bannerRole') }} <code>{{ safety.role }}</code>
+          <span class="sbsep">·</span>{{ $t('bannerAudit') }}
+        </span>
+        <button class="sbbtn" :title="$t('bannerEnd')" @click="activeTab && closeTab(activeTab.id)">
+          <LogOut :size="13" />{{ $t('bannerEnd') }}
+        </button>
       </div>
 
       <div v-if="!tabs.length" class="empty">{{ $t('tabEmpty') }}</div>
@@ -213,7 +266,12 @@ onMounted(async () => {
       </div>
     </div>
 
-    <RiskInspector :risk="activeTab?.risk || 'idle'" :risk-commands="riskCommands" :conn="activeTab?.conn || null" :chain="chain" />
+    <div v-if="inspCollapsed && !zen" class="rail right" :title="$t('ctxExpand')" @click="toggleInsp"><PanelRightOpen :size="16" /></div>
+    <RiskInspector
+      v-else-if="!zen"
+      :risk="activeTab?.risk || 'idle'" :risk-commands="riskCommands"
+      :conn="activeTab?.conn || null" :chain="chain" @collapse="toggleInsp"
+    />
   </div>
 </template>
 
@@ -227,11 +285,17 @@ onMounted(async () => {
    所以窄下来的时候由两侧依次让位,而不是让主角一直缩。 */
 .grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 268px 1fr 340px; grid-template-rows: minmax(0, 1fr); }
 .grid.tree-collapsed { grid-template-columns: 30px 1fr 340px; }
+.grid.insp-collapsed { grid-template-columns: 268px 1fr 30px; }
+.grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
+/* 沉浸模式:两侧一起收成导轨,只留终端。 */
+.grid.zen { grid-template-columns: 30px 1fr !important; }
 
 /* 第一步:先收窄右侧的执行上下文,它的内容本来就是窄栏排布。 */
 @media (max-width: 1500px) {
   .grid { grid-template-columns: 248px 1fr 296px; }
   .grid.tree-collapsed { grid-template-columns: 30px 1fr 296px; }
+  .grid.insp-collapsed { grid-template-columns: 248px 1fr 30px; }
+  .grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
 }
 /* 第二步:整块收起执行上下文。它是辅助信息 —— 风险判定的结论终端里照样会打印,
    而终端本身不可替代。让出这 296px,中间那栏差不多翻倍。 */
@@ -244,8 +308,11 @@ onMounted(async () => {
 @media (max-width: 1040px) {
   .grid { grid-template-columns: 30px 1fr; }
 }
-.treerail { display: flex; justify-content: center; padding-top: 14px; border-right: 1px solid var(--border-subtle); background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
-.treerail:hover { color: var(--accent-text); }
+/* 收起后的导轨:只留一个能点回来的图标。左右两侧共用一套样式,只是边框在哪一侧不同。 */
+.rail { display: flex; justify-content: center; padding-top: 14px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
+.rail:hover { color: var(--accent-text); }
+.rail.left { border-right: 1px solid var(--border-subtle); }
+.rail.right { border-left: 1px solid var(--border-subtle); }
 .term { display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
 .tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
 .termsplit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -274,9 +341,27 @@ onMounted(async () => {
 /* 拖动时整页禁选,否则一拖就把终端里的文字选中一片。 */
 .splitter.dragging { cursor: row-resize; }
 :global(body:has(.splitter.dragging)) { cursor: row-resize; user-select: none; }
-.gridtoggle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; align-self: center; height: 26px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11px var(--font-mono); cursor: pointer; flex-shrink: 0; white-space: nowrap; }
-.gridtoggle:hover { color: var(--text-body); }
-.gridtoggle.on { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent-text); }
+.tabspacer { flex: 1; min-width: 8px; }
+.tbtn { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 26px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11px var(--font-mono); cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+.tbtn:hover { color: var(--text-body); }
+.tbtn.on { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent-text); }
+/* 这个会话此刻连没连上。整站的网关延迟在顶栏,这里说的是**这一条 socket**。 */
+.wschip { display: inline-flex; align-items: center; gap: 5px; align-self: center; height: 26px; padding: 0 9px; border-radius: 8px; font: 600 10.5px var(--font-mono); flex-shrink: 0; white-space: nowrap; }
+.wschip.open { background: var(--success-subtle); color: var(--success-text); }
+.wschip.connecting { background: var(--warning-subtle); color: var(--warning-text); }
+.wschip.closed { background: var(--danger-subtle); color: var(--danger-text); }
+
+/* 生产安全横幅:常驻在终端上方,不会被滚屏顶走。 */
+.safety { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid; font: 500 11.5px var(--font-body); }
+.safety.danger { background: var(--danger-subtle); border-color: var(--danger); color: var(--danger-text); }
+.safety.warn { background: var(--warning-subtle); border-color: var(--warning); color: var(--warning-text); }
+.safety .sbi { flex-shrink: 0; }
+.sbtxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbtxt b { font-weight: 700; }
+.sbtxt code { font: 600 11px var(--font-mono); }
+.sbsep { margin: 0 6px; opacity: .5; }
+.sbbtn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border: 1px solid currentColor; border-radius: 7px; background: transparent; color: inherit; font: 600 10.5px var(--font-body); cursor: pointer; }
+.sbbtn:hover { background: rgba(255, 255, 255, .35); }
 .tab {
   display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px 0 12px; border-radius: 9px 9px 0 0;
   background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-bottom: none;
@@ -287,7 +372,9 @@ onMounted(async () => {
 .tab.active { background: var(--surface-page); color: var(--text-strong); border-color: var(--border-default); }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
 .dot.off { background: var(--warning); }
-.tname { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.tname { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.tdb { color: var(--text-faint); font-weight: 400; }
+.tab.active .tdb { color: var(--text-muted); }
 .close { display: flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 5px; color: var(--text-faint); }
 .close:hover { background: var(--danger-subtle); color: var(--danger-text); }
 .empty { flex: 1; display: flex; align-items: center; justify-content: center; font: 500 13px var(--font-mono); color: var(--text-faint); }
