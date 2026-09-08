@@ -10,10 +10,21 @@ import (
 
 type apListView struct {
 	Items []struct {
-		ApNo   string `json:"apNo"`
-		Status string `json:"status"`
+		ApNo     string `json:"apNo"`
+		Status   string `json:"status"`
+		Instance string `json:"instance"`
 	} `json:"items"`
 	Total int64 `json:"total"`
+}
+
+// decodeApList 把 /approvals 的分页信封拆成上面那个视图。
+func decodeApList(t *testing.T, data []byte) apListView {
+	t.Helper()
+	var out apListView
+	if err := json.Unmarshal(data, &out); err != nil {
+		t.Fatalf("decode approvals page: %v", err)
+	}
+	return out
 }
 
 func (a *testApp) listApprovals(token, status string) apListView {
@@ -22,11 +33,7 @@ func (a *testApp) listApprovals(token, status string) apListView {
 	if r.Code != 0 {
 		a.t.Fatalf("list approvals status=%q: code=%d msg=%s", status, r.Code, r.Msg)
 	}
-	var out apListView
-	if err := json.Unmarshal(r.Data, &out); err != nil {
-		a.t.Fatalf("decode: %v", err)
-	}
-	return out
+	return decodeApList(a.t, r.Data)
 }
 
 // 按状态取,而不是取一页回去自己筛。

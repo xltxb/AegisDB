@@ -140,6 +140,13 @@
   // 必须一眼分得开 —— 扫一列全是"已通过"的人,看不出哪张还等着他。
   apStWaitRun: '待执行', apStRan: '已执行', apStDone: '已通过',
   apStRejected: '已驳回',
+  apSearchPh: '搜单号 / 库表 / 发起人',
+  apSearchClear: '清空搜索',
+  apFilterAll: '全部状态',
+  apStExpired: '已失效',
+  apPerPage: '每页',
+  apEmptyFiltered: '没有符合当前条件的工单',
+  apClearFilters: '清空筛选条件',
   apActions: '操作',
   // 执行结果 —— 一张工单最后怎么样了,以库那边收没收下为准。
   apStFailed: '执行失败',

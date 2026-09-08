@@ -381,7 +381,12 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "status 取值无效")
 		return
 	}
-	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, status, (page-1)*pageSize, pageSize)
+	// 搜索词有上限:它进 LIKE,而一个几 KB 的模式只会让数据库白扫一遍全表。
+	q := strings.TrimSpace(c.Query("q"))
+	if len(q) > 128 {
+		q = q[:128]
+	}
+	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, status, q, (page-1)*pageSize, pageSize)
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "加载失败")
 		return

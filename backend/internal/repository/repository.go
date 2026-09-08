@@ -951,7 +951,7 @@ func (r *Repo) approvalScope(scope string, userID int64) *gorm.DB {
 // audit log links tickets by number, and such a ticket may sit on any page. The
 // visibility predicate still applies, so a number cannot be used to read someone
 // else's ticket.
-func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status string, offset, limit int) ([]model.Approval, int64, error) {
+func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status, q string, offset, limit int) ([]model.Approval, int64, error) {
 	count := r.approvalScope(scope, userID)
 	rows := r.approvalScope(scope, userID).Order("id desc")
 	if apNo != "" {
@@ -966,6 +966,29 @@ func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status strin
 	if status != "" {
 		count = count.Where("status = ?", status)
 		rows = rows.Where("status = ?", status)
+	}
+	// q 是控制台搜索框,匹配单号 / 实例 / 库 / 命令 / 发起人。
+	//
+	// 它必须在**这里**筛,不能让前端拿一页回去自己过滤:列表是分页的,只搜当前页
+	// 的搜索框会对一张躺在第三页的工单回答"没有" —— 而人会据此认为它不存在。
+	// 一个会说谎的搜索框比没有搜索框糟。
+	//
+	// LIKE 里的 % 和 _ 先转义,否则用户输入的下划线(表名里到处都是:t_order)会变成
+	// 通配符,搜 t_order 连 tXorder 一起命中。
+	if q != "" {
+		pat := "%" + escapeLike(q) + "%"
+		// ESCAPE 必须显式写出来:MySQL 的 LIKE 默认拿反斜杠当转义,而 **SQLite 默认
+		// 一个转义字符都没有** —— 不写这一句,上面转义出来的反斜杠加下划线在 SQLite
+		// 上会被当成"一个反斜杠 + 任意一个字符",搜 t_order 反而什么都搜不到。
+		// 两种引擎都认 ESCAPE,所以写死它。
+		const like = ` LIKE ? ESCAPE '\'`
+		const where = "ap_no" + like +
+			" OR instance" + like +
+			" OR db_name" + like +
+			" OR command" + like +
+			" OR initiator" + like
+		count = count.Where(where, pat, pat, pat, pat, pat)
+		rows = rows.Where(where, pat, pat, pat, pat, pat)
 	}
 	var total int64
 	if err := count.Count(&total).Error; err != nil {
@@ -982,11 +1005,23 @@ func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status strin
 	return as, total, err
 }
 
+// escapeLike neutralises the LIKE wildcards in user input so a search term is
+// matched literally. Without it "t_order" also matches "tXorder", and a single
+// "%" would match every row — a search box that silently means something other
+// than what was typed.
+func escapeLike(s string) string {
+	// 反斜杠自己也要先加倍,否则它会把紧随其后的那个字符转义掉 —— 而顺序必须是
+	// 反斜杠在前:NewReplacer 从左到右扫一遍、不回头,所以后面几条产生的反斜杠不会
+	// 被这一条再处理一次。
+	r := strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`)
+	return r.Replace(s)
+}
+
 // ListApprovals returns every approval the caller may see. Retained for callers
 // that genuinely need the whole set (the approval-chain sweep); the console uses
 // the paged form.
 func (r *Repo) ListApprovals(scope string, userID int64) ([]model.Approval, error) {
-	as, _, err := r.ListApprovalsPaged(scope, userID, "", "", 0, 0)
+	as, _, err := r.ListApprovalsPaged(scope, userID, "", "", "", 0, 0)
 	return as, err
 }
 

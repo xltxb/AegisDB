@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, Play, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, Play, Search, RotateCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import VSelect from '@/components/common/VSelect.vue'
 import VButton from '@/components/common/VButton.vue'
 import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
@@ -32,15 +33,54 @@ const scope = ref<'mine' | 'all'>('all')
 const list = ref<Approval[]>([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = 50
-const pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
+const pageSize = ref(20)
+const pageSizes = [20, 50, 100]
+const pages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
+
+// 搜索与状态筛选都在**服务端**做(见 api.approvals 的注释)。列表是分页的,只筛
+// 当前页的搜索框会对一张躺在第三页的工单回答"没有" —— 而人会据此认为它不存在。
+const q = ref('')
+const statusFilter = ref('')
+// 状态筛选用的是服务端**真实存在**的四个状态。界面上还有一个"待执行",但那是由
+// status + executedAt 合成出来的显示态,库里没有这一列 —— 拿它当筛选条件,分页
+// 的总数就会和筛出来的行对不上。
+const statusOpts = computed(() => [
+  { v: '', label: t('apFilterAll') },
+  { v: 'pending', label: t('apPending') },
+  { v: 'approved', label: t('apStDone') },
+  { v: 'rejected', label: t('apStRejected') },
+  { v: 'expired', label: t('apStExpired') },
+])
+const statusLabel = computed({
+  get: () => statusOpts.value.find((o) => o.v === statusFilter.value)?.label || '',
+  set: (l: string) => {
+    const hit = statusOpts.value.find((o) => o.label === l)
+    if (hit) { statusFilter.value = hit.v; page.value = 1; load() }
+  },
+})
+const statusLabels = computed(() => statusOpts.value.map((o) => o.label))
+
+// 输入时不要每敲一个字就打一次请求 —— 但也不能等失焦,那样人会以为搜索没反应。
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearch() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value = 1; load() }, 300)
+}
+function clearSearch() { q.value = ''; page.value = 1; load() }
+
+const refreshing = ref(false)
+async function refresh() {
+  refreshing.value = true
+  try { await load() } finally { refreshing.value = false }
+}
+function setPageSize(n: number) { pageSize.value = n; page.value = 1; load() }
 
 const pending = computed(() => list.value.filter((a) => a.status === 'pending').length)
 
 async function load() {
   // M14: 加载失败以 toast 呈现，避免静默失败
   try {
-    const res = await api.approvals(scope.value, page.value, pageSize)
+    const res = await api.approvals(scope.value, page.value, pageSize.value, statusFilter.value, q.value.trim())
     list.value = res.items
     total.value = res.total
     // Server-side count: the badge must not be limited to the current page.
@@ -139,6 +179,10 @@ function rowLabel(a: Approval) {
     // 历史工单没有 execStatus(这一列是后加的),它们的成败无从得知 —— 照旧只说
     // "已执行",不替它们编一个结果。
     case 'approved': return a.executedAt ? 'apStRan' : 'apStDone'
+    // 已失效 ≠ 已驳回。前者是超时没人管、被清扫自动作废的(见 sweepStaleApprovals),
+    // 后者是有人看过并且说了不行。原先它们共用 default 分支,于是一张过期单在列表上
+    // 显示成"已驳回" —— 而按状态筛"已驳回"又筛不到它,同一行的两处说法自相矛盾。
+    case 'expired': return 'apStExpired'
     // 用短标签,不是 apRejected 那一句。"已驳回 · 命令未执行 · 已通知发起人" 是一句
     // 话,塞进状态列会折成三四行,把那一行撑得比别人高一倍 —— 英文下尤其明显。
     // 那句话留在详情卡底部,那里有一整行宽度。
@@ -200,34 +244,53 @@ function chainText(a: Approval) {
 
 <template>
   <div class="scy page">
-    <div class="head">
-      <div>
-        <div class="eyebrow">APPROVAL INBOX</div>
-        <div class="sub">{{ pending }} {{ $t('awaitingYou') }} {{ $t('apprSubTail') }}</div>
+    <div class="card">
+      <!-- 卡片头:标题 + 一句弱化的说明 + 右侧控制区(搜索/状态/范围/刷新) -->
+      <div class="chead">
+        <div class="ctitle">
+          <div class="h1">{{ $t('t_approve') }}</div>
+          <div class="hint"><Inbox :size="12" />{{ $t('apprSubTail') }}</div>
+        </div>
+        <div class="ctrls">
+          <div class="searchbox">
+            <Search :size="14" color="var(--text-faint)" />
+            <input v-model="q" :placeholder="$t('apSearchPh')" spellcheck="false" @input="onSearch">
+            <button v-if="q" class="sclear" :title="$t('apSearchClear')" @click="clearSearch"><X :size="13" /></button>
+          </div>
+          <VSelect v-model="statusLabel" :options="statusLabels" height="32px" class="stsel" />
+          <div class="tabs">
+            <div class="tab" :class="{ active: scope === 'mine' }" @click="setScope('mine')">{{ $t('mineAppr') }}</div>
+            <div class="tab" :class="{ active: scope === 'all' }" @click="setScope('all')">{{ $t('allAppr') }}</div>
+          </div>
+          <button class="refresh" :disabled="refreshing" :title="$t('exportRefresh')" @click="refresh">
+            <RotateCw :size="14" :class="{ spin: refreshing }" />
+          </button>
+        </div>
       </div>
-      <div class="tabs">
-        <div class="tab" :class="{ active: scope === 'mine' }" @click="setScope('mine')"><Inbox :size="14" />{{ $t('mineAppr') }}</div>
-        <div class="tab" :class="{ active: scope === 'all' }" @click="setScope('all')">{{ $t('allAppr') }}</div>
-      </div>
-    </div>
 
-    <div class="table">
+      <div class="table">
       <div class="thead">
-        <span>{{ $t('apNo') }}</span><span>{{ $t('apRisk') }}</span><span>{{ $t('apCommand') }}</span>
-        <span>{{ $t('apInitiator') }}</span><span>{{ $t('apTarget') }}</span><span>{{ $t('apTime') }}</span>
+        <span>{{ $t('apNo') }}</span><span>{{ $t('apCommand') }}</span>
+        <span>{{ $t('apInitiator') }}</span><span class="right">{{ $t('apTime') }}</span>
         <span>{{ $t('apStatus') }}</span><span class="acth">{{ $t('apActions') }}</span>
       </div>
       <div v-for="a in list" :key="a.id" class="tr" @click="openDetail(a)">
-        <span class="mono apno click" :title="$t('apDetail')">#{{ a.apNo }}</span>
-        <span><span class="badge" :style="{ background: riskMeta(a).bg, color: riskMeta(a).c }">{{ $t(riskMeta(a).t as any) }}</span></span>
-        <span class="mono cmd1" :title="a.command">{{ tablesOf(a) }}</span>
+        <!-- 单号与优先级同格:它们回答的是同一件事 —— "这是哪一张单,有多要紧" -->
+        <span class="idcell">
+          <span class="mono apno click" :title="$t('apDetail')">#{{ a.apNo }}</span>
+          <span class="badge" :class="a.riskLevel === 'high' ? 'p1' : 'p2'">{{ $t(riskMeta(a).t as any) }}</span>
+        </span>
+        <!-- 目标表用代码块;取不出表名时给一个居中的弱灰短横,而不是留空 -->
+        <span class="tgtcell">
+          <span class="tbl" :title="a.command"><code v-if="tablesOf(a)">{{ tablesOf(a) }}</code><span v-else class="none">—</span></span>
+          <span class="inst"><span class="envtag" :class="a.tierCode || 'unknown'">{{ a.env.toUpperCase() }}</span>{{ a.instance }}<template v-if="a.database"> / {{ a.database }}</template></span>
+        </span>
         <span class="who"><span class="ava">{{ initialsOf(a.initiator) }}</span>{{ a.initiator }}</span>
-        <span class="mono mute">{{ a.env.toUpperCase() }} · {{ a.instance }}</span>
-        <span class="mono mute">{{ new Date(a.createdAt).toLocaleString('zh', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }}</span>
-        <span class="st" :class="rowState(a)">
-          <CircleCheckBig v-if="rowState(a) === 'approved'" :size="13" />
-          <CircleX v-else-if="rowState(a) === 'rejected'" :size="13" />
-          {{ $t(rowLabel(a) as any) }}
+        <span class="timecell">{{ new Date(a.createdAt).toLocaleString('sv').slice(5, 16) }}</span>
+        <span class="stcell">
+          <span class="stbadge" :class="rowState(a)">
+            <span class="sdot" /><span>{{ $t(rowLabel(a) as any) }}</span>
+          </span>
         </span>
         <!-- 操作列里只放**操作**。这里原先还有一个"详情"按钮,而它做的事和点这一
              整行一模一样(.tr 自己就带 @click="openDetail") —— 一个纯冗余的按钮,
@@ -258,15 +321,28 @@ function chainText(a: Approval) {
           </button>
         </span>
       </div>
-      <div v-if="!list.length" class="empty">{{ $t('apEmpty') }}</div>
-    </div>
+      <!-- 空态要分清"确实没有"和"筛没了":后者的出口是清掉条件,不是等着 -->
+      <div v-if="!list.length" class="empty">
+        <div class="eic"><Inbox :size="22" color="var(--text-faint)" /></div>
+        <div class="et">{{ (q || statusFilter) ? $t('apEmptyFiltered') : $t('apEmpty') }}</div>
+        <button v-if="q || statusFilter" class="eclear" @click="q = ''; statusFilter = ''; page = 1; load()">{{ $t('apClearFilters') }}</button>
+      </div>
+      </div>
 
-    <div v-if="list.length" class="pfootbar">
-      <span class="ptotal">{{ $t('apTotal', { n: total }) }}</span>
-      <div class="pager">
-        <button class="pg" :disabled="page <= 1" @click="goto(page - 1)"><ChevronLeft :size="15" /></button>
-        <span class="pgn">{{ $t('auditPageOf', { p: page, n: pages }) }}</span>
-        <button class="pg" :disabled="page >= pages" @click="goto(page + 1)"><ChevronRight :size="15" /></button>
+      <!-- 分页收进卡片内部,靠一条分割线和表格分开 -->
+      <div class="pfootbar">
+        <span class="ptotal">{{ $t('apTotal', { n: total }) }}</span>
+        <div class="pager">
+          <span class="psize">
+            {{ $t('apPerPage') }}
+            <select :value="pageSize" @change="setPageSize(Number(($event.target as HTMLSelectElement).value))">
+              <option v-for="n in pageSizes" :key="n" :value="n">{{ n }}</option>
+            </select>
+          </span>
+          <button class="pg" :disabled="page <= 1" @click="goto(page - 1)"><ChevronLeft :size="15" /></button>
+          <span class="pgn">{{ $t('auditPageOf', { p: page, n: pages }) }}</span>
+          <button class="pg" :disabled="page >= pages" @click="goto(page + 1)"><ChevronRight :size="15" /></button>
+        </div>
       </div>
     </div>
 
@@ -344,58 +420,85 @@ function chainText(a: Approval) {
 </template>
 
 <style scoped>
-.pfootbar { display: flex; align-items: center; gap: 14px; margin-top: 12px; }
-.ptotal { font: 500 12px var(--font-body); color: var(--text-muted); }
-.pager { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.pg { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border-subtle);
-  border-radius: 8px; background: var(--surface-card); color: var(--text-body); cursor: pointer; }
-.pg:disabled { opacity: .4; cursor: default; }
-.pgn { font: 500 12px var(--font-mono); color: var(--text-muted); }
+/* 卡片把整张表包起来:表头、行、分页都在同一张白卡上,而不是几块内容各自浮在
+   页面底色上。页面底色由外层壳提供(--surface-page),卡片是它上面唯一的白。 */
+.card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.chead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 18px; border-bottom: 1px solid var(--border-subtle); }
+.ctitle { min-width: 0; }
+.h1 { font: 600 17px var(--font-display); color: var(--text-strong); }
+/* 那句"待办审批后会自动发起…"降成一行小灰字带图标:它是背景说明,不是标题 */
+.hint { margin-top: 3px; display: inline-flex; align-items: center; gap: 5px; font: 500 12px var(--font-body); color: var(--text-faint); }
+.ctrls { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.searchbox { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); }
+.searchbox input { width: 190px; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 12px var(--font-body); }
+.sclear { display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 5px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.sclear:hover { color: var(--text-body); }
+.stsel { width: 132px; }
+.tabs { display: flex; border: 1px solid var(--border-default); border-radius: 9px; overflow: hidden; }
+.tab { display: flex; align-items: center; height: 32px; padding: 0 13px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); border-left: 1px solid var(--border-subtle); white-space: nowrap; }
+.tab:first-child { border-left: none; }
+.tab.active { background: var(--accent-subtle); color: var(--accent-text); }
+.refresh { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-card); color: var(--text-muted); cursor: pointer; }
+.refresh:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.refresh:disabled { opacity: .6; cursor: default; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.table { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
-/* 风险与状态两列按内容取宽(min-content),不再是按中文文案量出来的死值:
-   "Privilege P2"、"Rejected" 一到英文就顶破 88px / 96px,徽章在 22px 高的胶囊里
-   折行,整张表的行高参差不齐。富余宽度全部留给命令列那一个 1fr。 */
 /* 每一行是**各自独立**的一个 grid(.thead 和每个 .tr 分别声明 display:grid),所以
    列宽必须是与内容无关的定值 —— 一旦写 min-content / max-content / auto,每行会按
    自己那一行的内容各算一套,表头和各行的分栏就对不齐了。
 
-   定值按**英文**量,不是中文:原先 88px / 96px 是照着"风险""状态"两个中文词定的,
-   "Privilege P2"、"Rejected · not executed · requester notified" 一上去就顶破,
-   徽章在 22px 高的定高胶囊里折行,行高从 46 变到 80,整张表看着散架。
-
-   末列是操作列,按最满的那一行(驳回+通过,英文 Reject+Approve)留够并留一点余量,
-   这样每一行的按钮左右边界都在同一条线上,而不是随当前页有没有待审的单子伸缩。 */
-.thead, .tr { display: grid; grid-template-columns: 104px 108px minmax(140px, 1fr) 130px 176px 116px 104px 184px; gap: 10px; align-items: center; padding: 10px 14px; }
-.thead { background: var(--surface-page); font: 600 11px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
-.tr { border-top: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); cursor: pointer; }
+   定值按**英文**量,不是中文:照着中文词量出来的宽度,"Privilege P2"、"Rejected"
+   一上去就顶破,徽章在定高胶囊里折行,整张表的行高参差不齐。 */
+.thead, .tr { display: grid; grid-template-columns: 208px minmax(200px, 1fr) 150px 104px 116px 184px; gap: 12px; align-items: center; padding: 0 18px; }
+.thead { height: 42px; background: var(--surface-page); border-bottom: 1px solid var(--border-subtle); font: 500 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.thead .right { text-align: right; }
+.tr { min-height: 56px; padding-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); cursor: pointer; transition: background var(--dur-fast, .15s) var(--ease-out, ease); }
+.tr:last-child { border-bottom: none; }
 .tr:hover { background: var(--surface-page); }
 .mono { font-family: var(--font-mono); }
-.mute { color: var(--text-muted); }
-.apno { color: #8facff; }
-.cmd1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-strong); }
-.who { display: flex; align-items: center; gap: 6px; }
-.ava { width: 20px; height: 20px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent-text);
+
+/* 单号 + 优先级 */
+.idcell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.apno { color: var(--accent-text); font: 600 12.5px var(--font-mono); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+.tr:hover .apno { text-decoration-color: currentColor; }
+.badge { flex-shrink: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font: 600 10px var(--font-mono); white-space: nowrap; border: 1px solid transparent; }
+.badge.p1 { background: var(--danger-subtle); color: var(--danger-text); }
+.badge.p2 { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
+
+/* 目标表 / 实例 / 库 */
+.tgtcell { min-width: 0; }
+.tbl { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbl code { padding: 2px 6px; border-radius: 5px; background: var(--surface-sunken); color: var(--text-strong); font: 500 11.5px var(--font-mono); }
+.none { color: var(--text-faint); }
+.inst { margin-top: 4px; display: flex; align-items: center; gap: 6px; min-width: 0; font: 500 11px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 环境标签按**分层**着色,不按环境名 —— 名字不决定它是什么环境,绑的分层才决定 */
+.envtag { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; font: 600 9.5px var(--font-mono); background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.envtag.prod { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envtag.gli, .envtag.staging { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+
+.who { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-strong); }
+.ava { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-text);
   font: 600 10px var(--font-mono); display: grid; place-items: center; }
-.st { display: flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
-.st.pending { color: var(--warning-text); }
-.st.approved { color: var(--success-text); }
-/* 待执行借用 pending 的告警色:它和"待审批"一样,是一件还没做完、有人得动手的事 */
-.st.waitrun { color: var(--warning-text); }
-.st.rejected { color: var(--danger-text); }
-/* 执行失败与被驳回同色:两者对读的人是同一件事 —— 这条变更没有生效 */
-.st.failed { color: var(--danger-text); }
-/* 操作列和状态列之间多留一段:只隔着 10px 的网格间距时,"待执行 [执行] [详情]"
-   连成一片,看着像按钮长在状态那一列里。 */
+.timecell { text-align: right; font: 500 11.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+
+/* 状态胶囊。等待类的带一颗呼吸的点 —— 它是唯一一种"还会自己变"的状态。 */
+.stcell { min-width: 0; }
+.stbadge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font: 600 11px var(--font-body); white-space: nowrap; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.stbadge.pending, .stbadge.waitrun { background: var(--warning-subtle); color: var(--warning-text); }
+.stbadge.pending .sdot, .stbadge.waitrun .sdot { animation: breathe 1.8s ease-in-out infinite; }
+.stbadge.approved { background: var(--success-subtle); color: var(--success-text); }
+.stbadge.rejected, .stbadge.failed { background: var(--danger-subtle); color: var(--danger-text); }
+/* 已失效是"没人管过",不是"被拒绝" —— 用中性灰,不占用红色 */
+.stbadge.expired { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
 .acth { text-align: right; padding-left: 18px; }
-/* 定高,而不是让内容撑。拿掉「详情」之后,没有任何操作的行少了一个撑高度的元素,
-   有按钮的行就比没按钮的高一点点;而按钮自身的高度还随语言变 —— 中文行盒比英文
-   高 1px,于是中文下是 47/46 两种行高、英文下反而是齐的。按字体度量去配这个数配
-   不准,索性把按钮和这一格都定死在同一个高度上。 */
-.acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; padding-left: 18px; min-height: 26px; }
+.acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; padding-left: 18px; min-height: 28px; }
 .rowbtn {
-  display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; cursor: pointer;
-  border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-card);
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; cursor: pointer;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-card);
   font: 600 11px var(--font-body); color: var(--text-muted); white-space: nowrap;
   transition: color .12s, border-color .12s, background .12s;
 }
@@ -405,16 +508,21 @@ function chainText(a: Approval) {
 .rowbtn.run { color: #fff; background: var(--accent); border-color: var(--accent); }
 .rowbtn.run:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
 .rowbtn:disabled { opacity: .55; cursor: default; }
-.apno.click { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
-.tr:hover .apno.click { text-decoration-color: currentColor; }
-.rhead { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font: 600 12px var(--font-body); }
-.rhead.success { color: var(--success-text); }
-.rhead.failed { color: var(--danger-text); }
-.rhead.unknown { color: var(--text-muted); }
-.rmeta { font: 500 11px var(--font-mono); color: var(--text-faint); }
-.dcmd.out.bad { border-color: var(--danger); }
-.waitc.bad { color: var(--danger-text); }
-.empty { padding: 28px; text-align: center; color: var(--text-faint); font-size: 13px; }
+
+/* 空态与分页 */
+.empty { padding: 52px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.eic { width: 46px; height: 46px; border-radius: 14px; background: var(--surface-sunken); display: grid; place-items: center; }
+.et { font: 600 13px var(--font-body); color: var(--text-muted); }
+.eclear { padding: 6px 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--accent-text); font: 600 11.5px var(--font-body); cursor: pointer; }
+.pfootbar { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--border-subtle); }
+.ptotal { font: 500 12px var(--font-body); color: var(--text-muted); }
+.pager { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.psize { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
+.psize select { height: 28px; padding: 0 6px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-sunken); color: var(--text-body); font: 500 11.5px var(--font-mono); cursor: pointer; outline: none; }
+.pg { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border-subtle);
+  border-radius: 8px; background: var(--surface-card); color: var(--text-body); cursor: pointer; }
+.pg:disabled { opacity: .4; cursor: default; }
+.pgn { font: 500 12px var(--font-mono); color: var(--text-muted); }
 
 .overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
 .mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); }

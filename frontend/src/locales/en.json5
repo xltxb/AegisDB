@@ -126,6 +126,13 @@
   apExecuteDone: 'Command executed',
   apStWaitRun: 'To run', apStRan: 'Ran', apStDone: 'Approved',
   apStRejected: 'Rejected',
+  apSearchPh: 'Ticket, table or requester',
+  apSearchClear: 'Clear search',
+  apFilterAll: 'All statuses',
+  apStExpired: 'Expired',
+  apPerPage: 'Per page',
+  apEmptyFiltered: 'No tickets match the current filters',
+  apClearFilters: 'Clear filters',
   apActions: 'Actions',
   // Execution outcome — a ticket's final state is whatever the database did with it.
   apStFailed: 'Failed',
