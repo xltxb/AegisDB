@@ -15,7 +15,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Layers, Boxes, Plus, X, ShieldCheck, Clock, Pencil, Trash2 } from 'lucide-vue-next'
+import { Layers, Boxes, Plus, X, ShieldCheck, Clock, Pencil, Trash2, Check, Database } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -32,6 +32,10 @@ const auth = useAuthStore()
 const envtier = useEnvTierStore()
 // Every mutation is admin-only server-side; non-admins get the page read-only.
 const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
+
+// 三个子领域分成页签,而不是一路铺下去。它们是三张各自完整的表,叠在一页里要滚
+// 三屏才看得完,而每次进来其实只处理其中一件事。
+const tab = ref<'tiers' | 'envs' | 'windows'>('tiers')
 
 const usage = ref<Record<string, number>>({})
 const busy = ref(false)
@@ -155,6 +159,24 @@ onMounted(async () => {
 })
 
 const envCount = (code: string) => usage.value[code] ?? 0
+
+// 已绑定环境:列表里最多摊开三个,其余折成 +N。一个分层底下挂七八个环境是常事,
+// 全铺出来这一列会把整行撑成两行高,而它回答的问题只是"大概挂了哪些"。
+const MAX_ENV_CHIPS = 3
+const envChips = (code: string) => boundEnvs(code).slice(0, MAX_ENV_CHIPS)
+const envChipsMore = (code: string) => Math.max(0, boundEnvs(code).length - MAX_ENV_CHIPS)
+
+// 环境行的分层绑定:默认只显示一个标签,点"编辑"才换成下拉。整列都摆着下拉框时,
+// 一张只是想看一眼归属的表会长得像一张待填的表单。
+const editEnv = ref('')
+
+// 班车的发车日。空串 = 每天(后端的约定,见 validWeekdays),1..7 对应周一到周日。
+function daysOf(w: ExecWindow): boolean[] {
+  const spec = (w.weekdays || '').trim()
+  if (!spec) return [true, true, true, true, true, true, true]
+  const set = new Set(spec.split(',').map((x) => Number(x.trim())))
+  return [1, 2, 3, 4, 5, 6, 7].map((n) => set.has(n))
+}
 /** Environments bound to a tier — what blocks its deletion. */
 const boundEnvs = (code: string) => envtier.environments.filter((e) => e.tierCode === code)
 
@@ -330,8 +352,22 @@ const moveTargets = computed(() =>
       <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
     </div>
 
+    <!-- 三个子领域分页签。它们是三张各自完整的表 —— 一路铺下去要滚三屏才看得完,
+         而每次进来其实只处理其中一件事。 -->
+    <div class="segtabs">
+      <button class="segtab" :class="{ on: tab === 'tiers' }" @click="tab = 'tiers'">
+        <Layers :size="14" />{{ $t('etTierTitle') }}<span class="segn">{{ envtier.tiers.length }}</span>
+      </button>
+      <button class="segtab" :class="{ on: tab === 'envs' }" @click="tab = 'envs'">
+        <Boxes :size="14" />{{ $t('etEnvTitle') }}<span class="segn">{{ envtier.environments.length }}</span>
+      </button>
+      <button class="segtab" :class="{ on: tab === 'windows' }" @click="tab = 'windows'">
+        <Clock :size="14" />{{ $t('ewTitle') }}<span class="segn">{{ windows.length }}</span>
+      </button>
+    </div>
+
     <!-- ------------------------------------------------------------ tiers -->
-    <div class="card">
+    <div v-show="tab === 'tiers'" class="card">
       <div class="chead">
         <div class="cic"><Layers :size="17" color="var(--danger)" /></div>
         <div class="grow">
@@ -345,6 +381,13 @@ const moveTargets = computed(() =>
 
       <div class="scx">
         <div class="tgrid">
+          <!-- 四个管控开关合并到一个大表头下面。它们回答的是同一个问题("这一层
+               按什么规矩办"),分散成四个平级列头时,读的人得逐列去猜彼此的关系。 -->
+          <div class="thgroup">
+            <span />
+            <span class="grouphd">{{ $t('etGroupPolicy') }}</span>
+            <span /><span /><span />
+          </div>
           <div class="th">
             <span>{{ $t('etColTier') }}</span><span class="ctr">{{ $t('etColMfa') }}</span>
             <span class="ctr">{{ $t('etColBanner') }}</span><span class="ctr">{{ $t('etColPending') }}</span>
@@ -352,17 +395,19 @@ const moveTargets = computed(() =>
             <span class="ctr">{{ $t('etColBaseline') }}</span><span>{{ $t('etColBound') }}</span><span />
           </div>
           <div v-for="tier in envtier.tiers" :key="tier.code" class="tr">
-            <div>
-              <div class="cn"><span class="d" :class="envtier.dotFor(tier.code)" />{{ tier.code }}</div>
-              <div class="cl">{{ envtier.tierLabel(tier.code, t) }}</div>
-              <div class="cl2">{{ tier.connLayer }} · {{ tier.defaultRole }}</div>
+            <div class="tiercell">
+              <span class="tierbadge" :class="envtier.dotFor(tier.code)">{{ tier.code }}</span>
+              <span class="tiertxt">
+                <span class="cl">{{ envtier.tierLabel(tier.code, t) }}</span>
+                <span class="cl2">{{ tier.connLayer }} · {{ tier.defaultRole }}</span>
+              </span>
             </div>
-            <div class="ctr"><VSwitch :model-value="tier.requireMfa" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { requireMfa: v })" /></div>
-            <div class="ctr"><VSwitch :model-value="tier.dangerBanner" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { dangerBanner: v })" /></div>
-            <div class="ctr"><VSwitch :model-value="tier.countsInPending" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { countsInPending: v })" /></div>
+            <div class="ctr" :class="{ ro: !isAdmin }"><VSwitch :model-value="tier.requireMfa" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { requireMfa: v })" /></div>
+            <div class="ctr" :class="{ ro: !isAdmin }"><VSwitch :model-value="tier.dangerBanner" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { dangerBanner: v })" /></div>
+            <div class="ctr" :class="{ ro: !isAdmin }"><VSwitch :model-value="tier.countsInPending" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { countsInPending: v })" /></div>
             <!-- 判定的第三层。前两层(能力矩阵、高危命令字典)本来就按分层存,
                  这一层过去是个全局开关,于是它是唯一一道瞄不准的闸。 -->
-            <div class="ctr" :title="$t('etColStrictHint')"><VSwitch :model-value="tier.strictNoWhere" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { strictNoWhere: v })" /></div>
+            <div class="ctr" :class="{ ro: !isAdmin }" :title="$t('etColStrictHint')"><VSwitch :model-value="tier.strictNoWhere" @update:model-value="(v: boolean) => isAdmin && saveTier(tier, { strictNoWhere: v })" /></div>
             <!-- Radio semantics, not a switch: exactly one tier holds it, and
                  turning it off is never an option — only moving it elsewhere. -->
             <div class="ctr">
@@ -370,13 +415,16 @@ const moveTargets = computed(() =>
               <button v-else-if="isAdmin" class="baselink" :disabled="busy" @click="makeBaseline(tier)">{{ $t('etBaselineSet') }}</button>
               <span v-else class="dash">—</span>
             </div>
-            <div class="mono mute">
-              <template v-if="boundEnvs(tier.code).length">{{ boundEnvs(tier.code).map((e) => e.code).join(', ') }}</template>
+            <div class="chips">
+              <template v-if="boundEnvs(tier.code).length">
+                <span v-for="e in envChips(tier.code)" :key="e.code" class="chip">{{ e.code }}</span>
+                <span v-if="envChipsMore(tier.code)" class="chip more" :title="boundEnvs(tier.code).map((e) => e.code).join(', ')">+{{ envChipsMore(tier.code) }}</span>
+              </template>
               <span v-else class="dash">{{ $t('etNoEnv') }}</span>
             </div>
             <div class="acts">
-              <button v-if="isAdmin" class="del" :disabled="!tierDeletable(tier) || busy" :title="tierBlockReason(tier)" @click="removeTier(tier)">
-                {{ $t('etDelete') }}
+              <button v-if="isAdmin" class="iconbtn danger" :disabled="!tierDeletable(tier) || busy" :title="tierBlockReason(tier) || $t('etDelete')" @click="removeTier(tier)">
+                <Trash2 :size="13" />
               </button>
             </div>
           </div>
@@ -410,7 +458,7 @@ const moveTargets = computed(() =>
     </div>
 
     <!-- ----------------------------------------------------- environments -->
-    <div class="card">
+    <div v-show="tab === 'envs'" class="card">
       <div class="chead">
         <div class="cic"><Boxes :size="17" color="var(--accent-text)" /></div>
         <div class="grow">
@@ -426,18 +474,39 @@ const moveTargets = computed(() =>
         <div class="egrid">
           <div class="th"><span>{{ $t('etColEnv') }}</span><span>{{ $t('etColTierBind') }}</span><span class="ctr">{{ $t('etColInsts') }}</span><span /></div>
           <div v-for="e in envtier.environments" :key="e.code" class="tr">
-            <div>
-              <div class="cn"><span class="d" :class="envtier.dotForEnv(e.code)" />{{ e.code }}</div>
-              <div class="cl">{{ e.displayName }}</div>
+            <div class="tiercell">
+              <span class="d" :class="envtier.dotForEnv(e.code)" />
+              <span class="tiertxt">
+                <span class="cn">{{ e.code }}</span>
+                <span class="cl">{{ e.displayName }}</span>
+              </span>
             </div>
-            <div>
-              <VSelect v-if="isAdmin" :model-value="tierOptionLabel(e.tierCode)" :options="tierOptions" @update:model-value="(v: string) => rebind(e.code, v)" />
-              <span v-else class="mono mute">{{ e.tierCode }}</span>
+            <!-- 归属默认是一个标签,点铅笔才换成下拉。整列都摆着下拉框时,一张
+                 只是想看一眼归属的表会长得像一张待填的表单。 -->
+            <div class="bindcell">
+              <template v-if="isAdmin && editEnv === e.code">
+                <VSelect
+                  :model-value="tierOptionLabel(e.tierCode)" :options="tierOptions" height="32px"
+                  @update:model-value="(v: string) => { rebind(e.code, v); editEnv = '' }"
+                />
+                <button class="iconbtn" :title="$t('btnCancel')" @click="editEnv = ''"><X :size="13" /></button>
+              </template>
+              <template v-else>
+                <span class="tierbadge sm" :class="envtier.dotFor(e.tierCode)">{{ e.tierCode }}</span>
+                <span class="bindname">{{ envtier.tierLabel(e.tierCode, t) }}</span>
+                <button v-if="isAdmin" class="iconbtn ghost" :title="$t('etRebind')" @click="editEnv = e.code"><Pencil :size="12" /></button>
+              </template>
             </div>
-            <div class="ctr mono">{{ envCount(e.code) }}</div>
+            <div class="ctr">
+              <span class="countpill" :class="{ zero: !envCount(e.code) }">
+                <!-- 带上计数走复数分支:英文里 "1 instances" 是错的,而这一列
+                     大多数行的值恰恰是 1。中文只有一种形式,同一个 key 照常工作。 -->
+                <Database :size="11" />{{ $t('etInstN', { n: envCount(e.code) }, envCount(e.code)) }}
+              </span>
+            </div>
             <div class="acts">
-              <button v-if="isAdmin" class="del" :disabled="envtier.environments.length <= 1 || busy" :title="envtier.environments.length <= 1 ? $t('etBlockedLastEnv') : ''" @click="openDeleteEnv(e.code)">
-                {{ $t('etDelete') }}
+              <button v-if="isAdmin" class="iconbtn danger" :disabled="envtier.environments.length <= 1 || busy" :title="envtier.environments.length <= 1 ? $t('etBlockedLastEnv') : $t('etDelete')" @click="openDeleteEnv(e.code)">
+                <Trash2 :size="13" />
               </button>
             </div>
           </div>
@@ -462,11 +531,10 @@ const moveTargets = computed(() =>
       </div>
     </div>
 
-
     <!-- --------------------------------------------------- exec windows -->
     <!-- 「班车」:在指定时间、对指定的库,把本来要审批的中/高风险语句直接放行。
          放在这一页,是因为它和分层是同一类东西 —— 都在回答"这个环境按什么规矩办"。 -->
-    <div class="card">
+    <div v-show="tab === 'windows'" class="card">
       <div class="chead">
         <div class="cic"><Clock :size="17" color="var(--accent-text)" /></div>
         <div class="grow">
@@ -482,7 +550,8 @@ const moveTargets = computed(() =>
         <div class="wgrid">
           <div class="th">
             <span>{{ $t('ewColName') }}</span><span>{{ $t('ewColScope') }}</span>
-            <span>{{ $t('ewColWhen') }}</span><span class="ctr">{{ $t('ewColState') }}</span><span />
+            <span>{{ $t('ewColWhen') }}</span><span>{{ $t('ewColDays') }}</span>
+            <span class="ctr">{{ $t('ewColState') }}</span><span />
           </div>
           <div v-if="!windows.length" class="tr empty">{{ $t('ewEmpty') }}</div>
           <div v-for="w in windows" :key="w.id" class="tr">
@@ -492,6 +561,14 @@ const moveTargets = computed(() =>
             </div>
             <div class="mono mute">{{ connLabel(w.connectionId) }} / {{ w.database }}</div>
             <div class="mono mute">{{ whenLabel(w) }}</div>
+            <!-- 发车日用圆点徽章:七个字比一串 "1,3,5" 好认,而一眼扫过去就知道
+                 这班车一周跑几天。一次性窗口没有"每周哪几天"这回事,留空。 -->
+            <div class="daycell">
+              <template v-if="w.kind === 'recurring'">
+                <span v-for="(on, i) in daysOf(w)" :key="i" class="daydot" :class="{ on }">{{ dayLabels[i] }}</span>
+              </template>
+              <span v-else class="dash">—</span>
+            </div>
             <div class="ctr">
               <!-- 「进行中」是后端用与判定完全相同的逻辑算出来的,不是前端猜的 -->
               <span v-if="w.active" class="wopen">{{ $t('ewOpen') }}</span>
@@ -499,61 +576,76 @@ const moveTargets = computed(() =>
               <span v-else class="wclosed">{{ $t('ewClosed') }}</span>
             </div>
             <div class="acts">
-              <button v-if="isAdmin" class="del" :disabled="busy" @click="openWindowForm(w)"><Pencil :size="13" /></button>
-              <button v-if="isAdmin" class="del" :disabled="busy" @click="removeWindow(w)"><Trash2 :size="13" /></button>
+              <button v-if="isAdmin" class="iconbtn" :disabled="busy" :title="$t('ewEdit')" @click="openWindowForm(w)"><Pencil :size="13" /></button>
+              <button v-if="isAdmin" class="iconbtn danger" :disabled="busy" :title="$t('etDelete')" @click="removeWindow(w)"><Trash2 :size="13" /></button>
             </div>
           </div>
         </div>
       </div>
+    </div>
 
-      <div v-if="winForm" class="form">
-        <div class="fhead">{{ wf.id ? $t('ewEdit') : $t('ewNew') }}<span class="x" @click="winForm = false"><X :size="16" /></span></div>
-        <div class="frow">
-          <div><div class="fl">{{ $t('ewColName') }}</div><input v-model="wf.name" :placeholder="$t('ewNamePh')" /></div>
-          <div><div class="fl">{{ $t('ewFReason') }}</div><input v-model="wf.reason" :placeholder="$t('ewReasonPh')" /></div>
-        </div>
-        <div class="frow">
-          <div><div class="fl">{{ $t('ewFInstance') }}</div><VSelect v-model="wf.connLabel" :options="connOptions" /></div>
-          <div><div class="fl">{{ $t('ewFDatabase') }}</div><input v-model="wf.database" :placeholder="$t('ewDbPh')" /></div>
-        </div>
-        <div class="frow">
-          <div><div class="fl">{{ $t('ewFKind') }}</div><VSelect v-model="wf.kindLabel" :options="kindOptions" /></div>
-          <div><div class="fl">{{ $t('ewFEnabled') }}</div><label class="chk"><VSwitch v-model="wf.enabled" />{{ $t('ewEnabledHint') }}</label></div>
-        </div>
-
-        <!-- 一次性 -->
-        <template v-if="wf.kindLabel === kindOptions[1]">
-          <div class="frow">
-            <div><div class="fl">{{ $t('ewFFrom') }}</div><input v-model="wf.startsAt" type="datetime-local" /></div>
-            <div><div class="fl">{{ $t('ewFTo') }}</div><input v-model="wf.endsAt" type="datetime-local" /></div>
+    <!-- 新建/编辑窗口改成右侧抽屉。它原先内嵌在表格下面,一展开就把整张表推下去,
+         而这张表恰恰是填表时要对照的东西。 -->
+    <div v-if="winForm" class="drawer-ovl">
+      <div class="drawer-mask" @click="winForm = false" />
+      <aside class="drawer">
+        <div class="dhead">
+          <div class="dic"><Clock :size="16" color="var(--accent-text)" /></div>
+          <div class="grow">
+            <div class="dt">{{ wf.id ? $t('ewEdit') : $t('ewNew') }}</div>
+            <div class="ds">{{ $t('ewSub') }}</div>
           </div>
-          <div class="note">{{ $t('ewOnceNote') }}</div>
-        </template>
+          <span class="x" @click="winForm = false"><X :size="17" /></span>
+        </div>
 
-        <!-- 周期班车 -->
-        <template v-else>
+        <div class="dbody scy">
           <div class="frow">
-            <div><div class="fl">{{ $t('ewFStart') }}</div><input v-model="wf.startHM" type="time" /></div>
-            <div><div class="fl">{{ $t('ewFEnd') }}</div><input v-model="wf.endHM" type="time" /></div>
+            <div><div class="fl">{{ $t('ewColName') }}</div><input v-model="wf.name" :placeholder="$t('ewNamePh')" /></div>
+            <div><div class="fl">{{ $t('ewFReason') }}</div><input v-model="wf.reason" :placeholder="$t('ewReasonPh')" /></div>
           </div>
           <div class="frow">
-            <div><div class="fl">{{ $t('ewFTz') }}</div><input v-model="wf.timezone" placeholder="Asia/Shanghai" /></div>
-            <div><div class="fl">{{ $t('ewFNotAfter') }}</div><input v-model="wf.notAfter" type="datetime-local" /></div>
+            <div><div class="fl">{{ $t('ewFInstance') }}</div><VSelect v-model="wf.connLabel" :options="connOptions" /></div>
+            <div><div class="fl">{{ $t('ewFDatabase') }}</div><input v-model="wf.database" :placeholder="$t('ewDbPh')" /></div>
           </div>
-          <div class="fl">{{ $t('ewFDays') }}</div>
-          <div class="days">
-            <label v-for="(d, i) in dayLabels" :key="i" class="day" :class="{ on: wf.days[i] }">
-              <input v-model="wf.days[i]" type="checkbox" />{{ d }}
-            </label>
+          <div class="frow">
+            <div><div class="fl">{{ $t('ewFKind') }}</div><VSelect v-model="wf.kindLabel" :options="kindOptions" /></div>
+            <div><div class="fl">{{ $t('ewFEnabled') }}</div><label class="chk"><VSwitch v-model="wf.enabled" />{{ $t('ewEnabledHint') }}</label></div>
           </div>
-          <div class="note">{{ $t('ewRecurNote') }}</div>
-        </template>
 
-        <div class="ffoot">
-          <VButton variant="secondary" height="34px" @click="winForm = false">{{ $t('btnCancel') }}</VButton>
-          <VButton variant="primary" height="34px" :disabled="busy || !wf.name || !wf.database" @click="saveWindow">{{ $t('btnSave') }}</VButton>
+          <!-- 一次性 -->
+          <template v-if="wf.kindLabel === kindOptions[1]">
+            <div class="frow">
+              <div><div class="fl">{{ $t('ewFFrom') }}</div><input v-model="wf.startsAt" type="datetime-local" /></div>
+              <div><div class="fl">{{ $t('ewFTo') }}</div><input v-model="wf.endsAt" type="datetime-local" /></div>
+            </div>
+            <div class="note">{{ $t('ewOnceNote') }}</div>
+          </template>
+
+          <!-- 周期班车 -->
+          <template v-else>
+            <div class="frow">
+              <div><div class="fl">{{ $t('ewFStart') }}</div><input v-model="wf.startHM" type="time" /></div>
+              <div><div class="fl">{{ $t('ewFEnd') }}</div><input v-model="wf.endHM" type="time" /></div>
+            </div>
+            <div class="frow">
+              <div><div class="fl">{{ $t('ewFTz') }}</div><input v-model="wf.timezone" placeholder="Asia/Shanghai" /></div>
+              <div><div class="fl">{{ $t('ewFNotAfter') }}</div><input v-model="wf.notAfter" type="datetime-local" /></div>
+            </div>
+            <div class="fl">{{ $t('ewFDays') }}</div>
+            <div class="days">
+              <label v-for="(d, i) in dayLabels" :key="i" class="day" :class="{ on: wf.days[i] }">
+                <input v-model="wf.days[i]" type="checkbox" />{{ d }}
+              </label>
+            </div>
+            <div class="note">{{ $t('ewRecurNote') }}</div>
+          </template>
         </div>
-      </div>
+
+        <div class="dfoot">
+          <VButton variant="secondary" height="36px" @click="winForm = false">{{ $t('btnCancel') }}</VButton>
+          <VButton variant="primary" height="36px" :disabled="busy || !wf.name || !wf.database" @click="saveWindow">{{ $t('btnSave') }}</VButton>
+        </div>
+      </aside>
     </div>
 
     <!-- Deleting an environment always relocates its instances. -->
@@ -591,10 +683,14 @@ const moveTargets = computed(() =>
 
 /* Both tables scroll inside their own card; the page body never moves sideways. */
 .tgrid, .egrid { min-width: max-content; }
-.tgrid .th, .tgrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) 88px 88px 88px 96px 120px minmax(160px, 1.4fr) 90px; gap: 10px; align-items: center; }
+/* 开关四列收窄并固定:它们是同一组东西,列宽一致才有一条能顺着往下看的竖线。
+   合并表头 .thgroup 用同一套列宽,所以"管控策略配置"正好压在那四列上面。 */
+.tgrid .th, .tgrid .tr, .tgrid .thgroup { display: grid; grid-template-columns: minmax(200px, 1.6fr) 76px 76px 76px 76px 116px minmax(170px, 1.2fr) 64px; gap: 10px; align-items: center; }
+.thgroup { padding: 8px 14px 0; }
+.thgroup .grouphd { grid-column: 2 / 6; text-align: center; padding-bottom: 6px; border-bottom: 1px solid var(--border-default); font: 600 10.5px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
 /* 执行窗口列表 */
 .wgrid { min-width: max-content; }
-.wgrid .th, .wgrid .tr { display: grid; grid-template-columns: minmax(180px, 1.6fr) minmax(160px, 1.2fr) minmax(200px, 1.4fr) 96px 84px; gap: 10px; align-items: center; }
+.wgrid .th, .wgrid .tr { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(160px, 1.1fr) minmax(190px, 1.2fr) 210px 96px 72px; gap: 10px; align-items: center; }
 .tr.empty { padding: 18px; color: var(--text-faint); font: 500 12px var(--font-body); }
 .cl2 { margin-top: 3px; font: 400 11.5px var(--font-body); color: var(--text-faint); }
 /* 三种状态要一眼分得开:开着的是当下真的免审批,值得显眼。 */
@@ -602,9 +698,21 @@ const moveTargets = computed(() =>
 .wclosed { color: var(--text-faint); font: 500 11px var(--font-mono); }
 .woff { color: var(--text-faint); font: 500 11px var(--font-mono); text-decoration: line-through; }
 .days { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
-.day { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--border-default); border-radius: 999px; font: 500 12px var(--font-body); color: var(--text-muted); cursor: pointer; }
-.day.on { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
-.egrid .th, .egrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) minmax(220px, 1.6fr) 96px 90px; gap: 10px; align-items: center; }
+/* 胶囊本身就是开关(.day.on 换色),旁边再放一个原生方框等于同一件事说两遍,而且
+   那个方框还是这一排里唯一没被设计过的东西。把它藏起来但保留在 DOM 里 —— 键盘
+   和读屏靠它,焦点由 :focus-within 画在胶囊上。 */
+.day { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 34px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 999px; font: 600 12px var(--font-body); color: var(--text-muted); cursor: pointer; user-select: none; transition: color .12s, border-color .12s, background .12s; }
+.day input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+/* 选中态实心填充,而不是淡淡的一层底色。原生方框藏起来之后,开关状态全靠这一处
+   表达 —— 而"淡底色 + accent 字"和"hover 到一个未选中的胶囊"几乎分不出来,等于
+   把仅有的那点区别又交给了鼠标位置。hover 只动边框,不碰字色和填充。 */
+.day:hover { border-color: var(--accent-text); }
+.day:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.day.on { border-color: var(--accent); background: var(--accent); color: #fff; }
+/* 绑定分层那一列给上限,不再按 1.6fr 分走富余:里面是一个下拉框,而"prod · PROD ·
+   生产环境"只要两百多像素。之前它被拉到六百多宽,一个带底色的控件横在行中间,看着
+   像一条选中的色带而不是一个控件。多出来的宽度让给环境名那一列。 */
+.egrid .th, .egrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) minmax(220px, 340px) 96px 90px; gap: 10px; align-items: center; }
 .th { padding: 11px 18px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
 .tr { padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); }
 .tr:last-child { border-bottom: none; }
@@ -634,17 +742,31 @@ const moveTargets = computed(() =>
    button with no reason reads as a bug. */
 .del:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.form { padding: 16px 18px 18px; border-top: 1px solid var(--border-subtle); background: var(--surface-sunken); }
+/* 全站的约定是"凹陷的字段 + 抬起的面板":输入框和 VSelect 都用 --surface-sunken,
+   放在 --surface-card 的面板上(见 ConnectionsView 的 .ce-card/.fgrid)。这张表单
+   原先把两者反了过来 —— 面板 sunken、输入框 card —— 于是遵守约定的 VSelect 底色
+   和面板一模一样,读起来是一条色带而不是一个控件;旁边的白底输入框又像是另一类
+   东西。乱的不是下拉框,是这张表单没跟着约定走。分隔靠 border-top 和标题,不靠底色。 */
+.form { padding: 16px 18px 18px; border-top: 1px solid var(--border-subtle); background: var(--surface-card); }
 .fhead { display: flex; align-items: center; font: 700 13px var(--font-display); color: var(--text-strong); margin-bottom: 12px; }
 .fhead .x { margin-left: auto; cursor: pointer; color: var(--text-faint); display: flex; }
 .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px; }
 .frow3 { display: flex; flex-wrap: wrap; gap: 18px; margin: 12px 0; }
 .chk { display: flex; align-items: center; gap: 8px; font: 500 12px var(--font-body); color: var(--text-body); }
 .fl { font: 600 11px var(--font-mono); color: var(--text-muted); margin-bottom: 6px; }
-.form input { width: 100%; height: 38px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-strong); font: 500 12.5px var(--font-mono); outline: none; }
-.form input:focus { border-color: var(--accent-text); }
+/* :not([type="checkbox"]) —— 这一条原先是无差别的 `.form input`,于是星期那七个
+   复选框也拿到了文本框的样式:一个 13px 宽的复选框被拉成 38px 高,把外面的胶囊
+   撑到 56px,比同一张表单里的任何一个控件都高。选择器写宽了,不是样式配错了。
+
+   高度/字号/圆角与 VSelect 对齐(40px · 13px mono · 10px),它们在同一行里并排,
+   差一档就看得出来。 */
+.form input:not([type="checkbox"]) { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); color: var(--text-strong); font: 400 13px var(--font-mono); outline: none; }
+.form input:not([type="checkbox"]):focus { border-color: var(--accent-text); }
 .warn { padding: 9px 12px; border-radius: 9px; background: var(--warning-subtle, rgba(245, 165, 36, 0.1)); color: var(--warning-text); font: 500 11.5px/1.6 var(--font-body); }
-.note { padding: 9px 12px; border-radius: 9px; background: var(--surface-card); color: var(--text-muted); font: 500 11.5px/1.6 var(--font-body); }
+/* 提示原先用的是 --surface-card 的底色加 9px 圆角,而同一张表单里的输入框是
+   --surface-card 加 10px 圆角 —— 两者在屏幕上一模一样,于是这段说明看着像一个
+   填不进字的空输入框。改成一段带左侧竖线的说明文字,一眼能看出它不是控件。 */
+.note { padding: 2px 0 2px 11px; border-left: 2px solid var(--border-default); color: var(--text-muted); font: 500 11.5px/1.6 var(--font-body); }
 .ffoot { margin-top: 14px; display: flex; justify-content: flex-end; gap: 10px; }
 
 .ovl { position: fixed; inset: 0; z-index: 60; }
@@ -654,4 +776,70 @@ const moveTargets = computed(() =>
 .mbody { padding: 16px 20px; }
 .mwarn { margin-bottom: 14px; padding: 10px 12px; border-radius: 9px; background: var(--danger-subtle); color: var(--danger-text); font: 500 12px/1.6 var(--font-body); }
 .mfoot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+
+/* ---------------- 页签 ---------------- */
+.segtabs { display: flex; gap: 6px; margin-bottom: 18px; padding: 4px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-card); width: fit-content; max-width: 100%; flex-wrap: wrap; box-shadow: var(--shadow-xs); }
+.segtab { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border: none; border-radius: 9px; background: transparent; color: var(--text-muted); font: 600 12.5px var(--font-body); cursor: pointer; white-space: nowrap; transition: color .12s, background .12s; }
+.segtab:hover { color: var(--text-strong); }
+.segtab.on { background: var(--accent-subtle); color: var(--accent-text); }
+.segn { padding: 1px 7px; border-radius: 999px; background: var(--surface-sunken); font: 700 10px var(--font-mono); }
+.segtab.on .segn { background: var(--surface-card); }
+
+/* ---------------- 分层标识 ---------------- */
+.tiercell { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tiertxt { display: flex; flex-direction: column; min-width: 0; }
+/* 分层代码用语义色胶囊。颜色来自 envtier.dotFor —— 和树、审批列表上的那套是
+   同一个来源,而不是在这一页另配一份。 */
+.tierbadge { flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; font: 700 11px var(--font-mono); text-transform: uppercase; background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.tierbadge.sm { height: 20px; padding: 0 8px; font-size: 10px; }
+.tierbadge.danger { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.tierbadge.warning { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+.tierbadge.success { background: var(--success-subtle); color: var(--success-text); border-color: transparent; }
+.tierbadge.info { background: var(--accent-subtle); color: var(--accent-text); border-color: transparent; }
+
+/* 不能操作的开关弱化,但**不隐藏** —— 只读的人也要看得见这一层现在是怎么配的 */
+.ctr.ro { opacity: .45; pointer-events: none; }
+
+/* 已绑定环境:标签组,超出折成 +N */
+.chips { display: flex; align-items: center; gap: 5px; flex-wrap: nowrap; min-width: 0; overflow: hidden; }
+.chip { flex-shrink: 0; padding: 2px 8px; border-radius: 6px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 500 10.5px var(--font-mono); color: var(--text-muted); }
+.chip.more { background: var(--accent-subtle); border-color: transparent; color: var(--accent-text); cursor: default; }
+
+/* ---------------- 环境行 ---------------- */
+.bindcell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bindcell :deep(.vsel) { flex: 1; min-width: 0; }
+.bindname { font: 500 12px var(--font-body); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.countpill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 11px var(--font-mono); }
+.countpill.zero { background: var(--surface-sunken); color: var(--text-faint); }
+
+/* ---------------- 图标操作按钮 ---------------- */
+.iconbtn { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-card); color: var(--text-muted); cursor: pointer; }
+.iconbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.iconbtn.danger:hover:not(:disabled) { color: var(--danger-text); border-color: var(--danger); }
+.iconbtn.ghost { border-color: transparent; background: transparent; }
+.iconbtn:disabled { opacity: .35; cursor: default; }
+.acts { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+
+/* ---------------- 发车日圆点 ---------------- */
+.daycell { display: flex; align-items: center; gap: 4px; }
+.daydot { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--border-default); font: 600 10px var(--font-body); color: var(--text-faint); }
+.daydot.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---------------- 右侧抽屉 ---------------- */
+.drawer-ovl { position: fixed; inset: 0; z-index: var(--z-modal, 1100); }
+.drawer-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, .45); backdrop-filter: blur(2px); }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(520px, 100vw); display: flex; flex-direction: column; background: var(--surface-card); border-left: 1px solid var(--border-subtle); box-shadow: -12px 0 32px rgba(16, 24, 48, .18); }
+.dhead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.dic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.dt { font: 600 14px var(--font-display); color: var(--text-strong); }
+.ds { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dhead .x { cursor: pointer; color: var(--text-faint); display: flex; }
+/* 表单区自己滚,底部操作栏钉在抽屉底 —— 字段一多就把保存按钮滚出视野的表单,
+   人会以为还没填完。 */
+.dbody { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 20px; }
+.dfoot { flex-shrink: 0; display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-card); }
+.drawer .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 14px; }
+.drawer .fl { margin-bottom: 7px; font: 600 11px var(--font-mono); color: var(--text-muted); }
+.drawer input:not([type="checkbox"]) { width: 100%; box-sizing: border-box; height: 40px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); color: var(--text-strong); font: 400 13px var(--font-mono); outline: none; }
+.drawer input:not([type="checkbox"]):focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
 </style>

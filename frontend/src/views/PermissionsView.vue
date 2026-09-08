@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Crown, Shield, UserCog, Code, Eye, SquareTerminal, ClipboardCheck, Database,
   ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound, Rocket,
+  CircleCheck, Lock, Minus, Plus,
 } from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import VButton from '@/components/common/VButton.vue'
@@ -37,6 +38,32 @@ const edit = ref({ name: '', description: '', defaultConnRole: 'dba_l2', canAppr
 const inviteEmail = ref('')
 const inviteRoleName = ref('')
 const memberSearch = ref('')
+
+// 角色搜索。角色是一次性全量拉下来的(api.roles 不分页),所以在客户端筛是对的 ——
+// 和审批页那个必须走服务端的搜索框不是一回事。
+const roleQ = ref('')
+const filteredRoles = computed(() => {
+  const kw = roleQ.value.trim().toLowerCase()
+  if (!kw) return roles.value
+  return roles.value.filter((r) => r.name.toLowerCase().includes(kw) || r.code.toLowerCase().includes(kw))
+})
+/**
+ * 内置角色的 code,镜像自 bootstrap/seed.go 里种下的那五个。
+ *
+ * 服务端没有 builtin 标志位,所以这份清单是**复制过来的事实** —— 和
+ * lib/envTierLabels.ts 里的 BUILTIN_TIER_LABEL 是同一种做法,也同样要求:种子改了
+ * 这里得跟着改。写错的代价只是少一个灰色小标,不影响任何判定;但写错过一次
+ * (admin/dba_owner/dba_l2/dev/auditor,五个里只有一个对得上),所以把出处写在这里。
+ */
+const BUILTIN_ROLES = ['admin', 'owner', 'l2', 'ro', 'audit']
+const isBuiltin = (code: string) => BUILTIN_ROLES.includes(code)
+
+// 成员的邮箱来自本页已经加载的用户列表(onMounted 里 loadUsers 已经跑过),按 id
+// 关联即可 —— 不为此再发一次请求。
+//
+// **加入时间没有**:tbl_role_member 只有 role_id + user_id 两列,库里根本没记
+// 这个时刻。宁可不显示,也不摆一个看着像真的的假时间。
+const memberEmail = (id: number) => users.value.find((u) => u.id === id)?.email || ''
 
 const filteredUsers = computed(() => {
   const q = memberSearch.value.trim().toLowerCase()
@@ -111,10 +138,12 @@ const menuDefs = [
   // writing it, not a separate privilege.
   { key: 'pipeline', icon: Rocket, label: 'm_pipeline' },
 ]
-const sym: Record<string, { s: string; c: string }> = {
-  allow: { s: '✓', c: 'var(--success-text)' },
-  approve: { s: '⚑', c: 'var(--warning-text)' },
-  deny: { s: '—', c: 'var(--text-faint)' },
+// 三种判定各自一个图标 + 一块语义底色。原先是三个裸字符(✓ ⚑ —),同一个字号、
+// 同一种粗细,扫一列下去要逐格辨认;而这张表最常做的动作恰恰是"扫一列"。
+const sym: Record<string, { icon: any; cls: string; tip: string }> = {
+  allow: { icon: CircleCheck, cls: 'allow', tip: 'capTipAllow' },
+  approve: { icon: Lock, cls: 'approve', tip: 'capTipApprove' },
+  deny: { icon: Minus, cls: 'deny', tip: 'capTipDeny' },
 }
 const cycleOrder = ['allow', 'approve', 'deny']
 
@@ -359,67 +388,126 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 
     <!-- ROLE VIEW -->
     <div v-if="view === 'roles'" class="rolegrid">
-      <div class="scy rolelist">
-        <div class="eyebrow">{{ $t('rolesTier') }}</div>
-        <div class="rl">
-          <div v-for="r in roles" :key="r.id" class="ritem" :class="{ active: detail?.id === r.id }" @click="selectRole(r.id)">
-            <div class="rname"><component :is="roleIcon[r.icon] || Shield" :size="15" />{{ r.name }}</div>
-            <div class="rlayer">{{ r.layer }} · {{ $t('pmMembersN', { n: r.count }) }}</div>
+      <!-- 左:角色导航 -->
+      <div class="rolepanel">
+        <div class="rphead">
+          <div class="eyebrow">{{ $t('rolesTier') }}</div>
+          <VButton v-if="isAdmin" variant="primary" height="30px" @click="openRoleForm"><Plus :size="14" />{{ $t('pmNewRole') }}</VButton>
+        </div>
+        <div class="rsearch">
+          <Search :size="14" color="var(--text-faint)" />
+          <input v-model="roleQ" :placeholder="$t('pmRoleSearchPh')" spellcheck="false">
+          <button v-if="roleQ" class="sclear" :title="$t('apSearchClear')" @click="roleQ = ''"><X :size="13" /></button>
+        </div>
+        <div class="scy rl">
+          <div v-for="r in filteredRoles" :key="r.id" class="ritem" :class="{ active: detail?.id === r.id }" @click="selectRole(r.id)">
+            <div class="rname">
+              <component :is="roleIcon[r.icon] || Shield" :size="15" />
+              <span class="rn">{{ r.name }}</span>
+              <span v-if="isBuiltin(r.code)" class="builtin">{{ $t('pmBuiltin') }}</span>
+            </div>
+            <div class="rlayer">{{ r.layer }}<span class="sep">·</span>{{ $t('pmMembersN', { n: r.count }) }}</div>
           </div>
+          <div v-if="!filteredRoles.length" class="rempty">{{ $t('pmNoRole') }}</div>
         </div>
       </div>
 
-      <div v-if="detail" class="scy matrix">
-        <div class="mhead">
-          <div class="mtitle">{{ $t('matrixTitle') }}{{ selName }}</div>
-          <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
-          <VButton v-if="isAdmin" variant="secondary" @click="openRoleForm">{{ $t('editRole') }}</VButton>
-        </div>
-        <div class="mhint">{{ detail.layer }} · {{ detail.members.length }} {{ $t('membersTitle') }} · {{ $t('matrixHint') }}</div>
+      <!-- 右:权限详情。外层负责滚动,内层卡片限宽 —— 宽屏上一张横向铺满的表格,
+           眼睛要从最左的动作名一路扫到最右的开关,中间全是空白。 -->
+      <div v-if="detail" class="scy detailwrap">
+        <div class="detail">
+          <div class="mhead">
+            <div class="grow">
+              <div class="mtitle">{{ selName }}<span class="mtsub">{{ $t('matrixTitleSuffix') }}</span></div>
+              <div class="mhint">{{ detail.layer }}<span class="sep">·</span>{{ $t('pmMembersN', { n: detail.members.length }) }}<span class="sep">·</span>{{ $t('matrixHint') }}</div>
+            </div>
+            <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
+            <VButton v-if="isAdmin" variant="secondary" height="34px" @click="openRoleForm">{{ $t('editRole') }}</VButton>
+          </div>
 
-        <!-- Scrolls inside its own box once the tier count outgrows the width;
-             the page body must never scroll sideways. -->
-        <div class="mtable scx">
-          <!-- The template goes on each ROW: they are the grids. Binding it to the
-               wrapper instead left the rows with no columns at all, so every cell
-               stacked vertically in one implicit column. -->
-          <div class="mgrid">
-            <div class="mth" :style="matrixCols"><span>{{ $t('colCap') }}</span><span v-for="env in envCols" :key="env" class="ctr">{{ env }}</span></div>
-            <div v-for="(cap, i) in capKeys" :key="cap" class="mtr" :style="matrixCols">
-              <span class="cap">{{ $t(capLabels[i] as any) }}</span>
-              <div v-for="env in envCols" :key="env" class="cellwrap">
-                <div class="cell" :style="{ color: sym[cellLevel(cap, env)].c }" @click="cycleCell(cap, env)">{{ sym[cellLevel(cap, env)].s }}</div>
+          <!-- 模块一:操作权限矩阵 -->
+          <div class="sec">
+            <div class="sechead"><span class="eyebrow2">{{ $t('matrixSection') }}</span></div>
+            <!-- Scrolls inside its own box once the tier count outgrows the width;
+                 the page body must never scroll sideways. -->
+            <div class="mtable scx">
+              <!-- The template goes on each ROW: they are the grids. Binding it to the
+                   wrapper instead left the rows with no columns at all, so every cell
+                   stacked vertically in one implicit column. -->
+              <div class="mgrid">
+                <div class="mth" :style="matrixCols">
+                  <span>{{ $t('colCap') }}</span>
+                  <!-- 环境列头带分层色。颜色来自 envtier.dotFor —— 和树、审批列表、
+                       分层页是同一个来源,不在这一页另配一份。 -->
+                  <span v-for="env in envCols" :key="env" class="ctr">
+                    <span class="envhd" :class="envtier.dotFor(env)">{{ env.toUpperCase() }}</span>
+                  </span>
+                </div>
+                <div v-for="(cap, i) in capKeys" :key="cap" class="mtr" :style="matrixCols">
+                  <span class="cap">{{ $t(capLabels[i] as any) }}</span>
+                  <div v-for="env in envCols" :key="env" class="cellwrap">
+                    <button
+                      class="cell" :class="[sym[cellLevel(cap, env)].cls, { ro: !isAdmin }]"
+                      :title="$t(sym[cellLevel(cap, env)].tip)" @click="cycleCell(cap, env)"
+                    >
+                      <component :is="sym[cellLevel(cap, env)].icon" :size="14" />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+            <div class="legend">
+              <span class="lg"><span class="cell allow sm"><CircleCheck :size="12" /></span>{{ $t('capTipAllow') }}</span>
+              <span class="lg"><span class="cell approve sm"><Lock :size="12" /></span>{{ $t('capTipApprove') }}</span>
+              <span class="lg"><span class="cell deny sm"><Minus :size="12" /></span>{{ $t('capTipDeny') }}</span>
+            </div>
           </div>
-        </div>
 
-        <div class="eyebrow2">{{ $t('menuTitle') }}</div>
-        <div class="menusub">{{ $t('menuSub') }}</div>
-        <div class="menus">
-          <div v-for="m in menuDefs" :key="m.key" class="menurow">
-            <component :is="m.icon" :size="17" color="var(--text-muted)" />
-            <span class="ml">{{ $t(m.label as any) }}</span>
-            <VSwitch :model-value="!!detail.menus[m.key]" :disabled="!isAdmin" @update:model-value="toggleMenu(m.key)" />
+          <!-- 模块二:功能菜单。网格卡片,开关紧跟在名字后面 —— 原先是一行一项,
+               名字在最左、开关在屏幕最右,一千多像素的空白把两者拉断了。 -->
+          <div class="sec">
+            <div class="sechead"><span class="eyebrow2">{{ $t('menuTitle') }}</span><span class="secsub">{{ $t('menuSub') }}</span></div>
+            <div class="menugrid">
+              <label v-for="m in menuDefs" :key="m.key" class="menucard" :class="{ on: !!detail.menus[m.key] }">
+                <component :is="m.icon" :size="16" class="mi" />
+                <span class="ml">{{ $t(m.label as any) }}</span>
+                <VSwitch :model-value="!!detail.menus[m.key]" :disabled="!isAdmin" @update:model-value="toggleMenu(m.key)" />
+              </label>
+            </div>
           </div>
-        </div>
 
-        <div class="eyebrow2">{{ $t('tagAccessTitle') }}</div>
-        <div class="menusub">{{ detail.tags.length ? $t('tagAccessSub') : $t('tagAccessAll') }}</div>
-        <div class="rtags">
-          <span v-for="tg in detail.tags" :key="tg" class="rtag">{{ tg }}</span>
-          <span v-if="!detail.tags.length" class="rtagall">{{ $t('tagAllBadge') }}</span>
-          <span v-if="isAdmin" class="rtedit" @click="tagModalOpen = true"><Tag :size="12" />{{ $t('tagAssign') }}</span>
-        </div>
-
-        <div class="eyebrow2">{{ $t('membersTitle') }} · {{ detail.members.length }} {{ $t('people') }}</div>
-        <div class="members">
-          <div v-for="(mb, i) in detail.members" :key="mb.id" class="mchip">
-            <div class="mava" :class="{ first: i === 0 }">{{ mb.initials }}</div>
-            <span>{{ mb.name }}</span>
-            <span v-if="isAdmin" class="mx" :title="$t('pmRemoveMember')" @click="removeMember(mb.id)"><X :size="12" /></span>
+          <!-- 模块三:授权范围 + 成员,分两块 -->
+          <div class="sec">
+            <div class="sechead"><span class="eyebrow2">{{ $t('tagAccessTitle') }}</span><span class="secsub">{{ detail.tags.length ? $t('tagAccessSub') : $t('tagAccessAll') }}</span></div>
+            <div class="rtags">
+              <span v-for="tg in detail.tags" :key="tg" class="rtag">{{ tg }}</span>
+              <span v-if="!detail.tags.length" class="rtagall">{{ $t('tagAllBadge') }}</span>
+              <button v-if="isAdmin" class="rtedit" @click="tagModalOpen = true"><Tag :size="12" />{{ $t('tagAssign') }}</button>
+            </div>
           </div>
-          <div v-if="isAdmin" class="addm" @click="memberForm = true"><UserPlus :size="15" />{{ $t('addMember') }}</div>
+
+          <div class="sec last">
+            <div class="sechead">
+              <span class="eyebrow2">{{ $t('membersTitle') }}</span>
+              <span class="secsub">{{ $t('pmMembersN', { n: detail.members.length }) }}</span>
+              <VButton v-if="isAdmin" class="secbtn" variant="secondary" height="30px" @click="memberForm = true">
+                <UserPlus :size="14" />{{ $t('addMember') }}
+              </VButton>
+            </div>
+            <div class="memgrid">
+              <!-- 邮箱来自本页已加载的用户列表。**加入时间没有** —— tbl_role_member
+                   只有 role_id + user_id,库里就没记这个时刻,不摆一个假的。 -->
+              <div v-for="(mb, i) in detail.members" :key="mb.id" class="memcard">
+                <div class="mava" :class="{ first: i === 0 }">{{ mb.initials }}</div>
+                <div class="mbody">
+                  <div class="mn">{{ mb.name }}</div>
+                  <div class="me">{{ memberEmail(mb.id) || mb.dept || '—' }}</div>
+                </div>
+                <button v-if="isAdmin" class="mx" :title="$t('pmRemoveMember')" @click="removeMember(mb.id)"><X :size="13" /></button>
+              </div>
+              <div v-if="!detail.members.length" class="memempty">{{ $t('pmNoMember') }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -620,73 +708,120 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 .vt { display: flex; align-items: center; height: 32px; padding: 0 16px; border-radius: 9px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); }
 .vt.active { background: var(--accent-subtle); color: var(--accent-text); }
 .vhint { margin-left: auto; font: 500 11px var(--font-mono); color: var(--text-faint); }
-.rolegrid { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px 1fr; }
-.rolelist { border-right: 1px solid var(--border-subtle); background: var(--surface-sunken); padding: 18px 14px; }
-.eyebrow { font: 600 11px var(--font-mono); letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 12px; }
-.rl { display: flex; flex-direction: column; gap: 8px; }
-.ritem { padding: 12px 14px; border-radius: 10px; cursor: pointer; transition: all 0.15s ease; border: 1px solid var(--border-subtle); }
-.ritem.active { background: var(--accent-subtle); border-color: var(--accent-subtle-border); }
-.rname { display: flex; align-items: center; gap: 8px; font: 600 13px var(--font-body); color: var(--text-body); }
+.rolegrid { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); background: var(--surface-page); }
+@media (max-width: 1100px) { .rolegrid { grid-template-columns: 260px minmax(0, 1fr); } }
+
+/* ---------------- 左:角色导航 ---------------- */
+.rolepanel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border-subtle); background: var(--surface-card); }
+.rphead { display: flex; align-items: center; gap: 10px; padding: 16px 14px 10px; }
+.rphead .eyebrow { flex: 1; font: 600 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
+.rsearch { display: flex; align-items: center; gap: 7px; margin: 0 14px 10px; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); }
+.rsearch input { width: 100%; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 12px var(--font-body); }
+.sclear { display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 5px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.sclear:hover { color: var(--text-body); }
+.rl { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 14px 18px; }
+/* 选中态用左侧重点色边条,而不是整块换底:一整块蓝底在一列卡片里太重,而这一列
+   要一眼看出"现在编的是哪一个",边条比底色更快。 */
+.ritem { position: relative; padding: 11px 13px 11px 15px; border-radius: 10px; cursor: pointer; border: 1px solid var(--border-subtle); background: var(--surface-card); transition: background .15s ease, border-color .15s ease; }
+.ritem:hover { border-color: var(--border-default); background: var(--surface-sunken); }
+.ritem.active { background: var(--accent-subtle); border-color: transparent; }
+.ritem.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.rname { display: flex; align-items: center; gap: 8px; min-width: 0; font: 600 13px var(--font-body); color: var(--text-body); }
+.rn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ritem.active .rname { color: var(--accent-text); }
-.rlayer { font: 500 11px var(--font-mono); color: var(--text-faint); margin-top: 4px; }
-.matrix { padding: 24px 28px; }
-.mhead { display: flex; align-items: center; margin-bottom: 6px; }
-.mtitle { font: 700 16px var(--font-display); color: var(--text-strong); }
-.mhead :deep(.vbtn) { margin-left: auto; }
-.roflag { margin-left: auto; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
-.mhint { font: 500 12px var(--font-body); color: var(--text-muted); margin-bottom: 18px; }
-/* overflow-y:hidden keeps the rounded corners clipping (the old `overflow:hidden`
-   did that) while .scx supplies the horizontal scroll. */
-/* 这页四个区块全是白底叠白底,--border-subtle 在浅色下几乎不可见 —— 区块边界
-   一律用 --border-default,矩阵格子给出可点击的"形状"而不是漂浮的符号。 */
-.mtable { border: 1px solid var(--border-default); border-radius: 14px; overflow-y: hidden; background: var(--surface-card); box-shadow: var(--shadow-xs); }
-/* min-width:max-content keeps the rows at their natural width so .mtable's
-   overflow-x is what scrolls; without it the grid compresses instead. */
+.builtin { flex-shrink: 0; padding: 1px 6px; border-radius: 5px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 9.5px var(--font-mono); color: var(--text-faint); }
+.ritem.active .builtin { background: var(--surface-card); border-color: transparent; }
+.rlayer { margin-top: 4px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.sep { margin: 0 5px; opacity: .6; }
+.rempty { padding: 24px 4px; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+
+/* ---------------- 右:权限详情 ---------------- */
+.detailwrap { min-height: 0; padding: 22px 26px 32px; }
+/* 限宽:宽屏上一张横向铺满的表格,眼睛要从最左的动作名一路扫到最右的开关,中间
+   全是空白;而这张表的行本来就短。 */
+.detail { max-width: 1120px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); padding: 22px 24px 24px; }
+.mhead { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.mhead .grow { flex: 1; min-width: 0; }
+.mtitle { font: 700 17px var(--font-display); color: var(--text-strong); }
+.mtsub { margin-left: 8px; font: 500 12px var(--font-body); color: var(--text-faint); }
+.mhint { margin-top: 4px; font: 500 12px var(--font-body); color: var(--text-muted); }
+.roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
+
+.sec { margin-top: 22px; }
+.sec.last { margin-bottom: 2px; }
+.sechead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 11px; }
+.eyebrow2 { font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
+.secsub { font: 500 12px var(--font-body); color: var(--text-faint); }
+.secbtn { margin-left: auto; }
+
+/* ---------------- 权限矩阵 ---------------- */
+.mtable { border: 1px solid var(--border-subtle); border-radius: 12px; overflow-y: hidden; background: var(--surface-card); }
 .mgrid { min-width: max-content; }
-/* Column template is set inline from the tier count — see matrixCols — and it is
-   set on the ROWS, which are the grids. It sat on .mgrid for a while, which is a
-   plain block: the declaration was simply ignored there, and the rows, left with
-   no template, collapsed to one implicit column and stacked every cell. Nothing
-   errors when grid-template-columns lands on a non-grid, which is why that looked
-   fine in review. */
 .mth, .mtr { display: grid; gap: 10px; }
-.mth { padding: 12px 18px; border-bottom: 1px solid var(--border-default); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-muted); text-transform: uppercase; }
-.ctr { text-align: center; }
-.mtr { padding: 9px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
-.mtr:nth-child(even) { background: color-mix(in oklch, var(--surface-sunken) 55%, var(--surface-card)); }
+.mth { padding: 10px 16px; border-bottom: 1px solid var(--border-default); background: var(--surface-page); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-muted); text-transform: uppercase; align-items: center; }
+.mth .ctr { display: flex; justify-content: center; }
+/* 环境列头的颜色来自 envtier.dotFor —— 和树、审批列表、分层页同一个来源。 */
+.envhd { padding: 2px 9px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 700 10px var(--font-mono); color: var(--text-muted); }
+.envhd.danger { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envhd.warning { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+.envhd.success { background: var(--success-subtle); color: var(--success-text); border-color: transparent; }
+.envhd.info { background: var(--accent-subtle); color: var(--accent-text); border-color: transparent; }
+.mtr { padding: 7px 16px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
 .mtr:last-child { border-bottom: none; }
-.mtr:hover { background: var(--accent-subtle); }
-/* 分层列之间的竖向分隔:没有它,五列 ✓/旗 在一大片留白里对不上列头 */
+/* 斑马纹弱到几乎看不见,整行 hover 才是主要的定位手段 —— 这张表最常做的动作是
+   横着看一行、竖着扫一列,而强斑马纹会跟竖向的列边框打架。 */
+.mtr:nth-child(even) { background: color-mix(in oklch, var(--surface-sunken) 30%, var(--surface-card)); }
+.mtr:hover { background: var(--surface-sunken); }
 .cellwrap, .mth .ctr { border-left: 1px solid var(--border-subtle); }
 .cap { font: 500 13px var(--font-body); color: var(--text-body); }
 .cellwrap { display: flex; justify-content: center; }
-.cell { width: 40px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 15px; cursor: pointer;
-  border: 1px solid var(--border-subtle); background: var(--surface-card); transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
-.cell:hover { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
-.cell:hover { background: var(--surface-sunken); }
-.eyebrow2 { margin-top: 28px; font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; }
-.menusub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: -6px; margin-bottom: 12px; }
-.menus { border: 1px solid var(--border-default); border-radius: 14px; overflow: hidden; background: var(--surface-card); box-shadow: var(--shadow-xs); display: grid; grid-template-columns: 1fr 1fr; }
-.menurow { display: flex; align-items: center; gap: 11px; padding: 13px 18px; border-bottom: 1px solid var(--border-subtle); }
-.menurow:nth-child(odd) { border-right: 1px solid var(--border-subtle); }
-.menurow:hover { background: color-mix(in oklch, var(--surface-sunken) 60%, var(--surface-card)); }
-.menurow:last-child, .menurow:nth-last-child(2):nth-child(odd) { border-bottom: none; }
-.menurow .ml { flex: 1; font: 600 13px var(--font-body); color: var(--text-body); }
-.rtags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: 14px; background: color-mix(in oklch, var(--surface-sunken) 45%, var(--surface-card)); box-shadow: var(--shadow-xs); }
-.rtag { display: inline-flex; height: 26px; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 12px var(--font-mono); }
-.rtagall { display: inline-flex; height: 26px; align-items: center; padding: 0 12px; border-radius: 999px; background: var(--success-subtle); color: var(--success-text); font: 600 12px var(--font-mono); }
-.rtedit { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border: 1px dashed var(--border-default); border-radius: 999px; color: var(--text-muted); font: 600 12px var(--font-body); cursor: pointer; }
-.rtedit:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
-.members { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 16px; border: 1px solid var(--border-default); border-radius: 14px; background: color-mix(in oklch, var(--surface-sunken) 45%, var(--surface-card)); box-shadow: var(--shadow-xs); }
-.mchip { display: flex; align-items: center; gap: 9px; padding: 7px 8px 7px 7px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-card); }
-.mava { width: 28px; height: 28px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 11px var(--font-body); color: var(--text-muted); }
-.mava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; }
-.mchip span { font: 600 12px var(--font-body); color: var(--text-body); }
-.mx { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; color: var(--text-faint); }
-.mx:hover { background: var(--surface-sunken); color: var(--danger-text); }
-.addm { display: flex; align-items: center; gap: 7px; padding: 7px 16px; border: 1px dashed var(--border-default); border-radius: 999px; color: var(--text-muted); font: 600 12px var(--font-body); cursor: pointer; }
-.addm:hover { border-color: var(--accent); color: var(--accent-text); }
+/* 三种判定各自一块语义底色 + 一个图标。原先是三个裸字符,同字号同粗细,扫一列
+   下去要逐格辨认。 */
+.cell { width: 34px; height: 28px; border: 1px solid transparent; border-radius: 8px; display: grid; place-items: center; cursor: pointer; transition: box-shadow .12s ease, border-color .12s ease; }
+.cell.allow { background: var(--success-subtle); color: var(--success-text); }
+.cell.approve { background: var(--danger-subtle); color: var(--danger-text); }
+.cell.deny { background: transparent; color: var(--text-faint); }
+.cell:hover:not(.ro) { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.cell.ro { cursor: default; }
+.cell.sm { width: 20px; height: 20px; border-radius: 6px; }
+.legend { margin-top: 10px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.lg { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------------- 菜单权限 ---------------- */
+/* 网格卡片:开关紧跟在名字后面。原先是一行一项,名字在最左、开关在屏幕最右,
+   一千多像素的空白把两者拉断了 —— 要对准哪个开关属于哪一项得用手指比。 */
+.menugrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.menucard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.menucard:hover { border-color: var(--border-default); background: var(--surface-sunken); }
+.menucard.on { border-color: var(--accent-subtle-border); background: var(--accent-subtle); }
+.menucard .mi { flex-shrink: 0; color: var(--text-faint); }
+.menucard.on .mi { color: var(--accent-text); }
+.menucard .ml { flex: 1; min-width: 0; font: 600 12.5px var(--font-body); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menucard.on .ml { color: var(--accent-text); }
+
+/* ---------------- 授权范围 ---------------- */
+.rtags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-sunken); }
+.rtag { display: inline-flex; height: 24px; align-items: center; padding: 0 11px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 11.5px var(--font-mono); }
+.rtagall { display: inline-flex; height: 24px; align-items: center; padding: 0 11px; border-radius: 999px; background: var(--success-subtle); color: var(--success-text); font: 600 11.5px var(--font-mono); }
+.rtedit { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 11px; border: 1px dashed var(--border-default); border-radius: 999px; background: transparent; color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; }
+.rtedit:hover { border-color: var(--accent); color: var(--accent-text); }
+
+/* ---------------- 成员 ---------------- */
+.memgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.memcard { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); }
+.memcard:hover { border-color: var(--border-default); }
+.mava { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--surface-raised); border: 1px solid var(--border-default); display: grid; place-items: center; font: 600 11px var(--font-body); color: var(--text-muted); }
+.mava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; border: none; }
+.mbody { flex: 1; min-width: 0; }
+.mn { font: 600 12.5px var(--font-body); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me { font: 500 11px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 移除按钮只在 hover 时露出来:它是一次不可逆的操作,常驻在每张卡片上等于把
+   最危险的那个按钮摆得到处都是。 */
+.mx { flex-shrink: 0; width: 22px; height: 22px; display: grid; place-items: center; border: none; border-radius: 6px; background: transparent; cursor: pointer; color: var(--text-faint); opacity: 0; transition: opacity .12s ease; }
+.memcard:hover .mx, .mx:focus-visible { opacity: 1; }
+.mx:hover { background: var(--danger-subtle); color: var(--danger-text); }
+.memempty { padding: 18px 4px; font: 500 12px var(--font-body); color: var(--text-faint); }
+
 /* user view */
 .userpage { flex: 1; min-height: 0; padding: 24px 28px; }
 .uhead { display: flex; align-items: center; margin-bottom: 18px; }

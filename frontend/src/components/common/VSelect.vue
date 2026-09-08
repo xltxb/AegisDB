@@ -120,12 +120,18 @@ function close() {
 }
 .val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chev { color: var(--text-faint); flex-shrink: 0; }
+/* 菜单宽度原先被 left:0 + right:0 钉死成控件的宽度。而控件宽度是各个页面按版面
+   排的(导出页上只有 225px),菜单里装的却是实例名 —— 一串长得很像的标识符,截断
+   之后正是最不该截的那一段。改成至少与控件同宽、按内容伸长、再给一个上限。 */
 .menu {
   position: absolute;
   z-index: 30;
   top: calc(100% + 4px);
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(460px, 92vw);
   background: var(--surface-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -151,7 +157,10 @@ function close() {
   color: var(--text-strong);
   font: 400 12.5px var(--font-mono);
 }
-.list { max-height: 220px; }
+/* 220px 配 33px 的行高只露得出 6.67 行 —— 十来个实例要在一个切掉半行的小窗口里
+   翻,而那半行看着像渲染坏了。放到 360px(约 10 行),同时用 vh 兜住:矮屏幕上不能
+   让菜单长过视口。 */
+.list { max-height: min(360px, 52vh); }
 .opt {
   padding: 8px 11px;
   border-radius: 8px;
