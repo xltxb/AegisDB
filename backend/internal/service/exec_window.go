@@ -76,7 +76,12 @@ func (s *Services) relaxByWindow(conn *model.Connection, v gateway.Verdict, now 
 	v.Action = gateway.ActionAllow
 	// 风险等级**不降**:它描述这条语句有多危险,而窗口改变的是流程,不是事实。
 	// 降级会让审计里这条 DROP 看起来像一次普通查询。
-	v.Rule = "执行窗口「" + w.Name + "」· 免审批放行(原判:" + v.Rule + ")"
+	ref := model.NewRuleRef(model.RuleExecWindow, "window", w.Name)
+	if v.Ref != nil {
+		ref.Parts = []model.RuleRef{*v.Ref} // 原判嵌在里面,两半都能各自翻译
+	}
+	v.Ref = ref
+	v.Rule = model.RenderRule(ref)
 	return v, w
 }
 

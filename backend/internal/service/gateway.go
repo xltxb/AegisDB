@@ -82,6 +82,7 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql, database string) 
 		Action:           v.Action,
 		RequiresApproval: v.RequiresApproval(),
 		MatchedRule:      v.Rule,
+		MatchedRuleRef:   v.Ref,
 		Command:          v.Command,
 	}, nil
 }
@@ -173,11 +174,11 @@ func (s *Services) rawVerdict(u *model.User, conn *model.Connection, stmts []str
 	}
 	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	roleIDs := s.Repo.EffectiveRoleIDs(u)
-	var hits []string // one entry per gated statement, in script order
+	var hits []model.RuleRef // one entry per gated statement, in script order
 	for i, st := range stmts {
 		v := s.Engine.EvaluateFor(roleIDs, conn.Engine, tier, st)
-		if v.Action != gateway.ActionAllow && v.Rule != "" {
-			hits = append(hits, batchHitLabel(i+1, v))
+		if v.Action != gateway.ActionAllow && v.Ref != nil {
+			hits = append(hits, *batchHitRef(i+1, v))
 		}
 		if actionRank(v.Action) > actionRank(strict.Action) ||
 			(actionRank(v.Action) == actionRank(strict.Action) && riskRank(v.Risk) > riskRank(strict.Risk)) {
@@ -185,7 +186,8 @@ func (s *Services) rawVerdict(u *model.User, conn *model.Connection, stmts []str
 		}
 	}
 	if len(stmts) > 1 && len(hits) > 0 {
-		strict.Rule = joinBatchHits(hits)
+		strict.Ref = batchRef(hits)
+		strict.Rule = model.RenderRule(strict.Ref)
 	}
 	return strict
 }
@@ -195,21 +197,29 @@ func (s *Services) rawVerdict(u *model.User, conn *model.Connection, stmts []str
 // line both need the first few and the total, not the whole list.
 const maxBatchHits = 8
 
-// batchHitLabel renders one gated statement of a batch: "第2条 TRUNCATE · 高危命令字典 · …".
-func batchHitLabel(pos int, v gateway.Verdict) string {
+// batchHitRef identifies one gated statement of a batch: "第2条 TRUNCATE · 高危命令字典 · …",
+// keeping the statement's own rule nested so a client can translate both halves.
+func batchHitRef(pos int, v gateway.Verdict) *model.RuleRef {
+	code := model.RuleBatchHit
 	if v.Command == "" {
-		return fmt.Sprintf("第%d条 · %s", pos, v.Rule)
+		code = model.RuleBatchHitBare
 	}
-	return fmt.Sprintf("第%d条 %s · %s", pos, v.Command, v.Rule)
+	r := model.NewRuleRef(code, "pos", model.Itoa(pos), "command", v.Command)
+	r.Parts = []model.RuleRef{*v.Ref}
+	return r
 }
 
-// joinBatchHits joins the per-statement hits, truncating past maxBatchHits with
-// the count of what was left out.
-func joinBatchHits(hits []string) string {
+// batchRef gathers the per-statement hits, truncating past maxBatchHits with the
+// count of what was left out.
+func batchRef(hits []model.RuleRef) *model.RuleRef {
+	r := model.NewRuleRef(model.RuleBatch)
 	if len(hits) <= maxBatchHits {
-		return strings.Join(hits, " + ")
+		r.Parts = hits
+		return r
 	}
-	return strings.Join(hits[:maxBatchHits], " + ") + fmt.Sprintf(" + …另有 %d 条命中", len(hits)-maxBatchHits)
+	r.Parts = append(append([]model.RuleRef{}, hits[:maxBatchHits]...),
+		*model.NewRuleRef(model.RuleBatchMore, "n", model.Itoa(len(hits)-maxBatchHits)))
+	return r
 }
 
 // riskRank orders risk grades so equal-action verdicts can still escalate.
@@ -270,7 +280,7 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 			return nil, err
 		}
 		s.recordAudit(u, conn, sql, v.Risk, model.ResultPending, ap.ApNo, "intercept")
-		return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: v.Risk, Rule: v.Rule}, nil
+		return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: v.Risk, Rule: v.Rule, RuleRef: v.Ref}, nil
 
 	default: // allow
 		res := s.Executor.Run(conn, sql, s.execTimeout())
@@ -339,8 +349,9 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 			return nil, ErrForbidden
 		}
 	}
-	rule := "脚本含高危语句 · 需审批"
-	av := gateway.Verdict{Action: gateway.ActionApprove, Risk: risk, Rule: rule}
+	ref := model.NewRuleRef(model.RuleScriptHigh)
+	rule := model.RenderRule(ref)
+	av := gateway.Verdict{Action: gateway.ActionApprove, Risk: risk, Rule: rule, Ref: ref}
 
 	// The ticket carries an excerpt and a digest, not the script. See script_ref.go
 	// — the body would not fit in `command` on MySQL, and the file it came from is
@@ -360,7 +371,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 		return nil, err
 	}
 	s.recordAudit(u, conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
-	return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: risk, Rule: rule}, nil
+	return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: risk, Rule: rule, RuleRef: ref}, nil
 }
 
 // createApproval builds an approval ticket + chain steps (default approvers from

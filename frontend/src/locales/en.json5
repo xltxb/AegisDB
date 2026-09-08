@@ -372,6 +372,21 @@
   termLostWhileRunning: 'Connection lost while the command was running — its outcome is unknown. Check the audit log before retrying.',
   termDeniedCap: '· Command denied: the capability matrix forbids this operation in this environment',
   termHitRule: '· Matched high-risk rule "{rule}", submit for approval in the dialog',
+  // Rule names. The server sends a stable code plus arguments; the canonical
+  // Chinese string comes alongside it as the fallback (see lib/ruleText.ts).
+  ruleText: {
+    capDeny: 'Capability matrix · forbidden in this environment',
+    capApprove: 'Capability matrix · approval required',
+    dictDeny: 'High-risk dictionary · direct execution forbidden on {tier}',
+    dictApprove: 'High-risk dictionary · approval required',
+    strictNoWhere: 'Strict mode · DELETE / UPDATE without a WHERE clause',
+    unavailable: 'Risk control unavailable · treated as strictest',
+    scriptHigh: 'Script contains high-risk statements · approval required',
+    execWindow: 'Execution window “{window}” · allowed without approval (originally: {inner})',
+    batchHit: 'Statement {pos} {command} · {inner}',
+    batchHitBare: 'Statement {pos} · {inner}',
+    batchMore: '… and {n} more matches',
+  },
   termMetaTitle: ' Meta-commands',
   termMetaHelp: '  {bs}?            show help',
   termMetaList: '  {bs}l            list connections',

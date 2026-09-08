@@ -72,7 +72,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 			return nil, aerr
 		}
 		s.recordAudit(u, conn, sql, v.Risk, model.ResultPending, ap.ApNo, "intercept")
-		return &dto.AsyncSubmitResp{Intercepted: true, ApprovalNo: ap.ApNo, Risk: v.Risk, Rule: v.Rule}, nil
+		return &dto.AsyncSubmitResp{Intercepted: true, ApprovalNo: ap.ApNo, Risk: v.Risk, Rule: v.Rule, RuleRef: v.Ref}, nil
 	default: // allow → enqueue a background job
 		job := &model.AsyncJob{
 			UserID: u.ID, ConnectionID: conn.ID, Instance: conn.Env + "-" + conn.Name,

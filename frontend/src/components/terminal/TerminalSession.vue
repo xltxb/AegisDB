@@ -12,6 +12,8 @@ import SnippetModal from '@/components/modals/SnippetModal.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
+import { renderRule as renderRuleIn } from '@/lib/ruleText'
+import type { RuleRef } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
 import { useSnippetStore } from '@/stores/snippets'
@@ -40,7 +42,10 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string]; result: [{ columns: string[]; rows: string[][] }]; close: [] }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
+// 规则名按界面语言渲染;服务端认不出的 code 回落到它给的中文原串。
+const ruleI18n = { t: t as never, te: te as never }
+const renderRule = (ref: RuleRef | undefined, canonical: string) => renderRuleIn(ref, canonical, ruleI18n)
 const auth = useAuthStore()
 const envtier = useEnvTierStore()
 const router = useRouter()
@@ -523,10 +528,10 @@ async function handleSubmit(stmt: string) {
       risk.value = 'high'
       apCmd.value = raw
       apRisk.value = r.risk === 'high' ? 'high' : 'mid'
-      apRule.value = r.matchedRule || ''
+      apRule.value = renderRule(r.matchedRuleRef, r.matchedRule)
       apAuditId.value = t('auditPending')
       apOpen.value = true
-      out(c(ANSI.yellow, t('termHitRule', { rule: r.matchedRule || '-' })))
+      out(c(ANSI.yellow, t('termHitRule', { rule: apRule.value || '-' })))
       return
     }
     risk.value = 'safe'
@@ -750,9 +755,10 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
   risk.value = 'safe'
 }
 
-function renderIntercept(m: { rule?: string; approvalNo?: string }) {
+function renderIntercept(m: { rule?: string; ruleRef?: RuleRef; approvalNo?: string }) {
   out(c(ANSI.red, t('termIntercepted')))
-  out(c(ANSI.gray, t('termHitRuleLine', { rule: m.rule || apRule.value || '-' })))
+  const rule = renderRule(m.ruleRef, m.rule || '') || apRule.value
+  out(c(ANSI.gray, t('termHitRuleLine', { rule: rule || '-' })))
   out(c(ANSI.gray, t('termApprovalLine', { no: m.approvalNo || '-' })))
 }
 
@@ -764,7 +770,7 @@ function renderExecEnvelope(env: ExecEnvelope) {
   const outcome = classifyExecEnvelope(env)
   switch (outcome.kind) {
     case 'intercepted':
-      renderIntercept({ rule: outcome.rule, approvalNo: outcome.approvalNo })
+      renderIntercept({ rule: outcome.rule, ruleRef: outcome.ruleRef, approvalNo: outcome.approvalNo })
       auth.pendingCount++
       return
     case 'failed':
@@ -788,7 +794,7 @@ async function submitApproval(reason: string) {
     const outcome = classifyExecEnvelope(env)
     if (outcome.kind === 'mfa') { requestMfa(apCmd.value, reason); return }
     if (outcome.kind === 'intercepted') {
-      renderIntercept({ rule: outcome.rule || apRule.value, approvalNo: outcome.approvalNo })
+      renderIntercept({ rule: outcome.rule, ruleRef: outcome.ruleRef, approvalNo: outcome.approvalNo })
       auth.pendingCount++
     } else {
       // The command may not have been intercepted after all (the rule could have

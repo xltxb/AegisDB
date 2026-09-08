@@ -1,7 +1,11 @@
 // Package dto defines request/response payloads (the front/back contract).
 package dto
 
-import "time"
+import (
+	"time"
+
+	"velagateway/internal/model"
+)
 
 // ---- Auth ----
 
@@ -52,6 +56,9 @@ type RiskCheckResp struct {
 	Action           string `json:"action"` // allow|approve|deny
 	RequiresApproval bool   `json:"requiresApproval"`
 	MatchedRule      string `json:"matchedRule"`
+	// MatchedRuleRef 是同一条规则的机器可读身份,给客户端按界面语言渲染用。
+	// MatchedRule 仍然是规范中文串,也是认不出 code 时的回落。
+	MatchedRuleRef *model.RuleRef `json:"matchedRuleRef,omitempty"`
 	Command          string `json:"command"`
 	ApprovalNo       string `json:"approvalNo,omitempty"`
 	AuditID          string `json:"auditId,omitempty"`
@@ -72,7 +79,8 @@ type ExecResp struct {
 	ApprovalNo  string `json:"approvalNo,omitempty"`
 	AuditID     string `json:"auditId,omitempty"`
 	Risk        string `json:"risk"`
-	Rule        string `json:"rule,omitempty"` // matched rule text (why it was intercepted)
+	Rule        string         `json:"rule,omitempty"` // matched rule text (why it was intercepted)
+	RuleRef     *model.RuleRef `json:"ruleRef,omitempty"`
 	Output      string `json:"output,omitempty"`
 	Rows        int    `json:"rows,omitempty"`
 	Ms          int    `json:"ms,omitempty"`
@@ -515,8 +523,9 @@ type AsyncSubmitResp struct {
 	JobID       int64  `json:"jobId,omitempty"`
 	Intercepted bool   `json:"intercepted,omitempty"`
 	ApprovalNo  string `json:"approvalNo,omitempty"`
-	Risk        string `json:"risk,omitempty"`
-	Rule        string `json:"rule,omitempty"`
+	Risk        string         `json:"risk,omitempty"`
+	Rule        string         `json:"rule,omitempty"`
+	RuleRef     *model.RuleRef `json:"ruleRef,omitempty"`
 	// Output carries a terminal-style notice when the submission was accepted but
 	// nothing was queued — e.g. the instance is in maintenance (ER6). Mirrors how
 	// the synchronous exec path reports the same restriction.

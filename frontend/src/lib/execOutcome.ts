@@ -12,6 +12,7 @@
 // component) is what makes the distinction testable.
 
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED } from '@/api/codes'
+import type { RuleRef } from '@/types'
 
 export interface ExecPayload {
   output?: string
@@ -23,6 +24,7 @@ export interface ExecPayload {
   intercepted?: boolean
   approvalNo?: string
   rule?: string
+  ruleRef?: RuleRef
 }
 
 export interface ExecEnvelope {
@@ -33,7 +35,7 @@ export interface ExecEnvelope {
 
 export type ExecOutcome =
   | { kind: 'mfa' }
-  | { kind: 'intercepted'; approvalNo?: string; rule?: string }
+  | { kind: 'intercepted'; approvalNo?: string; rule?: string; ruleRef?: RuleRef }
   | { kind: 'ok'; data: ExecPayload }
   | { kind: 'failed'; message: string }
 
@@ -42,7 +44,10 @@ export function classifyExecEnvelope(env: ExecEnvelope): ExecOutcome {
   // Interception is signalled either by its own code or by a flag inside an
   // otherwise-successful envelope, depending on the entry point.
   if (env.code === CODE_INTERCEPTED || env.data?.intercepted) {
-    return { kind: 'intercepted', approvalNo: env.data?.approvalNo, rule: env.data?.rule }
+    return {
+      kind: 'intercepted', approvalNo: env.data?.approvalNo,
+      rule: env.data?.rule, ruleRef: env.data?.ruleRef,
+    }
   }
   // Anything else non-zero is a refusal or an error — never a result. An empty
   // payload on a SUCCESS code stays a success (a DDL returns nothing), which is

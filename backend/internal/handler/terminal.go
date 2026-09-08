@@ -677,7 +677,7 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			continue
 		}
 		if r.Intercepted {
-			send(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule})
+			send(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule, "ruleRef": r.RuleRef})
 			continue
 		}
 		send(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,

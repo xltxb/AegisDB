@@ -394,6 +394,21 @@
   termLostWhileRunning: '连接在命令执行期间中断,该命令是否已生效未知,请先查审计日志再重试。',
   termDeniedCap: '· 命令被拒绝:能力矩阵在该环境禁止此操作',
   termHitRule: '· 命中高危规则「{rule}」,请在弹窗中提交审批',
+  // 规则名。服务端发的是稳定的 code + 参数,这里按界面语言讲同一句话;
+  // 服务端同时还发一份规范中文串,认不出的 code 就回落到它(见 lib/ruleText.ts)。
+  ruleText: {
+    capDeny: '能力矩阵 · 该环境禁止此操作',
+    capApprove: '能力矩阵 · 需审批',
+    dictDeny: '高危命令字典 · {tier} 禁止直接执行',
+    dictApprove: '高危命令字典 · 需审批',
+    strictNoWhere: '严格模式 · 无 WHERE 的 DELETE / UPDATE',
+    unavailable: '风险控制暂时不可用 · 已按最严处理',
+    scriptHigh: '脚本含高危语句 · 需审批',
+    execWindow: '执行窗口「{window}」· 免审批放行(原判:{inner})',
+    batchHit: '第{pos}条 {command} · {inner}',
+    batchHitBare: '第{pos}条 · {inner}',
+    batchMore: '…另有 {n} 条命中',
+  },
   termMetaTitle: ' 元命令',
   termMetaHelp: '  {bs}?            显示帮助',
   termMetaList: '  {bs}l            列出可用连接',

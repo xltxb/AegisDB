@@ -91,11 +91,26 @@ export interface LoginResp {
   user: Me
 }
 
+/**
+ * The machine-readable identity of the rule behind a verdict.
+ *
+ * Sent alongside the canonical Chinese rule string so the UI can say the same
+ * thing in the reader's language; `parts` nests (a batch holds one per gated
+ * statement, an execution window holds the verdict it relaxed). See
+ * lib/ruleText.ts — an unknown `code` falls back to the string.
+ */
+export interface RuleRef {
+  code: string
+  args?: Record<string, string>
+  parts?: RuleRef[]
+}
+
 export interface RiskCheckResp {
   risk: string
   action: 'allow' | 'approve' | 'deny'
   requiresApproval: boolean
   matchedRule: string
+  matchedRuleRef?: RuleRef
   command: string
   approvalNo?: string
   auditId?: string
@@ -107,6 +122,7 @@ export interface ExecResp {
   auditId?: string
   risk: string
   rule?: string
+  ruleRef?: RuleRef
   output?: string
   rows?: number
   ms?: number

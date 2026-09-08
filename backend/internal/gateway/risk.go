@@ -17,11 +17,25 @@ const (
 )
 
 // Verdict is the outcome of the three-layer risk evaluation.
+//
+// Rule is the canonical Chinese sentence — what approvals and the audit chain
+// record, and what must not change with whoever happens to be reading. Ref is
+// the same statement as a code plus arguments, so a client can render it in the
+// operator's language; see model.RuleRef. Rule is always RenderRule(Ref), never
+// written independently, or the two would drift and the audit trail would stop
+// matching what the operator was shown.
 type Verdict struct {
 	Action  string // allow|approve|deny
 	Risk    string // high|mid|low
 	Rule    string
+	Ref     *model.RuleRef
 	Command string
+}
+
+// verdict builds a gated verdict from its rule identity, keeping Rule and Ref in
+// step by construction.
+func verdict(action, risk, verb string, ref *model.RuleRef) Verdict {
+	return Verdict{Action: action, Risk: risk, Rule: model.RenderRule(ref), Ref: ref, Command: verb}
 }
 
 // RequiresApproval reports whether the command must go through approval.
@@ -715,10 +729,10 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 			return unavailableVerdict(verb, err)
 		}
 		if capLevel == model.LevelDeny {
-			return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
+			return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleCapDeny))
 		}
 		if capLevel == model.LevelApprove {
-			return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "能力矩阵 · 需审批", Command: verb}
+			return verdict(ActionApprove, model.RiskMid, verb, model.NewRuleRef(model.RuleCapApprove))
 		}
 		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
 	}
@@ -746,10 +760,10 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 		}
 		capLevel := stricterLevel(readLevel, planLevel)
 		if capLevel == model.LevelDeny {
-			return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
+			return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleCapDeny))
 		}
 		if capLevel == model.LevelApprove {
-			return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "能力矩阵 · 需审批", Command: verb}
+			return verdict(ActionApprove, model.RiskMid, verb, model.NewRuleRef(model.RuleCapApprove))
 		}
 		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
 	}
@@ -759,7 +773,7 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 		return unavailableVerdict(verb, err)
 	}
 	if capLevel == model.LevelDeny {
-		return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "能力矩阵 · 该环境禁止此操作", Command: verb}
+		return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleCapDeny))
 	}
 
 	matched, lvl, err := e.matchCommand(sql, tier)
@@ -769,7 +783,7 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 	if matched != "" {
 		verb = matched
 	}
-	rule := ""
+	var ref *model.RuleRef
 	// Layer ③, keyed by the same tier as the two layers above it. A tier that
 	// switches this off is saying "a full-table write is ordinary here" — which is
 	// what dev means by setting its whole dictionary to `off`.
@@ -779,20 +793,23 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 	}
 	if strict && d.UnscopedMutation(sql) {
 		lvl = model.RiskHigh
-		rule = "严格模式 · 无 WHERE 的 DELETE / UPDATE"
+		ref = model.NewRuleRef(model.RuleStrictNoWhere)
 	}
 
 	switch lvl {
 	case model.RiskHigh:
-		if rule == "" {
-			rule = "高危命令字典 · PROD 禁止直接执行"
+		if ref == nil {
+			// 名字里那个分层要是**这次判定用的**分层。它一直硬写着 PROD,于是 UAT 上
+			// 被字典拦下的人读到的是"PROD 禁止直接执行" —— 一条对不上自己所在环境的
+			// 理由,只会让人怀疑是网关判错了库。
+			ref = model.NewRuleRef(model.RuleDictDeny, "tier", strings.ToUpper(tier))
 		}
-		return Verdict{Action: ActionApprove, Risk: model.RiskHigh, Rule: rule, Command: verb}
+		return verdict(ActionApprove, model.RiskHigh, verb, ref)
 	case model.RiskMid:
-		return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "高危命令字典 · 需审批", Command: verb}
+		return verdict(ActionApprove, model.RiskMid, verb, model.NewRuleRef(model.RuleDictApprove))
 	default:
 		if capLevel == model.LevelApprove {
-			return Verdict{Action: ActionApprove, Risk: model.RiskMid, Rule: "能力矩阵 · 需审批", Command: verb}
+			return verdict(ActionApprove, model.RiskMid, verb, model.NewRuleRef(model.RuleCapApprove))
 		}
 		return Verdict{Action: ActionAllow, Risk: model.RiskLow, Command: verb}
 	}
@@ -805,7 +822,7 @@ func (e *RiskEngine) EvaluateFor(roleIDs []int64, engine, tier, sql string) Verd
 // the gate cannot be consulted the command is refused, not waved past.
 func unavailableVerdict(verb string, err error) Verdict {
 	slog.Error("risk evaluation unavailable — denying command", "verb", verb, "err", err)
-	return Verdict{Action: ActionDeny, Risk: model.RiskHigh, Rule: "风险控制暂时不可用 · 已按最严处理", Command: verb}
+	return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleUnavailable))
 }
 
 // Unavailable is unavailableVerdict for callers outside this package that fail

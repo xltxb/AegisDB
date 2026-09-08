@@ -16,6 +16,7 @@ import (
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/handler"
+	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/internal/service"
 	"velagateway/pkg/crypto"
@@ -196,10 +197,12 @@ func (a *testApp) connIDByEnv(token, env string) int64 {
 
 // riskCheckResult is the decoded /risk/check payload used by engine tests.
 type riskCheckResult struct {
-	Risk             string `json:"risk"`
-	Action           string `json:"action"`
-	RequiresApproval bool   `json:"requiresApproval"`
-	Command          string `json:"command"`
+	Risk             string         `json:"risk"`
+	Action           string         `json:"action"`
+	RequiresApproval bool           `json:"requiresApproval"`
+	Command          string         `json:"command"`
+	MatchedRule      string         `json:"matchedRule"`
+	MatchedRuleRef   *model.RuleRef `json:"matchedRuleRef"`
 }
 
 // riskCheck runs the pure three-layer pre-check for a (connection, sql) pair.
