@@ -368,7 +368,10 @@ const policies = computed(() => {
 .dt { font: 600 14px var(--font-display); color: var(--text-strong); }
 .ds { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
 .envtabs { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
-.et { height: 32px; line-height: 32px; padding: 0 14px; cursor: pointer; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 32px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.et { display: flex; align-items: center; height: 32px; padding: 0 14px; cursor: pointer; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
 .et:first-child { border-left: none; }
 .et.active { background: var(--accent-subtle); color: var(--accent-text); }
 .chips { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
@@ -417,7 +420,10 @@ const policies = computed(() => {
 .si { cursor: pointer; }
 .rf2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .seg { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
-.si { flex: 1; text-align: center; height: 38px; line-height: 38px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 38px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { flex: 1; display: flex; align-items: center; justify-content: center; height: 38px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
 .si:first-child { border-left: none; }
 .si.active { background: var(--accent-subtle); color: var(--accent-text); }
 .si.active.danger { background: var(--danger-subtle); color: var(--danger-text); }

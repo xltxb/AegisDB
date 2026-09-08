@@ -416,7 +416,10 @@ function dialectsOf(r: ReviewRule) {
 .ct { font: 600 14px var(--font-display); color: var(--text-strong); }
 .cs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
 .tabs { display: flex; width: fit-content; max-width: 100%; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); overflow: hidden; }
-.tab { height: 32px; line-height: 32px; padding: 0 14px; cursor: pointer; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); white-space: nowrap; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 32px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.tab { display: flex; align-items: center; height: 32px; padding: 0 14px; cursor: pointer; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); white-space: nowrap; }
 .tab:first-child { border-left: none; }
 .tab.active { background: var(--accent-subtle); color: var(--accent-text); }
 .cats { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
@@ -469,7 +472,10 @@ function dialectsOf(r: ReviewRule) {
 .mbody { padding: 6px 22px 18px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .seg { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
-.si { flex: 1; text-align: center; height: 36px; line-height: 36px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); cursor: pointer; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 36px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { flex: 1; display: flex; align-items: center; justify-content: center; height: 36px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); cursor: pointer; }
 .si:first-child { border-left: none; }
 .si.active { background: var(--accent-subtle); color: var(--accent-text); }
 .hint { margin-top: 10px; font: 500 11px var(--font-body); color: var(--text-faint); }

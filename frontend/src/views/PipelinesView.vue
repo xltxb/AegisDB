@@ -409,7 +409,10 @@ async function remove(p: Pipeline) {
 .sb { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 7px; border: 1px solid var(--border-subtle); background: var(--surface-card); color: var(--text-muted); cursor: pointer; }
 .sb.danger { color: var(--danger-text); }
 .seg { display: flex; border: 1px solid var(--border-default); border-radius: 9px; overflow: hidden; }
-.si { padding: 0 12px; height: 30px; line-height: 30px; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); cursor: pointer; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 30px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { display: flex; align-items: center; padding: 0 14px; height: 34px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); cursor: pointer; }
 .si:first-child { border-left: none; }
 .si.active { background: var(--accent-subtle); color: var(--accent-text); }
 .addbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; }

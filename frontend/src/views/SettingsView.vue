@@ -403,7 +403,10 @@ async function save() {
 .badge.on { background: var(--success-subtle); color: var(--success-text); }
 .badge.off { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
 .seg { display: flex; border: 1px solid var(--border-default); border-radius: 9px; overflow: hidden; }
-.si { height: 34px; line-height: 34px; padding: 0 16px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 34px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { display: flex; align-items: center; height: 34px; padding: 0 16px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
 .si:first-child { border-left: none; }
 .si.active { background: var(--accent-subtle); color: var(--accent-text); }
 .about { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); }

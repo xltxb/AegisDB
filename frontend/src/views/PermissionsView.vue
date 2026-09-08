@@ -614,7 +614,10 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
 <style scoped>
 .wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .vtabs { display: flex; align-items: center; gap: 8px; height: 52px; flex-shrink: 0; padding: 0 24px; border-bottom: 1px solid var(--border-subtle); }
-.vt { height: 32px; line-height: 32px; padding: 0 16px; border-radius: 9px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 32px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.vt { display: flex; align-items: center; height: 32px; padding: 0 16px; border-radius: 9px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); }
 .vt.active { background: var(--accent-subtle); color: var(--accent-text); }
 .vhint { margin-left: auto; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .rolegrid { flex: 1; min-height: 0; display: grid; grid-template-columns: 280px 1fr; }
