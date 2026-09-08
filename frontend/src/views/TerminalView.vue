@@ -34,9 +34,12 @@ interface GridResult { columns: string[]; rows: string[][] }
 interface Tab { id: number; conn: Connection; db: string; risk: 'idle' | 'safe' | 'high'; wsStatus: WsStatus; result?: GridResult }
 const tabs = ref<Tab[]>([])
 const treeCollapsed = ref(false) // collapse the left database-tree panel
-// 右侧执行上下文也可以收起。它是辅助信息(风险判定的结论终端里照样会打印),而
+// 右侧执行上下文**默认收起**。它是辅助信息(风险判定的结论终端里照样会打印),而
 // 终端本身不可替代 —— 要对着一屏宽结果核数据时,这 340px 让出来最值。
-const inspCollapsed = ref(localStorage.getItem('vela_insp_collapsed') === '1')
+//
+// 判的是 !== '0' 而不是 === '1':没存过 = 收起(新的默认),而**明确展开过**的人
+// 存的是 '0',那份选择继续算数。把默认写成"没存过就展开"才会把人的选择吃掉。
+const inspCollapsed = ref(localStorage.getItem('vela_insp_collapsed') !== '0')
 function toggleInsp() {
   inspCollapsed.value = !inspCollapsed.value
   localStorage.setItem('vela_insp_collapsed', inspCollapsed.value ? '1' : '0')
