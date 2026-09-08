@@ -189,27 +189,24 @@ const ui = useUIStore()
 // for dark backgrounds, so on the light theme the result table (cyan numbers, gray
 // rules) was near-invisible; each mode gets an explicit ramp with the right
 // contrast for its background. Surface/foreground read the live CSS tokens.
-// 终端**不跟随**应用主题,它永远是深色。
+// xtermTheme 跟随应用主题。
 //
-// 这不是审美偏好:这块区域是一台控制台,而控制台的深色底是它最强的边界信号 ——
-// 亮色主题下它和周围的白卡片糊成一片,人得靠边框去认"哪里是可以敲命令的地方"。
-// 页面其余部分照旧跟随主题;只有这一块坚持自己的身份,和 Cloud Shell、VS Code
-// 的集成终端是同一个取舍。
+// 曾经把它写死成深色,理由是"控制台就该是深的"。那是拿一个审美偏好去覆盖用户
+// 明确选的主题 —— 挑了浅色主题的人,看到的却是一块黑框,而他并没有要求过它。
+// 终端的边界由 .xterm-wrap 的边框和聚焦辉光负责,不需要靠底色去抢。
 //
-// 保留 light 分支的那套色阶不是浪费:结果表格用的是 16 色 ANSI,而深浅两套的对比度
-// 要求完全不同 —— 哪天要把跟随主题加回来,那份调好的色阶还在。
+// xterm 的默认 16 色 ANSI 色阶是给深色底调的,浅色下结果表里的青色数字、灰色分隔
+// 线几乎看不见,所以两套各有一份对比度合适的色阶。
 function xtermTheme() {
-  const light = false
-  // 终端有自己的底色,不再直接借用页面底色:它被包在一块带边框的面板里(见
+  const light = ui.resolvedTheme() === 'light'
+  // 终端有自己的底色,不直接借用页面底色:它被包在一块带边框的面板里(见
   // .xterm-wrap),底色和页面一样就没有"这是一块控制台"的边界,只是一片会滚动的
   // 页面背景。亮色用卡片白,暗色用最沉的那一档。
-  // 底色写死,不再读 CSS 变量:变量是跟着应用主题走的,而这块要的恰恰是**不跟**。
-  const CONSOLE_BG = '#0b0f19'
   const base = {
-    background: CONSOLE_BG,
-    foreground: '#d7dee8',
-    cursor: '#34d399',
-    cursorAccent: CONSOLE_BG,
+    background: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
+    foreground: cssVar('--text-body', light ? '#232838' : '#d7dee8'),
+    cursor: cssVar('--accent-text', light ? '#2553e0' : '#58a6ff'),
+    cursorAccent: cssVar(light ? '--surface-card' : '--surface-sunken', light ? '#ffffff' : '#0c0e17'),
     selectionBackground: light ? 'rgba(59,110,246,0.20)' : 'rgba(88,166,255,0.32)',
     // 失去焦点后选区仍然看得见,但明显退一档 —— 复制粘贴要跨窗口,选完切出去
     // 再切回来,选区不该消失,也不该看着仍然是活动的。
@@ -1237,8 +1234,7 @@ async function doRunScript() {
 </template>
 
 <style scoped>
-/* 会话容器同样沉下去:面板是深色的,四周留一圈亮色页面底,看着像终端浮在纸上。 */
-.session { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #080b12; }
+.session { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--surface-page); }
 .actionbar { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 14px; background: var(--surface-raised); border-bottom: 1px solid var(--border-subtle); min-width: 0; overflow: hidden; }
 .host { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: 600 12px var(--font-mono); color: var(--text-strong); }
 .curdb { color: var(--accent-text); }
@@ -1276,20 +1272,20 @@ async function doRunScript() {
    xterm 自己只画字符网格,周围的一切都要外面给。这块把它做成一块控制台面板:
    自己的底色、一圈边框、内圈留白,让它在页面上是一个"东西",而不是一片恰好
    有等宽字的区域。 */
-/* 面板底色和 xterm 的底色写同一个值。
-   终端本身已经固定深色(见 xtermTheme),而这个包裹层原先跟着应用主题走 —— 亮色
-   下就是一圈白边把深色的控制台框在中间,像贴上去的一张图。它们本来就该是同一块
-   东西,所以颜色也只能有一个来源。 */
+/* 面板底色必须和 xterm 自己的底色是同一个来源,否则深色的终端会被一圈异色的边
+   框在中间,像贴上去的一张图。两边都跟随主题,所以两边都用同一组 token。 */
 .xterm-wrap {
   flex: 1; min-height: 0; overflow: hidden;
   margin: 10px 12px; padding: 12px 14px;
-  background: #0b0f19;
-  border: 1px solid rgba(255, 255, 255, .08);
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: none;
+  box-shadow: var(--shadow-xs);
   transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease),
               box-shadow var(--dur-fast, 0.15s) var(--ease-out, ease);
 }
+/* 暗色下换成最沉的一档,并去掉投影 —— 这套暗色主题靠边框和辉光分层,不用投影。 */
+[data-theme='dark'] .xterm-wrap { background: var(--surface-sunken); box-shadow: none; }
 
 /* 有焦点时描一圈强调色。这个终端经常被审批框、MFA 框、快捷脚本弹窗抢走焦点,
    而"我现在敲字会进到哪里"在一个能对生产库下命令的界面里不是装饰问题。
@@ -1318,15 +1314,15 @@ async function doRunScript() {
   background-clip: padding-box;
 }
 .xterm-host :deep(.xterm-viewport)::-webkit-scrollbar-thumb:hover { background: var(--text-faint); background-clip: padding-box; }
-/* 底部状态栏:和终端同一族的暗色窄条(VS Code 那种),而不是一条跟着应用主题
-   变白的卡片色横条 —— 它贴着终端底边,颜色一旦不同就把控制台切成了两半。 */
-.statusbar { height: 28px; background: #0e1320; border-top: 1px solid rgba(255, 255, 255, .07); display: flex; align-items: center; gap: 14px; padding: 0 14px; font: 500 10.5px var(--font-mono); color: #8b93a7; }
-.statusbar .ok { color: #6ee7a0; }
-.statusbar .ok.warn { color: #fcd34d; }
-.statusbar .hl { color: #d7dee8; }
+/* 底部状态栏保持 VS Code 那种窄条形态(28px、等宽小字、右侧快捷键),但**跟着
+   主题走** —— 它贴着终端底边,终端是浅的时候压一条黑条,等于把控制台切成两半。 */
+.statusbar { height: 28px; background: var(--surface-raised); border-top: 1px solid var(--border-subtle); display: flex; align-items: center; gap: 14px; padding: 0 14px; font: 500 10.5px var(--font-mono); color: var(--text-muted); }
+.statusbar .ok { color: var(--success-text); }
+.statusbar .ok.warn { color: var(--warning-text); }
+.statusbar .hl { color: var(--text-body); }
 .statusbar .right { margin-left: auto; }
-.statusbar .keyhint { display: inline-flex; align-items: center; gap: 10px; color: #69748b; }
-.statusbar kbd { padding: 0 4px; border-radius: 4px; background: rgba(255, 255, 255, .08); color: #b8c0d0; font: 600 10px var(--font-mono); }
+.statusbar .keyhint { display: inline-flex; align-items: center; gap: 10px; color: var(--text-faint); }
+.statusbar kbd { padding: 0 4px; border-radius: 4px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); color: var(--text-body); font: 600 10px var(--font-mono); }
 
 /* modals */
 .mfa-overlay { position: fixed; inset: 0; z-index: 60; }
