@@ -97,7 +97,7 @@ var allModels = []any{
 	&model.WebhookConfig{}, &model.WebhookDelivery{}, &model.SchemaObject{}, &model.Setting{},
 	&model.Notification{}, &model.RoleTag{}, &model.ExportJob{}, &model.ScriptUpload{},
 	&model.AsyncJob{}, &model.UserTag{}, &model.TerminalSnippet{},
-	&model.EnvTier{}, &model.Environment{},
+	&model.EnvTier{}, &model.Environment{}, &model.ExecWindow{},
 	&model.SQLReviewRule{}, &model.Pipeline{}, &model.PipelineStage{},
 	&model.Release{}, &model.ReleaseStage{}, &model.APIClient{}, &model.Project{}, &model.DatabaseProject{}, &model.SensitiveColumn{},
 }

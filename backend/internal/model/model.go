@@ -306,6 +306,66 @@ type DatabaseProject struct {
 
 func (DatabaseProject) TableName() string { return "tbl_database_project" }
 
+// ExecWindow —— 执行窗口(「班车」)。
+//
+// 它做的事只有一件:在**指定时间**、对**指定的库**,把本来需要审批的中/高风险语句
+// 直接放行。它改的是"要不要人来批",不是"有没有权限":能力矩阵判 deny 的仍然 deny,
+// 只读角色不会因为开了窗口就能写库。见 service.relaxByWindow。
+//
+// 为什么按库而不是按实例或分层:一台实例底下往往混着不同业务的库,而一次变更通常
+// 只动其中一两个。放开面越小,窗口开着的那几个小时里能出的事就越少。
+//
+// 两种时间模型:
+//   once      —— 一次性,起止时刻,用完即废(本周六 22:00 到周日 02:00)
+//   recurring —— 周期班车,固定时段反复生效(每天 02:00-04:00),可设整体失效时间
+//
+// 时区是窗口自己的属性,不是服务器的。运维说的"凌晨两点"是他所在时区的两点,而网关
+// 可能跑在 UTC 上 —— 存 IANA 名字,判定时按它换算。
+type ExecWindow struct {
+	ID      int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name    string `gorm:"size:64;not null" json:"name"`
+	Enabled bool   `gorm:"not null;default:true" json:"enabled"`
+
+	// 作用范围:库级。两者都必须有值 —— 空库名会让一个窗口悄悄覆盖整台实例。
+	ConnectionID int64  `gorm:"index:idx_window_scope,priority:1;not null" json:"connectionId"`
+	Database     string `gorm:"column:db_name;index:idx_window_scope,priority:2;size:128;not null" json:"database"`
+
+	Kind     string `gorm:"size:16;not null" json:"kind"` // once | recurring
+	Timezone string `gorm:"size:64;not null" json:"timezone"`
+
+	// once
+	StartsAt *time.Time `json:"startsAt,omitempty"`
+	EndsAt   *time.Time `json:"endsAt,omitempty"`
+
+	// recurring:Weekdays 为 ISO 星期(1=周一…7=周日)的逗号列表,空串表示每天。
+	// StartMin/EndMin 是从当地 00:00 起的分钟数;EndMin <= StartMin 表示跨午夜。
+	Weekdays string     `gorm:"size:32" json:"weekdays"`
+	StartMin int        `gorm:"not null;default:0" json:"startMin"`
+	EndMin   int        `gorm:"not null;default:0" json:"endMin"`
+	NotAfter *time.Time `json:"notAfter,omitempty"` // 周期班车的整体失效时刻,可空
+
+	// Reason 不是备注,是这扇门为什么被打开的记录 —— 窗口放行的每一条命令都会在
+	// 审计里指回这个窗口,而审计要回答的正是"当时凭什么不用审批"。
+	Reason    string    `gorm:"size:255" json:"reason"`
+	CreatedBy int64     `gorm:"not null;default:0" json:"createdBy"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+
+	// Active 是"此刻这扇门开着吗",列表时算出来给界面看,不入库。
+	//
+	// 算在后端而不是前端:跨午夜和时区换算是这个功能里最容易出错的两处,在 TS 里
+	// 再写一遍就等着两份实现慢慢分叉 —— 而分叉的表现是"界面说开着,网关说没开"。
+	Active bool `gorm:"-" json:"active"`
+}
+
+func (ExecWindow) TableName() string { return "tbl_exec_window" }
+
+// 执行窗口的两种时间模型。
+const (
+	WindowOnce      = "once"
+	WindowRecurring = "recurring"
+)
+
 // Export job / task states.
 const (
 	// ExportAwaiting:含敏感字段的导出在批准之前停在这里,不进队列。

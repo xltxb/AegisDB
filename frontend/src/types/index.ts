@@ -21,6 +21,31 @@ export type MenuKey = 'terminal' | 'approve' | 'db' | 'rules' | 'envtier' | 'per
  * by. The booleans replace what used to be `code === 'prod'` tests in the UI and
  * the gateway alike.
  */
+// 执行窗口(「班车」):在指定时间、对指定的库,把本来要审批的中/高风险语句直接放行。
+// 它改的是"要不要人来批",不是"有没有权限" —— 能力矩阵拒绝的仍然拒绝。
+export interface ExecWindow {
+  id: number
+  name: string
+  enabled: boolean
+  connectionId: number
+  database: string
+  kind: 'once' | 'recurring'
+  timezone: string
+  startsAt?: string
+  endsAt?: string
+  weekdays: string   // ISO 星期的逗号列表,1=周一…7=周日;空串=每天
+  startMin: number   // 从当地 00:00 起的分钟数
+  endMin: number     // 小于等于 startMin 表示跨午夜
+  notAfter?: string
+  reason: string
+  createdBy: number
+  createdAt: string
+  updatedAt: string
+  // 此刻是否开着 —— 由后端用与判定完全相同的逻辑算出来。前端不自己算:跨午夜与
+  // 时区换算写两遍迟早分叉,而分叉的表现是"界面说开着、网关说没开"。
+  active: boolean
+}
+
 export interface EnvTier {
   code: TierCode
   displayName: string

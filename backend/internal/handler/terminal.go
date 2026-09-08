@@ -90,7 +90,7 @@ func (h *Handler) RiskCheck(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	r, err := h.Svc.RiskCheck(middleware.CurrentUser(c), req.ConnectionID, req.SQL)
+	r, err := h.Svc.RiskCheck(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Database)
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return

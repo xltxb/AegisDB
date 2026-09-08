@@ -57,11 +57,14 @@ func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
 }
 
 // RiskCheck performs the pure three-layer pre-check (no side effects).
-func (s *Services) RiskCheck(u *model.User, connID int64, sql string) (*dto.RiskCheckResp, error) {
+func (s *Services) RiskCheck(u *model.User, connID int64, sql, database string) (*dto.RiskCheckResp, error) {
 	conn, err := s.Repo.GetConnection(connID)
 	if err != nil {
 		return nil, ErrNotFound
 	}
+	// 与 Exec 同一口径:执行窗口按库开,预检不带库名就判不出窗口,于是会比执行更严 ——
+	// 终端先弹审批理由框,提交后才发现根本不用审批。
+	applyTargetDatabase(conn, database)
 	if _, err := s.tierCodeOf(conn); err != nil {
 		return nil, ErrBadRequest // unresolvable tier — see tierOf; never judged as allow
 	}
@@ -127,7 +130,8 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
 		return s.execJudged(u, conn, sql, reason)
 	}
-	return s.applyVerdict(u, conn, sql, s.strictestVerdict(u, conn, stmts), reason)
+	v, win := s.judge(u, conn, stmts)
+	return s.applyVerdict(u, conn, sql, v, reason, win)
 }
 
 // strictestVerdict evaluates every statement and returns the one demanding the
@@ -145,6 +149,24 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 // while the other two were in fact judged and gated too. The judgement was
 // never the gap; the report was.
 func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
+	v, _ := s.judge(u, conn, stmts)
+	return v
+}
+
+// judge is strictestVerdict plus the execution window that relaxed it, if any.
+//
+// 放宽发生在**这里**,而不是各个执行入口:终端、异步执行、发布流水线、Oracle 编译,
+// 每一条都经过这个函数。放在入口上就意味着"新加一条路时要记得也放宽" —— 而这类
+// 遗漏的表现是"同一条语句在终端免审批、在后台执行却要审批",用户完全看不懂。
+//
+// 预检(RiskCheck)走的也是这里,所以终端不会先弹一个填审批理由的框、再发现不用审批。
+func (s *Services) judge(u *model.User, conn *model.Connection, stmts []string) (gateway.Verdict, *model.ExecWindow) {
+	v := s.rawVerdict(u, conn, stmts)
+	return s.relaxByWindow(conn, v, time.Now())
+}
+
+// rawVerdict 是三层判定本身的结论,不含任何窗口放宽。
+func (s *Services) rawVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
 		return gateway.Unavailable(conn.Engine, strings.Join(stmts, ";"), err)
@@ -221,15 +243,22 @@ func actionRank(a string) int {
 func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
-		return s.applyVerdict(u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason)
+		// 分层解析不出来是 deny,窗口放宽不作用于 deny,所以这里没有窗口可言。
+		return s.applyVerdict(u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason, nil)
 	}
-	return s.applyVerdict(u, conn, sql, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql), reason)
+	// 这条路不经过 strictestVerdict(它按单条语句判),所以放宽要在这里显式接上 ——
+	// 否则同一条语句在终端里免审批、走脚本执行却要审批。
+	v, win := s.relaxByWindow(conn, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql), time.Now())
+	return s.applyVerdict(u, conn, sql, v, reason, win)
 }
 
 // applyVerdict routes a judged command to deny / approve / allow and records the
 // matching audit entry. The command text (sql) is preserved verbatim even when
 // the verdict was derived from an individual sub-statement (A1).
-func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string) (*dto.ExecResp, error) {
+// win 非空表示这条命令是被执行窗口放行的(本来要审批)。它会写进审计的 Operator ——
+// 那个字段的语义正是"当授权者不是操作者本人时,是谁授权的",而这里授权的不是人,是
+// 当时开着的那扇门。Operator 在审计链的哈希里,事后改不了。
+func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string, win *model.ExecWindow) (*dto.ExecResp, error) {
 	switch v.Action {
 	case gateway.ActionDeny:
 		s.recordAudit(u, conn, sql, model.RiskHigh, model.ResultRejected, "", "intercept")
@@ -245,7 +274,7 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 
 	default: // allow
 		res := s.Executor.Run(conn, sql, s.execTimeout())
-		s.recordAudit(u, conn, sql, v.Risk, execResultStatus(res), "", "exec")
+		s.recordAuditBy(u, windowOperator(win), conn, sql, v.Risk, execResultStatus(res), "", "exec")
 		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}

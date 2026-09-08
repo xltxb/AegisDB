@@ -1,6 +1,6 @@
 import http, { ok, type Envelope } from './http'
 import type {
-  APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp,
+  APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp, ExecWindow,
   ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, Release, ReleasePage, ReviewCatalog, SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
@@ -42,8 +42,10 @@ export const api = {
     http.post<any, Envelope<any>>('/notifications/read', { ids }).then(ok),
 
   // ---- terminal ----
-  riskCheck: (connectionId: number, sql: string) =>
-    http.post<any, Envelope<RiskCheckResp>>('/risk/check', { connectionId, sql }).then(ok),
+  // database 要传:执行窗口按库开,预检不带库名就判不出窗口,会比执行更严 ——
+  // 终端先弹一个多余的审批理由框,提交后才发现根本不用审批。
+  riskCheck: (connectionId: number, sql: string, database = '') =>
+    http.post<any, Envelope<RiskCheckResp>>('/risk/check', { connectionId, sql, database }).then(ok),
   // exec returns the raw envelope so callers can detect 42200 (intercept) / 42800 (MFA).
   exec: (connectionId: number, sql: string, reason = '', mfaCode = '', database = '') =>
     http.post<any, Envelope<ExecResp>>('/terminal/exec', { connectionId, sql, reason, mfaCode, database }),
@@ -85,6 +87,14 @@ export const api = {
   scriptExecute: (content: string, filename: string, connectionId: number, mfaCode = '', uploadId = 0, database = '') =>
     http.post<any, Envelope<any>>('/scripts/execute', { content, filename, connectionId, mfaCode, uploadId, database },
       { timeout: SCRIPT_TIMEOUT_MS }),
+  // ---- 执行窗口(「班车」) ----
+  execWindows: () => http.get<any, Envelope<ExecWindow[]>>('/exec-windows').then(ok),
+  createExecWindow: (body: Partial<ExecWindow>) =>
+    http.post<any, Envelope<ExecWindow>>('/exec-windows', body),
+  updateExecWindow: (id: number, body: Partial<ExecWindow>) =>
+    http.put<any, Envelope<ExecWindow>>(`/exec-windows/${id}`, body),
+  deleteExecWindow: (id: number) => http.delete<any, Envelope<any>>(`/exec-windows/${id}`),
+
   // ---- uploaded script files (per-user) ----
   scriptUploads: () => http.get<any, Envelope<ScriptUpload[]>>('/scripts/uploads').then(ok),
   // raw envelope so callers can detect 42600 (path unset).

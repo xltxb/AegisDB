@@ -204,9 +204,15 @@ type riskCheckResult struct {
 
 // riskCheck runs the pure three-layer pre-check for a (connection, sql) pair.
 func (a *testApp) riskCheck(token string, connID int64, sql string) riskCheckResult {
+	return a.riskCheckIn(token, connID, sql, "")
+}
+
+// riskCheckIn is riskCheck against a specific target database —执行窗口按库开,
+// 不带库名就判不出窗口。
+func (a *testApp) riskCheckIn(token string, connID int64, sql, database string) riskCheckResult {
 	a.t.Helper()
 	r := a.do(http.MethodPost, "/api/v1/risk/check", token, map[string]any{
-		"connectionId": connID, "sql": sql,
+		"connectionId": connID, "sql": sql, "database": database,
 	})
 	if r.Code != 0 {
 		a.t.Fatalf("risk/check %q: code=%d msg=%s", sql, r.Code, r.Msg)

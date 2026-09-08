@@ -182,6 +182,13 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/env-tiers", menu("envtier"), admin, h.CreateEnvTier)
 		a.PUT("/env-tiers/:code", menu("envtier"), admin, h.UpdateEnvTier)
 		a.DELETE("/env-tiers/:code", menu("envtier"), admin, h.DeleteEnvTier)
+
+		// 执行窗口(「班车」):读对进得来这个菜单的人开放 —— 一扇免审批的门开在哪、
+		// 什么时候开,不该只有管理员知道;写限管理员,每次变动进审计链。
+		a.GET("/exec-windows", h.ListExecWindows)
+		a.POST("/exec-windows", menu("envtier"), admin, h.CreateExecWindow)
+		a.PUT("/exec-windows/:id", menu("envtier"), admin, h.UpdateExecWindow)
+		a.DELETE("/exec-windows/:id", menu("envtier"), admin, h.DeleteExecWindow)
 		a.GET("/environments", h.ListEnvironments)
 		a.GET("/environments/usage", menu("envtier"), h.EnvironmentUsage)
 		a.POST("/environments", menu("envtier"), admin, h.CreateEnvironment)

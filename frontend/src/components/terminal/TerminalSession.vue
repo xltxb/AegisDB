@@ -477,7 +477,7 @@ async function handleSubmit(stmt: string) {
   const useDb = parseUseDb(raw)
   if (useDb) { switchDb(useDb); editor.resume(); return }
   try {
-    const r = await api.riskCheck(props.conn.id, raw)
+    const r = await api.riskCheck(props.conn.id, raw, targetDb.value)
     if (r.action === 'deny') {
       out(c(ANSI.red, t('termDeniedCap')))
       risk.value = 'safe'

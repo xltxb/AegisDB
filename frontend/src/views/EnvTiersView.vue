@@ -15,7 +15,7 @@
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Layers, Boxes, Plus, X, ShieldCheck } from 'lucide-vue-next'
+import { Layers, Boxes, Plus, X, ShieldCheck, Clock, Pencil, Trash2 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -24,7 +24,7 @@ import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
-import type { EnvTier } from '@/types'
+import type { Connection, EnvTier, ExecWindow } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
@@ -41,8 +41,117 @@ async function reload() {
   try { usage.value = await api.environmentUsage() } catch { /* counts are advisory */ }
   ui.pageSub = t('etSub', { tiers: envtier.tiers.length, envs: envtier.environments.length })
 }
+
+// ---- 执行窗口(「班车」) ----
+//
+// 表单里存的是人类写法(HH:MM、datetime-local、星期勾选),提交时才换算成接口要的
+// 分钟数与 ISO 星期串。反过来编辑时再折回去。换算集中在这两个函数里,别处不碰。
+// 窗口要挂到具体实例上,所以这一页要知道有哪些实例(它原先只关心分层与环境)。
+const conns = ref<Connection[]>([])
+const windows = ref<ExecWindow[]>([])
+const winForm = ref(false)
+const dayLabels = ['一', '二', '三', '四', '五', '六', '日']
+const kindOptions = computed(() => [t('ewKindRecurring'), t('ewKindOnce')])
+const connOptions = computed(() => conns.value.map((c) => `${c.env}-${c.name}`))
+const connLabel = (id: number) => {
+  const c = conns.value.find((x) => x.id === id)
+  return c ? `${c.env}-${c.name}` : `#${id}`
+}
+const blankWindow = () => ({
+  id: 0, name: '', reason: '', database: '', enabled: true,
+  connLabel: connOptions.value[0] || '', kindLabel: t('ewKindRecurring'),
+  startsAt: '', endsAt: '', startHM: '02:00', endHM: '04:00',
+  timezone: 'Asia/Shanghai', notAfter: '', days: [true, true, true, true, true, true, true],
+})
+const wf = ref(blankWindow())
+
+const hmToMin = (hm: string) => {
+  const [h, m] = (hm || '0:0').split(':').map((x) => Number(x) || 0)
+  return h * 60 + m
+}
+const minToHM = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`
+
+// whenLabel 只是显示。是否"进行中"由后端算(w.active),前端不重算 —— 跨午夜和时区
+// 写两遍迟早分叉,而分叉的表现是界面与网关各说各话。
+function whenLabel(w: ExecWindow): string {
+  if (w.kind === 'once') {
+    const f = (s?: string) => (s ? new Date(s).toLocaleString('sv').slice(0, 16) : '—')
+    return `${f(w.startsAt)} → ${f(w.endsAt)}`
+  }
+  const days = w.weekdays.trim()
+    ? w.weekdays.split(',').map((n) => dayLabels[Number(n) - 1] || n).join('')
+    : t('ewEveryDay')
+  const cross = w.endMin <= w.startMin ? ' (+1d)' : ''
+  return `${days} ${minToHM(w.startMin)}-${minToHM(w.endMin)}${cross} ${w.timezone}`
+}
+
+async function loadWindows() {
+  try { windows.value = await api.execWindows() } catch { windows.value = [] }
+}
+
+function openWindowForm(w?: ExecWindow) {
+  wf.value = blankWindow()
+  if (w) {
+    const local = (s?: string) => (s ? new Date(s).toLocaleString('sv').slice(0, 16).replace(' ', 'T') : '')
+    const days = w.weekdays.trim()
+      ? dayLabels.map((_, i) => w.weekdays.split(',').includes(String(i + 1)))
+      : [true, true, true, true, true, true, true]
+    wf.value = {
+      id: w.id, name: w.name, reason: w.reason, database: w.database, enabled: w.enabled,
+      connLabel: connLabel(w.connectionId),
+      kindLabel: w.kind === 'once' ? t('ewKindOnce') : t('ewKindRecurring'),
+      startsAt: local(w.startsAt), endsAt: local(w.endsAt),
+      startHM: minToHM(w.startMin), endHM: minToHM(w.endMin),
+      timezone: w.timezone || 'Asia/Shanghai', notAfter: local(w.notAfter), days,
+    }
+  }
+  winForm.value = true
+}
+
+async function saveWindow() {
+  const f = wf.value
+  const conn = conns.value.find((c) => `${c.env}-${c.name}` === f.connLabel)
+  if (!conn) { ui.notifyError(new Error(t('ewPickInstance')), t('actionFailed')); return }
+  const once = f.kindLabel === kindOptions.value[1]
+  const iso = (v: string) => (v ? new Date(v).toISOString() : undefined)
+  const body: Record<string, unknown> = {
+    name: f.name.trim(), enabled: f.enabled, connectionId: conn.id,
+    database: f.database.trim(), reason: f.reason.trim(),
+    kind: once ? 'once' : 'recurring',
+  }
+  if (once) {
+    body.startsAt = iso(f.startsAt)
+    body.endsAt = iso(f.endsAt)
+  } else {
+    body.timezone = f.timezone.trim()
+    body.startMin = hmToMin(f.startHM)
+    body.endMin = hmToMin(f.endHM)
+    // 全选等于"每天",送空串 —— 与后端 weekdayAllowed 的约定一致。
+    body.weekdays = f.days.every(Boolean) ? '' : f.days.map((on, i) => (on ? i + 1 : 0)).filter(Boolean).join(',')
+    body.notAfter = iso(f.notAfter)
+  }
+  busy.value = true
+  try {
+    const env = f.id ? await api.updateExecWindow(f.id, body) : await api.createExecWindow(body)
+    if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
+    winForm.value = false
+    await loadWindows()
+  } catch (e) { ui.notifyError(e, t('actionFailed')) } finally { busy.value = false }
+}
+
+async function removeWindow(w: ExecWindow) {
+  busy.value = true
+  try {
+    const env = await api.deleteExecWindow(w.id)
+    if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
+    await loadWindows()
+  } catch (e) { ui.notifyError(e, t('actionFailed')) } finally { busy.value = false }
+}
+
 onMounted(async () => {
   try { await reload() } catch (e) { ui.notifyError(e, t('actionFailed')) }
+  try { conns.value = await api.connections() } catch { /* 窗口表单的实例下拉降级为空 */ }
+  await loadWindows()
 })
 
 const envCount = (code: string) => usage.value[code] ?? 0
@@ -353,6 +462,100 @@ const moveTargets = computed(() =>
       </div>
     </div>
 
+
+    <!-- --------------------------------------------------- exec windows -->
+    <!-- 「班车」:在指定时间、对指定的库,把本来要审批的中/高风险语句直接放行。
+         放在这一页,是因为它和分层是同一类东西 —— 都在回答"这个环境按什么规矩办"。 -->
+    <div class="card">
+      <div class="chead">
+        <div class="cic"><Clock :size="17" color="var(--accent-text)" /></div>
+        <div class="grow">
+          <div class="ct">{{ $t('ewTitle') }}</div>
+          <div class="cs">{{ $t('ewSub') }}</div>
+        </div>
+        <VButton v-if="isAdmin" variant="secondary" height="34px" @click="openWindowForm()">
+          <Plus :size="14" />{{ $t('ewNew') }}
+        </VButton>
+      </div>
+
+      <div class="scx">
+        <div class="wgrid">
+          <div class="th">
+            <span>{{ $t('ewColName') }}</span><span>{{ $t('ewColScope') }}</span>
+            <span>{{ $t('ewColWhen') }}</span><span class="ctr">{{ $t('ewColState') }}</span><span />
+          </div>
+          <div v-if="!windows.length" class="tr empty">{{ $t('ewEmpty') }}</div>
+          <div v-for="w in windows" :key="w.id" class="tr">
+            <div>
+              <div class="cn">{{ w.name }}</div>
+              <div class="cl2">{{ w.reason || $t('ewNoReason') }}</div>
+            </div>
+            <div class="mono mute">{{ connLabel(w.connectionId) }} / {{ w.database }}</div>
+            <div class="mono mute">{{ whenLabel(w) }}</div>
+            <div class="ctr">
+              <!-- 「进行中」是后端用与判定完全相同的逻辑算出来的,不是前端猜的 -->
+              <span v-if="w.active" class="wopen">{{ $t('ewOpen') }}</span>
+              <span v-else-if="!w.enabled" class="woff">{{ $t('ewDisabled') }}</span>
+              <span v-else class="wclosed">{{ $t('ewClosed') }}</span>
+            </div>
+            <div class="acts">
+              <button v-if="isAdmin" class="del" :disabled="busy" @click="openWindowForm(w)"><Pencil :size="13" /></button>
+              <button v-if="isAdmin" class="del" :disabled="busy" @click="removeWindow(w)"><Trash2 :size="13" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="winForm" class="form">
+        <div class="fhead">{{ wf.id ? $t('ewEdit') : $t('ewNew') }}<span class="x" @click="winForm = false"><X :size="16" /></span></div>
+        <div class="frow">
+          <div><div class="fl">{{ $t('ewColName') }}</div><input v-model="wf.name" :placeholder="$t('ewNamePh')" /></div>
+          <div><div class="fl">{{ $t('ewFReason') }}</div><input v-model="wf.reason" :placeholder="$t('ewReasonPh')" /></div>
+        </div>
+        <div class="frow">
+          <div><div class="fl">{{ $t('ewFInstance') }}</div><VSelect v-model="wf.connLabel" :options="connOptions" /></div>
+          <div><div class="fl">{{ $t('ewFDatabase') }}</div><input v-model="wf.database" :placeholder="$t('ewDbPh')" /></div>
+        </div>
+        <div class="frow">
+          <div><div class="fl">{{ $t('ewFKind') }}</div><VSelect v-model="wf.kindLabel" :options="kindOptions" /></div>
+          <div><div class="fl">{{ $t('ewFEnabled') }}</div><label class="chk"><VSwitch v-model="wf.enabled" />{{ $t('ewEnabledHint') }}</label></div>
+        </div>
+
+        <!-- 一次性 -->
+        <template v-if="wf.kindLabel === kindOptions[1]">
+          <div class="frow">
+            <div><div class="fl">{{ $t('ewFFrom') }}</div><input v-model="wf.startsAt" type="datetime-local" /></div>
+            <div><div class="fl">{{ $t('ewFTo') }}</div><input v-model="wf.endsAt" type="datetime-local" /></div>
+          </div>
+          <div class="note">{{ $t('ewOnceNote') }}</div>
+        </template>
+
+        <!-- 周期班车 -->
+        <template v-else>
+          <div class="frow">
+            <div><div class="fl">{{ $t('ewFStart') }}</div><input v-model="wf.startHM" type="time" /></div>
+            <div><div class="fl">{{ $t('ewFEnd') }}</div><input v-model="wf.endHM" type="time" /></div>
+          </div>
+          <div class="frow">
+            <div><div class="fl">{{ $t('ewFTz') }}</div><input v-model="wf.timezone" placeholder="Asia/Shanghai" /></div>
+            <div><div class="fl">{{ $t('ewFNotAfter') }}</div><input v-model="wf.notAfter" type="datetime-local" /></div>
+          </div>
+          <div class="fl">{{ $t('ewFDays') }}</div>
+          <div class="days">
+            <label v-for="(d, i) in dayLabels" :key="i" class="day" :class="{ on: wf.days[i] }">
+              <input v-model="wf.days[i]" type="checkbox" />{{ d }}
+            </label>
+          </div>
+          <div class="note">{{ $t('ewRecurNote') }}</div>
+        </template>
+
+        <div class="ffoot">
+          <VButton variant="secondary" height="34px" @click="winForm = false">{{ $t('btnCancel') }}</VButton>
+          <VButton variant="primary" height="34px" :disabled="busy || !wf.name || !wf.database" @click="saveWindow">{{ $t('btnSave') }}</VButton>
+        </div>
+      </div>
+    </div>
+
     <!-- Deleting an environment always relocates its instances. -->
     <div v-if="delEnv.open" class="ovl">
       <div class="mask" @click="delEnv.open = false" />
@@ -389,6 +592,18 @@ const moveTargets = computed(() =>
 /* Both tables scroll inside their own card; the page body never moves sideways. */
 .tgrid, .egrid { min-width: max-content; }
 .tgrid .th, .tgrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) 88px 88px 88px 96px 120px minmax(160px, 1.4fr) 90px; gap: 10px; align-items: center; }
+/* 执行窗口列表 */
+.wgrid { min-width: max-content; }
+.wgrid .th, .wgrid .tr { display: grid; grid-template-columns: minmax(180px, 1.6fr) minmax(160px, 1.2fr) minmax(200px, 1.4fr) 96px 84px; gap: 10px; align-items: center; }
+.tr.empty { padding: 18px; color: var(--text-faint); font: 500 12px var(--font-body); }
+.cl2 { margin-top: 3px; font: 400 11.5px var(--font-body); color: var(--text-faint); }
+/* 三种状态要一眼分得开:开着的是当下真的免审批,值得显眼。 */
+.wopen { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--danger-subtle); color: var(--danger-text); font: 600 11px var(--font-mono); }
+.wclosed { color: var(--text-faint); font: 500 11px var(--font-mono); }
+.woff { color: var(--text-faint); font: 500 11px var(--font-mono); text-decoration: line-through; }
+.days { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 2px; }
+.day { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 1px solid var(--border-default); border-radius: 999px; font: 500 12px var(--font-body); color: var(--text-muted); cursor: pointer; }
+.day.on { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
 .egrid .th, .egrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) minmax(220px, 1.6fr) 96px 90px; gap: 10px; align-items: center; }
 .th { padding: 11px 18px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
 .tr { padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); }

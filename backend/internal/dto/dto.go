@@ -41,6 +41,10 @@ type MeResp struct {
 type RiskCheckReq struct {
 	ConnectionID int64  `json:"connectionId" binding:"required"`
 	SQL          string `json:"sql" binding:"required"`
+	// Database 是这条命令要落到的库。判定本身不看它,但执行窗口按库开,不传就没法
+	// 判断窗口是否覆盖 —— 预检会说"要审批",执行却放行,终端于是先弹一个多余的
+	// 审批理由框。传了才对得上。
+	Database string `json:"database"`
 }
 
 type RiskCheckResp struct {
@@ -228,6 +232,32 @@ type EnvTierUpdateReq struct {
 	StrictNoWhere   bool   `json:"strictNoWhere"`
 	ConnLayer       string `json:"connLayer"`
 	DefaultRole     string `json:"defaultRole"`
+}
+
+// ExecWindowReq 建/改一个执行窗口(「班车」)。
+//
+// Kind 决定哪几个字段有意义:
+//   once      —— StartsAt / EndsAt(绝对时刻,不看时区)
+//   recurring —— Timezone + Weekdays + StartMin/EndMin,NotAfter 可选
+// 校验在 service.fillExecWindow,从严:写坏的窗口要么白配,要么开在没预料的时间,
+// 而后者是安全问题,所以说不清的定义一律拒绝。
+type ExecWindowReq struct {
+	Name         string `json:"name"`
+	Enabled      bool   `json:"enabled"`
+	ConnectionID int64  `json:"connectionId"`
+	Database     string `json:"database"`
+	Kind         string `json:"kind"`
+	Timezone     string `json:"timezone"`
+
+	StartsAt *time.Time `json:"startsAt,omitempty"`
+	EndsAt   *time.Time `json:"endsAt,omitempty"`
+
+	Weekdays string     `json:"weekdays"`
+	StartMin int        `json:"startMin"`
+	EndMin   int        `json:"endMin"`
+	NotAfter *time.Time `json:"notAfter,omitempty"`
+
+	Reason string `json:"reason"`
 }
 
 // EnvironmentCreateReq adds an instance group on an existing tier. Nothing is

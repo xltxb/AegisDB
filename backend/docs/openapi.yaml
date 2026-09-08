@@ -992,6 +992,36 @@ paths:
       summary: '[envtier · admin] 删除分层(仍有环境挂靠时拒绝)'
       parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows:
+    get:
+      tags: [tiers]
+      summary: 执行窗口(「班车」)列表 —— 含"此刻是否开着"
+      description: >
+        窗口在指定时间、对指定的库,把本来需要审批的中/高风险语句直接放行。它改的是
+        "要不要人来批",不是"有没有权限":能力矩阵禁止的仍然禁止,风险等级也不降。
+        响应里的 active 由服务端用与判定完全相同的逻辑算出,前端不重算。
+        读对能进该菜单的人开放 —— 一扇免审批的门开在哪、什么时候开,不该只有管理员知道。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[envtier · admin] 新建执行窗口'
+      description: >
+        两种时间模型:once(绝对起止时刻,与时区无关)与 recurring(带 IANA 时区的固定
+        时段,结束早于开始表示跨午夜)。库名必填 —— 空库名会让窗口悄悄覆盖整台实例。
+        说不清的定义当场拒绝:写坏的窗口要么白配,要么开在没预料的时间,后者是安全问题。
+        每次变动写入审计链。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows/{id}:
+    put:
+      tags: [tiers]
+      summary: '[envtier · admin] 修改执行窗口'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[envtier · admin] 删除执行窗口(立刻恢复审批)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /environments:
     get:
       tags: [tiers]
