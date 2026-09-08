@@ -5,7 +5,7 @@ export default { name: 'TerminalView' }
 </script>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onActivated } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import {
   X, PanelLeftOpen, PanelRightOpen, Table2, Maximize2, Minimize2, Activity, ShieldAlert, LogOut,
@@ -44,6 +44,116 @@ function toggleInsp() {
   inspCollapsed.value = !inspCollapsed.value
   localStorage.setItem('vela_insp_collapsed', inspCollapsed.value ? '1' : '0')
 }
+
+// ---- 两侧边栏的宽度:可拖 ----
+//
+// 默认宽度由下面的媒体查询给,那套逐级让位的规则(先收窄执行上下文、再整块收起、
+// 最后连树也收成导轨)是为了"窗口一窄,被挤没的不能是终端本身"。拖动不推翻它,
+// 只是把某一侧的宽度换成人自己定的那个值:CSS 里每一处都写成 var(--tree-w, 268px),
+// 没拖过就走默认,拖过了就在每个断点上都听人的。
+//
+// 存像素而不是百分比 —— 这跟终端/结果表那根横向分隔条相反,是故意的:树和执行上下文
+// 装的是**定宽的东西**(实例名、字段标签),它们需要的宽度不随窗口变;而结果表要占
+// 的是"剩下的一半",所以那边存比例。
+const TREE_W_KEY = 'vela_tree_w'
+const INSP_W_KEY = 'vela_insp_w'
+const TREE_MIN = 180
+const TREE_MAX = 560
+const INSP_MIN = 240
+const INSP_MAX = 620
+// 中间那栏的下限。拖动可以把两侧拉宽,但不能把终端挤到开始逐字断行 —— 这正是
+// 媒体查询那一串在防的事,手动拖动没有理由成为它的后门。
+const TERM_MIN = 420
+
+const readW = (k: string) => {
+  const v = Number(localStorage.getItem(k))
+  return Number.isFinite(v) && v > 0 ? v : null
+}
+const treeW = ref<number | null>(readW(TREE_W_KEY))
+const inspW = ref<number | null>(readW(INSP_W_KEY))
+const gridEl = ref<HTMLElement>()
+
+// 只有拖过的那一侧才写变量;没写的那侧留给 CSS 默认值(含媒体查询)。
+const gridVars = computed(() => {
+  const s: Record<string, string> = {}
+  if (treeW.value) s['--tree-w'] = `${treeW.value}px`
+  if (inspW.value) s['--insp-w'] = `${inspW.value}px`
+  return s
+})
+
+type Side = 'tree' | 'insp'
+const resizing = ref<Side | null>(null)
+
+/** 拖动时那一侧的上限:先受自身上限约束,再受"中间必须留够"约束。 */
+function maxFor(side: Side): number {
+  const el = gridEl.value
+  const hard = side === 'tree' ? TREE_MAX : INSP_MAX
+  if (!el) return hard
+  // 另一侧此刻**实际渲染**的宽度,直接从解析后的列宽读,不去猜它落在哪个断点上。
+  const cols = getComputedStyle(el).gridTemplateColumns.split(' ').map(parseFloat)
+  const other = side === 'tree' ? (cols[2] ?? 0) : (cols[0] ?? 0)
+  return Math.min(hard, el.getBoundingClientRect().width - other - TERM_MIN)
+}
+
+function setW(side: Side, px: number) {
+  const min = side === 'tree' ? TREE_MIN : INSP_MIN
+  const v = Math.round(Math.min(maxFor(side), Math.max(min, px)))
+  if (side === 'tree') { treeW.value = v; localStorage.setItem(TREE_W_KEY, String(v)) }
+  else { inspW.value = v; localStorage.setItem(INSP_W_KEY, String(v)) }
+}
+
+/** 双击 / 回车:还原成默认宽度,也就是把这一侧交还给媒体查询。 */
+function resetW(side: Side) {
+  if (side === 'tree') { treeW.value = null; localStorage.removeItem(TREE_W_KEY) }
+  else { inspW.value = null; localStorage.removeItem(INSP_W_KEY) }
+}
+
+// 指针事件 + setPointerCapture,跟结果表那根分隔条同一套:一套代码覆盖鼠标、
+// 触控板和触摸屏,并且指针拖出把手之外仍然跟手 —— 拖动时它几乎一定会跑出去。
+function onEdgeDown(side: Side, e: PointerEvent) {
+  resizing.value = side
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  e.preventDefault()
+}
+function onEdgeMove(side: Side, e: PointerEvent) {
+  if (resizing.value !== side || !gridEl.value) return
+  const box = gridEl.value.getBoundingClientRect()
+  setW(side, side === 'tree' ? e.clientX - box.left : box.right - e.clientX)
+}
+function onEdgeUp(e: PointerEvent) {
+  if (!resizing.value) return
+  resizing.value = null
+  ;(e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId)
+}
+
+// 键盘也能调:把手是可聚焦的 separator。没拖过时先从当前实际宽度起步,
+// 否则第一次按键会把面板跳到某个凭空的数字上。
+function onEdgeKey(side: Side, e: KeyboardEvent) {
+  const step = e.shiftKey ? 32 : 8
+  const cur = side === 'tree' ? treeW.value : inspW.value
+  let base = cur
+  if (base == null && gridEl.value) {
+    const cols = getComputedStyle(gridEl.value).gridTemplateColumns.split(' ').map(parseFloat)
+    base = side === 'tree' ? cols[0] : cols[2]
+  }
+  if (base == null || !Number.isFinite(base)) return
+  const grow = side === 'tree' ? 'ArrowRight' : 'ArrowLeft'
+  const shrink = side === 'tree' ? 'ArrowLeft' : 'ArrowRight'
+  if (e.key === grow) setW(side, base + step)
+  else if (e.key === shrink) setW(side, base - step)
+  else if (e.key === 'Enter' || e.key === ' ') resetW(side)
+  else return
+  e.preventDefault()
+}
+
+// 窗口变窄后,拖出来的宽度可能已经把终端挤过了下限 —— 重新夹一次。存着的值不动:
+// 窗口再拉回来时,人自己设的那个宽度应该回来。
+function reclamp() {
+  if (treeW.value) treeW.value = Math.round(Math.min(treeW.value, Math.max(TREE_MIN, maxFor('tree'))))
+  if (inspW.value) inspW.value = Math.round(Math.min(inspW.value, Math.max(INSP_MIN, maxFor('insp'))))
+}
+onMounted(() => window.addEventListener('resize', reclamp))
+onUnmounted(() => window.removeEventListener('resize', reclamp))
 
 // 沉浸模式:把左右两栏一起收掉,只留终端。不是浏览器全屏 —— 那会把顶栏和导航
 // 一起吞掉,而人还需要知道自己在哪个系统里。
@@ -195,11 +305,28 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="grid" :class="{ 'tree-collapsed': treeCollapsed, 'insp-collapsed': inspCollapsed, zen }">
+  <div ref="gridEl" class="grid" :class="{ 'tree-collapsed': treeCollapsed, 'insp-collapsed': inspCollapsed, zen, resizing }" :style="gridVars">
     <div v-if="treeCollapsed || zen" class="rail left" :title="$t('treeExpand')" @click="treeCollapsed = false; zen = false"><PanelLeftOpen :size="16" /></div>
     <DbTree v-else :connections="conns" :selected-id="activeTab?.conn.id || 0" :selected-db="activeTab?.db" @select="openConn" @select-db="openDb" @collapse="treeCollapsed = true" />
 
     <div class="term">
+      <!-- 两根竖把手。它们贴在终端栏的左右内边缘,而不是自己占一列:多一列就要在
+           上面每一条媒体查询里多写一个数,而那串规则本来就是这个视图里最容易写歪的
+           地方。收起的那一侧不渲染把手 —— 30px 的导轨没有宽度可调。 -->
+      <div
+        v-if="!treeCollapsed && !zen" class="edge left" role="separator" aria-orientation="vertical"
+        tabindex="0" :title="$t('resizePanel')"
+        @pointerdown="onEdgeDown('tree', $event)" @pointermove="onEdgeMove('tree', $event)"
+        @pointerup="onEdgeUp" @pointercancel="onEdgeUp"
+        @dblclick="resetW('tree')" @keydown="onEdgeKey('tree', $event)"
+      ><span class="grip" /></div>
+      <div
+        v-if="!inspCollapsed && !zen" class="edge right" role="separator" aria-orientation="vertical"
+        tabindex="0" :title="$t('resizePanel')"
+        @pointerdown="onEdgeDown('insp', $event)" @pointermove="onEdgeMove('insp', $event)"
+        @pointerup="onEdgeUp" @pointercancel="onEdgeUp"
+        @dblclick="resetW('insp')" @keydown="onEdgeKey('insp', $event)"
+      ><span class="grip" /></div>
       <!-- 第一行:标签页。一个标签 = 一个会话,标题写清"哪台实例的哪个库" —— 只写
            实例名时,同一台上开两个库的两个标签长得一模一样。 -->
       <div class="tabstrip">
@@ -286,37 +413,56 @@ onMounted(async () => {
    于是窗口一窄,被挤没的永远是终端本身。1100px 宽的窗口里它只剩约 390px:
    命令回显开始逐字断行(`dba` / `_l2`),工具栏按钮被裁掉一半,状态栏叠成两行。
    所以窄下来的时候由两侧依次让位,而不是让主角一直缩。 */
-.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 268px 1fr 340px; grid-template-rows: minmax(0, 1fr); }
-.grid.tree-collapsed { grid-template-columns: 30px 1fr 340px; }
-.grid.insp-collapsed { grid-template-columns: 268px 1fr 30px; }
+/* 每一处列宽都写成 var(--x, 默认):没拖过就是下面这套逐级让位的默认值,拖过了
+   就在每个断点上都听人的。变量只在拖过的那一侧由内联样式给出。 */
+.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--tree-w, 268px) 1fr var(--insp-w, 340px); grid-template-rows: minmax(0, 1fr); }
+.grid.tree-collapsed { grid-template-columns: 30px 1fr var(--insp-w, 340px); }
+.grid.insp-collapsed { grid-template-columns: var(--tree-w, 268px) 1fr 30px; }
 .grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
+/* 拖动时别让指针划过终端就选中里面的文字。 */
+.grid.resizing { cursor: col-resize; user-select: none; }
 /* 沉浸模式:两侧一起收成导轨,只留终端。 */
 .grid.zen { grid-template-columns: 30px 1fr !important; }
 
 /* 第一步:先收窄右侧的执行上下文,它的内容本来就是窄栏排布。 */
 @media (max-width: 1500px) {
-  .grid { grid-template-columns: 248px 1fr 296px; }
-  .grid.tree-collapsed { grid-template-columns: 30px 1fr 296px; }
-  .grid.insp-collapsed { grid-template-columns: 248px 1fr 30px; }
+  .grid { grid-template-columns: var(--tree-w, 248px) 1fr var(--insp-w, 296px); }
+  .grid.tree-collapsed { grid-template-columns: 30px 1fr var(--insp-w, 296px); }
+  .grid.insp-collapsed { grid-template-columns: var(--tree-w, 248px) 1fr 30px; }
   .grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
 }
 /* 第二步:整块收起执行上下文。它是辅助信息 —— 风险判定的结论终端里照样会打印,
    而终端本身不可替代。让出这 296px,中间那栏差不多翻倍。 */
 @media (max-width: 1280px) {
-  .grid { grid-template-columns: 248px 1fr; }
+  .grid { grid-template-columns: var(--tree-w, 248px) 1fr; }
   .grid.tree-collapsed { grid-template-columns: 30px 1fr; }
   .grid > :last-child { display: none; }
+  /* 执行上下文这一档整块没了,右边那根把手也就没有东西可调。 */
+  .edge.right { display: none; }
 }
 /* 第三步:树也收成导轨,点一下还能展开。到这个宽度,保住终端比同时看见三样东西要紧。 */
 @media (max-width: 1040px) {
   .grid { grid-template-columns: 30px 1fr; }
+  .edge.left { display: none; }
 }
 /* 收起后的导轨:只留一个能点回来的图标。左右两侧共用一套样式,只是边框在哪一侧不同。 */
 .rail { display: flex; justify-content: center; padding-top: 14px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
 .rail:hover { color: var(--accent-text); }
 .rail.left { border-right: 1px solid var(--border-subtle); }
 .rail.right { border-left: 1px solid var(--border-subtle); }
-.term { display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
+.term { position: relative; display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
+/* 把手:平时只是一条看不见的 6px 热区,悬停/聚焦时才显出那道竖线 —— 一条常驻的
+   竖线会在这一屏上多出两条与内容无关的分隔,而边界本来就已经有边框了。 */
+.edge {
+  position: absolute; top: 0; bottom: 0; width: 6px; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  cursor: col-resize; background: transparent; border: none; padding: 0;
+}
+.edge.left { left: 0; }
+.edge.right { right: 0; }
+.edge .grip { width: 2px; height: 40px; border-radius: 2px; background: transparent; }
+.edge:hover .grip, .edge:focus-visible .grip { background: var(--accent-text); }
+.edge:focus-visible { outline: none; }
 .tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
 .termsplit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 /* 百分比负责比例,像素下限负责"再拖也不会变成一条缝"。两个都要:百分比在矮窗口
