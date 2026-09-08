@@ -501,6 +501,9 @@
   wsConnecting: 'Connecting…', wsDisconnected: 'Disconnected · reconnecting',
   // database tree
   treeLoading: 'Loading…', treeEmptySchema: '— empty schema —', treeEmptyDb: '— empty database —', treeNoMatch: '— no matching instances —',
+  treeHitsObj: 'Databases & tables', treeHitsInst: 'Instances', treeNoObjMatch: '— no matching database or table in the scanned instances —',
+  treeUnscanned: '{n} instance(s) not introspected; their databases and tables are not in these results', treeScanAll: 'Scan all', treeScanning: 'Scanning {d}/{n}',
+  treeUnloadedDbs: '{n} database(s) have no tables loaded yet (PostgreSQL introspects per database); their tables are not in these results', treeLoadDbs: 'Load tables',
   treeFunctions: 'Functions', treeProcedures: 'Procedures', treePackages: 'Packages', treeTriggers: 'Triggers',
   objViewSource: 'View source', objViewDDL: 'View table DDL', objLoadFail: 'Failed to load',
 

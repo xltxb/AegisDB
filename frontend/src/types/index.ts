@@ -435,16 +435,19 @@ export interface WebhookConfig {
   enabled: boolean
 }
 
+/** 树上的一个库。抽成具名类型,是为了让"往这个库里补表"的函数能接住它。 */
+export interface SchemaDB {
+  name: string
+  /** 归属项目 —— 组织维度,判定层不看。0 / 缺省 = 未归属,是合法状态。 */
+  projectId?: number
+  projectName?: string
+  schemas?: { name: string; tables: { name: string }[] }[]
+  tables: { name: string }[]
+}
+
 export interface ConnectionSchema {
   connectionId: number
-  databases: {
-    name: string
-    /** 归属项目 —— 组织维度,判定层不看。0 / 缺省 = 未归属,是合法状态。 */
-    projectId?: number
-    projectName?: string
-    schemas?: { name: string; tables: { name: string }[] }[]
-    tables: { name: string }[]
-  }[]
+  databases: SchemaDB[]
   error?: string
 }
 

@@ -524,6 +524,9 @@
   wsConnecting: '连接中…', wsDisconnected: '已断开·重连中',
   // 数据库分层
   treeLoading: '加载中…', treeEmptySchema: '— 空 schema —', treeEmptyDb: '— 空库 —', treeNoMatch: '— 无匹配实例 —',
+  treeHitsObj: '库与表', treeHitsInst: '实例', treeNoObjMatch: '— 已搜索的实例里没有匹配的库或表 —',
+  treeUnscanned: '还有 {n} 台实例未探查,其库与表不在结果内', treeScanAll: '全部探查', treeScanning: '探查中 {d}/{n}',
+  treeUnloadedDbs: '有 {n} 个库的表尚未加载(PostgreSQL 按库探查),其表不在结果内', treeLoadDbs: '加载库表',
   treeFunctions: '函数', treeProcedures: '存储过程', treePackages: '包', treeTriggers: '触发器',
   objViewSource: '查看源码', objViewDDL: '查看建表 DDL', objLoadFail: '加载失败',
 

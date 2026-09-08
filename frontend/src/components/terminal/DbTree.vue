@@ -8,7 +8,7 @@ import { highlightSqlHtml } from '@/lib/sqlHighlight'
 import { copyText } from '@/lib/clipboard'
 import { engineDisplay, engineLabels } from '@/lib/engines'
 import { useEnvTierStore } from '@/stores/envtier'
-import type { Connection, ConnectionSchema, DbObjects } from '@/types'
+import type { Connection, ConnectionSchema, DbObjects, SchemaDB } from '@/types'
 
 const props = defineProps<{ connections: Connection[]; selectedId: number; selectedDb?: string }>()
 const emit = defineEmits<{ select: [number]; selectDb: [number, string]; collapse: [] }>()
@@ -23,12 +23,19 @@ envtier.load().catch(() => {})
 // so track a loading flag and surface the returned error instead of a silent empty.
 const schema = ref<ConnectionSchema | null>(null)
 const schemaLoading = ref(false)
+// 探查过的实例按 id 留着。渲染仍然只用当前选中的那一份(schema),这份缓存是给
+// 搜索用的:库和表不随连接列表下发,只能按实例逐台探查,探查过的没有理由再丢掉。
+// 存的是同一批对象引用,所以 loadDbTables 往 d.tables 里补的内容缓存里也看得到。
+const schemaCache = ref<Record<number, ConnectionSchema>>({})
 watch(() => props.selectedId, async (id) => {
   schema.value = null
   if (!id) return
+  const cached = schemaCache.value[id]
+  if (cached) { schema.value = cached; return }
   schemaLoading.value = true
   try {
     schema.value = await api.connectionSchema(id)
+    if (schema.value && !schema.value.error) schemaCache.value = { ...schemaCache.value, [id]: schema.value }
   } catch {
     schema.value = null
   } finally {
@@ -182,19 +189,23 @@ async function compileObject() {
 // the top level lists databases (no tables/schemas) introspected on demand; a
 // database already populated (MySQL, or a loaded PG db) is skipped.
 const dbLoading = ref<Record<string, boolean>>({})
+// 把某个库的表灌进**那个库对象本身**。缓存存的是同一批引用,所以这里补进去的表
+// 树上看得到,搜索也立刻搜得到 —— 不需要两份数据,也就不会有两份数据不一致。
+async function fetchDbInto(cid: number, d: SchemaDB) {
+  const sc = await api.connectionSchema(cid, d.name)
+  const loaded = sc.databases.find((x) => x.name === d.name) || sc.databases[0]
+  if (!loaded) return
+  d.tables = loaded.tables
+  d.schemas = loaded.schemas
+  // Auto-expand the sole schema (usually "public") so its tables are visible.
+  if (loaded.schemas?.length === 1) schemaOpen.value[schemaKey(cid, d.name, loaded.schemas[0].name)] = true
+}
 async function loadDbTables(cid: number, name: string) {
   const d = schema.value?.databases.find((x) => x.name === name)
   if (!d || d.tables.length || d.schemas?.length || dbLoading.value[dbKey(cid, name)]) return
   dbLoading.value[dbKey(cid, name)] = true
   try {
-    const sc = await api.connectionSchema(cid, name)
-    const loaded = sc.databases.find((x) => x.name === name) || sc.databases[0]
-    if (loaded) {
-      d.tables = loaded.tables
-      d.schemas = loaded.schemas
-      // Auto-expand the sole schema (usually "public") so its tables are visible.
-      if (loaded.schemas?.length === 1) schemaOpen.value[schemaKey(cid, name, loaded.schemas[0].name)] = true
-    }
+    await fetchDbInto(cid, d)
   } catch { /* leave empty on failure */ }
   finally { dbLoading.value[dbKey(cid, name)] = false }
 }
@@ -231,6 +242,8 @@ interface TreeGroup {
   children: TreeChild[]
 }
 
+const searching = computed(() => search.value.trim().length > 0)
+
 // Search matches the instance name, its environment, or its database type. With
 // several production environments and several engines in each, the name alone no
 // longer says where an instance lives or what it is — "hk" and "postgres" are both
@@ -244,6 +257,131 @@ const matching = computed(() => {
     envtier.envLabel(c.env).toLowerCase().includes(q) ||
     engineDisplay(c.engine).toLowerCase().includes(q))
 })
+
+/**
+ * 搜索命中的库、schema 与表。
+ *
+ * 只在**已经探查过**的实例里找。库和表不是随连接列表一起下发的 —— 每台实例都要
+ * 单独连过去问一次,那是对目标库的真实探查。跟着每次敲键对全部实例都来一遍,等于
+ * 让一个搜索框去敲遍所有生产集群。
+ *
+ * 所以:探查过的立刻能搜,没探查过的由人显式点一下(sweepAll),并且界面上要写清
+ * 还有几台没搜 —— 一个悄悄只搜了一半的搜索框,和一个会说谎的搜索框是一回事。
+ */
+const MAX_HITS = 80
+interface ObjHit { connId: number; inst: string; db: string; schema?: string; table?: string }
+const objectHits = computed<ObjHit[]>(() => {
+  const q = search.value.trim().toLowerCase()
+  if (!q) return []
+  const out: ObjHit[] = []
+  const hit = (h: ObjHit) => { if (out.length < MAX_HITS) out.push(h) }
+  for (const c of props.connections) {
+    const sc = schemaCache.value[c.id]
+    if (!sc) continue
+    for (const d of sc.databases || []) {
+      if (d.name.toLowerCase().includes(q)) hit({ connId: c.id, inst: c.name, db: d.name })
+      for (const tb of d.tables || []) {
+        if (tb.name.toLowerCase().includes(q)) hit({ connId: c.id, inst: c.name, db: d.name, table: tb.name })
+      }
+      for (const s of d.schemas || []) {
+        if (s.name.toLowerCase().includes(q)) hit({ connId: c.id, inst: c.name, db: d.name, schema: s.name })
+        for (const tb of s.tables || []) {
+          if (tb.name.toLowerCase().includes(q)) hit({ connId: c.id, inst: c.name, db: d.name, schema: s.name, table: tb.name })
+        }
+      }
+    }
+  }
+  return out
+})
+
+/** 还没探查过的实例 —— 它们的库与表现在搜不到,这一点必须让人看见。 */
+const unscanned = computed(() => props.connections.filter((c) => !schemaCache.value[c.id]))
+
+// 显式地把其余实例也探查一遍。并发限 4:这是真往每台目标库上连,不是本地过滤;
+// 连不上的跳过 —— 它搜不到,但不该拖住其余的。
+const sweeping = ref(false)
+const sweepDone = ref(0)
+const sweepTotal = ref(0)
+async function sweepAll() {
+  if (sweeping.value) return
+  const queue = unscanned.value.slice()
+  if (!queue.length) return
+  sweeping.value = true
+  sweepDone.value = 0
+  sweepTotal.value = queue.length
+  const worker = async () => {
+    for (;;) {
+      const c = queue.shift()
+      if (!c) return
+      try {
+        const sc = await api.connectionSchema(c.id)
+        if (sc && !sc.error) schemaCache.value = { ...schemaCache.value, [c.id]: sc }
+      } catch { /* 连不上的实例搜不到,如实留在"未搜索"里 */ }
+      sweepDone.value++
+    }
+  }
+  try {
+    await Promise.all([worker(), worker(), worker(), worker()])
+  } finally {
+    sweeping.value = false
+  }
+}
+
+/**
+ * 已探查过、但表还没加载的库。
+ *
+ * 只有 PostgreSQL 家族会出现:它的 information_schema 是**按库**的,实例级那一次
+ * 只能列出有哪些库,每个库的表要再连一次。MySQL / Oracle / SQLite 一次就全带回来了。
+ *
+ * 所以这里不能跟着实例那一趟一起做 —— 一个有 30 个库的 PG 集群就是 30 次连接。
+ * 它单独算一笔、单独一个按钮,代价写在按钮旁边,由人决定要不要付。
+ */
+const unloadedDbs = computed(() => {
+  const out: { cid: number; d: SchemaDB }[] = []
+  for (const c of props.connections) {
+    const sc = schemaCache.value[c.id]
+    if (!sc) continue
+    for (const d of sc.databases || []) {
+      if (!d.tables?.length && !d.schemas?.length) out.push({ cid: c.id, d })
+    }
+  }
+  return out
+})
+
+const loadingDbs = ref(false)
+const dbDone = ref(0)
+const dbTotal = ref(0)
+async function loadAllDbs() {
+  if (loadingDbs.value) return
+  const queue = unloadedDbs.value.slice()
+  if (!queue.length) return
+  loadingDbs.value = true
+  dbDone.value = 0
+  dbTotal.value = queue.length
+  const worker = async () => {
+    for (;;) {
+      const it = queue.shift()
+      if (!it) return
+      try { await fetchDbInto(it.cid, it.d) } catch { /* 连不上的库如实留在"未加载"里 */ }
+      dbDone.value++
+    }
+  }
+  try {
+    await Promise.all([worker(), worker(), worker(), worker()])
+  } finally {
+    loadingDbs.value = false
+  }
+}
+
+// 点一条结果 = 跳到那台实例的那个库(父级的 openDb 会连带切/开对应的标签页)。
+// 清掉搜索框,并把实例与库都展开 —— 落地之后要能直接看见自己点的是哪一个,而不是
+// 回到一棵全收起的树前面自己再找一遍。命中来自缓存,所以那个库的表已经在手上了。
+function gotoHit(h: ObjHit) {
+  search.value = ''
+  instCollapsed.value[h.connId] = false
+  dbOpen.value[dbKey(h.connId, h.db)] = true
+  emit('selectDb', h.connId, h.db)
+}
 
 /** Types ordered by the engine catalogue, with anything unrecognised last. */
 function byCatalogueOrder(a: string, b: string): number {
@@ -299,6 +437,9 @@ const groups = computed<TreeGroup[]>(() => {
     for (const e of envtier.envsByTier[tier.code] ?? []) {
       claimed.add(e.code)
       const conns = byEnv[e.code] ?? []
+      // 不搜索时空环境照列 —— 那是"这套资产长什么样"的一部分;搜索时列出来就
+      // 只是一屏"无匹配实例",把真正的命中挤出视线。
+      if (searching.value && !conns.length) continue
       out.push({
         key: e.code,
         label: envtier.envLabel(e.code),
@@ -329,7 +470,6 @@ const groups = computed<TreeGroup[]>(() => {
   return out
 })
 
-const searching = computed(() => search.value.trim().length > 0)
 function toggle(key: string) { collapsed.value[key] = !collapsed.value[key] }
 // Searching expands everything: a hit two levels down is useless if the levels
 // above it stay shut.
@@ -368,6 +508,40 @@ function clickInst(id: number) {
       </div>
     </div>
     <div class="scy body">
+      <!-- 搜索命中的库与表。实例的匹配仍然走下面那棵树 —— 树是用来"浏览"的,
+           而找一张表要的是一份能直接点开的平铺清单。 -->
+      <template v-if="searching">
+        <div class="reshead">
+          <span>{{ $t('treeHitsObj') }}</span>
+          <span class="cnt">{{ objectHits.length }}{{ objectHits.length >= MAX_HITS ? '+' : '' }}</span>
+        </div>
+        <div
+          v-for="(h, i) in objectHits" :key="i" class="reshit"
+          :title="h.inst + ' / ' + h.db + (h.schema ? ' / ' + h.schema : '') + (h.table ? ' / ' + h.table : '')"
+          @click="gotoHit(h)"
+        >
+          <component :is="h.table ? Table2 : FolderOpen" :size="12" color="var(--text-faint)" />
+          <span class="hname">{{ h.table || h.schema || h.db }}</span>
+          <span class="hpath">{{ h.inst }} / {{ h.db }}<template v-if="h.schema"> / {{ h.schema }}</template></span>
+        </div>
+        <div v-if="!objectHits.length" class="empty">{{ $t('treeNoObjMatch') }}</div>
+        <!-- 还有多少台没探查,说清楚,并给一个显式的出口 -->
+        <div v-if="unscanned.length" class="sweep">
+          <span class="swtxt">{{ $t('treeUnscanned', { n: unscanned.length }) }}</span>
+          <button class="swbtn" :disabled="sweeping" @click="sweepAll">
+            {{ sweeping ? $t('treeScanning', { d: sweepDone, n: sweepTotal }) : $t('treeScanAll') }}
+          </button>
+        </div>
+        <div v-if="!unscanned.length && unloadedDbs.length" class="sweep">
+          <span class="swtxt">{{ $t('treeUnloadedDbs', { n: unloadedDbs.length }) }}</span>
+          <button class="swbtn" :disabled="loadingDbs" @click="loadAllDbs">
+            {{ loadingDbs ? $t('treeScanning', { d: dbDone, n: dbTotal }) : $t('treeLoadDbs') }}
+          </button>
+        </div>
+        <!-- 一个实例都没匹配上时不留空标题:空标题只会让人以为下面那块没加载出来 -->
+        <div v-if="matching.length" class="reshead">{{ $t('treeHitsInst') }}</div>
+      </template>
+
       <template v-for="g in groups" :key="g.key">
         <!-- First level: the environment. The dot carries its TIER colour — the
              tier no longer has a row of its own, and losing the "which of these
@@ -574,6 +748,19 @@ function clickInst(id: number) {
 .tbl.click:hover { color: var(--accent-text); background: rgba(255, 255, 255, 0.04); }
 .tbl.sel { border-radius: 6px; background: rgba(255, 255, 255, 0.04); color: var(--text-strong); }
 .empty { padding: 6px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+/* 搜索结果区 */
+.reshead { display: flex; align-items: center; padding: 9px 8px 5px; font: 600 10px var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-faint); }
+.reshit { display: flex; align-items: baseline; gap: 7px; padding: 5px 8px; border-radius: 7px; cursor: pointer; }
+.reshit:hover { background: var(--accent-subtle); }
+.reshit:hover .hname { color: var(--accent-text); }
+.hname { font: 500 12px var(--font-mono); color: var(--text-body); white-space: nowrap; }
+/* 路径压在右边并省略:名字才是要认的东西,路径是用来消歧的 */
+.hpath { flex: 1; min-width: 0; text-align: right; font: 400 10.5px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sweep { display: flex; align-items: center; gap: 8px; margin: 6px 8px 2px; padding: 7px 9px; border: 1px dashed var(--border-default); border-radius: 8px; }
+.swtxt { flex: 1; min-width: 0; font: 500 10.5px var(--font-body); color: var(--text-muted); }
+.swbtn { flex-shrink: 0; height: 24px; padding: 0 9px; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-card); color: var(--text-body); font: 600 10.5px var(--font-body); cursor: pointer; }
+.swbtn:hover:not(:disabled) { border-color: var(--accent-text); color: var(--accent-text); background: var(--accent-subtle); }
+.swbtn:disabled { opacity: 0.6; cursor: default; }
 .shint { padding: 5px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
 .shint.err { color: var(--danger-text); white-space: normal; word-break: break-word; }
 .foot { padding: 12px 14px; border-top: 1px solid var(--border-subtle); font: 500 11px var(--font-mono); color: var(--text-faint); }
