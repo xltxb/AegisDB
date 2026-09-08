@@ -76,7 +76,9 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	default: // allow → enqueue a background job
 		job := &model.AsyncJob{
 			UserID: u.ID, ConnectionID: conn.ID, Instance: conn.Env + "-" + conn.Name,
-			Database: conn.Database, SQL: sql, Reason: reason, Status: model.AsyncPending,
+			// effectiveDatabase:Oracle 的 Database 是服务名,选中的 schema 在
+			// TargetSchema 上。记成服务名的话,worker 起来时那个 schema 就再也找不回来了。
+			Database: effectiveDatabase(conn), SQL: sql, Reason: reason, Status: model.AsyncPending,
 			Risk: v.Risk,
 		}
 		if err := s.Repo.CreateAsyncJob(job); err != nil {
@@ -119,9 +121,8 @@ func (s *Services) runAsyncJob(id int64) {
 		s.failAsync(id, "连接不存在")
 		return
 	}
-	if job.Database != "" {
-		conn.Database = job.Database
-	}
+	// 统一入口,不裸赋值:Oracle 上要走 TargetSchema,写进 conn.Database 是覆盖服务名。
+	applyTargetDatabase(conn, job.Database)
 	u, _ := s.Repo.GetUserByID(job.UserID)
 
 	// Log sink: keep the full text in memory (capped), flush to the row at most

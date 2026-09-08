@@ -13,6 +13,7 @@ type apListView struct {
 		ApNo     string `json:"apNo"`
 		Status   string `json:"status"`
 		Instance string `json:"instance"`
+		Database string `json:"database"`
 	} `json:"items"`
 	Total int64 `json:"total"`
 }

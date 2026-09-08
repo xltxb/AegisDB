@@ -316,9 +316,9 @@ func (s *Services) runExportJob(id int64) {
 	}
 	// Target the database chosen at submit time (the job persists it so the async
 	// worker runs against the same schema the user selected).
-	if job.Database != "" {
-		conn.Database = job.Database
-	}
+	// 统一入口,不裸赋值:提交时存的就是用户选的那个(Oracle 上是 schema),直接写进
+	// conn.Database 会把服务名覆盖掉,worker 连的就成了一个不存在的服务。
+	applyTargetDatabase(conn, job.Database)
 	u, err := s.Repo.GetUserByID(job.UserID)
 	if err != nil {
 		s.failExport(id, "用户不存在")

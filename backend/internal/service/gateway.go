@@ -397,7 +397,11 @@ func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection
 	}
 	ap := &model.Approval{
 		ApNo: apNo, ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode, Instance: conn.Name,
-		Command: sql, Keyword: kw, Database: conn.Database, InitiatorID: u.ID, Initiator: u.Name,
+		// effectiveDatabase 而不是 conn.Database:Oracle 的 Database 装的是 SERVICE
+		// NAME,选中的 schema 在 TargetSchema 上。记成服务名的后果不是显示错了 ——
+		// 批准之后执行会把它当 schema 去 ALTER SESSION SET CURRENT_SCHEMA,于是那条
+		// CREATE TABLE 建到了一个不是你选的地方。
+		Command: sql, Keyword: kw, Database: effectiveDatabase(conn), InitiatorID: u.ID, Initiator: u.Name,
 		Reason: reason, RiskLevel: v.Risk, Status: model.StatusPending, AuditID: auditID,
 		ScriptUploadID: uploadID, ScriptSHA256: sha,
 	}
@@ -496,9 +500,10 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // initiator since the command runs on their behalf.
 func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string) (*dto.ExecResp, error) {
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
-	if conn != nil && ap.Database != "" {
-		conn.Database = ap.Database // execute against the selected target database
-	}
+	// 走 applyTargetDatabase,不要裸赋值:Oracle 上 conn.Database 是服务名,直接写
+	// 进去等于把连接指向一个不存在的服务(TNS-12514),而工单里那个值本来是 schema。
+	// 这条规则收敛成一个函数,正是因为分散的写法只会以"又有人新写一处"的方式复发。
+	applyTargetDatabase(conn, ap.Database)
 	initiator, _ := s.Repo.GetUserByID(ap.InitiatorID)
 	if initiator == nil {
 		// The initiator user was removed — keep audit attribution via the stored name.

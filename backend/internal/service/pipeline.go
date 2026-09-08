@@ -324,7 +324,8 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 	rel := &model.Release{
 		RelNo: s.nextRelNo(), Title: clip(strings.TrimSpace(req.Title), 100),
 		PipelineID: pipeline.ID, PipelineName: pipeline.Name,
-		ConnectionID: conn.ID, Instance: conn.Name, Database: conn.Database,
+		// effectiveDatabase:Oracle 记 schema,不是服务名 —— 执行阶段要照着它切回去。
+		ConnectionID: conn.ID, Instance: conn.Name, Database: effectiveDatabase(conn),
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
@@ -477,9 +478,8 @@ func (s *Services) driveRelease(id int64) {
 		s.finishRelease(rel, model.RunFailed, "目标连接已不存在")
 		return
 	}
-	if rel.Database != "" {
-		conn.Database = rel.Database
-	}
+	// 统一入口,不裸赋值(理由同 target_database.go)。
+	applyTargetDatabase(conn, rel.Database)
 	stages, err := s.Repo.StagesOfRelease(id)
 	if err != nil {
 		return

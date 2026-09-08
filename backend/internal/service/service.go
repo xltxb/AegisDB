@@ -207,7 +207,9 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 		if conn != nil {
 			a.ConnectionID = conn.ID
 			a.Instance = conn.Name
-			a.Database = conn.Database
+			// 同一个口径:Oracle 记 schema,不是服务名。审计事后要回答"这条语句落在
+			// 哪个库",而服务名回答不了这个问题。
+			a.Database = effectiveDatabase(conn)
 			a.Env = conn.Env
 		}
 		payload, _ := json.Marshal(map[string]any{
