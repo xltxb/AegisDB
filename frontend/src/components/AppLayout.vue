@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { FolderKanban,
-  Sailboat, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound, Rocket, GitBranch, SpellCheck,
+  Sailboat, LayoutDashboard, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound, Rocket, GitBranch, SpellCheck,
   ScrollText, Settings, Activity, Hourglass, Languages, Bell,
   CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck,
 } from 'lucide-vue-next'
@@ -20,6 +20,8 @@ const ui = useUIStore()
 const { t } = useI18n()
 
 const navItems = [
+  // 总览始终可见(always):它是落地页,而且只显示调用者本来就取得到的东西。
+  { key: 'dashboard', always: true, path: '/dashboard', icon: LayoutDashboard, label: 'navHome' },
   { key: 'terminal', path: '/terminal', icon: SquareTerminal, label: 'navTerm' },
   // export & uploads reuse the terminal permission (`gate`) rather than own menu keys.
   { key: 'export', gate: 'terminal', path: '/export', icon: DatabaseZap, label: 'navExport' },
@@ -42,7 +44,7 @@ const navItems = [
   { key: 'settings', path: '/settings', icon: Settings, label: 'navSettings' },
 ]
 
-const visibleNav = computed(() => navItems.filter((n) => auth.menus[(n as any).gate ?? n.key]))
+const visibleNav = computed(() => navItems.filter((n) => (n as any).always || auth.menus[(n as any).gate ?? n.key]))
 const activeKey = computed(() => (route.meta.menuKey as string) || '')
 // Titles are keyed off the MENU key, not the route name. The two differ for
 // several routes (connections→db, approvals→approve, risk-rules→rules,

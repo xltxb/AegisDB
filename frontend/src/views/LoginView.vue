@@ -33,14 +33,16 @@ async function submit() {
   loading.value = true
   try {
     await auth.login(email.value.trim(), password.value, mfaCode.value.trim())
-    const dest = auth.firstVisibleRoute
-    if (!dest) {
+    // firstVisibleRoute 在这里只用来回答一个问题:这个人有没有任何一处能去。
+    // 有,就送去总览 —— 落地页不该是 Web 命令行,那是这个产品里唯一能改动真实数据
+    // 的地方。总览本身不设菜单闸,所以送得过去。
+    if (!auth.firstVisibleRoute) {
       // Logged in but the role has no visible menu — don't push('') (which would
       // silently stay on the login page), tell the user (V5).
       error.value = t('loginNoMenu')
       return
     }
-    router.push(dest)
+    router.push('/dashboard')
   } catch (e: any) {
     if (e?.code === CODE_MFA_REQUIRED) {
       // A submitted-but-wrong code carries a message; the first prompt does not.

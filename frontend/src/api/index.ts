@@ -307,10 +307,13 @@ export const api = {
 
   // ---- approvals ----
   // Paged listing {items,total,page,pageSize}.
-  approvals: (scope: 'mine' | 'all', page = 1, pageSize = 50) =>
+  // status 按状态筛,空串是不筛。总览的"待执行"必须靠它:通过了的工单不会过期,
+  // 一张等着执行的单子可以停很久,早就被新工单挤出了任何一页 —— 取一页回来自己筛
+  // 会漏报,而那张卡片漏报等于没有。
+  approvals: (scope: 'mine' | 'all', page = 1, pageSize = 50, status = '') =>
     http
       .get<any, Envelope<{ items: Approval[]; total: number; pending: number }>>(
-        `/approvals?scope=${scope}&page=${page}&pageSize=${pageSize}`,
+        `/approvals?scope=${scope}&page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}`,
       )
       .then(ok),
   // Look one ticket up by number, independent of paging — the audit log links

@@ -1,6 +1,6 @@
 // English locale — ported from the prototype's tr() pairs.
 {
-  navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navProject: 'Projects', navDb: 'DB', navRules: 'Rules', navEnvTier: 'Tiers', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
+  navHome: 'Home', navTerm: 'Term', navExport: 'Export', navUploads: 'Upload', navAsync: 'Background', navAppr: 'Appr', navProject: 'Projects', navDb: 'DB', navRules: 'Rules', navEnvTier: 'Tiers', navPerms: 'Roles', navAudit: 'Audit', navSettings: 'Config',
   // shared form controls
   selSearchPh: 'Type to search', selNoMatch: 'No match',
   t_export: 'Data export', t_exportSub: 'SQL export · compressed & encrypted', t_uploads: 'Script upload', t_uploadsSub: 'Upload and manage your script files',
@@ -372,6 +372,29 @@
   termLostWhileRunning: 'Connection lost while the command was running — its outcome is unknown. Check the audit log before retrying.',
   termDeniedCap: '· Command denied: the capability matrix forbids this operation in this environment',
   termHitRule: '· Matched high-risk rule "{rule}", submit for approval in the dialog',
+  // Dashboard (landing page)
+  t_dashboard: 'Overview', t_dashboardSub: 'What needs attention right now',
+  dashPageSub: '{n} instances available to you',
+  dashGreeting: '{name}, here is what needs your attention',
+  dashOpenTerminal: 'Open terminal',
+  dashStatTodo: 'Waiting on you',
+  dashStatToRun: 'Waiting for you to run',
+  dashRunTitle: 'Ready to run', dashRunSub: 'Approved, still waiting for someone to press go',
+  dashRunGo: 'Run it',
+  dashRunStage: 'parked at “{stage}”',
+  dashStatWindows: 'Execution windows open now',
+  dashStatInstances: 'Instances · {n} under control',
+  dashStatGwOn: 'Gateway online · median latency',
+  dashStatGwOff: 'Gateway offline',
+  dashWindowOpen: '{n} execution window(s) open — mid/high-risk statements run without approval',
+  dashTodoTitle: 'Waiting on you', dashTodoSub: 'Only tickets you can decide right now',
+  dashTodoEmpty: 'Nothing waiting on your decision',
+  dashAuditTitle: 'Recent activity', dashAuditSub: 'Commands run through or stopped by the gateway',
+  dashAuditEmpty: 'No entries yet',
+  dashInstTitle: 'Instances', dashInstSub: 'Grouped by control tier',
+  dashInstEmpty: 'No instances available to your role',
+  dashTierGated: 'gated',
+  dashTierUnknown: 'No tier',
   // Rule names. The server sends a stable code plus arguments; the canonical
   // Chinese string comes alongside it as the fallback (see lib/ruleText.ts).
   ruleText: {

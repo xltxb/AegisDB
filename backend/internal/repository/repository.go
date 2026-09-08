@@ -950,12 +950,21 @@ func (r *Repo) approvalScope(scope string, userID int64) *gorm.DB {
 // audit log links tickets by number, and such a ticket may sit on any page. The
 // visibility predicate still applies, so a number cannot be used to read someone
 // else's ticket.
-func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo string, offset, limit int) ([]model.Approval, int64, error) {
+func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status string, offset, limit int) ([]model.Approval, int64, error) {
 	count := r.approvalScope(scope, userID)
 	rows := r.approvalScope(scope, userID).Order("id desc")
 	if apNo != "" {
 		count = count.Where("ap_no = ?", apNo)
 		rows = rows.Where("ap_no = ?", apNo)
+	}
+	// status 让调用方按状态取,而不是取一页回去自己筛。
+	//
+	// 这是"待执行"那张卡片需要的:通过之后命令并没有跑,而**通过了的工单不会过期**
+	// (超时清扫只作废 pending,见 sweepStaleApprovals),所以一张等着执行的单子可以
+	// 停很久,早就被新工单挤出了任何一页。客户端筛就会漏报,而这张卡片漏报等于没有。
+	if status != "" {
+		count = count.Where("status = ?", status)
+		rows = rows.Where("status = ?", status)
 	}
 	var total int64
 	if err := count.Count(&total).Error; err != nil {
@@ -976,7 +985,7 @@ func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo string, offse
 // that genuinely need the whole set (the approval-chain sweep); the console uses
 // the paged form.
 func (r *Repo) ListApprovals(scope string, userID int64) ([]model.Approval, error) {
-	as, _, err := r.ListApprovalsPaged(scope, userID, "", 0, 0)
+	as, _, err := r.ListApprovalsPaged(scope, userID, "", "", 0, 0)
 	return as, err
 }
 

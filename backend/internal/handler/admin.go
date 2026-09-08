@@ -372,7 +372,16 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	if apNo != "" {
 		page, pageSize = 1, 1
 	}
-	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, (page-1)*pageSize, pageSize)
+	// status 只认已知的四个状态。一个拼错的值若原样进 WHERE,查出来的是空列表 ——
+	// 而空列表和"确实没有"长得一模一样,调用方看不出自己写错了。
+	status := strings.TrimSpace(c.Query("status"))
+	switch status {
+	case "", model.StatusPending, model.StatusApproved, model.StatusRejected, model.StatusExpired:
+	default:
+		resp.Fail(c, resp.CodeBadRequest, "status 取值无效")
+		return
+	}
+	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, status, (page-1)*pageSize, pageSize)
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "加载失败")
 		return

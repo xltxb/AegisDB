@@ -8,8 +8,13 @@ const router = createRouter({
     {
       path: '/',
       component: () => import('@/components/AppLayout.vue'),
-      redirect: '/terminal',
+      // 落地页是总览,不是 Web 命令行。终端是这个产品里唯一能改动真实数据的地方,
+      // 把它当默认页等于每次开工都先站到闸门里面。
+      redirect: '/dashboard',
       children: [
+        // 总览不设菜单闸:它只显示调用者本来就取得到的东西(每个数据接口自己带闸),
+        // 而一个没有落地页的登录态只会把人弹回登录页。`home` 见下方守卫。
+        { path: 'dashboard', name: 'dashboard', component: () => import('@/views/DashboardView.vue'), meta: { menuKey: 'dashboard', home: true } },
         { path: 'terminal', name: 'terminal', component: () => import('@/views/TerminalView.vue'), meta: { menuKey: 'terminal' } },
         // export is a terminal-level data capability; gate on the terminal menu.
         { path: 'export', name: 'export', component: () => import('@/views/ExportView.vue'), meta: { menuKey: 'export', gate: 'terminal' } },
@@ -37,7 +42,7 @@ const router = createRouter({
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { menuKey: 'settings' } },
       ],
     },
-    { path: '/:pathMatch(.*)*', redirect: '/terminal' },
+    { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 })
 
@@ -54,17 +59,33 @@ router.beforeEach(async (to) => {
       return { name: 'login' }
     }
   }
-  // `gate` lets a route reuse another menu's permission (e.g. export ← terminal).
-  const key = (to.meta.gate as string | undefined) ?? (to.meta.menuKey as string | undefined)
-  if (key && !auth.menus[key]) {
-    const dest = auth.firstVisibleRoute
-    // No accessible route (empty menus) or the fallback is the very route we're
-    // being denied → break the redirect loop by logging out (L12).
-    if (!dest || dest === to.path) {
+  // 总览没有菜单闸。它带着 menuKey 只是为了页眉标题和导航高亮,所以这里要在闸门
+  // 之前放行 —— 否则 auth.menus['dashboard'] 永远是 undefined,落地页会把每个人
+  // 都弹回各自的第一个菜单,也就是又回到了 Web 命令行。
+  //
+  // 但一个**一个菜单都没有**的账户仍然该被弹回登录页(L12):让他停在一张空总览上,
+  // 看着像登进来了,其实什么都做不了。
+  if (to.meta.home) {
+    if (!auth.firstVisibleRoute) {
       auth.logout()
       return { name: 'login' }
     }
-    return { path: dest }
+    return true
+  }
+  // `gate` lets a route reuse another menu's permission (e.g. export ← terminal).
+  const key = (to.meta.gate as string | undefined) ?? (to.meta.menuKey as string | undefined)
+  if (key && !auth.menus[key]) {
+    // 被拒之后送去总览,而不是送进 Web 命令行 —— 那是这里唯一能改动真实数据的地方,
+    // 不该是"你去不了那儿"的默认落点。
+    //
+    // firstVisibleRoute 在这里只回答一件事:这个人有没有任何一处能去。一处都没有
+    // 就回登录页(L12)。原先那条"兜底恰好就是被拒的这一页"的死循环判断也不必了 ——
+    // 总览是 home 路由,在上面就已经放行,永远不会走到这里。
+    if (!auth.firstVisibleRoute) {
+      auth.logout()
+      return { name: 'login' }
+    }
+    return { path: '/dashboard' }
   }
   return true
 })

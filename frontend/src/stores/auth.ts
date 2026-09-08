@@ -4,6 +4,9 @@ import api from '@/api'
 import type { Me } from '@/types'
 
 // Route order used to pick the first visible menu after login.
+// 总览不在这张表里,而这是有意的:这张表回答的是"这个人有没有任何一处能去",
+// 用来决定被拒之后把他送到哪、以及一个菜单都没有的账户该被弹回登录页。总览人人
+// 可见,写进来会让那个判断永远为真。
 const ROUTE_ORDER: { key: string; path: string }[] = [
   { key: 'terminal', path: '/terminal' },
   { key: 'approve', path: '/approvals' },

@@ -1,7 +1,7 @@
 // Chinese locale — ported from the prototype's tr() pairs.
 {
   // nav / topbar
-  navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navProject: '项目', navDb: '配置', navRules: '规则', navEnvTier: '分层', navPerms: '权限', navAudit: '审计', navSettings: '设置',
+  navHome: '总览', navTerm: '终端', navExport: '导出', navUploads: '上传', navAsync: '后台执行', navAppr: '审批', navProject: '项目', navDb: '配置', navRules: '规则', navEnvTier: '分层', navPerms: '权限', navAudit: '审计', navSettings: '设置',
   // shared form controls
   selSearchPh: '输入关键词搜索', selNoMatch: '无匹配项',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
@@ -394,6 +394,29 @@
   termLostWhileRunning: '连接在命令执行期间中断,该命令是否已生效未知,请先查审计日志再重试。',
   termDeniedCap: '· 命令被拒绝:能力矩阵在该环境禁止此操作',
   termHitRule: '· 命中高危规则「{rule}」,请在弹窗中提交审批',
+  // 总览(落地页)
+  t_dashboard: '总览', t_dashboardSub: '此刻有什么要管',
+  dashPageSub: '可访问 {n} 台实例',
+  dashGreeting: '{name},以下是此刻需要你留意的',
+  dashOpenTerminal: '打开命令行',
+  dashStatTodo: '等我审批',
+  dashStatToRun: '待我执行',
+  dashRunTitle: '待执行', dashRunSub: '已通过、还等着有人按下那一下',
+  dashRunGo: '去执行',
+  dashRunStage: '停在「{stage}」',
+  dashStatWindows: '正开着的执行窗口',
+  dashStatInstances: '可访问实例 · 其中 {n} 台受管控',
+  dashStatGwOn: '网关在线 · 中位延迟',
+  dashStatGwOff: '网关离线',
+  dashWindowOpen: '有 {n} 个执行窗口正开着 —— 期间中高风险语句免审批直接执行',
+  dashTodoTitle: '等我审批', dashTodoSub: '只列此刻由你决定的单子',
+  dashTodoEmpty: '没有等你决定的单子',
+  dashAuditTitle: '最近动作', dashAuditSub: '经网关执行或被拦下的命令',
+  dashAuditEmpty: '暂无记录',
+  dashInstTitle: '实例概览', dashInstSub: '按控制分层归堆',
+  dashInstEmpty: '你的角色下没有可访问的实例',
+  dashTierGated: '受管控',
+  dashTierUnknown: '未归入分层',
   // 规则名。服务端发的是稳定的 code + 参数,这里按界面语言讲同一句话;
   // 服务端同时还发一份规范中文串,认不出的 code 就回落到它(见 lib/ruleText.ts)。
   ruleText: {
