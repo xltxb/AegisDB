@@ -252,6 +252,8 @@
   exportServerFile: '服务器文件路径', exportNoPath: '尚未配置数据导出保存路径', copy: '复制',
   scPathTitle: '未配置上传脚本保存路径', scPathDesc: '使用上传脚本前，请先在【系统设置 · 网关】配置保存路径。', scPathGo: '去设置', scArchiveAt: '归档至',
   tabClose: '关闭标签', tabEmpty: '从左侧选择数据库实例打开标签页',
+  prodWarnTitle: '你正在进入生产环境', prodWarnDesc: '这台实例上的操作会直接作用于线上数据。确认后本标签页不再提示,顶部红色横幅会一直提醒你身处何处。',
+  prodWarnGo: '我确认,继续', prodWarnLeave: '走错了,关掉',
   splitHint: '拖动调整终端与结果表的高度 · 双击恢复默认 · 方向键微调',
   gridToggle: '表格视图', gridResult: '结果', gridRows: '{n} 行', gridCopyTsv: '复制为 TSV', gridClose: '关闭表格', gridEmpty: '无结果', copied: '已复制',
   edit: '编辑', tagAdd: '打标签', tagAssign: '分配标签', tagNone: '暂无标签', tagAddPh: '输入标签后回车添加', tagSuggest: '已有标签',

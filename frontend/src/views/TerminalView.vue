@@ -191,6 +191,7 @@ onMounted(async () => {
           :conns="conns" :chain="chain" :script-enabled="scriptEnabled" :script-save-path="scriptSavePath"
           @update:risk="(v) => setRisk(tab.id, v)" @update:ws-status="(v) => setWs(tab.id, v)"
           @update:db="(v) => setDb(tab.id, v)" @result="(r) => setResult(tab.id, r)"
+          @close="closeTab(tab.id)"
         />
         <template v-if="gridView && tabs.length && activeTab?.result">
           <div

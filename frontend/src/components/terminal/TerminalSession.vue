@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onActivated, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { Upload, FileCode2, RotateCw, ShieldAlert, FolderCog, ListChecks, ChevronDown, Download, Command, ClipboardPaste } from 'lucide-vue-next'
@@ -38,7 +38,7 @@ const props = defineProps<{
   db?: string // target database chosen in the tree (defaults to the connection's)
   gridView?: boolean // when true, result sets go to the HTML grid; terminal prints only the summary
 }>()
-const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string]; result: [{ columns: string[]; rows: string[][] }] }>()
+const emit = defineEmits<{ 'update:risk': ['idle' | 'safe' | 'high']; 'update:wsStatus': [WsStatus]; 'update:db': [string]; result: [{ columns: string[]; rows: string[][] }]; close: [] }>()
 
 const { t } = useI18n()
 const auth = useAuthStore()
@@ -46,7 +46,7 @@ const envtier = useEnvTierStore()
 const router = useRouter()
 // The caution banner's severity comes from the connection's tier. A failed load
 // leaves every tier unresolved, which cautionLine treats as "unknown, warn".
-envtier.load().catch(() => {})
+envtier.load().then(() => { if (props.active) maybeWarnDanger() }).catch(() => {})
 
 const risk = ref<'idle' | 'safe' | 'high'>('idle')
 const wsStatus = ref<WsStatus>('connecting')
@@ -241,6 +241,38 @@ function promptText() {
 function promptLen() { return props.conn.name.length + (targetDb.value ? targetDb.value.length + 1 : 0) + 3 }
 function contPrompt() { return ' '.repeat(Math.max(0, promptLen() - 2)) + c(ANSI.gray, '· ') }
 
+// ---- 进入生产实例的红色确认 ----
+//
+// 终端里那行红字是**被动**的:它印在屏幕上,人扫一眼就滑过去了。这个弹窗是主动的,
+// 它挡在路中间,要求先确认再操作。两者不重复 —— 弹窗打断"手快",红字负责之后一直提醒。
+//
+// 触发条件同样是分层的 dangerBanner,不是名字叫不叫 prod:第二个生产环境和第一个一样
+// 危险,按名字挑会让人最不熟悉的那些集群拿到最弱的警告(理由见 cautionLine)。
+//
+// 每个标签页确认一次。这个状态是组件内的 ref,所以关掉标签页再打开会重新确认 ——
+// 那正是"重新进入"该有的意思;而在标签页之间来回切不会反复弹。
+const dangerAck = ref(false)
+const dangerOpen = ref(false)
+
+const isDangerTier = computed(() => !!envtier.tierOf(props.conn.env)?.dangerBanner)
+
+function maybeWarnDanger() {
+  if (isDangerTier.value && !dangerAck.value) dangerOpen.value = true
+}
+
+function confirmDanger() {
+  dangerAck.value = true
+  dangerOpen.value = false
+  nextTick(() => term?.focus())
+}
+
+// 取消 = 我不该在这里。直接把这个标签页关掉,而不是留着一个"确认过一半"的终端 ——
+// 留着它,下一次点进来就不会再问了。
+function cancelDanger() {
+  dangerOpen.value = false
+  emit('close')
+}
+
 // A prominent, tier-coloured "you are operating on X" caution printed into the
 // terminal itself (bold; red with an explicit "proceed with caution" on a tier
 // that carries the danger banner).
@@ -409,6 +441,9 @@ watch(() => props.active, (a) => { if (a) nextTick(() => { fitNow(); term.focus(
 // Re-entering the terminal route (kept alive) re-inserts the DOM: refit the
 // active session so xterm matches the restored container size.
 onActivated(() => { if (props.active) nextTick(() => { fitNow(); term.focus() }) })
+// 标签页之间切换时,第一次切到某个生产实例上同样算"进入"。已确认过的不会再弹
+// (dangerAck 是每个标签页各自的)。
+watch(() => props.active, (on) => { if (on) maybeWarnDanger() })
 
 onUnmounted(() => {
   ro?.disconnect()
@@ -1072,6 +1107,29 @@ async function runScript() {
       </div>
     </div>
 
+
+    <!-- 进入生产实例的红色确认。挡在路中间,先确认再操作 —— 终端里那行红字是被动的,
+         人扫一眼就滑过去了。 -->
+    <div v-if="dangerOpen" class="mfa-overlay">
+      <div class="mfa-mask" />
+      <div class="mfa-modal danger-modal">
+        <div class="mfa-top" />
+        <div class="mfa-pad">
+          <div class="mfa-title"><ShieldAlert :size="18" />{{ $t('prodWarnTitle') }}</div>
+          <div class="danger-target">
+            <span class="dt-env">{{ conn.env.toUpperCase() }}</span>
+            <span class="dt-name">{{ conn.name }}</span>
+            <span v-if="targetDb" class="dt-db">/ {{ targetDb }}</span>
+          </div>
+          <div class="mfa-desc">{{ $t('prodWarnDesc') }}</div>
+          <div class="mfa-acts">
+            <button class="mfa-btn ghost" @click="cancelDanger">{{ $t('prodWarnLeave') }}</button>
+            <button class="mfa-btn danger" @click="confirmDanger">{{ $t('prodWarnGo') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-if="pathPromptOpen" class="mfa-overlay">
       <div class="mfa-mask" @click="pathPromptOpen = false" />
       <div class="mfa-modal">
@@ -1219,6 +1277,18 @@ async function runScript() {
   font: 700 22px var(--font-mono); letter-spacing: 10px; outline: none;
 }
 .mfa-code:focus { border-color: var(--accent-text); }
+.danger-modal { width: 460px; }
+/* 目标写在最显眼的位置:人要确认的是"我在哪台机器上",不是"我读没读这段话"。 */
+.danger-target {
+  margin-top: 14px; padding: 12px 14px; border-radius: 10px;
+  background: var(--danger-subtle); border: 1px solid var(--danger);
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+}
+.dt-env { font: 700 13px var(--font-mono); color: var(--danger-text); letter-spacing: 0.06em; }
+.dt-name { font: 600 14px var(--font-mono); color: var(--text-strong); }
+.dt-db { font: 500 13px var(--font-mono); color: var(--text-muted); }
+.mfa-btn.danger { background: var(--danger); color: #fff; border-color: transparent; }
+.mfa-btn.danger:hover { filter: brightness(1.08); }
 .mfa-err { margin-top: 8px; font: 600 12px var(--font-body); color: var(--danger-text); }
 .paste-modal { width: 640px; }
 .paste-box {
