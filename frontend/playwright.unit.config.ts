@@ -12,6 +12,10 @@ import { defineConfig } from '@playwright/test'
 // had no way to be regression-tested at all.
 export default defineConfig({
   testDir: './tests/unit',
+  // Not the app tsconfig: it maps `@/locales` to a test double so the runner can
+  // read the .json5 catalogues at all. Without it the JSON5 import aborts
+  // COLLECTION and the whole suite runs zero tests — see tests/unit/stubs/locales.ts.
+  tsconfig: './tsconfig.unit.json',
   fullyParallel: true,
   reporter: 'list',
 })
