@@ -76,6 +76,8 @@
   scClean: '未检出高危命令，可直接执行', scRisky: '检出高危命令，执行需经审批',
   scRun: '执行脚本', scSubmitAppr: '提交审批后执行',
   scTargetDb: '目标库', scPickDb: '请选择目标库', scMustPick: '请先选择执行的目标库', scConfirm: '确认在 {i} · {d} 执行',
+  scBusyRun: '正在执行,请勿关闭', scBusySubmit: '正在提交审批,请勿关闭',
+  scBusyHint: '脚本已下发,正在逐条经网关判定。重复点击不会更快,只会多跑一遍。',
   scSubmitted: '已提交审批 · 通过后回来自己执行', scClose: '关闭', scDrop: '或拖入 .sql 文件',
   // db config
   connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',

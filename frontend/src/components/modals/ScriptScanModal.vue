@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { FileSearch, X, ShieldAlert, ShieldCheck, TriangleAlert, Hourglass, FolderArchive, Database, CircleCheck } from 'lucide-vue-next'
+import { FileSearch, X, ShieldAlert, ShieldCheck, TriangleAlert, Hourglass, FolderArchive, Database, CircleCheck, Loader2 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import type { ScriptScanResp } from '@/types'
 
@@ -20,6 +20,19 @@ const db = computed({ get: () => props.targetDb || '', set: (v: string) => emit(
 // 能不能点执行:选了库、没有正在跑、这次还没跑过。
 // 三个条件缺一不可 —— 少了后两个,连点两下就是两次真的执行。
 const canRun = computed(() => !!db.value && !props.running && !props.done)
+
+// 下发期间整个弹窗都不接受操作 —— 关闭也不行。
+//
+// 按钮变灰挡得住"再点一次执行",挡不住"关掉再来一次":重新扫一遍脚本会把
+// scRunning / scDone 一起重置(见 TerminalSession 里 scriptScan 之后那两行),
+// 于是上一次还在飞的下发就没人记得了。这个遮罩把这条路一起封上。
+//
+// 不怕把人困住:scriptExecute 带的是 SCRIPT_TIMEOUT_MS 这个有界超时,
+// 无论成败 finally 都会把 running 放掉,遮罩跟着消失。
+function tryClose() {
+  if (props.running) return
+  emit('close')
+}
 const banner = computed(() =>
   risky.value
     ? { text: 'scRisky', bg: 'var(--danger-subtle)', color: 'var(--danger-text)', icon: ShieldAlert }
@@ -34,7 +47,7 @@ function badgeMeta(r: string) {
 
 <template>
   <div v-if="open && scan" class="scan-overlay">
-    <div class="scan-mask" @click="emit('close')" />
+    <div class="scan-mask" @click="tryClose" />
     <div class="modal">
       <div class="topbar" />
       <div class="pad">
@@ -44,7 +57,7 @@ function badgeMeta(r: string) {
             <div class="titlerow"><div class="title">{{ $t('scTitle') }}</div><span class="fn">{{ scan.filename }}</span></div>
             <div class="desc">{{ $t('scSub') }}</div>
           </div>
-          <div class="x" @click="emit('close')"><X :size="18" /></div>
+          <div class="x" :class="{ off: running }" @click="tryClose"><X :size="18" /></div>
         </div>
 
         <div class="stats">
@@ -102,11 +115,20 @@ function badgeMeta(r: string) {
             <CircleCheck :size="13" />
             {{ done.kind === 'submitted' ? $t('scAlreadySubmitted', { at: done.at, by: done.by }) : $t('scAlreadyRan', { at: done.at, by: done.by }) }}
           </span>
-          <VButton variant="secondary" @click="emit('close')">{{ $t('scClose') }}</VButton>
+          <VButton variant="secondary" :disabled="running" @click="tryClose">{{ $t('scClose') }}</VButton>
           <VButton variant="primary" :disabled="!canRun" @click="canRun && emit('run')">
             {{ running ? $t('scRunning') : done ? $t('scDone') : risky ? $t('scSubmitAppr') : $t('scRun') }}
           </VButton>
         </div>
+      </div>
+
+      <!-- 下发中的遮罩。它盖住的是**整个弹窗**,不只是那颗按钮:这段时间里没有
+           任何一个操作是有意义的,而一颗变灰的按钮旁边仍然可点的关闭/下拉框,
+           只会让人以为界面卡住了去乱点。 -->
+      <div v-if="running" class="busy">
+        <Loader2 class="spin" :size="26" color="var(--accent-text)" />
+        <div class="bt">{{ risky ? $t('scBusySubmit') : $t('scBusyRun') }}</div>
+        <div class="bs">{{ $t('scBusyHint') }}</div>
       </div>
     </div>
   </div>
@@ -169,4 +191,20 @@ function badgeMeta(r: string) {
 .ok { color: var(--success-text); }
 .acts { margin-left: auto; display: flex; gap: 10px; }
 .ranmark { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--success-text); }
+/* 下发中的遮罩。铺满弹窗、吃掉所有指针事件 —— 它不是装饰,拦住重复下发靠的就是它。
+   cursor: progress 让"现在点什么都没用"这件事在指针上就能看出来。 */
+.busy {
+  position: absolute; inset: 0; z-index: 2; cursor: progress;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 0 32px; text-align: center;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+.busy .bt { font: 700 14px var(--font-display); color: var(--text-strong); }
+.busy .bs { font: 500 12px/1.6 var(--font-body); color: var(--text-muted); max-width: 380px; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 遮罩期间关闭入口一并失效,鼠标上也要看得出来 */
+.x.off { opacity: 0.4; cursor: default; }
+.x.off:hover { background: transparent; }
 </style>

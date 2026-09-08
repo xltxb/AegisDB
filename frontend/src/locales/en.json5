@@ -71,6 +71,8 @@
   scClean: 'No high-risk commands — safe to run', scRisky: 'High-risk found — execution requires approval',
   scRun: 'Run script', scSubmitAppr: 'Submit for approval',
   scTargetDb: 'Target DB', scPickDb: 'Select target database', scMustPick: 'Select a target database first', scConfirm: 'Confirm running on {i} · {d}',
+  scBusyRun: 'Running — do not close', scBusySubmit: 'Submitting for approval — do not close',
+  scBusyHint: 'The script has been dispatched and is being judged statement by statement. Clicking again will not make it faster — it will run it twice.',
   scSubmitted: 'Submitted · come back and run it once approved', scClose: 'Close', scDrop: 'or drop a .sql file',
   connSub: 'instances · tiered by env, all proxied by the gateway', importInst: 'Import', newConn: 'New connection',
   colInst: 'Instance / tier', colEngine: 'Engine', colAddr: 'Address', colRole: 'Default role', colPolicy: 'Policy', colStatus: 'Status',
