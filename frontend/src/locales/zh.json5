@@ -49,7 +49,7 @@
   pasteBtn: '粘贴 SQL', pasteBtnTitle: '把复制来的 SQL 粘到弹窗里,确认后逐条执行',
   pasteTitle: '粘贴 SQL', pasteDesc: '将在 {env} · {inst} 上逐条执行,每条都照常经过风险判定、审批与 MFA。',
   pastePh: '在这里粘贴一条或多条 SQL,以分号分隔', pasteHint: 'Ctrl+Enter 执行 · Esc 关闭',
-
+  pasteAutoOpened: '检测到 {n} 条语句,已改用粘贴弹窗 —— 确认后逐条经网关判定执行',
   pasteRun: '执行', pasteBusy: '上一条语句还在执行,请等它完成再粘贴',
   // 快捷脚本(Alt+1…9)
   snipBtn: '快捷脚本', snipBtnTitle: '存好的脚本,按 Alt+1…9 执行',

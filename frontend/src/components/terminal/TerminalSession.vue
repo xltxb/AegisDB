@@ -20,6 +20,7 @@ import { useSnippetStore } from '@/stores/snippets'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
 import { needsArming, slotFromEvent, slotLabel, snippetPreview, snippetSubmitText } from '@/lib/snippet'
+import { countStatements } from '@/lib/sqlCount'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
 import { translateMetaSql, translateDescribe, type NoticeRef } from '@/lib/metaCommand'
 import { Transcript } from '@/lib/transcript'
@@ -437,6 +438,10 @@ onMounted(() => {
 
   ro = new ResizeObserver(() => fitNow())
   ro.observe(termEl.value!)
+  // 绑在容器上、capture 阶段:粘贴事件落在 xterm 自己的隐藏 textarea 上,而它由
+  // xterm 创建和销毁 —— 绑容器就不用去追那个元素的生命周期,capture 让我们能在
+  // xterm 处理之前决定要不要拦。
+  termEl.value!.addEventListener('paste', onTermPaste, true)
   if (props.active) nextTick(() => { fitNow(); term.focus() })
 })
 
@@ -451,6 +456,8 @@ onActivated(() => { if (props.active) nextTick(() => { fitNow(); term.focus() })
 watch(() => props.active, (on) => { if (on) maybeWarnDanger() })
 
 onUnmounted(() => {
+  // 监听器绑在 termEl 上,而 termEl 随组件一起消失;显式摘掉是为了不依赖那个巧合。
+  termEl.value?.removeEventListener('paste', onTermPaste, true)
   ro?.disconnect()
   ws?.close()
   term?.dispose()
@@ -902,12 +909,35 @@ function runSlot(slot: number) {
 const pasteOpen = ref(false)
 const pasteText = ref('')
 
-function openPaste() {
+function openPaste(initial = '') {
   // Feeding while a statement runs would queue the text behind it and execute
   // seconds later, against whatever the session looks like by then (see runSlot).
   if (editor.running) { notice(c(ANSI.yellow, '· ' + t('pasteBusy'))); return }
-  pasteText.value = ''
+  pasteText.value = initial
   pasteOpen.value = true
+}
+
+// ---- 粘进来的多条语句改走弹窗 ----
+//
+// 键盘粘贴本来是直接进行编辑器的:第一条立刻执行,其余的排队,一条接一条回显着
+// 滚过去。粘一句是这样最顺手,粘二十句就是**在看不清的情况下开始对生产下发** ——
+// 想中途停下只能按 Ctrl+C,而那时前面几条已经跑完了。
+//
+// 所以:粘贴内容看着是多条时,拦下来交给「粘贴 SQL」弹窗,让人先看见全文再确认。
+// 确认之后走的还是同一条路(editor.feed → handleSubmit),逐条过判定、该弹审批弹
+// 审批 —— 这里改的只是"下发前先不先给人看一眼",不是任何一条语句怎么被判。
+//
+// 判断多条用的是 countStatements,它是个**界面用的启发式**:数错了两个方向都无害
+// (见 lib/sqlCount 的注释),没有语句能因此绕过网关。
+function onTermPaste(e: ClipboardEvent) {
+  const text = e.clipboardData?.getData('text') ?? ''
+  if (countStatements(text) <= 1) return // 单条照旧直接进行编辑器
+  // 阻止 xterm 收到这次粘贴:否则文本会同时进编辑器和弹窗,确认后跑两遍。
+  e.preventDefault()
+  e.stopPropagation()
+  if (editor.running) { notice(c(ANSI.yellow, '· ' + t('pasteBusy'))); return }
+  openPaste(text)
+  notice(c(ANSI.cyan, '· ' + t('pasteAutoOpened', { n: countStatements(text) })))
 }
 
 function closePaste() {
@@ -1103,7 +1133,7 @@ async function doRunScript() {
             </div>
           </template>
         </Teleport>
-        <div class="upload" :title="$t('pasteBtnTitle')" @click="openPaste"><ClipboardPaste :size="13" />{{ $t('pasteBtn') }}</div>
+        <div class="upload" :title="$t('pasteBtnTitle')" @click="openPaste()"><ClipboardPaste :size="13" />{{ $t('pasteBtn') }}</div>
         <div class="upload" :title="$t('snipBtnTitle')" @click="snipOpen = true"><Command :size="13" />{{ $t('snipBtn') }}</div>
         <div class="sample" @click="onSampleClick"><FileCode2 :size="13" />{{ $t('sampleScript') }}</div>
         <!-- Disabled until something has actually been printed: an empty file is

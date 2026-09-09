@@ -45,7 +45,7 @@
   pasteBtn: 'Paste SQL', pasteBtnTitle: 'Paste copied SQL into a dialog and run it statement by statement',
   pasteTitle: 'Paste SQL', pasteDesc: 'Runs on {env} · {inst} one statement at a time; each goes through the risk check, approval and MFA as usual.',
   pastePh: 'Paste one or more SQL statements here, separated by semicolons', pasteHint: 'Ctrl+Enter to run · Esc to close',
-
+  pasteAutoOpened: '{n} statements detected — opened the paste dialog; each one is judged by the gateway on confirm',
   pasteRun: 'Run', pasteBusy: 'A statement is still running; wait for it before pasting',
   // saved scripts on hotkeys Alt+1…9
   snipBtn: 'Snippets', snipBtnTitle: 'Saved scripts on Alt+1…9',
