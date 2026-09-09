@@ -18,7 +18,11 @@ import (
 // 这里只做便宜的等值过滤。
 func (r *Repo) ExecWindowsFor(connID int64, database string) ([]model.ExecWindow, error) {
 	var out []model.ExecWindow
-	err := r.db.Where("connection_id = ? AND db_name = ? AND enabled = ?", connID, database, true).
+	// status = approved 是**这个功能的闸门**:一张还在等审批(或被驳回)的窗口一行
+	// 都不该放行。它和 enabled 是两件事 —— enabled 是"运维要不要用它",status 是
+	// "有没有人签过字"。少一个条件,窗口在提交申请的那一刻就已经开着了。
+	err := r.db.Where("connection_id = ? AND db_name = ? AND enabled = ? AND status = ?",
+		connID, database, true, model.WindowApproved).
 		Order("id asc").Find(&out).Error
 	if err != nil {
 		return nil, err
@@ -31,6 +35,23 @@ func (r *Repo) ListExecWindows() ([]model.ExecWindow, error) {
 	var out []model.ExecWindow
 	err := r.db.Order("id desc").Find(&out).Error
 	return out, err
+}
+
+// LinkWindowApproval 把窗口指回它的审批单。
+func (r *Repo) LinkWindowApproval(id, approvalID int64, apNo string) error {
+	return r.db.Model(&model.ExecWindow{}).Where("id = ?", id).
+		Updates(map[string]any{"approval_id": approvalID, "ap_no": apNo}).Error
+}
+
+// SetExecWindowDecision 写下审批结论。
+//
+// 带上 status = pending 这个条件:一张已经被决定过的窗口不该被第二次决定覆盖
+// (外部回调与站内审批可能同时到达),而"谁先到算谁的"要由数据库来裁,不是由
+// 两段各自读一遍再写回去的代码来裁。
+func (r *Repo) SetExecWindowDecision(id int64, status string, at time.Time) error {
+	return r.db.Model(&model.ExecWindow{}).
+		Where("id = ? AND status = ?", id, model.WindowPending).
+		Updates(map[string]any{"status": status, "decided_at": at}).Error
 }
 
 func (r *Repo) GetExecWindow(id int64) (*model.ExecWindow, error) {

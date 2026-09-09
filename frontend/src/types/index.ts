@@ -41,6 +41,16 @@ export interface ExecWindow {
   createdBy: number
   createdAt: string
   updatedAt: string
+  /**
+   * 审批状态。判定层只认 approved —— 一张还在等审批(或被驳回)的窗口一行都不放行。
+   *
+   * 它和 enabled / active 是三件事:status 说"有没有人签过字",enabled 说"运维要不要
+   * 用它",active 说"此刻在不在时间表内"。三者都为真,这扇门才是开着的。
+   */
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  approvalId?: number
+  apNo?: string
+  decidedAt?: string
   // 此刻是否开着 —— 由后端用与判定完全相同的逻辑算出来。前端不自己算:跨午夜与
   // 时区换算写两遍迟早分叉,而分叉的表现是"界面说开着、网关说没开"。
   active: boolean
@@ -277,7 +287,20 @@ export interface Approval {
   riskLevel: string
   /** >0 表示这张单属于一张发布单:它的执行归流水线,走不了发起人手动执行那条路 */
   releaseId?: number
-  status: 'pending' | 'approved' | 'rejected' | 'expired'
+  /** 窗口申请单:批准即生效,没有需要手动执行的命令(与 releaseId 同一类)。 */
+  windowId?: number
+  /**
+   * 能不能**撤回**这张单。与 canDecide 分开:撤回不是"决定"。
+   *
+   * 驳回是审批人看过之后说"不行",要留在记录里;撤回是发起人说"这张不用了",
+   * 没有人对它做过判断。服务端算这一位,前端照着它决定按钮亮不亮。
+   */
+  canCancel?: boolean
+  /**
+   * cancelled 是发起人自己收回的,与 rejected 分开 —— 后者是审批人看过之后说
+   * "不行"。合成一个的话,记录上就看不出到底有没有人拒绝过什么。
+   */
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled'
   /** 那一次下发的结果:空 = 还没执行,或是这一列存在之前跑过的历史单(成败无从得知)。
    *  它和 status 是两件事 —— 跑挂了不会把一张已批准的工单变回没批准。 */
   execStatus?: 'success' | 'failed' | ''

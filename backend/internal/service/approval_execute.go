@@ -125,6 +125,11 @@ func (s *Services) canExecuteApproved(actor *model.User, ap *model.Approval) err
 	if actor == nil {
 		return ErrForbidden
 	}
+	if ap.WindowID > 0 {
+		// 窗口单的 Command 是一句描述("开启执行窗口「…」"),不是可执行语句。
+		// 让它走到这里,网关会把那句话当 SQL 发给数据库。
+		return fmt.Errorf("这是执行窗口的申请单,批准即生效,没有需要手动执行的命令")
+	}
 	if ap.ReleaseID > 0 {
 		return fmt.Errorf("这是升级单的审批工单,执行由发布流水线的执行阶段完成,不能在这里执行")
 	}

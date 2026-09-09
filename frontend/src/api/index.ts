@@ -330,6 +330,10 @@ export const api = {
   // 理由(不能自审 / 不在审批链 / 已被处理)各自要人做的事完全不同。
   approve: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/approve`).then(ok),
   reject: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/reject`).then(ok),
+  // 撤回:发起人自己的动作,和 approve/reject 是两码事(见后端 approval_cancel.go)。
+  // 走 ok():服务端的拒绝理由会被抛成 Error(msg),原样进 toast —— 而那三种理由
+  // 要人去做的事完全不同。
+  cancelApproval: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/cancel`).then(ok),
   // 执行是发起人的动作,不是审批的副作用 —— 所以它是独立的一个调用。
   executeApproval: (id: number) => http.post<any, Envelope<any>>(`/approvals/${id}/execute`).then(ok),
 

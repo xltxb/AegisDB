@@ -1004,8 +1004,12 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     post:
       tags: [tiers]
-      summary: '[envtier · admin] 新建执行窗口'
+      summary: '[execwindow] 申请执行窗口(提交审批,通过后才生效)'
       description: >
+        提交一次**申请**,不是保存一个立即生效的配置。窗口落成 pending 并按默认审批链
+        建单;判定层只认 approved,等待期间它一行都不放行。
+        不再要求管理员:这个功能的意义就在于开门的人和签字的人不是同一个。
+
         两种时间模型:once(绝对起止时刻,与时区无关)与 recurring(带 IANA 时区的固定
         时段,结束早于开始表示跨午夜)。库名必填 —— 空库名会让窗口悄悄覆盖整台实例。
         说不清的定义当场拒绝:写坏的窗口要么白配,要么开在没预料的时间,后者是安全问题。
@@ -1014,12 +1018,18 @@ paths:
   /exec-windows/{id}:
     put:
       tags: [tiers]
-      summary: '[envtier · admin] 修改执行窗口'
+      summary: '[execwindow] 修改执行窗口 —— 改完重新走审批'
+      description: >
+        改动会把窗口打回 pending 并重新建单。因为"把 02:00-04:00 改成 02:00-06:00"和
+        "新开一扇 04:00-06:00 的门"是同一件事;不重审的话,审批只拦得住第一版。
+        只有申请人本人或平台管理员可以改(在 service 层判,路由只认得菜单)。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     delete:
       tags: [tiers]
-      summary: '[envtier · admin] 删除执行窗口(立刻恢复审批)'
+      summary: '[execwindow] 撤销执行窗口(立刻恢复审批)'
+      description: >
+        撤销不走审批:关一扇门永远不需要第二个人同意。同样限申请人本人或平台管理员。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /environments:
@@ -1360,6 +1370,23 @@ paths:
 
         拒绝的理由原样透出 —— 等审批、找发起人、看发布单、重新提交,
         这四种拒绝要人做的事完全不同。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/cancel:
+    post:
+      tags: [approvals]
+      summary: '[terminal] 撤回自己发起的、尚未执行的工单'
+      description: >
+        撤回与驳回是两件事:驳回是审批人看过之后说"不行",要留在记录里;撤回是发起人
+        说"这张不用了",没有人对它做过判断。所以**审批人不能撤回** —— 否则他可以用撤回
+        把一张本该驳回的工单悄悄抹掉,而记录上看不出有人拒绝过什么。
+        能撤的只有发起人自己与平台管理员。
+        两种状态可撤:等审批的,以及**已批准但还没执行的**(批准解锁的是发起人的一次
+        执行,放不放弃是他的事)。跑过的撤不了 —— 命令已经落到库上,改状态只会让记录与
+        事实对不上。撤回与执行抢同一把原子闸(status 与 executed_at 在同一次更新里较量),
+        谁先谁赢。
+        升级单里的审批工单不能单独撤回(流水线不认识这种结论,会停在无人推进的状态)。
+        挂在这张单上的东西跟着收场:执行窗口置为 rejected,导出任务标记失败。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /approvals/{id}/reject:

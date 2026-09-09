@@ -186,9 +186,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// 执行窗口(「班车」):读对进得来这个菜单的人开放 —— 一扇免审批的门开在哪、
 		// 什么时候开,不该只有管理员知道;写限管理员,每次变动进审计链。
 		a.GET("/exec-windows", h.ListExecWindows)
-		a.POST("/exec-windows", menu("envtier"), admin, h.CreateExecWindow)
-		a.PUT("/exec-windows/:id", menu("envtier"), admin, h.UpdateExecWindow)
-		a.DELETE("/exec-windows/:id", menu("envtier"), admin, h.DeleteExecWindow)
+		// 执行窗口有了自己的菜单键。申请**不再要求管理员** —— 这个功能的整个改动
+		// 就在于"开门的人和签字的人不是同一个"。改和撤只有申请人自己或管理员能做,
+		// 那条判断在 service 里(路由只认得菜单,认不出这一行是谁的)。
+		a.POST("/exec-windows", menu("execwindow"), h.CreateExecWindow)
+		a.PUT("/exec-windows/:id", menu("execwindow"), h.UpdateExecWindow)
+		a.DELETE("/exec-windows/:id", menu("execwindow"), h.DeleteExecWindow)
 		a.GET("/environments", h.ListEnvironments)
 		a.GET("/environments/usage", menu("envtier"), h.EnvironmentUsage)
 		a.POST("/environments", menu("envtier"), admin, h.CreateEnvironment)
@@ -258,6 +261,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// 而不是 approve 的副作用。
 		a.POST("/approvals/:id/execute", menu("terminal"), h.ExecuteApproval)
 		a.POST("/approvals/:id/reject", menu("approve"), h.RejectApproval)
+		// 撤回挂在 terminal 菜单下,不是 approve:发起人常常是从终端提交的那个人,
+		// 他不一定有审批菜单 —— 而这张单本来就是他的。
+		a.POST("/approvals/:id/cancel", menu("terminal"), h.CancelApproval)
 
 		// audit
 		a.GET("/audit", menu("audit"), h.ListAudit)

@@ -150,6 +150,10 @@ func backfillEnvTiers(db *gorm.DB) error {
 	if err := backfillPipelineMenu(db); err != nil {
 		return err
 	}
+	// 同上:execwindow 是这一版新拆出来的键。
+	if err := backfillExecWindowMenu(db); err != nil {
+		return err
+	}
 	// 项目菜单同理:没有 RoleMenu 行的键读作对所有人拒绝,管理员也不例外。
 	return backfillProjectMenu(db)
 }
@@ -362,6 +366,36 @@ func backfillEnvTierMenu(db *gorm.DB) error {
 	return nil
 }
 
+// backfillExecWindowMenu 把新的 execwindow 菜单发给已经持有 terminal 的角色。
+//
+// 没有 RoleMenu 行的菜单键在 MenuGuard 里读作**拒绝**,所以升级过的库里没有人 ——
+// 管理员也不行 —— 能打开这一页,而唯一能授权的地方正是一个他打不开的页面。
+// 窗口过去挂在 envtier 菜单下、且只有管理员能建;现在它是"申请"权,跟着 terminal
+// 走(见上面 menuMatrix 里的理由)。
+//
+// 只在这个键**完全不存在**时写,所以一次刻意的收回不会在下次重启时被撤销。
+func backfillExecWindowMenu(db *gorm.DB) error {
+	var existing int64
+	if err := db.Model(&model.RoleMenu{}).Where("menu_key = ?", "execwindow").Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+	var base []model.RoleMenu
+	if err := db.Where("menu_key = ?", "terminal").Find(&base).Error; err != nil {
+		return err
+	}
+	for _, r := range base {
+		if err := db.Create(&model.RoleMenu{
+			RoleID: r.RoleID, MenuKey: "execwindow", Enabled: r.Enabled,
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // seedGliEnv backfills the tiers whose rules are cloned from staging: GLI (法务)
 // and, since the five-tier correction, UAT (演练). Both are later additions whose
 // capability-matrix and risk-dictionary rows mirror staging's, so their instances
@@ -465,7 +499,7 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	}
 
 	// ---- Menus ----
-	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings", "pipeline"}
+	menuKeys := []string{"terminal", "approve", "db", "rules", "envtier", "perms", "audit", "settings", "pipeline", "execwindow"}
 	// Instance config (db), rules, tiers/environments (envtier), permissions
 	// (perms) and settings are all platform-admin only — non-admins don't even
 	// see these pages.
@@ -475,13 +509,16 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 	// ones who may release. Read-only and audit roles are deliberately left out —
 	// they cannot execute, and a release they could raise would only ever be
 	// refused at the execute stage.
+	// execwindow(执行窗口/班车)跟 terminal 走:申请一个窗口是为了让**自己**接下来
+	// 的变更不必逐条等人批,所以能申请的是那些本来就要在这台实例上执行的人。它只是
+	// 申请权 —— 批不批由审批链决定,而只读与审计角色跟着 terminal 一起排除在外。
 	menuMatrix := map[string][]bool{
-		//        terminal approve  db    rules envtier perms audit settings pipeline
-		"admin": {true, true, true, true, true, true, true, true, true},
-		"owner": {true, true, false, false, false, false, true, false, true},
-		"l2":    {true, true, false, false, false, false, true, false, true},
-		"ro":    {true, false, false, false, false, false, true, false, false},
-		"audit": {false, false, false, false, false, false, true, false, false},
+		//        terminal approve  db    rules envtier perms audit settings pipeline execwindow
+		"admin": {true, true, true, true, true, true, true, true, true, true},
+		"owner": {true, true, false, false, false, false, true, false, true, true},
+		"l2":    {true, true, false, false, false, false, true, false, true, true},
+		"ro":    {true, false, false, false, false, false, true, false, false, false},
+		"audit": {false, false, false, false, false, false, true, false, false, false},
 	}
 	for code, vals := range menuMatrix {
 		for i, k := range menuKeys {

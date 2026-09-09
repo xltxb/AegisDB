@@ -139,6 +139,12 @@ const (
 	StatusApproved = "approved"
 	StatusRejected = "rejected"
 	StatusExpired  = "expired"
+	// StatusCancelled —— 发起人自己撤回的。
+	//
+	// 它和 rejected 刻意分开:驳回是审批人看过之后说"不行",是一次留在记录里的决定;
+	// 撤回是发起人说"这张不用了",没有人对它做过判断。合成一个状态的话,记录上就看
+	// 不出到底有没有人拒绝过什么 —— 而那正是这条记录存在的意义。
+	StatusCancelled = "cancelled"
 
 	// 一次批准换来的那一次下发,库那边收没收下。见 Approval.ExecStatus —— 它和上面
 	// 四个是两回事:跑挂了不会把一张已批准的工单变回没批准。
@@ -148,6 +154,8 @@ const (
 	ResultExecuted = "executed"
 	ResultPending  = "pending"
 	ResultRejected = "rejected"
+	// 工单被发起人撤回。与 rejected 分开,理由同 StatusCancelled。
+	ResultCancelled = "cancelled"
 	ResultWarn     = "warn"
 	// ResultExported records data leaving the console as a file. The rows were
 	// already shown to this user, so nothing new was read — but a copy now exists
@@ -356,6 +364,16 @@ type ExecWindow struct {
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 
+	// Status —— 申请 → 审批 → 生效。判定只认 approved。
+	//
+	// 这是这个功能的闸门本身:窗口开着的那几个小时里,本该有人签字的中/高风险语句
+	// 会一条不落地直接下发,所以"谁可以打开这扇门"必须不是一个人。等待审批期间它
+	// 一行都不放行 —— 见 repository.ExecWindowsFor。
+	Status     string     `gorm:"size:16;not null;default:pending" json:"status"`
+	ApprovalID int64      `gorm:"not null;default:0" json:"approvalId,omitempty"`
+	ApNo       string     `gorm:"size:32" json:"apNo,omitempty"`
+	DecidedAt  *time.Time `json:"decidedAt,omitempty"`
+
 	// Active 是"此刻这扇门开着吗",列表时算出来给界面看,不入库。
 	//
 	// 算在后端而不是前端:跨午夜和时区换算是这个功能里最容易出错的两处,在 TS 里
@@ -369,6 +387,19 @@ func (ExecWindow) TableName() string { return "tbl_exec_window" }
 const (
 	WindowOnce      = "once"
 	WindowRecurring = "recurring"
+)
+
+// 执行窗口的审批状态。只有 approved 会被判定层认。
+const (
+	WindowPending  = "pending"
+	WindowApproved = "approved"
+	WindowRejected = "rejected"
+	// WindowCancelled —— 申请人自己撤回的,不是被谁驳回的。
+	//
+	// 和 Approval 那边的 cancelled 是同一条道理:显示成"已驳回"就等于说有人看过并
+	// 拒绝了它,而实际上没有任何人对它做过判断。两者对判定层是一样的(都不是
+	// approved,一行都不放行),但对读记录的人不是。
+	WindowCancelled = "cancelled"
 )
 
 // Export job / task states.
@@ -606,6 +637,12 @@ type Approval struct {
 	// 发起人若能点"执行",网关会把它当成一条命令发给数据库。而这张单真正授权的事
 	// 情是"让导出 worker 去跑",不是"在终端里执行一句 SQL"。
 	ExportJobID int64 `gorm:"not null;default:0;index:idx_approval_export" json:"exportJobId,omitempty"`
+	// WindowID 把一张单指回它要开的那扇执行窗口。作用和上面两个一样:
+	//
+	//   1. 通过之后要做的事是"让那个窗口开始生效",不是执行一条命令;
+	//   2. 把这张单挡在**手动执行**那条路之外 —— 窗口单的 Command 是一句描述
+	//      ("开启执行窗口「…」"),发起人若能点"执行",网关会把那句话当 SQL 发出去。
+	WindowID int64 `gorm:"not null;default:0;index:idx_approval_window" json:"windowId,omitempty"`
 	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
 	ResultRows   int        `json:"resultRows"`
 	// ExecStatus 是命令在**目标库上真的跑成了没有**,和 Status 是两件事。

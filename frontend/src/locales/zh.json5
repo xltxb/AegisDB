@@ -49,6 +49,7 @@
   pasteBtn: '粘贴 SQL', pasteBtnTitle: '把复制来的 SQL 粘到弹窗里,确认后逐条执行',
   pasteTitle: '粘贴 SQL', pasteDesc: '将在 {env} · {inst} 上逐条执行,每条都照常经过风险判定、审批与 MFA。',
   pastePh: '在这里粘贴一条或多条 SQL,以分号分隔', pasteHint: 'Ctrl+Enter 执行 · Esc 关闭',
+
   pasteRun: '执行', pasteBusy: '上一条语句还在执行,请等它完成再粘贴',
   // 快捷脚本(Alt+1…9)
   snipBtn: '快捷脚本', snipBtnTitle: '存好的脚本,按 Alt+1…9 执行',
@@ -80,7 +81,8 @@
   scBusyHint: '脚本已下发,正在逐条经网关判定。重复点击不会更快,只会多跑一遍。',
   scSubmitted: '已提交审批 · 通过后回来自己执行', scClose: '关闭', scDrop: '或拖入 .sql 文件',
   // db config
-  connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
+
+ connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
   online: '在线', maint: '维护',
   formNewConn: '新建连接', formNewConnSub: '接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。',
@@ -130,6 +132,9 @@
   // approval inbox
   apprSubTail: '· 通过后由发起人自己执行，全程写入审计', mineAppr: '待我审批', allAppr: '全部',
   apprCardTail: '· 高危命令审批', apInitiator: '发起人', apTarget: '目标', apTier: '判定分层', apTierUnknown: '未记录(该单早于分层模型)', apReason: '操作原因', apResult: '执行结果', apWaitChain: '等待审批链成员处理',
+  apCancel: '撤回', apStCancelled: '已撤回',
+  apCancelConfirm: '撤回工单 {no}?撤回后这条命令不会被执行。这不是驳回 —— 记录上会显示是你自己收回的。',
+  apCancelled: '{no} 已撤回',
   apChain: '你 · DBA 组长 → 终审 李娜', apReject: '驳回', apApprove: '通过',
   // 通过不再代执行:审批人按下的是"我同意",执行时机由发起人挑。下面这一组
   // 文案要把"还没跑"说清楚 —— 一句"已完成"会让人以为变更已经生效了。
@@ -375,6 +380,7 @@
   impRowFailed: '第 {line} 行「{name}」失败:{msg}',
   // 分层与环境
   etIntro: '分层标签承载管控规则(能力矩阵 + 高危命令字典),环境用于归属实例。一个分层标签可绑定多个环境 —— 新增一个生产集群只需在 prod 标签下建环境,不复制任何规则行,建好即受完整管控。',
+  dtPick: '选择日期时间', dtToday: '今天', dtClear: '清除', dtDone: '完成',
   dow1: '一', dow2: '二', dow3: '三', dow4: '四', dow5: '五', dow6: '六', dow7: '日',
   etSub: '{tiers} 个分层标签 · {envs} 个环境',
   etTierTitle: '分层标签 · 管控等级', etTierSub: '规则按它分行。删除标签会连同其规则行一并删除。',
@@ -382,6 +388,16 @@
   etNewTier: '新建分层标签', etNewEnv: '新建环境',
   etColTier: '分层标签', etColMfa: '强制 MFA', etColBanner: '终端红色警告', etColPending: '计入待审批',
   // 执行窗口(「班车」)
+  navExecWindow: '班车', t_execwindow: '执行窗口(班车)', t_execwindowSub: '申请一段免审批的时间窗,通过审批后生效',
+  m_execwindow: '执行窗口', ewPageSub: '{n} 个窗口',
+  ewApply: '申请窗口', ewSubmit: '提交审批',
+  ewApprovalNote: '窗口不是保存即生效:提交后走审批链,通过之后才开始按时间表放行。窗口只把「需要审批」降为「直接执行」——能力矩阵判定拒绝的仍然拒绝,风险等级也不降。',
+  ewEditNote: '改动会让这个窗口重新回到待审批:时间段或目标库一变,原来那次签字就不再对应它现在的样子。',
+  ewSubmitted: '申请已提交({ap}),审批通过后窗口才会生效', ewResubmitted: '改动已提交({ap}),重新审批通过后才会生效',
+  ewStCancelled: '已撤回',
+  ewStPending: '待审批', ewStRejected: '已驳回',
+  ewDelConfirm: '撤销执行窗口「{name}」?这扇门会立刻关上。',
+  apWindowLive: '执行窗口已生效 · 无需手动执行',
   ewTitle: '执行窗口 · 班车', ewSub: '在指定时间、对指定的库,把本来需要审批的中/高风险语句直接放行。它改的是"要不要人来批",不是"有没有权限" —— 能力矩阵禁止的仍然禁止。',
   ewNew: '新建窗口', ewEdit: '编辑窗口', ewEmpty: '还没有窗口 —— 变更车次前先约好时间段,到点自动开、过点自动关',
   ewColName: '窗口', ewColScope: '作用范围', ewColWhen: '时间', ewColState: '状态',
@@ -456,21 +472,23 @@
   // 总览(落地页)
   t_dashboard: '总览', t_dashboardSub: '此刻有什么要管',
   dashPageSub: '可访问 {n} 台实例',
-  dashGreeting: '{name},以下是此刻需要你留意的',
+
+  dashGreeting: '{name},以下是当前需要处理的事项',
   dashOpenTerminal: '打开命令行',
   dashStatTodo: '等我审批',
   dashStatToRun: '待我执行',
-  dashRunTitle: '待执行', dashRunSub: '已通过、还等着有人按下那一下',
+  dashRunTitle: '待执行任务队列', dashRunSub: '已审批通过,等待发起人下发执行',
   dashRunGo: '去执行',
   dashRunStage: '停在「{stage}」',
+
   dashStatWindows: '正开着的执行窗口',
   dashStatInstances: '可访问实例 · 其中 {n} 台受管控',
   dashStatGwOn: '网关在线 · 中位延迟',
   dashStatGwOff: '网关离线',
   dashWindowOpen: '有 {n} 个执行窗口正开着 —— 期间中高风险语句免审批直接执行',
-  dashTodoTitle: '等我审批', dashTodoSub: '只列此刻由你决定的单子',
-  dashTodoEmpty: '没有等你决定的单子',
-  dashAuditTitle: '最近动作', dashAuditSub: '经网关执行或被拦下的命令',
+  dashTodoTitle: '等我审批', dashTodoSub: '仅显示由你决定的工单',
+  dashTodoEmpty: '当前无待审批任务',
+  dashAuditTitle: '最近动作', dashAuditSub: '经网关执行或被拦截的命令',
   dashAuditEmpty: '暂无记录',
   dashInstTitle: '实例概览', dashInstSub: '按控制分层归堆',
   dashInstEmpty: '你的角色下没有可访问的实例',

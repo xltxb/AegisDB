@@ -526,7 +526,13 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
 		result, title := model.ResultPending, "审批已通过,请前往执行"
-		if ap.ExportJobID > 0 {
+		if ap.WindowID > 0 {
+			// 窗口单授权的是"让那扇门在它自己的时间表内生效",不是"执行一条命令"。
+			// 批准即生效,没有什么可等发起人去做的。
+			res.Output = "· 已批准,执行窗口已生效"
+			title = "执行窗口审批已通过"
+			s.applyWindowDecision(ap, true)
+		} else if ap.ExportJobID > 0 {
 			// 导出单授权的是"让导出 worker 去跑这次导出",不是"执行一条命令" ——
 			// 所以它不停在等发起人,批准即入队。
 			res.Output = "· 已批准,导出任务已进入队列"
@@ -560,7 +566,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		// 命令就一直挂在那里,直到有人发现变更根本没生效。
 		body := fmt.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
 			operatorName, safeClip(ap.Command, 60))
-		if ap.ExportJobID > 0 {
+		if ap.WindowID > 0 {
+			body = fmt.Sprintf("%s 通过了你的执行窗口申请：%s\n窗口已生效,到点自动开启、到点自动关闭。",
+				operatorName, safeClip(ap.Command, 60))
+		} else if ap.ExportJobID > 0 {
 			body = fmt.Sprintf("%s 通过了你的导出申请：%s\n任务已进入队列,完成后会再通知你。",
 				operatorName, safeClip(ap.Command, 60))
 		} else if ap.ReleaseID > 0 {
@@ -581,6 +590,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 	}
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
 	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
+	if ap.WindowID > 0 {
+		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
+		s.applyWindowDecision(ap, false)
+	}
 	s.recordAuditBy(initiator, operatorName, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
 	s.notify(ap.InitiatorID, model.NotifApprovalRejected, "审批被拒绝",
 		fmt.Sprintf("%s 驳回了你的命令：%s", operatorName, safeClip(ap.Command, 80)), ap.ApNo)

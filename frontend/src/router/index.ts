@@ -37,6 +37,9 @@ const router = createRouter({
         { path: 'connections', name: 'connections', component: () => import('@/views/ConnectionsView.vue'), meta: { menuKey: 'db' } },
         { path: 'risk-rules', name: 'risk-rules', component: () => import('@/views/RiskRulesView.vue'), meta: { menuKey: 'rules' } },
         { path: 'env-tiers', name: 'env-tiers', component: () => import('@/views/EnvTiersView.vue'), meta: { menuKey: 'envtier' } },
+        // 执行窗口有了自己的菜单键。它从分层页搬出来,是因为两者性质不同:分层是
+        // **规则**(管理员改),窗口是一次**申请**(要执行的人提,再由人签字)。
+        { path: 'exec-windows', name: 'exec-windows', component: () => import('@/views/ExecWindowsView.vue'), meta: { menuKey: 'execwindow' } },
         { path: 'permissions', name: 'permissions', component: () => import('@/views/PermissionsView.vue'), meta: { menuKey: 'perms' } },
         { path: 'audit', name: 'audit', component: () => import('@/views/AuditView.vue'), meta: { menuKey: 'audit' } },
         { path: 'settings', name: 'settings', component: () => import('@/views/SettingsView.vue'), meta: { menuKey: 'settings' } },

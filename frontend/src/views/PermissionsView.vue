@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Crown, Shield, UserCog, Code, Eye, SquareTerminal, ClipboardCheck, Database,
   ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound, Rocket,
-  CircleCheck, Lock, Minus, Plus,
+  CircleCheck, Lock, Minus, Plus, Clock,
 } from 'lucide-vue-next'
 import QRCode from 'qrcode'
 import VButton from '@/components/common/VButton.vue'
@@ -137,6 +137,9 @@ const menuDefs = [
   // page rides 'terminal' on purpose — self-checking your own change is part of
   // writing it, not a separate privilege.
   { key: 'pipeline', icon: Rocket, label: 'm_pipeline' },
+  // 执行窗口(班车)。它是**申请**权,不是管理权 —— 批不批由审批链决定,所以它
+  // 跟着 terminal 发,而不是跟着 envtier。
+  { key: 'execwindow', icon: Clock, label: 'm_execwindow' },
 ]
 // 三种判定各自一个图标 + 一块语义底色。原先是三个裸字符(✓ ⚑ —),同一个字号、
 // 同一种粗细,扫一列下去要逐格辨认;而这张表最常做的动作恰恰是"扫一列"。

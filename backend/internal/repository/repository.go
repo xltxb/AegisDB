@@ -1070,6 +1070,26 @@ func (r *Repo) ClaimApproval(id int64, from, to string) (bool, error) {
 	return res.RowsAffected == 1, res.Error
 }
 
+// ClaimApprovalCancel atomically withdraws a ticket that has NOT run.
+//
+// 它比 ClaimApproval(from→to) 多管一件事:executed_at IS NULL。
+//
+// 待执行的单子(已批准、尚未执行)也能撤,于是撤回和执行成了两个抢同一张单的动作。
+// 只按 status 做 CAS 是不够的:执行那一路先占的是 executed_at(ClaimApprovalExecution),
+// 它占住的那一刻 status 仍然是 approved —— 撤回照样能改成 cancelled,而那条命令已经
+// 发出去了。库里于是留下一张"已撤回"的单,和一次真实发生过的下发。
+//
+// 两条路都必须在**同一行、同一次原子更新**里较量:执行占 executed_at 且要求
+// status=approved;撤回改 status 且要求 executed_at IS NULL。谁先谁赢,另一个拿到
+// RowsAffected=0。
+func (r *Repo) ClaimApprovalCancel(id int64) (bool, error) {
+	res := r.db.Model(&model.Approval{}).
+		Where("id = ? AND status IN ? AND executed_at IS NULL",
+			id, []string{model.StatusPending, model.StatusApproved}).
+		Update("status", model.StatusCancelled)
+	return res.RowsAffected == 1, res.Error
+}
+
 // ClaimEscalation atomically marks an approval as escalated, but only if it was
 // not already. Returns true iff this caller flipped it (RowsAffected == 1), so a
 // timeout sweep escalates each overdue ticket exactly once (R13).

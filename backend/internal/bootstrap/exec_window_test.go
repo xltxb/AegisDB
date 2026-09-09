@@ -10,7 +10,12 @@ import (
 	"velagateway/pkg/resp"
 )
 
-// openWindow 建一个此刻正生效的一次性窗口,返回它的 id。
+// openWindow 建一个此刻正生效的一次性窗口 —— **并批准它**,返回它的 id。
+//
+// 窗口现在要走审批才生效(见 exec_window_approval_test.go)。这一组测的是判定层
+// 拿到一个生效窗口之后怎么算(放宽什么、不放宽什么、按库、过期),所以这里把申请
+// 到批准这一段一次走完,让每个用例的开头就是"一扇确实开着的门"。
+// 审批由**另一个人**签字,不打开自审批开关 —— 那条路径在这里不该被顺带绕过。
 func (a *testApp) openWindow(token string, connID int64, db string, from, to time.Time) int64 {
 	a.t.Helper()
 	r := a.do(http.MethodPost, "/api/v1/exec-windows", token, map[string]any{
@@ -25,6 +30,10 @@ func (a *testApp) openWindow(token string, connID int64, db string, from, to tim
 	if err := json.Unmarshal(r.Data, &w); err != nil {
 		a.t.Fatalf("decode window: %v", err)
 	}
+	if w.ApNo == "" {
+		a.t.Fatalf("窗口没有生成审批单 —— 那它就是一个人开的")
+	}
+	a.decideWindowTicket(w.ApNo, true)
 	return w.ID
 }
 

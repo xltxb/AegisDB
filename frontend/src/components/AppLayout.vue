@@ -38,6 +38,7 @@ const navItems = [
   { key: 'db', path: '/connections', icon: Database, label: 'navDb' },
   { key: 'rules', path: '/risk-rules', icon: ShieldAlert, label: 'navRules' },
   { key: 'envtier', path: '/env-tiers', icon: Layers, label: 'navEnvTier' },
+  { key: 'execwindow', path: '/exec-windows', icon: Clock, label: 'navExecWindow' },
   { key: 'perms', path: '/permissions', icon: UsersRound, label: 'navPerms' },
   { key: 'audit', path: '/audit', icon: ScrollText, label: 'navAudit' },
   // Settings is a menu item too; the seeded menu grants it to admins only.

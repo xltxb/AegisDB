@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, Play, Search, RotateCw, ChevronLeft, ChevronRight } from 'lucide-vue-next'
+import { Inbox, GitPullRequestArrow, CircleCheckBig, CircleX, X, Play, Search, RotateCw, ChevronLeft, ChevronRight, Undo2 } from 'lucide-vue-next'
 import VSelect from '@/components/common/VSelect.vue'
 import VButton from '@/components/common/VButton.vue'
 import api from '@/api'
@@ -50,6 +50,10 @@ const statusOpts = computed(() => [
   { v: 'approved', label: t('apStDone') },
   { v: 'rejected', label: t('apStRejected') },
   { v: 'expired', label: t('apStExpired') },
+  // cancelled 是这一版新增的真实状态(发起人撤回)。不列进来的话,撤回过的单子在
+  // "全部"里看得见、却没有任何一个筛选能单独找出来 —— 而"我上周撤了哪几张"正是
+  // 事后最常问的一句。
+  { v: 'cancelled', label: t('apStCancelled') },
 ])
 const statusLabel = computed({
   get: () => statusOpts.value.find((o) => o.v === statusFilter.value)?.label || '',
@@ -162,7 +166,10 @@ const running = ref(false)
 // 行内状态比 a.status 多分了一档:approved 里"还没跑"和"跑过了"是两回事,而
 // 前者往往正等着看这一列的人去处理。挤在一个"已通过"里,他就看不见了。
 function rowState(a: Approval) {
-  if (a.status === 'approved' && !a.executedAt && !a.releaseId) return 'waitrun'
+  // 升级单和**窗口申请单**都不走手动执行:前者归流水线的执行阶段,后者批准即生效
+  // (它的 Command 是一句描述,不是可执行语句)。把它们显示成"待执行",人会一直在
+  // 等一个永远不该按的按钮。
+  if (a.status === 'approved' && !a.executedAt && !a.releaseId && !a.windowId) return 'waitrun'
   // 最终状态以**库那边收没收下**为准。批准是人的决定,而这一列说的是那次下发的
   // 结果 —— 一条跑挂的 DROP 显示成"已通过",读的人会以为变更已经生效了。
   //
@@ -171,6 +178,27 @@ function rowState(a: Approval) {
   if (a.status === 'approved' && a.execStatus === 'failed') return 'failed'
   return a.status
 }
+/**
+ * 撤回自己发起的待审批工单。
+ *
+ * 和 decide() 分开写,因为它不是一次审批决定 —— 界面上也不该让它长得像。确认文案
+ * 里写清"撤回后这条命令不会被执行",因为发起人此刻要判断的正是这件事。
+ */
+async function cancelAp(a: Approval) {
+  if (!confirmAction(t('apCancelConfirm', { no: a.apNo }))) return
+  running.value = true
+  try {
+    await api.cancelApproval(a.id)
+    ui.notify(t('apCancelled', { no: a.apNo }), 'success')
+    await load()
+    if (detail.value) detail.value = list.value.find((x) => x.id === a.id) || null
+  } catch (e) {
+    // 服务端说的理由原样出现在 toast 上 —— "去驳回它"与"已被处理过"要人做的事不同。
+    ui.notifyError(e, t('actionFailed'))
+    await load()
+  } finally { running.value = false }
+}
+
 function rowLabel(a: Approval) {
   switch (rowState(a)) {
     case 'pending': return 'apPending'
@@ -183,6 +211,9 @@ function rowLabel(a: Approval) {
     // 后者是有人看过并且说了不行。原先它们共用 default 分支,于是一张过期单在列表上
     // 显示成"已驳回" —— 而按状态筛"已驳回"又筛不到它,同一行的两处说法自相矛盾。
     case 'expired': return 'apStExpired'
+    // 已撤回 ≠ 已驳回:前者是发起人自己收回的,没有人对它做过判断。共用一个标签
+    // 的话,记录上就看不出到底有没有人拒绝过什么。
+    case 'cancelled': return 'apStCancelled'
     // 用短标签,不是 apRejected 那一句。"已驳回 · 命令未执行 · 已通知发起人" 是一句
     // 话,塞进状态列会折成三四行,把那一行撑得比别人高一倍 —— 英文下尤其明显。
     // 那句话留在详情卡底部,那里有一整行宽度。
@@ -302,6 +333,15 @@ function chainText(a: Approval) {
              判断谁能决定仍然只看服务端算好的 canDecide,确认弹窗与失败提示与卡片里
              那一对按钮共用同一个 decide()。 -->
         <span class="acts">
+          <!-- 撤回排在最左、样式最轻:它是发起人的退路,不是这一列的主操作。
+               条件只看 canCancel,不再自己判 status —— 服务端已经把"等审批的"和
+               "已批准但没跑的"两种都算进去了,前端再判一遍就是第二套会跑偏的规则。 -->
+          <button
+            v-if="a.canCancel" class="rowbtn cxl" :disabled="running"
+            :title="$t('apCancel')" @click.stop="cancelAp(a)"
+          >
+            <Undo2 :size="13" />{{ $t('apCancel') }}
+          </button>
           <template v-if="a.status === 'pending' && canDecide(a)">
             <button class="rowbtn rej" :title="$t('apReject')" @click.stop="decide(a, false)">
               <CircleX :size="13" />{{ $t('apReject') }}
@@ -412,6 +452,7 @@ function chainText(a: Approval) {
               : $t('apExecuted', { at: shortTime(detail.executedAt) }) }}
           </span>
           <span v-else-if="detail.status === 'approved' && detail.releaseId" class="waitc">{{ $t('apExecuteByPipeline') }}</span>
+          <span v-else-if="detail.status === 'approved' && detail.windowId" class="waitc">{{ $t('apWindowLive') }}</span>
           <span v-else class="waitc">{{ detail.status === 'approved' ? $t('apDone') : $t('apRejected') }}</span>
         </div>
       </div>
@@ -503,6 +544,8 @@ function chainText(a: Approval) {
   transition: color .12s, border-color .12s, background .12s;
 }
 .rowbtn.ok:hover { color: var(--success-text); border-color: var(--success); background: var(--success-subtle); }
+.rowbtn.cxl { color: var(--text-muted); }
+.rowbtn.cxl:hover:not(:disabled) { color: var(--text-strong); border-color: var(--border-strong); background: var(--surface-sunken); }
 .rowbtn.rej:hover { color: var(--danger-text); border-color: var(--danger); background: var(--danger-subtle); }
 /* 执行是这一行里唯一真的会落到库上的动作,所以它比另外两个显眼一档 */
 .rowbtn.run { color: #fff; background: var(--accent); border-color: var(--accent); }

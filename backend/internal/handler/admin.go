@@ -402,6 +402,9 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		CanDecide   bool                 `json:"canDecide"`
 		BlockReason string               `json:"blockReason"`
 		CanExecute  bool                 `json:"canExecute"`
+		// canCancel:发起人自己撤回。与 canDecide 分开算 —— 撤回不是"决定",
+		// 审批人手里的动作是驳回(见 service.canCancel 的注释)。
+		CanCancel bool `json:"canCancel"`
 	}
 	out := []apView{}
 	for _, a := range aps {
@@ -415,10 +418,29 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 			Approval: a, Steps: steps,
 			CanDecide: block == service.BlockNone, BlockReason: block.Reason(),
 			CanExecute: h.Svc.CanExecuteApproved(u, &row),
+			CanCancel:  h.Svc.CanCancelApproval(u, &row),
 		})
 	}
 	pending, _ := h.Repo.CountPendingApprovals(scope, u.ID)
 	resp.OK(c, gin.H{"items": out, "total": total, "pending": pending, "page": page, "pageSize": pageSize})
+}
+
+// CancelApproval —— 发起人撤回自己的待审批工单。
+func (h *Handler) CancelApproval(c *gin.Context) {
+	err := h.Svc.CancelApproval(middleware.CurrentUser(c), pathID(c))
+	switch {
+	case err == nil:
+		resp.OK(c, gin.H{"ok": true})
+	case err == service.ErrNotFound:
+		resp.Fail(c, resp.CodeBadRequest, "工单不存在")
+	case err == service.ErrAlreadyDecided:
+		resp.Fail(c, resp.CodeBadRequest, "该工单已被处理,请刷新")
+	case err == service.ErrForbidden:
+		resp.Fail(c, resp.CodeForbidden, "无权撤回")
+	default:
+		// canCancel 的拒绝理由是要给人看的:三种情况要人去做的事完全不同。
+		resp.Fail(c, resp.CodeForbidden, err.Error())
+	}
 }
 
 func (h *Handler) ApproveApproval(c *gin.Context) {
