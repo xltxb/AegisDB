@@ -381,6 +381,33 @@ func (s *Services) canAccessConn(u *model.User, conn *model.Connection) bool {
 	return false
 }
 
+// AccessibleConnIDs 是这个人按标签授权够得到的实例。
+//
+// 逐台过 canAccessConn,而不是在别处再写一遍标签规则:那条规则只该有一个出处,
+// 两份实现迟早分叉,而分叉的方向是"某处多放了一台"。实例是几十到几百台的量级,
+// 这次遍历比一份会跑偏的副本便宜得多。
+//
+// 用途是**列表可见性**:已批准待执行的工单要让能接手的人看得见(见
+// repository.approvalScope)。真正放不放行仍由执行路径上的那几道闸决定。
+func (s *Services) AccessibleConnIDs(u *model.User) []int64 {
+	if u == nil {
+		return nil
+	}
+	conns, err := s.Repo.ListConnections()
+	if err != nil {
+		// 读不到就当"够不到任何实例":少看见一张单是件小事,多看见别人的工单不是。
+		slog.Error("列可访问实例失败 —— 按够不到处理", "userID", u.ID, "err", err)
+		return nil
+	}
+	out := make([]int64, 0, len(conns))
+	for i := range conns {
+		if s.canAccessConn(u, &conns[i]) {
+			out = append(out, conns[i].ID)
+		}
+	}
+	return out
+}
+
 // SetConnectionTags normalizes and stores a connection's tags.
 func (s *Services) SetConnectionTags(id int64, tags string) error {
 	return s.Repo.SetConnectionTags(id, strings.Join(repository.SplitTags(tags), ","))

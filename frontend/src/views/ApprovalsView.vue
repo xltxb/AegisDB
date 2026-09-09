@@ -351,8 +351,10 @@ function chainText(a: Approval) {
             </button>
           </template>
           <!-- 执行同样放到行上。它和审批不会同时出现:一张单要么在等人决定,要么已经
-               批了在等发起人跑 —— canExecute 由服务端算(service.CanExecuteApproved),
-               所以这个按钮只对该去按的那个人亮,而不是"看起来能点"。 -->
+               批了在等人跑 —— canExecute 由服务端算(service.CanExecuteApproved),
+               所以这个按钮只对**此刻真的能跑它**的人亮,而不是"看起来能点"。
+               能跑它的不再只有发起人:够得到那台实例、能力矩阵也放行的同事都可以
+               接手(ADR 0010 的 2026-09-09 修订)。 -->
           <button
             v-else-if="a.canExecute" class="rowbtn run" :disabled="running"
             :title="$t('apExecute')" @click.stop="runApproved(a)"

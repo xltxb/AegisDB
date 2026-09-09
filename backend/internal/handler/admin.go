@@ -386,7 +386,10 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	if len(q) > 128 {
 		q = q[:128]
 	}
-	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, status, q, (page-1)*pageSize, pageSize)
+	// 第三类可见性:已批准待执行、且落在他够得到的实例上的工单。执行权已经放开成
+	// "谁能在这台实例上跑,谁就能执行",而看不见的单子没法接手。
+	aps, total, err := h.Repo.ListApprovalsPaged(scope, u.ID, apNo, status, q,
+		(page-1)*pageSize, pageSize, h.Svc.AccessibleConnIDs(u))
 	if err != nil {
 		resp.Fail(c, resp.CodeInternalError, "加载失败")
 		return

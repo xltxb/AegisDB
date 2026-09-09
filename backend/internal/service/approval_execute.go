@@ -13,8 +13,21 @@ package service
 //
 // 所以拆成两步:审批通过 → 通知发起人 → 由发起人自己执行。
 //
+// 谁可以按下那一下?
+//
+// 一开始是"只有发起人"。现实把它推翻了:变更在凌晨两点批下来,发起人已经下班,而
+// 值班的同事接不了手 —— 于是这张单要么干等到第二天,要么有人拿发起人的账号去跑,
+// 后者比放开更糟。所以现在是:**谁本来就能在这台实例上跑这条命令,谁就能执行它。**
+//
+// 要紧的是这句话没有放松任何一道闸。下面每一道都按**实际按下按钮的人**(actor)算,
+// 而不是按发起人:
+//   - canAccessConn(actor) —— 标签授权,够不到这台实例的人连看都看不到这张单
+//   - checkMFA(actor)      —— 生产步进验证走他自己的 TOTP
+//   - EvaluateFor(actor)   —— 能力矩阵按他的角色复判,只读角色照样 deny
+// 批准授权的是"这条命令可以跑",不是"任何人可以绕过访问控制"。
+//
 // 三条边界,每一条都有测试钉住:
-//   - 只有**发起人**能执行(审批人不能顺手替他跑,那会绕过这次拆分的全部意义)
+//   - 执行的人必须**自己就有权在那台实例上跑这条命令**(不是"随便谁都行")
 //   - 一张工单只能执行**一次**(批准是对一次执行的授权,不是可反复使用的通行证)
 //   - **升级单的工单不走这条路**(它的执行归流水线所有,插队执行会把同一个变更应用
 //     两次 —— 一次在这里,一次在还以为自己没跑过的流水线里)
@@ -113,6 +126,16 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) 
 			"apNo", ap.ApNo, "execStatus", execStatus, "err", err)
 	}
 	s.recordAuditBy(actor, actor.Name, conn, ap.Command, ap.RiskLevel, execResultStatus(res), ap.ApNo, "exec")
+	// 别人替你跑了,你必须知道。审计里当然记着,但发起人不会天天去翻审计 —— 而
+	// "我的变更什么时候生效的"是他一定会问的问题。
+	if actor.ID != ap.InitiatorID {
+		title := "你的工单已由他人执行"
+		if res.Err != nil {
+			title = "你的工单由他人执行,但失败了"
+		}
+		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title,
+			fmt.Sprintf("%s 执行了你的工单 %s：%s", actor.Name, ap.ApNo, safeClip(ap.Command, 60)), ap.ApNo)
+	}
 	return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
 		Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 }
@@ -151,10 +174,9 @@ func (s *Services) canExecuteApproved(actor *model.User, ap *model.Approval) err
 	if ap.ExecutedAt != nil {
 		return fmt.Errorf("该工单已经执行过了")
 	}
-	if actor.ID != ap.InitiatorID {
-		// 审批人也不行:让审批人顺手执行,等于把刚拆开的两步又并回去了。
-		return fmt.Errorf("只有发起人 %s 本人可以执行这张工单", ap.Initiator)
-	}
+	// 到这里不再问"你是不是发起人"。真正的门在 ExecuteApproved 里,而且都按 actor 算:
+	// 标签授权、MFA、能力矩阵复判。列表页的可见性同样收在标签授权上 —— 够不到这台
+	// 实例的人根本看不到这张单(见 repository.approvalScope)。
 	return nil
 }
 

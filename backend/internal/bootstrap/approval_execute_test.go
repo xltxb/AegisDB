@@ -91,21 +91,28 @@ func TestApprovedCommand_ExecutesOnlyOnce(t *testing.T) {
 	}
 }
 
-// 只有发起人能执行。别人拿着一张已批准的工单,不能替他跑。
-func TestApprovedCommand_OnlyTheInitiatorMayExecute(t *testing.T) {
+// 执行的人必须**自己**够得到那台实例。
+//
+// "只有发起人能执行"这条已经放开了(值班同事要能接手,见
+// approval_execute_by_peer_test.go)。放开的只有那一条 —— 访问控制没有跟着松:
+// 一个够不到这台实例的人,拿着一张已批准的工单也跑不了。
+func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
 	dev, conn := app.sameFileConns(admin, "exec-who") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_who (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
+	// 贴一个只读角色够不到的标签(ro 的标签是 analytics/readonly)。
+	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn), admin,
+		map[string]any{"tags": "orders"}).Code, 0, "贴标签")
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_who`)
 	approver := app.login("zhangwei@vela.io", "vela123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
-	// 审批人自己不能顺手把它执行了 —— 那等于绕过了"由发起人操作"这件事。
-	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", approver, nil); r.Code == 0 {
-		t.Error("非发起人不该能执行这张工单")
+	outsider := app.login("zhaolei@vela.io", "vela123")
+	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", outsider, nil); r.Code == 0 {
+		t.Error("够不到这台实例的人不该能执行这张工单")
 	}
 	if !app.tableExists(admin, dev, "t_who") {
 		t.Error("被拒的执行不该真的跑了")

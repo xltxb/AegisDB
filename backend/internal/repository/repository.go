@@ -936,12 +936,29 @@ func (r *Repo) CreateApproval(a *model.Approval, steps []model.ApprovalStep) err
 // version loaded every approval id the caller had ever been an approver on and
 // pasted them into an IN(...) list, which grows with history and eventually
 // exceeds the driver's parameter limit (ED13).
-func (r *Repo) approvalScope(scope string, userID int64) *gorm.DB {
+// approvalScope —— 这个人能看见哪些工单。
+//
+// 三类:自己发起的、自己在审批链上的,以及**已批准待执行、且落在他够得到的实例上的**。
+//
+// 第三类是"代跑"必须的:执行权放开成"谁能在这台实例上跑,谁就能执行"之后,一个看
+// 不见那张单的人是没法接手的。它在 SQL 里按 connection_id 收口,而不是取回来再在
+// 应用层筛 —— 后者会让分页的总数和实际行数对不上,而那种列表会对着第三页的工单说
+// "没有"。
+//
+// runnableConnIDs 由调用方按标签授权算好(service.canAccessConn 是那条规则的唯一
+// 出处)。为空就不加这一条:够不到任何实例的人,这一类里本来也没有东西给他看。
+func (r *Repo) approvalScope(scope string, userID int64, runnableConnIDs []int64) *gorm.DB {
 	sub := r.db.Model(&model.ApprovalStep{}).Select("approval_id").Where("approver_id = ?", userID)
 	if scope == "mine" {
 		return r.db.Model(&model.Approval{}).Where("id IN (?)", sub)
 	}
-	return r.db.Model(&model.Approval{}).Where("initiator_id = ? OR id IN (?)", userID, sub)
+	q := r.db.Model(&model.Approval{})
+	if len(runnableConnIDs) == 0 {
+		return q.Where("initiator_id = ? OR id IN (?)", userID, sub)
+	}
+	return q.Where(
+		"initiator_id = ? OR id IN (?) OR (status = ? AND executed_at IS NULL AND connection_id IN ?)",
+		userID, sub, model.StatusApproved, runnableConnIDs)
 }
 
 // ListApprovalsPaged returns one page of approvals the caller may see (newest
@@ -951,9 +968,9 @@ func (r *Repo) approvalScope(scope string, userID int64) *gorm.DB {
 // audit log links tickets by number, and such a ticket may sit on any page. The
 // visibility predicate still applies, so a number cannot be used to read someone
 // else's ticket.
-func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status, q string, offset, limit int) ([]model.Approval, int64, error) {
-	count := r.approvalScope(scope, userID)
-	rows := r.approvalScope(scope, userID).Order("id desc")
+func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status, q string, offset, limit int, runnableConnIDs []int64) ([]model.Approval, int64, error) {
+	count := r.approvalScope(scope, userID, runnableConnIDs)
+	rows := r.approvalScope(scope, userID, runnableConnIDs).Order("id desc")
 	if apNo != "" {
 		count = count.Where("ap_no = ?", apNo)
 		rows = rows.Where("ap_no = ?", apNo)
@@ -1021,7 +1038,9 @@ func escapeLike(s string) string {
 // that genuinely need the whole set (the approval-chain sweep); the console uses
 // the paged form.
 func (r *Repo) ListApprovals(scope string, userID int64) ([]model.Approval, error) {
-	as, _, err := r.ListApprovalsPaged(scope, userID, "", "", "", 0, 0)
+	// 这条路只给审批链清扫用,它关心的是自己发起/自己要批的那些 —— 代跑可见性
+	// (第三类)与它无关,所以不传 runnableConnIDs。
+	as, _, err := r.ListApprovalsPaged(scope, userID, "", "", "", 0, 0, nil)
 	return as, err
 }
 
@@ -1632,6 +1651,8 @@ func (r *Repo) ScopeForUser(userID int64, roleIDs []int64) (allow []string, unre
 // silently cap at the page size once someone has more than that.
 func (r *Repo) CountPendingApprovals(scope string, userID int64) (int64, error) {
 	var n int64
-	err := r.approvalScope(scope, userID).Where("status = ?", model.StatusPending).Count(&n).Error
+	// 徽章数的是**待审批**,而代跑可见的那一类全是已批准的 —— 传 nil 不会漏计,
+	// 反倒避免了让一个数字随别人的工单变动。
+	err := r.approvalScope(scope, userID, nil).Where("status = ?", model.StatusPending).Count(&n).Error
 	return n, err
 }
