@@ -14,13 +14,15 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
   SquareTerminal, ClipboardCheck, Database, Activity, CalendarClock,
-  ScrollText, ArrowRight, ShieldAlert, Play, Rocket,
+  ScrollText, ArrowRight, ShieldAlert, Play, Rocket, RotateCw, CircleCheckBig, CircleX, CheckCheck, Undo2,
 } from 'lucide-vue-next'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
 import { useUIStore } from '@/stores/ui'
 import { awaitsExecution, humanGateOf } from '@/lib/pendingWork'
+import { confirmAction } from '@/lib/confirm'
+import { initialsOf } from '@/lib/initials'
 import type { Approval, AuditRow, Connection, ExecWindow, Release } from '@/types'
 
 const { t } = useI18n()
@@ -43,8 +45,23 @@ const stats = ref<{ online: boolean; p50Ms: number; p95Ms: number; intercepts: n
 
 // ---- 派生 ----
 
-/** 此刻开着的窗口。active 由后端用与判定完全相同的逻辑算出,前端不自己算。 */
+/**
+ * 班车(执行窗口)在这一页上分三档,顺序就是它们要人做的事:
+ *
+ *   开着的   —— 此刻本该审批的中/高风险语句正在被直接放行。这是这个系统里唯一一种
+ *              "门开着而没人站在门口"的状态,所以它排最前、用警示色。
+ *   等审批的 —— 有人申请了一扇门,还没人签字。它是**待办**,不是状态。
+ *   排着的   —— 已批准、还没到点。它回答"今晚/这周会不会有一段免审批时间"。
+ *
+ * `active` 由后端用与判定完全相同的逻辑算出(并且已经把"没批准"算进去了),
+ * 前端不自己重算跨午夜和时区 —— 那两处写两遍迟早分叉,而分叉的表现是界面说开着、
+ * 网关说没开。
+ */
 const openWindows = computed(() => windows.value.filter((w) => w.active))
+const pendingWindows = computed(() => windows.value.filter((w) => w.status === 'pending'))
+/** 已批准、启用中、但此刻没开 —— 也就是"接下来会开"的那些。 */
+const queuedWindows = computed(() =>
+  windows.value.filter((w) => w.status === 'approved' && w.enabled && !w.active))
 
 /** 等我决定的单子 —— canDecide 也是服务端算好的,前端不再拼一遍那三个条件。 */
 const myTodo = computed(() => approvals.value.filter((a) => a.status === 'pending' && a.canDecide))
@@ -137,38 +154,134 @@ function when(s?: string | null) {
   return s ? new Date(s).toLocaleString('sv').slice(5, 16) : '—'
 }
 
+/** 一句话的时间表。与「班车」页上的 whenLabel 同一个口径,只是更短。 */
+function windowWhen(w: ExecWindow) {
+  const hm = (n: number) => `${String(Math.floor(n / 60) % 24).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`
+  if (w.kind === 'once') {
+    const f = (s?: string) => (s ? new Date(s).toLocaleString('sv').slice(5, 16) : '—')
+    return `${f(w.startsAt)} → ${f(w.endsAt)}`
+  }
+  const days = w.weekdays.trim()
+    ? w.weekdays.split(',').map((n) => t(`dow${Number(n)}` as any)).join('')
+    : t('ewEveryDay')
+  return `${days} ${hm(w.startMin)}-${hm(w.endMin)}`
+}
+
 function windowScope(w: ExecWindow) {
   const c = conns.value.find((x) => x.id === w.connectionId)
   return (c?.name || '#' + w.connectionId) + ' / ' + w.database
 }
 
 function go(path: string) { router.push(path) }
+
+// ---- 行上的动作 ----
+//
+// 落地页上直接执行/审批,省掉的是"进另一页、找到同一行、再点一次"。但它省不掉的是
+// **看清楚要放行的是什么**:这一行里的命令是截断显示的,所以两个动作都先弹一次确认,
+// 而确认文案里带的是完整命令。能不能点仍然只看服务端算好的 canExecute / canDecide ——
+// 前端不自己拼那几个条件,否则按钮亮不亮和点下去放不放行迟早两套说法。
+const busy = ref(false)
+
+async function runNow(a: Approval) {
+  if (!a.canExecute || busy.value) return
+  if (!confirmAction(t('dashRunConfirm', { no: a.apNo, cmd: a.command }))) return
+  busy.value = true
+  try {
+    await api.executeApproval(a.id)
+    ui.notify(t('dashRunDone', { no: a.apNo }), 'success')
+    await load()
+  } catch (e) { ui.notifyError(e, t('actionFailed')) } finally { busy.value = false }
+}
+
+// 放弃这次下发。与 runNow 成对:确认文案里同样带完整命令,因为行里是截断的。
+async function cancelNow(a: Approval) {
+  if (busy.value) return
+  if (!confirmAction(t('apCancelConfirm', { no: a.apNo }))) return
+  busy.value = true
+  try {
+    await api.cancelApproval(a.id)
+    ui.notify(t('apCancelled', { no: a.apNo }), 'success')
+    await load()
+  } catch (e) { ui.notifyError(e, t('actionFailed')); await load() } finally { busy.value = false }
+}
+
+async function decideNow(a: Approval, approve: boolean) {
+  if (busy.value) return
+  const verb = approve ? t('apApprove') : t('apReject')
+  if (!confirmAction(t('apConfirm', { verb, cmd: a.command }))) return
+  busy.value = true
+  try {
+    if (approve) await api.approve(a.id)
+    else await api.reject(a.id)
+    await load()
+  } catch (e) { ui.notifyError(e, t('actionFailed')); await load() } finally { busy.value = false }
+}
+
+/**
+ * 相对时间("10 分钟前")。完整时刻放进 title —— 相对时间好扫,但要对齐日志、
+ * 对齐别人的截图时,需要的是那个绝对时刻。
+ */
+function relTime(s?: string | null) {
+  if (!s) return '—'
+  const ms = Date.now() - new Date(s).getTime()
+  const m = Math.floor(ms / 60000)
+  if (m < 1) return t('relJustNow')
+  if (m < 60) return t('relMin', { n: m })
+  const h = Math.floor(m / 60)
+  if (h < 24) return t('relHour', { n: h })
+  return t('relDay', { n: Math.floor(h / 24) })
+}
+/** 绝对时刻,给 title 用。 */
+function absTime(s?: string | null) {
+  return s ? new Date(s).toLocaleString('sv').slice(0, 19) : '—'
+}
+
+/** 审计结论的色档。executed 是常态,不上色 —— 满屏绿色和没有颜色是一个效果。 */
+function resultCls(r: string) {
+  if (r === 'rejected') return 'bad'
+  if (r === 'pending') return 'wait'
+  if (r === 'cancelled' || r === 'exported') return 'neutral'
+  if (r === 'executed') return 'ok'
+  return 'wait'
+}
 </script>
 
 <template>
   <div class="scy page">
+    <!-- 页眉:标题与欢迎语在左,主操作在右。刷新是这一页真正需要的第二个动作 ——
+         它上面每一块都是"此刻的状态",而人会盯着它等状态变。 -->
     <div class="head">
-      <div>
+      <div class="hleft">
         <div class="eyebrow">OVERVIEW</div>
+        <div class="htitle">{{ $t('t_dashboard') }}</div>
         <div class="sub">{{ $t('dashGreeting', { name: auth.me?.name || '' }) }}</div>
       </div>
+      <button class="ghostbtn" :disabled="busy" :title="$t('dashRefresh')" @click="load()">
+        <RotateCw :size="14" />{{ $t('dashRefresh') }}
+      </button>
       <button v-if="can('terminal')" class="cta" @click="go('/terminal')">
         <SquareTerminal :size="15" />{{ $t('dashOpenTerminal') }}
       </button>
     </div>
 
+    <!-- KPI。每张牌:大号等宽数字 + 一行说明 + 右上角一块淡底图标。
+         只有**要人动手**的两张(等我审批、待我执行)在大于 0 时变琥珀并加左侧竖条:
+         实例数和延迟无论多少都不是待办,把它们一起点亮等于没有重点。 -->
     <div class="stats">
-      <div v-if="can('approve')" class="stat click" @click="go('/approvals')">
+      <div v-if="can('approve')" class="stat click" :class="{ act: myTodo.length }" @click="go('/approvals')">
         <div class="si"><ClipboardCheck :size="15" /></div>
         <div class="sv">{{ myTodo.length }}</div>
         <div class="sl">{{ $t('dashStatTodo') }}</div>
       </div>
-      <div v-if="can('approve') || can('pipeline')" class="stat click" :class="{ warn: runCount }" @click="go(pendingRun.length ? '/approvals' : '/releases')">
+      <div
+        v-if="can('approve') || can('pipeline')" class="stat click" :class="{ act: runCount }"
+        @click="go(pendingRun.length ? '/approvals' : '/releases')"
+      >
         <div class="si"><Play :size="15" /></div>
         <div class="sv">{{ runCount }}</div>
         <div class="sl">{{ $t('dashStatToRun') }}</div>
       </div>
-      <div class="stat" :class="{ warn: openWindows.length }">
+      <div v-if="can('execwindow')" class="stat click" :class="{ warn: openWindows.length }" @click="go('/exec-windows')">
         <div class="si"><CalendarClock :size="15" /></div>
         <div class="sv">{{ openWindows.length }}</div>
         <div class="sl">{{ $t('dashStatWindows') }}</div>
@@ -180,98 +293,172 @@ function go(path: string) { router.push(path) }
       </div>
       <div class="stat">
         <div class="si"><Activity :size="15" /></div>
+        <!-- 标的是 p50(中位数)。接口只给 p50 / p95,写成 P90 是编一个没人算过的数。 -->
         <div class="sv">{{ stats ? stats.p50Ms.toFixed(1) + 'ms' : '—' }}</div>
         <div class="sl">{{ stats?.online ? $t('dashStatGwOn') : $t('dashStatGwOff') }}</div>
       </div>
     </div>
 
-    <!-- 开着的执行窗口。它排在所有列表前面,而且用警示色:窗口开着的这几个小时里,
-         本来要审批的中高风险语句是直接放行的 —— 那是这个系统里唯一一种"门开着而
-         没人站在门口"的状态,进来第一眼就该看见。 -->
-    <div v-if="openWindows.length" class="alert">
-      <div class="ai"><ShieldAlert :size="17" /></div>
-      <div class="grow">
-        <div class="at">{{ $t('dashWindowOpen', { n: openWindows.length }) }}</div>
-        <div v-for="w in openWindows" :key="w.id" class="aw">
-          <b>{{ w.name }}</b><span class="sep"> · </span>{{ windowScope(w) }}
-          <template v-if="w.reason"><span class="sep"> · </span>{{ w.reason }}</template>
+    <!-- 当前执行窗口。这是这一页唯一的"门开着"状态,所以它是一整块面板,不是一条提示:
+         窗口开着的这几个小时里,本来要审批的中/高风险语句会一条不落地直接下发。
+         呼吸点表示"此刻正开着",它是这块面板存在的全部理由。 -->
+    <div v-if="openWindows.length" class="panel">
+      <div class="phead">
+        <span class="pulse" />
+        <div class="grow">
+          <div class="pt">{{ $t('dashWindowLive') }}</div>
+          <div class="ps">{{ $t('dashWindowOpen', { n: openWindows.length }) }}</div>
+        </div>
+        <button class="ghostbtn sm" @click="go('/exec-windows')">{{ $t('dashWindowManage') }}<ArrowRight :size="13" /></button>
+      </div>
+      <!-- 每扇门两列:左边是"哪个库",右边是"到什么时候关"。两件事都堆在左边时,
+           人要在一行里数着分隔点找那个时间。 -->
+      <div class="pbody">
+        <div v-for="w in openWindows" :key="w.id" class="pw">
+          <div class="pwl">
+            <div class="pwn">{{ w.name }}</div>
+            <div class="pwr">{{ w.reason || $t('ewNoReason') }}</div>
+          </div>
+          <div class="pwm"><span class="chip">{{ windowScope(w) }}</span></div>
+          <div class="pwm"><span class="chip">{{ windowWhen(w) }}</span></div>
         </div>
       </div>
     </div>
 
-    <!-- 待执行:批完了、但还得有人去按下那一下的单子。它排在"等我审批"前面 ——
+    <!-- 待执行队列。批完了、还等着有人去按下那一下的单子;排在"等我审批"前面 ——
          审批是在等别人,这些是在等你。 -->
     <div v-if="runCount" class="card">
       <div class="chead">
         <div class="cic"><Play :size="17" color="var(--accent-text)" /></div>
-        <div><div class="ct">{{ $t('dashRunTitle') }}</div><div class="cs">{{ $t('dashRunSub') }}</div></div>
+        <div class="grow"><div class="ct">{{ $t('dashRunTitle') }}</div><div class="cs">{{ $t('dashRunSub') }}</div></div>
+        <span class="cnum">{{ runCount }}</span>
       </div>
       <div class="rows">
-        <div v-for="a in pendingRun" :key="'ap' + a.id" class="row click" @click="go('/approvals')">
-          <div class="grow">
-            <div class="rn">
-              <span class="mono">{{ a.apNo }}</span>
-              <span class="tag">{{ a.env }}</span>
-              <span class="on">{{ a.instance }}</span>
-            </div>
-            <div class="rm"><span class="clip mono">{{ a.command }}</span></div>
+        <div v-for="a in pendingRun" :key="'ap' + a.id" class="row">
+          <div class="rleft">
+            <span class="apno" :title="a.apNo">{{ a.apNo }}</span>
+            <span class="tag" :class="{ high: envtier.tierOf(a.env)?.dangerBanner }">{{ a.env }}</span>
+            <span class="tag">{{ a.instance }}</span>
           </div>
-          <span class="go">{{ $t('dashRunGo') }}<ArrowRight :size="13" /></span>
+          <!-- 命令用代码片显示,单行截断;完整命令在确认框里(那才是要看清的地方)。 -->
+          <code class="code" :title="a.command">{{ a.command }}</code>
+          <div class="rright">
+            <span class="who" :title="absTime(a.createdAt)">{{ a.initiator }} · {{ relTime(a.createdAt) }}</span>
+            <button v-if="a.canExecute" class="btn primary" :disabled="busy" @click.stop="runNow(a)">
+              <Play :size="12" />{{ $t('apExecute') }}
+            </button>
+            <!-- 批是批了,但可以不跑。撤回只对**没跑过**的单子亮(canCancel 由服务端算),
+                 所以这一列上它和"执行"是一对:要么下发,要么放弃这次下发。 -->
+            <button v-if="a.canCancel" class="btn ghost" :disabled="busy" @click.stop="cancelNow(a)">
+              <Undo2 :size="12" />{{ $t('apCancel') }}
+            </button>
+            <button class="btn ghost" @click.stop="go('/approvals')">{{ $t('dashDetail') }}</button>
+          </div>
         </div>
-        <div v-for="r in pendingRelease" :key="'rel' + r.id" class="row click" @click="go('/releases')">
-          <div class="grow">
-            <div class="rn">
-              <Rocket :size="12" color="var(--text-faint)" />
-              <span class="mono">{{ r.relNo }}</span>
-              <span class="tag">{{ r.env }}</span>
-              <span class="on">{{ r.instance }} / {{ r.database }}</span>
-            </div>
-            <!-- 停在哪一个节点上要说出来:一张升级单可能停在执行闸,也可能停在流程里
-                 配置的确认点,点进去要找的东西不一样。 -->
-            <div class="rm"><span class="clip">{{ r.title }} · {{ $t('dashRunStage', { stage: humanGateOf(r)?.name || '' }) }}</span></div>
+        <div v-for="r in pendingRelease" :key="'rel' + r.id" class="row">
+          <div class="rleft">
+            <Rocket :size="12" color="var(--text-faint)" />
+            <span class="apno">{{ r.relNo }}</span>
+            <span class="tag" :class="{ high: envtier.tierOf(r.env)?.dangerBanner }">{{ r.env }}</span>
+            <span class="tag">{{ r.instance }} / {{ r.database }}</span>
           </div>
-          <span class="go">{{ $t('dashRunGo') }}<ArrowRight :size="13" /></span>
+          <!-- 停在哪一个节点上要说出来:一张升级单可能停在执行闸,也可能停在流程里
+               配置的确认点,点进去要找的东西不一样。 -->
+          <code class="code plain" :title="r.title">{{ r.title }} · {{ $t('dashRunStage', { stage: humanGateOf(r)?.name || '' }) }}</code>
+          <div class="rright">
+            <button class="btn ghost" @click.stop="go('/releases')">{{ $t('dashDetail') }}<ArrowRight :size="12" /></button>
+          </div>
         </div>
       </div>
     </div>
 
+    <!-- 班车:等审批的排在前面(它要人去做一件事),已批准还没到点的排后面。
+         已经开着的不在这里重复 —— 上面那块面板已经用更重的方式说过了。 -->
+    <div v-if="can('execwindow') && (pendingWindows.length || queuedWindows.length)" class="card">
+      <div class="chead">
+        <div class="cic"><CalendarClock :size="17" color="var(--accent-text)" /></div>
+        <div class="grow"><div class="ct">{{ $t('dashWinTitle') }}</div><div class="cs">{{ $t('dashWinSub') }}</div></div>
+      </div>
+      <div class="rows">
+        <div v-for="w in [...pendingWindows, ...queuedWindows]" :key="'w' + w.id" class="row click" @click="go('/exec-windows')">
+          <div class="rleft">
+            <span class="wtag" :class="w.status === 'pending' ? 'pend' : 'ok'">
+              {{ w.status === 'pending' ? $t('ewStPending') : $t('dashWinQueued') }}
+            </span>
+            <span class="rname">{{ w.name }}</span>
+            <span v-if="w.apNo && w.status === 'pending'" class="apno">{{ w.apNo }}</span>
+          </div>
+          <code class="code plain">{{ windowScope(w) }}</code>
+          <div class="rright"><span class="chip">{{ windowWhen(w) }}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下半区 5:7。左边是要你决定的事(短、动作重),右边是刚发生的事(长、只读)。 -->
     <div class="cols">
       <div v-if="can('approve')" class="card">
         <div class="chead">
           <div class="cic"><ClipboardCheck :size="17" color="var(--accent-text)" /></div>
-          <div><div class="ct">{{ $t('dashTodoTitle') }}</div><div class="cs">{{ $t('dashTodoSub') }}</div></div>
+          <div class="grow"><div class="ct">{{ $t('dashTodoTitle') }}</div><div class="cs">{{ $t('dashTodoSub') }}</div></div>
+          <span v-if="myTodo.length" class="cnum">{{ myTodo.length }}</span>
         </div>
         <div class="rows">
-          <div v-for="a in myTodo.slice(0, 5)" :key="a.id" class="row click" @click="go('/approvals')">
-            <div class="grow">
-              <div class="rn"><span class="mono">{{ a.apNo }}</span><span class="tag">{{ a.env }}</span></div>
-              <div class="rm"><span class="clip mono">{{ a.command }}</span></div>
+          <div v-for="a in myTodo.slice(0, 5)" :key="a.id" class="trow">
+            <div class="tmeta">
+              <span class="av">{{ initialsOf(a.initiator) }}</span>
+              <div class="grow">
+                <div class="rleft">
+                  <span class="apno">{{ a.apNo }}</span>
+                  <span class="tag" :class="{ high: envtier.tierOf(a.env)?.dangerBanner }">{{ a.env }}</span>
+                </div>
+                <div class="who" :title="absTime(a.createdAt)">{{ a.initiator }} · {{ relTime(a.createdAt) }}</div>
+              </div>
             </div>
-            <span class="go">{{ when(a.createdAt) }}<ArrowRight :size="13" /></span>
+            <code class="code" :title="a.command">{{ a.command }}</code>
+            <div v-if="a.reason" class="why">{{ a.reason }}</div>
+            <div class="tacts">
+              <button class="btn ghost" :disabled="busy" @click.stop="decideNow(a, false)">
+                <CircleX :size="12" />{{ $t('apReject') }}
+              </button>
+              <button class="btn ok" :disabled="busy" @click.stop="decideNow(a, true)">
+                <CircleCheckBig :size="12" />{{ $t('apApprove') }}
+              </button>
+            </div>
           </div>
-          <div v-if="!myTodo.length" class="empty">{{ $t('dashTodoEmpty') }}</div>
+          <!-- 空态说的是"都处理完了",不是"没有数据"。这两句话对读的人意义完全不同。 -->
+          <div v-if="!myTodo.length" class="blank">
+            <div class="bic"><CheckCheck :size="20" /></div>
+            <div class="bt">{{ $t('dashTodoEmpty') }}</div>
+            <div class="bs">{{ $t('dashTodoEmptySub') }}</div>
+          </div>
         </div>
       </div>
 
       <div v-if="can('audit')" class="card">
         <div class="chead">
           <div class="cic"><ScrollText :size="17" color="var(--accent-text)" /></div>
-          <div><div class="ct">{{ $t('dashAuditTitle') }}</div><div class="cs">{{ $t('dashAuditSub') }}</div></div>
+          <div class="grow"><div class="ct">{{ $t('dashAuditTitle') }}</div><div class="cs">{{ $t('dashAuditSub') }}</div></div>
+          <button class="ghostbtn sm" @click="go('/audit')">{{ $t('dashDetail') }}<ArrowRight :size="13" /></button>
         </div>
-        <div class="rows">
-          <div v-for="r in audit.slice(0, 6)" :key="r.id" class="row click" @click="go('/audit')">
+        <!-- 时间轴:一条竖线串起来,左边是人,右边是那一刻发生的事。 -->
+        <div class="tl">
+          <div v-for="r in audit.slice(0, 7)" :key="r.id" class="tli click" @click="go('/audit')">
+            <span class="av sm">{{ initialsOf(r.actor) }}</span>
             <div class="grow">
-              <div class="rn">
-                {{ r.actor }}
-                <span class="on">{{ r.instance }}</span>
-                <span class="tag" :class="r.risk">{{ r.risk }}</span>
-                <span v-if="r.result !== 'executed'" class="tag" :class="r.result">{{ r.result }}</span>
+              <div class="rleft">
+                <span class="rname">{{ r.actor }}</span>
+                <span class="chip">{{ r.instance }}</span>
+                <span v-if="r.database" class="chip">{{ r.database }}</span>
+                <span class="cap" :class="resultCls(r.result)">{{ r.result }}</span>
+                <span class="ago" :title="absTime(r.occurredAt)">{{ relTime(r.occurredAt) }}</span>
               </div>
-              <div class="rm"><span class="clip mono">{{ r.command }}</span></div>
+              <code class="code" :title="r.command">{{ r.command }}</code>
             </div>
-            <span class="go">{{ when(r.occurredAt) }}<ArrowRight :size="13" /></span>
           </div>
-          <div v-if="!audit.length" class="empty">{{ $t('dashAuditEmpty') }}</div>
+          <div v-if="!audit.length" class="blank">
+            <div class="bic"><ScrollText :size="20" /></div>
+            <div class="bt">{{ $t('dashAuditEmpty') }}</div>
+          </div>
         </div>
       </div>
     </div>
@@ -279,7 +466,7 @@ function go(path: string) { router.push(path) }
     <div class="card">
       <div class="chead">
         <div class="cic"><Database :size="17" color="var(--accent-text)" /></div>
-        <div><div class="ct">{{ $t('dashInstTitle') }}</div><div class="cs">{{ $t('dashInstSub') }}</div></div>
+        <div class="grow"><div class="ct">{{ $t('dashInstTitle') }}</div><div class="cs">{{ $t('dashInstSub') }}</div></div>
       </div>
       <div class="rows">
         <div
@@ -287,14 +474,15 @@ function go(path: string) { router.push(path) }
           class="row" :class="{ click: can('terminal') }"
           @click="can('terminal') && go('/terminal')"
         >
-          <span class="d" :class="envtier.dotFor(g.code)" />
-          <div class="grow">
-            <div class="rn">{{ g.label }}<span v-if="g.danger" class="tag high">{{ $t('dashTierGated') }}</span></div>
-            <div class="rm"><span class="clip">{{ g.conns.map((c) => c.name).join(' · ') }}</span></div>
+          <div class="rleft">
+            <span class="d" :class="envtier.dotFor(g.code)" />
+            <span class="rname">{{ g.label }}</span>
+            <span v-if="g.danger" class="tag high">{{ $t('dashTierGated') }}</span>
           </div>
-          <span class="cnt">{{ g.conns.length }}</span>
+          <code class="code plain">{{ g.conns.map((c) => c.name).join(' · ') }}</code>
+          <div class="rright"><span class="cnum">{{ g.conns.length }}</span></div>
         </div>
-        <div v-if="!byTier.length" class="empty">{{ $t('dashInstEmpty') }}</div>
+        <div v-if="!byTier.length" class="blank"><div class="bt">{{ $t('dashInstEmpty') }}</div></div>
       </div>
     </div>
   </div>
@@ -306,69 +494,167 @@ function go(path: string) { router.push(path) }
 /* 见 ProjectsView:弹性子项默认可压缩,而卡片是 overflow:hidden 的,不钉住就会被压扁
    到刚好填满视口,后面的行看着像"只显示前几个"。让页面去滚,卡片保持自身高度。 */
 .page > * { flex-shrink: 0; }
-.head { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+
+/* ---------------- 页眉 ---------------- */
+.head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 2px; }
+.hleft { flex: 1; min-width: 0; }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
-.sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
+.htitle { margin-top: 4px; font: 700 20px var(--font-display); color: var(--text-strong); letter-spacing: -0.02em; }
+.sub { margin-top: 3px; font: 500 12.5px var(--font-body); color: var(--text-muted); }
 .cta {
-  margin-left: auto; display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; height: var(--control-md);
-  border: 0; border-radius: 11px; background: var(--accent); color: #fff; cursor: pointer;
-  font: 600 12.5px var(--font-body); transition: background var(--dur-fast, 0.15s) var(--ease-out, ease);
+  display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; height: var(--control-md);
+  border: 0; border-radius: var(--radius-md); background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 12.5px var(--font-body); transition: background var(--dur-fast) var(--ease-out);
 }
 .cta:hover { background: var(--accent-hover); }
-
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
-.stat { position: relative; padding: 16px 20px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); }
-.stat.click { cursor: pointer; }
-/* 有窗口开着的时候这张牌换成警示色。数字是 0 的时候它和别的牌一样安静 —— 一张
-   长期亮着的警示牌很快就没人看了。 */
-.stat.warn { background: var(--warning-subtle); }
-.stat.warn .sv { color: var(--warning-text); }
-.si { position: absolute; top: 16px; right: 18px; color: var(--text-faint); }
-.sv { font: 700 26px var(--font-display); color: var(--text-strong); }
-.sl { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
-
-.alert { display: flex; gap: 12px; padding: 14px 18px; border-radius: var(--radius-lg); background: var(--warning-subtle); border: 1px solid var(--warning); }
-.ai { color: var(--warning-text); flex-shrink: 0; margin-top: 1px; }
-.at { font: 600 13px var(--font-body); color: var(--warning-text); }
-.aw { margin-top: 4px; font: 500 12px var(--font-body); color: var(--text-muted); }
-.aw b { color: var(--text-strong); font-weight: 600; }
-.sep { color: var(--text-faint); }
-
-/* 两栏在放不下时自己变一栏,而不是把命令文本挤成一列窄条。 */
-.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
-.card { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
-.chead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
-.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
-.ct { font: 600 14px var(--font-display); color: var(--text-strong); }
-.cs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
-
-/* 行样式与项目页同源 —— 同一个产品里的列表行只该有一种长相。 */
-.rows { padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
-.row {
-  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
-  border: 1px solid var(--border-default); border-radius: 11px; background: var(--surface-sunken);
-  transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease);
+.ghostbtn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; height: var(--control-md);
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-card); color: var(--text-muted); cursor: pointer; font: 600 12px var(--font-body);
 }
-.row.click { cursor: pointer; }
-.row.click:hover { border-color: var(--accent-text); }
+.ghostbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.ghostbtn:disabled { opacity: 0.55; cursor: default; }
+.ghostbtn.sm { height: 28px; padding: 0 10px; font-size: 11.5px; }
+
+/* ---------------- KPI ---------------- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.stat {
+  position: relative; padding: 15px 18px; border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.stat.click { cursor: pointer; }
+.stat.click:hover { box-shadow: var(--shadow-sm); border-color: var(--border-default); }
+/* 数字用等宽:五张牌并排时,比例字体下"11"和"0.7ms"的基线宽度不一样,一列数字
+   扫下去会左右跳。 */
+.sv { font: 700 25px/1.1 var(--font-mono); color: var(--text-strong); letter-spacing: -0.02em; }
+.sl { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+/* 图标坐在一小块淡底里,而不是裸挂在角上 —— 裸图标和数字抢的是同一种注意力。 */
+.si {
+  position: absolute; top: 14px; right: 16px; width: 28px; height: 28px; border-radius: 9px;
+  display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted);
+}
+/* act:要人动手的两张牌。左边一条竖条 + 一层极淡的底,数字换成强调色。
+   为 0 时它和别的牌一模一样 —— 一张长期亮着的警示牌很快就没人看了。 */
+.stat.act { background: var(--accent-subtle); border-color: var(--accent-subtle-border); }
+.stat.act::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.stat.act .sv { color: var(--accent-text); }
+.stat.act .si { background: var(--surface-card); color: var(--accent-text); }
+/* warn:门开着。它比"有活要干"更重一档,所以用琥珀。 */
+.stat.warn { background: var(--warning-subtle); border-color: transparent; }
+.stat.warn::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--warning); }
+.stat.warn .sv { color: var(--warning-text); }
+.stat.warn .si { background: var(--surface-card); color: var(--warning-text); }
+
+/* ---------------- 当前执行窗口面板 ---------------- */
+.panel { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--warning); overflow: hidden; }
+.phead { display: flex; align-items: center; gap: 11px; padding: 13px 18px; background: var(--warning-subtle); }
+.pt { font: 700 13.5px var(--font-body); color: var(--warning-text); }
+.ps { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+/* 呼吸点:它表示"此刻正开着",而这块面板存在的全部理由就是这件事。 */
+.pulse { position: relative; width: 9px; height: 9px; border-radius: 50%; background: var(--warning); flex-shrink: 0; }
+.pulse::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--warning); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes ping { 0% { transform: scale(0.7); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pulse::after { animation: none; opacity: 0.35; } }
+.pbody { padding: 6px 18px 14px; }
+.pw { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.pw:last-child { border-bottom: none; }
+.pwn { font: 600 13px var(--font-body); color: var(--text-strong); }
+.pwr { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwm { min-width: 0; }
+
+/* ---------------- 卡片 ---------------- */
+.cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+/* 1366 及以下换成一栏:两栏各剩 600px 出头时,右边那条命令已经只剩几个字。 */
+@media (max-width: 1366px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; }
+.chead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
+.cic { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.ct { font: 700 13.5px var(--font-display); color: var(--text-strong); }
+.cs { font: 500 11.5px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.cnum { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 700 11px var(--font-mono); color: var(--text-muted); }
 .grow { flex: 1; min-width: 0; }
-.rn { display: flex; align-items: center; gap: 8px; font: 600 13px var(--font-body); color: var(--text-strong); }
-.rm { margin-top: 3px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
-/* 命令可以很长,单行截断 —— 落地页给的是"有这么一条",细节在它自己的页面上。 */
-.clip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mono { font-family: var(--font-mono); }
-.tag { padding: 1px 7px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 10px var(--font-mono); color: var(--text-muted); text-transform: uppercase; }
-.tag.high, .tag.rejected { background: var(--danger-subtle); border-color: transparent; color: var(--danger-text); }
-.tag.mid, .tag.pending, .tag.warn { background: var(--warning-subtle); border-color: transparent; color: var(--warning-text); }
-.on { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
-.cnt { font: 600 12px var(--font-mono); color: var(--text-muted); }
+
+/* ---------------- 行 ---------------- */
+.rows { padding: 8px 10px; display: flex; flex-direction: column; }
+.row {
+  display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: center; gap: 14px; padding: 11px 10px; border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.row + .row { border-top: 1px solid var(--border-subtle); border-radius: 0; }
+.row.click { cursor: pointer; }
+.row:hover { background: var(--surface-sunken); }
+.rleft { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rright { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.rname { font: 600 12.5px var(--font-body); color: var(--text-strong); white-space: nowrap; }
+/* 单号是等宽小徽章:它是要被念出来、被复制、被粘到聊天里的东西。 */
+.apno { padding: 1px 7px; border-radius: var(--radius-sm); background: var(--accent-subtle); color: var(--accent-text); font: 700 11px var(--font-mono); white-space: nowrap; }
+.tag { padding: 1px 7px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 10px var(--font-mono); color: var(--text-muted); text-transform: uppercase; white-space: nowrap; }
+.tag.high { background: var(--danger-subtle); border-color: transparent; color: var(--danger-text); }
+.chip { display: inline-block; max-width: 100%; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--surface-sunken); font: 500 11px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 命令用代码片。它在这一页永远是**一行**:落地页给的是"有这么一条",要读全文
+   得进它自己的页面(或者看确认框)。 */
+.code { display: block; min-width: 0; padding: 4px 9px; border-radius: var(--radius-sm); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 500 11.5px var(--font-mono); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code.plain { background: transparent; border-color: transparent; color: var(--text-muted); padding-left: 0; }
+.who { font: 500 11px var(--font-body); color: var(--text-faint); white-space: nowrap; }
+.wtag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); font: 700 10px var(--font-mono); white-space: nowrap; }
+.wtag.pend { background: var(--warning-subtle); color: var(--warning-text); }
+.wtag.ok { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
 .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
 .d.danger { background: var(--danger); }
 .d.warning { background: var(--warning); }
 .d.success { background: var(--success); }
 .d.info { background: var(--accent); }
 .d.muted { background: var(--text-faint); }
-.go { display: inline-flex; align-items: center; gap: 5px; font: 600 11.5px var(--font-mono); color: var(--text-faint); }
-.row.click:hover .go { color: var(--accent-text); }
-.empty { padding: 10px 2px; font: 500 12px var(--font-body); color: var(--text-faint); }
+
+/* ---------------- 行内按钮 ---------------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 27px; padding: 0 11px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+  background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body);
+  cursor: pointer; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.55; cursor: default; }
+/* 执行是这一页唯一会真的落到库上的动作,所以只有它是实色。 */
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn.ok:hover:not(:disabled) { color: var(--success-text); border-color: var(--success); background: var(--success-subtle); }
+.btn.ghost:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+
+/* ---------------- 待我审批:一行一张小卡 ---------------- */
+.trow { padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.trow + .trow { border-top: 1px solid var(--border-subtle); }
+.tmeta { display: flex; align-items: center; gap: 10px; }
+.av { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent-subtle); color: var(--accent-text); font: 700 11px var(--font-body); }
+.av.sm { width: 24px; height: 24px; font-size: 10px; }
+.why { font: 500 11.5px/1.6 var(--font-body); color: var(--text-muted); }
+.tacts { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------------- 审计时间轴 ---------------- */
+.tl { padding: 10px 18px 14px; position: relative; }
+.tli { display: flex; gap: 11px; padding: 9px 0; cursor: pointer; }
+.tli + .tli { border-top: 1px solid var(--border-subtle); }
+.tli:hover .rname { color: var(--accent-text); }
+.ago { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+/* 状态胶囊。executed 用翠绿,pending 琥珀,撤回/导出中性 —— 常态不该是满屏彩色。 */
+.cap { padding: 1px 7px; border-radius: var(--radius-full); font: 700 9.5px var(--font-mono); text-transform: uppercase; }
+.cap.ok { background: var(--success-subtle); color: var(--success-text); }
+.cap.wait { background: var(--warning-subtle); color: var(--warning-text); }
+.cap.bad { background: var(--danger-subtle); color: var(--danger-text); }
+.cap.neutral { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+
+/* ---------------- 空态 ---------------- */
+/* 说的是"都处理完了",不是"没有数据" —— 对读的人这是两句完全不同的话。 */
+.blank { padding: 28px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.bic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-faint); }
+.bt { font: 600 12.5px var(--font-body); color: var(--text-muted); }
+.bs { font: 500 11.5px var(--font-body); color: var(--text-faint); }
+
+/* 窄屏:行内三段改成上下堆叠,免得命令被挤成几个字。 */
+@media (max-width: 720px) {
+  .row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .rright { justify-content: flex-start; }
+  .pw { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}
 </style>

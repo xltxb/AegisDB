@@ -7,6 +7,7 @@ import {
 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
+import VDateTime from '@/components/common/VDateTime.vue'
 import api from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { extractTables, tablesLabel } from '@/lib/sqlTables'
@@ -161,9 +162,9 @@ function fmtTime(s: string) {
         <div class="fsel" :class="{ off: useAbsolute }"><Calendar :size="14" /><VSelect v-model="timeLabel" :options="timeLabelOpts" /></div>
         <!-- absolute time window (takes precedence over the relative preset) -->
         <div class="ctl range">
-          <input type="datetime-local" v-model="from" :aria-label="$t('auditFrom')" @change="reload" />
+          <VDateTime v-model="from" :placeholder="$t('auditFrom')" @update:model-value="reload" />
           <span class="dash">—</span>
-          <input type="datetime-local" v-model="to" :aria-label="$t('auditTo')" @change="reload" />
+          <VDateTime v-model="to" :placeholder="$t('auditTo')" @update:model-value="reload" />
           <X v-if="useAbsolute" class="clr" :size="14" :title="$t('auditClearRange')" @click="clearAbsolute" />
         </div>
         <VButton variant="secondary" height="36px" @click="doExport">{{ $t('exportCsv') }}</VButton>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Database, Tag, Pencil, Search, ChevronDown, X } from 'lucide-vue-next'
+import { Database, Tag, Pencil, Search, ChevronDown, X, Plus, Upload, Copy, Check,
+  ChevronsDownUp, ChevronsUpDown, Activity, Download, Rows3, Rows2 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
@@ -12,6 +13,7 @@ import { useEnvTierStore } from '@/stores/envtier'
 import { parseConnectionImport, IMPORT_TEMPLATE, type ImportRow } from '@/lib/connectionImport'
 import { UTF8_BOM } from '@/lib/transcript'
 import { engineDisplay, engineLabels } from '@/lib/engines'
+import { copyText } from '@/lib/clipboard'
 import type { Connection, Project } from '@/types'
 
 const auth = useAuthStore()
@@ -83,8 +85,30 @@ function projectsOn(c: Connection): string[] {
 }
 // 数据源一多,双层分组的长表就成了"滚动扫全表"。三件套:全字段搜索、环境
 // 筛选、分组折叠 —— 搜索时强制展开,否则命中项藏在折叠组里等于没搜到。
+// 输入框绑 qInput,过滤读 q —— 中间隔 300ms 防抖。
+//
+// 几十台实例时每敲一个键就重算一遍双层分组、并把命中组全部展开,是看得见的卡顿;
+// 而"边打字边跳"本身也难用。防抖只挡计算,不挡回显:输入框里的字是即时的。
+const qInput = ref('')
 const q = ref('')
+let qTimer: ReturnType<typeof setTimeout> | null = null
+watch(qInput, (v) => {
+  if (qTimer) clearTimeout(qTimer)
+  qTimer = setTimeout(() => (q.value = v), 300)
+})
+onBeforeUnmount(() => { if (qTimer) clearTimeout(qTimer) })
+function clearSearch() {
+  qInput.value = ''
+  if (qTimer) clearTimeout(qTimer)
+  q.value = ''
+}
+
 const envFilter = ref('') // '' = 全部环境
+// 只看异常:排障时的第一个动作。'' = 全部
+const statusFilter = ref<'' | 'bad'>('')
+const engineFilter = ref('') // '' = 全部引擎
+const anyFilter = computed(() => !!(q.value.trim() || statusFilter.value || engineFilter.value))
+
 const collapsed = ref(new Set<string>())
 function toggleGroup(key: string) {
   const next = new Set(collapsed.value)
@@ -92,28 +116,109 @@ function toggleGroup(key: string) {
   else next.add(key)
   collapsed.value = next
 }
-const isCollapsed = (key: string) => !q.value.trim() && collapsed.value.has(key)
-// 搜索匹配:名称/地址/库名/引擎/标签/角色,一个框全找
+// 搜索或筛选时强制展开:命中项藏在折叠组里,等于没搜到。
+const isCollapsed = (key: string) => !anyFilter.value && collapsed.value.has(key)
+
+// 默认只展开**第一个分层**下的环境(通常是生产),其余收起。
+//
+// 88 套实例平铺出来没人读得完,而真正天天要看的是生产。这跟终端左侧那棵树用的是
+// 同一条规则(见 DbTree),不在这一页另立一套。只在还没被人动过的组上生效 ——
+// 用户手动展开/收起过的,不该被下一次数据刷新推翻。
+const defaultsDone = ref(false)
+watch(() => envtier.environments, (envs) => {
+  if (defaultsDone.value || !envs.length) return
+  const first = envtier.tiers[0]?.code
+  const next = new Set(collapsed.value)
+  for (const e of envs) if (e.tierCode !== first) next.add(e.code)
+  collapsed.value = next
+  defaultsDone.value = true
+}, { immediate: true, deep: true })
+
+/**
+ * 点一个环境 = 只看它。
+ *
+ * 需求里给了两种行为(筛选 / 滚动定位),按"当前是不是全部展示模式"二选一。
+ * 这里只做**筛选**这一种,并顺带把该组展开、把表格滚回视野 —— 一个按当前隐藏
+ * 状态决定自己要干什么的控件,人按下去之前不知道会发生什么,而这一页的每个
+ * 环境本来就有自己的分组条可以直接点开定位。
+ *
+ * 筛选也正是"减少单页渲染量"这条要求真正生效的那一半。
+ */
+function pickEnv(code: string) {
+  envFilter.value = envFilter.value === code ? '' : code
+  if (envFilter.value) {
+    const next = new Set(collapsed.value)
+    next.delete(code)
+    collapsed.value = next
+  }
+  tableEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+const tableEl = ref<HTMLElement>()
+
+function expandAll() { collapsed.value = new Set() }
+function collapseAll() { collapsed.value = new Set(envGroups.value.map((g) => g.key)) }
+const allCollapsed = computed(() => envGroups.value.length > 0 && envGroups.value.every((g) => collapsed.value.has(g.key)))
+
+// 密度。紧凑模式压到 40px 行高并收起副标题与标签行 —— 1080p 首屏能一眼看到 20 台
+// 以上;要看标签和归属时切回舒适模式。按浏览器记住。
+const dense = ref(localStorage.getItem('vela_conn_dense') === '1')
+function setDense(v: boolean) { dense.value = v; localStorage.setItem('vela_conn_dense', v ? '1' : '0') }
+
+// 每组的渲染预算。展开一个 28 台的生产组时先出 25 行,其余由人点一下再出 ——
+// 这一页每行都带着标签、下拉框和可展开的库面板,一次性铺开的不是 88 行文本,
+// 而是上千个节点。
+const PAGE = 25
+const budget = ref<Record<string, number>>({})
+const budgetOf = (key: string) => budget.value[key] ?? PAGE
+function showMore(key: string) { budget.value = { ...budget.value, [key]: budgetOf(key) + PAGE } }
+// 搜索匹配:名称 / 地址 / 端口 / 库名 / 引擎 / 标签 / 角色,一个框全找。
+// 端口单独列一项:host:port 那一串里虽然带着它,但只敲 "3306" 也该命中。
 function matches(c: Connection, needle: string) {
-  const hay = [c.name, c.host + ':' + c.port, c.database, c.engine, c.tags, c.defaultRole, c.layer]
+  const hay = [c.name, c.host, String(c.port), `${c.host}:${c.port}`, c.database, c.engine, c.tags, c.defaultRole, c.layer]
     .join(' ').toLowerCase()
   return hay.includes(needle)
 }
-const filtered = computed(() => {
-  let rows = conns.value
-  if (envFilter.value) rows = rows.filter((c) => c.env === envFilter.value)
+/** 除环境外的所有条件 —— 环境计数要按"其它条件都满足"来算。 */
+function passes(c: Connection) {
+  if (statusFilter.value === 'bad' && c.status === 'online') return false
+  if (engineFilter.value && engineDisplay(c.engine) !== engineFilter.value) return false
   const needle = q.value.trim().toLowerCase()
-  if (needle) rows = rows.filter((c) => matches(c, needle))
+  return !needle || matches(c, needle)
+}
+const filtered = computed(() => {
+  let rows = conns.value.filter(passes)
+  if (envFilter.value) rows = rows.filter((c) => c.env === envFilter.value)
   return rows
 })
+/** 引擎下拉的可选值:只列**现有实例真的在用**的引擎,不列一整本目录。 */
+const engineFilterOpts = computed(() => {
+  const set = new Set(conns.value.map((c) => engineDisplay(c.engine)))
+  return [...set].sort(byCatalogueOrder)
+})
+
+// ---- 命中高亮 ----
+//
+// 切成片段用 <mark> 渲染,不用 v-html:实例名、host、标签都是别人填进库里的,
+// 拼进 innerHTML 就是把一个配置字段变成脚本注入口。
+function hi(text: string): { t: string; on: boolean }[] {
+  const needle = q.value.trim().toLowerCase()
+  if (!needle || !text) return [{ t: text, on: false }]
+  const out: { t: string; on: boolean }[] = []
+  const low = text.toLowerCase()
+  let i = 0
+  for (;;) {
+    const j = low.indexOf(needle, i)
+    if (j < 0) { if (i < text.length) out.push({ t: text.slice(i), on: false }); break }
+    if (j > i) out.push({ t: text.slice(i, j), on: false })
+    out.push({ t: text.slice(j, j + needle.length), on: true })
+    i = j + needle.length
+  }
+  return out
+}
 // 环境 chips 的计数按"搜索后"算:筛选器要回答"命中的都在哪",不是全量分布
 const envCounts = computed(() => {
   const m: Record<string, number> = {}
-  const needle = q.value.trim().toLowerCase()
-  for (const c of conns.value) {
-    if (needle && !matches(c, needle)) continue
-    m[c.env] = (m[c.env] || 0) + 1
-  }
+  for (const c of conns.value) if (passes(c)) m[c.env] = (m[c.env] || 0) + 1
   return m
 })
 const allTags = ref<string[]>([])
@@ -342,34 +447,59 @@ interface ConnGroup {
   label: string
   cls: string
   count: number
-  types: { key: string; label: string; rows: Connection[] }[]
+  /** 不展开也要看得见的健康概况 —— "这个环境现在有没有事"。 */
+  ok: number
+  bad: number
+  /** 预算之内实际渲染的行;`hidden` 是被留在后面、由人点一下才出来的条数。 */
+  types: { key: string; label: string; rows: Connection[]; total: number }[]
+  hidden: number
 }
 const envGroups = computed<ConnGroup[]>(() => {
   const byEnv: Record<string, Connection[]> = {}
   for (const c of filtered.value) (byEnv[c.env] ||= []).push(c)
 
-  const byType = (rows: Connection[]) => {
+  // 按引擎分桶,并在**组一级**的预算内裁剪:预算跨引擎桶连续消耗,所以
+  // "这一组先出 25 行"说的就是 25 行,而不是每个引擎各出 25 行。
+  const build = (key: string, rows: Connection[]) => {
     const m: Record<string, Connection[]> = {}
     for (const c of rows) (m[engineDisplay(c.engine)] ||= []).push(c)
-    return Object.keys(m).sort(byCatalogueOrder).map((k) => ({ key: k, label: k, rows: m[k] }))
+    let left = budgetOf(key)
+    const types: ConnGroup['types'] = []
+    for (const k of Object.keys(m).sort(byCatalogueOrder)) {
+      const all = m[k]
+      // 预算用完了也要留下标题行(带总数),否则"这个引擎存在"这件事会凭空消失。
+      const take = Math.max(0, Math.min(left, all.length))
+      left -= take
+      types.push({ key: k, label: k, rows: all.slice(0, take), total: all.length })
+    }
+    const shown = types.reduce((n, x) => n + x.rows.length, 0)
+    return {
+      types,
+      hidden: rows.length - shown,
+      ok: rows.filter((c) => c.status === 'online').length,
+      bad: rows.filter((c) => c.status !== 'online').length,
+    }
   }
 
-  const groups: ConnGroup[] = envtier.environments.map((e) => ({
-    key: e.code,
-    label: envtier.envLabel(e.code),
-    cls: envtier.dotForEnv(e.code),
-    count: (byEnv[e.code] ?? []).length,
-    types: byType(byEnv[e.code] ?? []),
-  }))
+  const groups: ConnGroup[] = envtier.environments.map((e) => {
+    const rows = byEnv[e.code] ?? []
+    return {
+      key: e.code,
+      label: envtier.envLabel(e.code),
+      cls: envtier.dotForEnv(e.code),
+      count: rows.length,
+      ...build(e.code, rows),
+    }
+  })
   const known = new Set(envtier.environments.map((e) => e.code))
   for (const k of Object.keys(byEnv).filter((x) => !known.has(x)).sort()) {
     groups.push({
       key: k, label: `${k} · ${t('envUnknown')}`, cls: 'muted',
-      count: byEnv[k].length, types: byType(byEnv[k]),
+      count: byEnv[k].length, ...build(k, byEnv[k]),
     })
   }
   // 过滤态下空组只是噪音;全量视图仍显示空环境(它回答"这个环境还没接入实例")
-  if (q.value.trim() || envFilter.value) return groups.filter((g) => g.count > 0)
+  if (anyFilter.value || envFilter.value) return groups.filter((g) => g.count > 0)
   return groups
 })
 
@@ -378,7 +508,9 @@ async function load() {
   try {
     conns.value = await api.connections()
     try { projects.value = await api.projects() } catch { /* 归属下拉降级为空 */ }
-    ui.pageSub = { key: 'subDb', params: { n: conns.value.length } }
+    // 顶栏说这一页是干什么的,数字交给页内那两枚徽标:同一个数在一屏上写两遍,
+    // 早晚会有一处忘了改 —— 原来的 subDb 就把"3 环境分层"写死了,而实际是 7 个。
+    ui.pageSub = { key: 'connSubLine' }
   } catch (e) {
     ui.notifyError(e, t('actionFailed'))
   }
@@ -391,16 +523,154 @@ onMounted(async () => {
   try { allTags.value = await api.tags() } catch { /* ignore */ }
 })
 
-function polMeta(p: string) {
-  if (p === 'strict') return { bg: 'var(--danger-subtle)', c: 'var(--danger-text)' }
-  if (p === 'audit-only') return { bg: 'var(--surface-sunken)', c: 'var(--text-muted)' }
-  return { bg: 'var(--warning-subtle)', c: 'var(--warning-text)' }
+// 网关策略的色档。返回的是**类名**而不是内联色值:内联样式盖不过 :hover /
+// :focus,于是那个下拉框在任何状态下都只有一个样子,看着像块死色。
+function polCls(p: string) {
+  if (p === 'strict') return 'strict'
+  if (p === 'audit-only') return 'audit'
+  return 'approve'
+}
+
+// 地址整串复制。列里是截断显示的 —— 看得见的那一段不等于能粘贴的那一串,
+// 所以复制取的是完整值,而不是屏幕上的文本。
+const copiedId = ref(0)
+let copyTimer: ReturnType<typeof setTimeout> | null = null
+async function copyHost(c: Connection) {
+  const ok = await copyText(`${c.host}:${c.port}`)
+  if (!ok) { ui.notify(t('objCopyFail'), 'error'); return }
+  copiedId.value = c.id
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => (copiedId.value = 0), 1600)
+  ui.notify(t('copied'), 'success', 1600)
 }
 function roleColor(r: string) { return r.startsWith('dba') ? '#8facff' : 'var(--text-muted)' }
-function stMeta(s: string) {
-  return s === 'online'
-    ? { bg: 'var(--success-subtle)', c: 'var(--success-text)' }
-    : { bg: 'var(--warning-subtle)', c: 'var(--warning-text)' }
+
+
+// ---- 批量选择 ----
+//
+// 选中集按 id 存,并且**只在当前可见的行**上做全选 —— 一个能把没在屏幕上的行
+// 一起选走的复选框,是批量操作里最容易出事的一种。
+const sel = ref<Set<number>>(new Set())
+const selCount = computed(() => sel.value.size)
+const visibleIds = computed(() => {
+  const out: number[] = []
+  for (const g of envGroups.value) {
+    if (isCollapsed(g.key)) continue
+    for (const ty of g.types) for (const c of ty.rows) out.push(c.id)
+  }
+  return out
+})
+const allVisibleSelected = computed(() =>
+  visibleIds.value.length > 0 && visibleIds.value.every((id) => sel.value.has(id)))
+function toggleSel(id: number) {
+  const next = new Set(sel.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  sel.value = next
+}
+function toggleSelAll() {
+  const next = new Set(sel.value)
+  if (allVisibleSelected.value) visibleIds.value.forEach((id) => next.delete(id))
+  else visibleIds.value.forEach((id) => next.add(id))
+  sel.value = next
+}
+function clearSel() { sel.value = new Set() }
+const selectedConns = computed(() => conns.value.filter((c) => sel.value.has(c.id)))
+
+const batchBusy = ref(false)
+const batchPolicy = ref('')
+
+/**
+ * 选中的实例里有多少台在**受管控的分层**上。
+ *
+ * 判据用 `dangerBanner || requireMfa` —— 和 lib/envTierLabels 里 dotFor 判"这一格
+ * 该不该是红的"用的是同一条。不另立一个"什么算生产"的定义:那样会出现分层页上不红、
+ * 这里却警告的情况,而两处只要说法不一致,人就会开始不信其中之一。
+ *
+ * 两个标志都关掉的部署里这个数会是 0 —— 那不是漏判,那是这套环境**自己声明**了
+ * 它没有需要额外提醒的分层。
+ */
+const selGuarded = computed(() => selectedConns.value.filter((c) => {
+  const tier = envtier.tierOf(c.env)
+  return !!tier && (tier.dangerBanner || tier.requireMfa)
+}).length)
+
+// 批量改网关策略。改的是**这些实例此后怎么被判**,所以先说清"多少台、其中多少台
+// 在生产分层",再让人按确认 —— 一次点错在这里等于把一批生产库的闸门一起挪了。
+// 逐台走同一个接口,不另开批量端点:批量入口绕过单台的服务端校验是很常见的漏法。
+async function runBatchPolicy() {
+  const p = batchPolicy.value
+  const rows = selectedConns.value
+  if (!p || !rows.length || batchBusy.value) return
+  // 没有受管控分层被选中时就不提那一句 —— "其中 0 台"是句废话,而废话读多了
+  // 会让人把整段确认文案一起跳过。
+  const msg = selGuarded.value
+    ? t('connBatchConfirmGuarded', { n: rows.length, p, d: selGuarded.value })
+    : t('connBatchConfirm', { n: rows.length, p })
+  if (!window.confirm(msg)) return
+  batchBusy.value = true
+  let ok = 0
+  const failed: string[] = []
+  try {
+    for (const c of rows) {
+      if (c.policy === p) { ok++; continue }
+      try { await api.setConnectionPolicy(c.id, p); ok++ } catch { failed.push(c.name) }
+    }
+  } finally {
+    batchBusy.value = false
+    batchPolicy.value = ''
+    await load()
+  }
+  // 部分失败要点名,不是给个总数了事:没改成的那几台仍然按老策略在跑。
+  if (failed.length) ui.notify(t('connBatchPartial', { ok, bad: failed.length, names: failed.slice(0, 3).join(', ') }), 'error', 6000)
+  else ui.notify(t('connBatchDone', { ok }), 'success')
+}
+
+// 批量巡检:逐台真的连过去试一次。并发限 4 —— 这是往目标库上连,不是本地循环。
+const checkResult = ref<Record<number, 'ok' | 'bad'>>({})
+async function runBatchCheck() {
+  const rows = selectedConns.value.slice()
+  if (!rows.length || batchBusy.value) return
+  batchBusy.value = true
+  checkResult.value = {}
+  let ok = 0
+  let bad = 0
+  const queue = rows.slice()
+  const worker = async () => {
+    for (;;) {
+      const c = queue.shift()
+      if (!c) return
+      try { await api.testConnection(c.id); checkResult.value = { ...checkResult.value, [c.id]: 'ok' }; ok++ }
+      catch { checkResult.value = { ...checkResult.value, [c.id]: 'bad' }; bad++ }
+    }
+  }
+  try { await Promise.all([worker(), worker(), worker(), worker()]) }
+  finally { batchBusy.value = false }
+  ui.notify(t('connCheckDone', { ok, bad }), bad ? 'error' : 'success', bad ? 6000 : 3500)
+  await load()
+}
+
+// 导出所选配置。**不含凭据** —— 口令在库里是加密的,而一份能落到下载目录里的
+// CSV 不该是把它们带出网关的那条路。
+function exportSelected() {
+  const rows = selectedConns.value
+  if (!rows.length) return
+  const esc = (v: unknown) => {
+    const x = String(v ?? '')
+    return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x
+  }
+  const head = ['name', 'engine', 'env', 'host', 'port', 'database', 'policy', 'defaultRole', 'status', 'tags']
+  const body = rows.map((c) => [c.name, c.engine, c.env, c.host, c.port, c.database, c.policy, c.defaultRole, c.status, c.tags].map(esc).join(','))
+  // BOM:这份表是要在 Excel 里打开的,不带的话中文实例名会读成乱码。
+  const url = URL.createObjectURL(new Blob([UTF8_BOM + [head.join(','), ...body].join('\n')], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `connections-${rows.length}.csv`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  ui.notify(t('connExportDone', { n: rows.length }), 'success')
 }
 
 async function toggle(c: Connection) {
@@ -441,17 +711,22 @@ async function add() {
 </script>
 
 <template>
-  <div class="scy page">
+  <div class="scy page" :class="{ hasfab: selCount > 0 }">
     <div class="head">
-      <div>
+      <div class="hleft">
         <div class="eyebrow">CONNECTIONS</div>
-        <div class="sub">{{ conns.length }} {{ $t('connSub') }}</div>
+        <!-- 规模先用两枚轻标签交代("多少台、几种环境"),再说这一页是干嘛的。
+             数字混在一句话里时,要数一眼看不出来。 -->
+        <div class="hbadges">
+          <span class="hbadge">{{ $t('connBadgeInst', { n: conns.length }) }}</span>
+          <span class="hbadge">{{ $t('connBadgeEnv', { n: envtier.environments.length }) }}</span>
+        </div>
       </div>
       <div class="acts">
         <span v-if="!isAdmin" class="roflag">{{ $t('readOnlyPerms') }}</span>
         <template v-else>
-          <VButton variant="secondary" @click="openImport">{{ $t('importInst') }}</VButton>
-          <VButton variant="primary" @click="openNew">{{ $t('newConn') }}</VButton>
+          <VButton variant="secondary" @click="openImport"><Upload :size="14" />{{ $t('importInst') }}</VButton>
+          <VButton variant="primary" @click="openNew"><Plus :size="15" />{{ $t('newConn') }}</VButton>
         </template>
       </div>
     </div>
@@ -459,41 +734,91 @@ async function add() {
     <div class="toolbar">
       <div class="searchbox">
         <Search :size="14" />
-        <input v-model="q" class="sin" :placeholder="$t('connSearchPh')" />
-        <X v-if="q" :size="13" class="sclear" @click="q = ''" />
+        <input v-model="qInput" class="sin" :placeholder="$t('connSearchPh')" />
+        <X v-if="qInput" :size="13" class="sclear" @click="clearSearch" />
       </div>
-      <div class="envchips">
-        <span class="echip" :class="{ on: envFilter === '' }" @click="envFilter = ''">{{ $t('connAllEnv') }}<i>{{ filtered.length }}</i></span>
-        <span v-for="e in envtier.environments" :key="e.code" class="echip" :class="[{ on: envFilter === e.code }, envtier.dotForEnv(e.code)]"
-          @click="envFilter = envFilter === e.code ? '' : e.code">
-          <span class="ed" />{{ envtier.envLabel(e.code) }}<i>{{ envCounts[e.code] || 0 }}</i>
-        </span>
+      <!-- 排障时的两个快捷条件。只列**现有实例真的在用**的引擎,不摆一整本目录。 -->
+      <select v-model="statusFilter" class="fsel" :title="$t('colStatus')">
+        <option value="">{{ $t('connFltStatusAll') }}</option>
+        <option value="bad">{{ $t('connFltStatusBad') }}</option>
+      </select>
+      <select v-model="engineFilter" class="fsel" :title="$t('colEngine')">
+        <option value="">{{ $t('connFltEngineAll') }}</option>
+        <option v-for="e in engineFilterOpts" :key="e" :value="e">{{ e }}</option>
+      </select>
+      <!-- 分段控制器:一整条凹槽,选中的那一段浮起来。散着的胶囊看不出"这几个
+           是同一组、只能选一个";凹槽把它们收成一件东西。 -->
+      <div class="seg">
+        <button class="segi" :class="{ on: envFilter === '' }" @click="envFilter = ''">
+          {{ $t('connAllEnv') }}<i>{{ filtered.length }}</i>
+        </button>
+        <button v-for="e in envtier.environments" :key="e.code" class="segi" :class="{ on: envFilter === e.code }"
+          @click="pickEnv(e.code)">
+          <!-- 圆点带的是**分层**的颜色,与树、审批列表同一个来源。它不随选中态变,
+               因为"这个环境有多危险"和"我现在筛的是不是它"是两件事。 -->
+          <span class="ed" :class="envtier.dotForEnv(e.code)" />{{ envtier.envLabel(e.code) }}<i>{{ envCounts[e.code] || 0 }}</i>
+        </button>
+      </div>
+
+      <div class="tbright">
+        <button class="tbtn" :title="allCollapsed ? $t('connExpandAll') : $t('connCollapseAll')"
+                @click="allCollapsed ? expandAll() : collapseAll()">
+          <component :is="allCollapsed ? ChevronsUpDown : ChevronsDownUp" :size="14" />
+          {{ allCollapsed ? $t('connExpandAll') : $t('connCollapseAll') }}
+        </button>
+        <!-- 密度开关。紧凑模式收起副标题与标签行 —— 那些在排障时是噪音,
+             在配置时才是内容,所以是个开关而不是一个决定。 -->
+        <div class="seg dens">
+          <button class="segi" :class="{ on: !dense }" :title="$t('connCozy')" @click="setDense(false)"><Rows2 :size="13" /></button>
+          <button class="segi" :class="{ on: dense }" :title="$t('connDense')" @click="setDense(true)"><Rows3 :size="13" /></button>
+        </div>
       </div>
     </div>
 
-    <div class="table">
+    <!-- 卡片容器 + 内层最小宽度:窄屏时整张表横向滚动,而不是把地址挤成三行。
+         滚动条挂在卡片上,表头和数据行在同一个滚动上下文里,不会各滚各的。 -->
+    <div ref="tableEl" class="table" :class="{ adm: isAdmin, dense }">
+      <div class="tscroll">
       <div class="thead">
+        <span v-if="isAdmin" class="cbcell">
+          <input type="checkbox" class="cb" :checked="allVisibleSelected" :title="$t('connSelAllVisible')" @change="toggleSelAll" />
+        </span>
         <span>{{ $t('colInst') }}</span><span>{{ $t('colEngine') }}</span><span>{{ $t('colAddr') }}</span>
         <span>{{ $t('colRole') }}</span><span>{{ $t('colPolicy') }}</span><span>{{ $t('colStatus') }}</span>
+        <span class="tar">{{ $t('apActions') }}</span>
       </div>
 
       <template v-for="group in envGroups" :key="group.key">
-        <div class="grouprow click" :class="group.cls" @click="toggleGroup(group.key)">
+        <!-- 分组条不再整条染色。原来一整条淡红压在生产环境上,红色在这一页是
+             "危险"的意思,而"这里是生产"不该长期占着那个信号。颜色收进左边那颗
+             圆点里,条子本身是中性的浅底。 -->
+        <div class="grouprow click" @click="toggleGroup(group.key)">
           <ChevronDown :size="13" class="chev" :class="{ closed: isCollapsed(group.key) }" />
-          <span class="d" />{{ group.label }}<span class="gcnt">{{ group.count }}</span>
+          <span class="d" :class="group.cls" />
+          <span class="glabel">{{ group.label }}</span>
+          <span class="gcnt">{{ $t('connGroupCount', { n: group.count }) }}</span>
+          <!-- 不展开也能看出这个环境有没有事。异常为 0 时只说"全部正常",
+               把一个恒定的红色 0 挂在那里,久了谁都不看了。 -->
+          <span v-if="group.count" class="ghealth" :class="{ bad: group.bad > 0 }">
+            <span class="hd ok" />{{ group.ok }}
+            <template v-if="group.bad"><span class="hd bad" />{{ group.bad }}</template>
+          </span>
         </div>
         <template v-if="!isCollapsed(group.key)">
         <template v-for="ty in group.types" :key="ty.key">
         <!-- Second level: database type. The engine decides which driver reaches
              the instance and how its commands are read, so it groups rather than
              sitting in a column to be scanned for. -->
-        <div class="typerow">{{ ty.label }}<span class="gcnt">{{ ty.rows.length }}</span></div>
+        <div v-if="ty.rows.length" class="typerow">{{ ty.label }}<span class="gcnt">{{ ty.total }}</span></div>
         <template v-for="c in ty.rows" :key="c.id">
-        <div class="trow">
-          <div>
-            <div class="cn">{{ c.name }}</div>
-            <div class="cl">{{ c.layer }}</div>
-            <div class="tags">
+        <div class="trow" :class="{ sel: sel.has(c.id) }">
+          <div v-if="isAdmin" class="cbcell">
+            <input type="checkbox" class="cb" :checked="sel.has(c.id)" @change="toggleSel(c.id)" />
+          </div>
+          <div class="namecell">
+            <div class="cn"><span v-for="(p, i) in hi(c.name)" :key="i" :class="{ hit: p.on }">{{ p.t }}</span></div>
+            <div v-if="!dense" class="cl">{{ c.layer }}</div>
+            <div v-if="!dense" class="tags">
               <span class="rbadge" :class="c.username ? 'real' : 'sim'">{{ c.username ? $t('connReal') : $t('connSim') }}</span>
               <!-- 归属是**按库**定的,所以入口在这里展开,而不是行上一个下拉:
                    一个实例底下的几个库可以分属不同项目。与访问标签刻意分开显示。 -->
@@ -505,20 +830,38 @@ async function add() {
               <span v-if="isAdmin" class="tedit" @click="openTagEdit(c)"><Tag :size="10" />{{ tagArr(c.tags).length ? $t('edit') : $t('tagAdd') }}</span>
             </div>
           </div>
-          <div class="mono">{{ c.engine }}</div>
-          <div class="mono mute">{{ c.host }}:{{ c.port }}</div>
+          <div class="engcell"><span class="eic"><Database :size="12" /></span>{{ engineDisplay(c.engine) }}</div>
+          <!-- 地址一行到底:截断 + 完整值进 title,右边一颗常驻的复制按钮。
+               这一串是拿去粘到别处用的,能看见不等于能拿走。 -->
+          <div class="hostcell">
+            <span class="hosttxt" :title="`${c.host}:${c.port}`">
+              <span v-for="(p, i) in hi(`${c.host}:${c.port}`)" :key="i" :class="{ hit: p.on }">{{ p.t }}</span>
+            </span>
+            <button class="ghost cp" :title="copiedId === c.id ? $t('copied') : $t('copy')" @click="copyHost(c)">
+              <component :is="copiedId === c.id ? Check : Copy" :size="12" />
+            </button>
+          </div>
           <div class="mono" :style="{ color: roleColor(c.defaultRole) }">{{ c.defaultRole }}</div>
           <div>
-            <select v-if="isAdmin" class="polsel" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }" :value="c.policy" :title="$t('fPolicy')" @change="setPolicy(c, ($event.target as HTMLSelectElement).value)">
+            <select v-if="isAdmin" class="polsel" :class="polCls(c.policy)" :value="c.policy" :title="$t('fPolicy')" @change="setPolicy(c, ($event.target as HTMLSelectElement).value)">
               <option v-for="p in policyOpts" :key="p" :value="p">{{ p }}</option>
             </select>
-            <span v-else class="pill" :style="{ background: polMeta(c.policy).bg, color: polMeta(c.policy).c }">{{ c.policy }}</span>
+            <span v-else class="polpill" :class="polCls(c.policy)">{{ c.policy }}</span>
           </div>
-          <div class="statuscell">
-            <span class="pill" :class="{ click: isAdmin }" :style="{ background: stMeta(c.status).bg, color: stMeta(c.status).c }" :title="isAdmin ? $t('tipToggleStatus') : ''" @click="toggle(c)">
-              <span class="dotc" />{{ c.status === 'online' ? $t('online') : $t('maint') }}
+          <!-- 状态回到"一颗点 + 两个字"。它此前是个填色胶囊,和同一行里的策略
+               胶囊长得一样重,而两者一个是事实、一个是配置。 -->
+          <div>
+            <span class="st" :class="[c.status, { click: isAdmin }]" :title="isAdmin ? $t('tipToggleStatus') : ''" @click="toggle(c)">
+              <span class="sdot" />{{ c.status === 'online' ? $t('online') : $t('maint') }}
             </span>
-            <button v-if="isAdmin" class="editbtn" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
+            <!-- 巡检结论只在本次巡检里存在,不写库:它是"刚才连通了吗",
+                 和实例的维护态是两件事。 -->
+            <span v-if="checkResult[c.id]" class="ck" :class="checkResult[c.id]">
+              {{ checkResult[c.id] === 'ok' ? $t('connCheckOk') : $t('connCheckBad') }}
+            </span>
+          </div>
+          <div class="opscell">
+            <button v-if="isAdmin" class="ghost" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
           </div>
         </div>
         <!-- 库一级:归属定在这里 -->
@@ -540,10 +883,32 @@ async function add() {
         </template>
         </template>
         <div v-if="!group.types.length" class="typerow empty">{{ $t('connGroupEmpty') }}</div>
+        <!-- 预算之外的行不进 DOM。这一页每行都带着标签、下拉框和可展开的库面板,
+             一次铺开的不是 N 行文本,而是上千个节点。 -->
+        <div v-if="group.hidden > 0" class="morerow">
+          <button class="mbtn" @click="showMore(group.key)">{{ $t('connShowMore', { n: group.hidden }) }}</button>
+        </div>
         </template>
       </template>
       <div v-if="!envGroups.some((g) => g.count > 0)" class="noresult">{{ $t('connNoMatch') }}</div>
+      </div>
     </div>
+
+    <!-- 悬浮批量操作条。只在选中后出现,并且始终显示"选了几台" ——
+         批量动作最怕的是不知道自己正在对多少东西下手。 -->
+    <Teleport to="body">
+      <div v-if="selCount" class="fab">
+        <span class="fcnt">{{ $t('connSelected', { n: selCount }) }}</span>
+        <span v-if="selGuarded" class="fprod">{{ $t('connSelGuarded', { n: selGuarded }) }}</span>
+        <select v-model="batchPolicy" class="fsel" :disabled="batchBusy" @change="runBatchPolicy">
+          <option value="">{{ $t('connBatchPolicy') }}</option>
+          <option v-for="p in policyOpts" :key="p" :value="p">{{ p }}</option>
+        </select>
+        <button class="fbtn" :disabled="batchBusy" @click="runBatchCheck"><Activity :size="13" />{{ $t('connBatchCheck') }}</button>
+        <button class="fbtn" :disabled="batchBusy" @click="exportSelected"><Download :size="13" />{{ $t('connBatchExport') }}</button>
+        <button class="fbtn ghosty" :disabled="batchBusy" @click="clearSel"><X :size="13" />{{ $t('connSelClear') }}</button>
+      </div>
+    </Teleport>
 
     <TagEditModal
       :open="tagModal.open" :title="$t('tagConnTitle')" :subtitle="tagModal.conn ? tagModal.conn.name : ''"
@@ -644,7 +1009,18 @@ async function add() {
 
 <style scoped>
 .page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
-.head { display: flex; align-items: center; margin-bottom: 14px; }
+/* 悬浮条会盖住最后一两行 —— 给页面垫一段底,让它盖的是空白而不是数据。 */
+.page.hasfab { padding-bottom: calc(var(--page-pad) + 72px); }
+.head { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
+.hleft { min-width: 0; }
+.hbadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* 轻标签:只是把两个数字从句子里拎出来,不是状态,所以不带语义色。 */
+.hbadge {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+  border-radius: var(--radius-full); background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle); color: var(--text-muted);
+  font: 600 11px var(--font-mono);
+}
 .prpanel { margin-bottom: 16px; }
 .dbtoggle { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 5px; border: 1px dashed var(--border-strong); color: var(--text-muted); font: 600 10px var(--font-body); cursor: pointer; }
 .dbtoggle:hover, .dbtoggle.on { border-style: solid; border-color: var(--accent-text); color: var(--accent-text); }
@@ -656,69 +1032,202 @@ async function add() {
 .dbnote.err { color: var(--danger-text); }
 .prsel { height: 20px; max-width: 150px; padding: 0 4px; border: 1px solid var(--accent-text); border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); cursor: pointer; }
 .prchip { padding: 1px 7px; border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); }
-.toolbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
-.searchbox { display: flex; align-items: center; gap: 8px; width: 300px; padding: 0 12px; height: 36px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-card); color: var(--text-faint); }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+/* 260–320px 之间伸缩:窄屏让给筛选器,宽屏也不无谓拉长 —— 搜的是实例名,不是句子。 */
+.searchbox {
+  display: flex; align-items: center; gap: 8px; flex: 0 1 320px; min-width: 260px;
+  padding: 0 12px; height: 36px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-faint);
+}
 .searchbox:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+/* 快捷过滤下拉:和搜索框同高,但更窄更安静 —— 它们是副条件。 */
+.fsel {
+  height: 36px; padding: 0 10px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-body);
+  font: 500 12px var(--font-body); cursor: pointer; outline: none;
+}
+.fsel:focus-visible { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--focus-ring); }
+.tbright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-card); color: var(--text-muted);
+  font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.tbtn:hover { color: var(--accent-text); border-color: var(--accent-text); }
+.seg.dens { padding: 3px; }
+.seg.dens .segi { padding: 0 9px; height: 28px; }
 .sin { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: 500 12.5px var(--font-body); color: var(--text-strong); }
 .sclear { cursor: pointer; color: var(--text-muted); }
-.envchips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.echip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border-default); background: var(--surface-card); font: 600 11.5px var(--font-body); color: var(--text-muted); cursor: pointer; user-select: none; }
-.echip i { font: 600 10px var(--font-mono); font-style: normal; color: var(--text-faint); }
-.echip.on { background: var(--accent-subtle); border-color: var(--accent-text); color: var(--accent-text); }
-.echip.on i { color: var(--accent-text); }
-.echip .ed { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.55; }
+/* 分段控制器。凹槽一条,选中的那一段用卡片色浮起来 + 一点投影 —— 这是"同一组、
+   只能选一个"的读法。环境是运维自建的,数量不定,所以允许换行而不是硬挤。 */
+.seg {
+  display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
+  padding: 3px; border-radius: var(--radius-md);
+  background: var(--surface-sunken); border: 1px solid var(--border-subtle);
+}
+.segi {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
+  border: none; border-radius: var(--radius-sm); background: transparent;
+  font: 600 11.5px var(--font-body); color: var(--text-muted);
+  cursor: pointer; user-select: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.segi:hover { color: var(--text-body); }
+.segi.on { background: var(--surface-card); color: var(--text-strong); box-shadow: var(--shadow-xs); }
+.segi i { font: 600 10px var(--font-mono); font-style: normal; color: var(--text-faint); }
+.segi.on i { color: var(--accent-text); }
+.segi .ed { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.segi .ed.danger { background: var(--danger); }
+.segi .ed.warning { background: var(--warning); }
+.segi .ed.success { background: var(--success); }
+.segi .ed.info { background: #3b82f6; }
 .grouprow.click { cursor: pointer; user-select: none; }
-.grouprow.click:hover { filter: brightness(0.97); }
+.grouprow.click:hover { background: var(--surface-raised); }
 .chev { transition: transform var(--dur-fast) var(--ease-out); color: var(--text-faint); }
 .chev.closed { transform: rotate(-90deg); }
 .noresult { padding: 36px 0; text-align: center; font: 500 12.5px var(--font-body); color: var(--text-faint); }
 .eyebrow { font: 500 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
-.sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
-.acts { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.acts { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.acts :deep(.vbtn) { display: inline-flex; align-items: center; gap: 6px; }
 .roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
-.table { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
-.thead, .trow { display: grid; grid-template-columns: 1.5fr 1fr 1.7fr 1fr 1fr 0.9fr; gap: 12px; }
-.thead { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; }
-.trow { padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
-.grouprow { padding: 9px 18px; display: flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); }
-.grouprow.danger { background: rgba(240, 71, 62, 0.06); color: var(--danger-text); }
-.grouprow.info { background: rgba(59, 130, 246, 0.07); color: var(--info-text, #2563eb); }
-/* `warn` is the legacy class name; `warning` is what the tier palette emits. */
-.grouprow.warn, .grouprow.warning { background: rgba(245, 165, 36, 0.06); color: var(--warning-text); }
-.grouprow.success { background: rgba(24, 179, 104, 0.06); color: var(--success-text); }
-/* An environment that no longer resolves to a tier — neutral, since no control
-   level can be claimed for it. */
-.grouprow.muted { background: var(--surface-sunken); color: var(--text-faint); }
-.grouprow .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.gcnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
+.table {
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--surface-card); box-shadow: var(--shadow-sm);
+  overflow-x: auto; overflow-y: hidden;
+}
+/* 表头与数据行是**两个各自独立的 grid**,所以列宽只能用与内容无关的值(fr / px)。
+   写 auto / min-content 会让每一行按自己那行的内容各算一套,分栏当场错开。 */
+.tscroll { min-width: 1000px; }
+/* 管理员多一列复选框;只读用户没有批量动作,那一列也就不该占位置。 */
+.thead, .trow { display: grid; grid-template-columns: 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; gap: 12px; }
+.table.adm .thead, .table.adm .trow { grid-template-columns: 34px 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; }
+.tar { text-align: right; }
+.cbcell { display: flex; align-items: center; }
+.cb { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-text); }
+.trow.sel { background: var(--accent-subtle); }
+.namecell { min-width: 0; }
+/* 命中高亮。片段是切好的文本节点,不走 v-html —— 实例名和 host 是别人填进库里的。 */
+.hit { border-radius: 3px; padding: 0 1px; background: var(--warning-subtle); color: var(--warning-text); }
+
+/* 紧凑模式:行高压到 40px,副标题与标签行整行不渲染(不是藏起来)。 */
+.table.dense .trow { padding: 5px 16px; }
+.table.dense .cn { font: 600 12px var(--font-body); }
+.table.dense .engcell, .table.dense .mono { font-size: 11.5px; }
+.table.dense .eic { width: 18px; height: 18px; }
+.table.dense .polsel, .table.dense .polpill { height: 21px; }
+.table.dense .ghost { width: 22px; height: 22px; }
+.table.dense .grouprow { padding: 7px 16px; }
+.table.dense .typerow { padding-top: 4px; padding-bottom: 4px; }
+.thead { padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; color: var(--text-faint); text-transform: uppercase; }
+.trow { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); align-items: center; transition: background var(--dur-fast) var(--ease-out); }
+.trow:hover { background: var(--surface-sunken); }
+/* 折叠条:中性浅底 + 上下细线,像个小节标题,而不是一条警示带。 */
+.grouprow {
+  padding: 9px 16px; display: flex; align-items: center; gap: 9px;
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
+  font: 600 11.5px var(--font-body); color: var(--text-body);
+}
+.glabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grouprow .gcnt { margin-left: 0; }
+.grouprow .ghealth { margin-left: auto; }
+/* 颜色只剩这一颗点。来源仍是 envtier.dotForEnv —— 与树、审批列表同一套,
+   不在这一页另配一份。 */
+.grouprow .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+.grouprow .d.danger { background: var(--danger); }
+/* `warn` 是旧类名;分层调色板发出来的是 `warning`。 */
+.grouprow .d.warn, .grouprow .d.warning { background: var(--warning); }
+.grouprow .d.success { background: var(--success); }
+.grouprow .d.info { background: #3b82f6; }
+/* 解析不出分层的环境:中性 —— 谁也不能替它声称一个管控级别。 */
+.grouprow .d.muted { background: var(--text-faint); }
+/* 健康概况:两颗小点 + 数字。全部正常时不摆一个恒定的红色 0 —— 常年为零的
+   告警数字,过一阵谁都不看了。 */
+.ghealth { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; font: 600 10.5px var(--font-mono); color: var(--text-faint); }
+.ghealth .hd { width: 6px; height: 6px; border-radius: 50%; }
+.ghealth .hd.ok { background: var(--success); }
+.ghealth .hd.bad { background: var(--danger); margin-left: 4px; }
+.ghealth.bad { color: var(--danger-text); }
+.ck { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); font: 700 9.5px var(--font-mono); }
+.ck.ok { background: var(--success-subtle); color: var(--success-text); }
+.ck.bad { background: var(--danger-subtle); color: var(--danger-text); }
+.morerow { padding: 10px 16px; display: flex; justify-content: center; border-bottom: 1px solid var(--border-subtle); }
+.mbtn {
+  height: 28px; padding: 0 14px; border: 1px solid var(--border-default); border-radius: var(--radius-full);
+  background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.mbtn:hover { color: var(--accent-text); border-color: var(--accent-text); background: var(--accent-subtle); }
+.gcnt {
+  margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center;
+  height: 19px; padding: 0 8px; border-radius: var(--radius-full);
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  font: 600 10px var(--font-mono); color: var(--text-muted);
+}
 /* Second-level group: quieter than the environment row, so the environment stays
    the structure the eye follows down the table. */
 .typerow {
-  padding: 6px 18px 6px 30px; display: flex; align-items: center;
-  font: 600 10.5px var(--font-mono); letter-spacing: 0.04em; color: var(--text-faint);
-  background: var(--surface-sunken);
+  padding: 5px 16px 5px 32px; display: flex; align-items: center;
+  font: 600 10px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint); background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
 }
-.typerow.empty { padding-left: 18px; font-style: italic; }
-.cn { font: 600 13px var(--font-body); color: var(--text-strong); }
-.cl { font: 500 11px var(--font-mono); color: var(--text-faint); }
+.typerow .gcnt { margin-left: 8px; height: 17px; padding: 0 7px; background: var(--surface-sunken); }
+.typerow.empty { padding-left: 16px; font-style: italic; text-transform: none; letter-spacing: 0; }
+.cn { font: 700 13px var(--font-body); color: var(--text-strong); letter-spacing: -0.01em; }
+.cl { margin-top: 1px; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
 .tags { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.tchip { display: inline-flex; height: 19px; align-items: center; padding: 0 8px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); }
+/* 访问标签是中性的:一行里已经有真连接/仿真、归属项目、网关策略三种带色的东西,
+   标签再上色就只剩一片花。项目片保留强调色 —— 它是这一堆里唯一可点进去的线索。 */
+.tchip { display: inline-flex; height: 19px; align-items: center; padding: 0 8px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); color: var(--text-muted); font: 600 10px var(--font-mono); }
 .rbadge { display: inline-flex; height: 19px; align-items: center; padding: 0 8px; border-radius: 999px; font: 700 10px var(--font-mono); }
 .rbadge.real { background: var(--success-subtle); color: var(--success-text); }
 .rbadge.sim { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
 .tedit { display: inline-flex; align-items: center; gap: 3px; height: 19px; padding: 0 7px; border-radius: 999px; border: 1px dashed var(--border-default); color: var(--text-faint); font: 600 10px var(--font-mono); cursor: pointer; }
 .tedit:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
 .mono { font: 500 12px var(--font-mono); color: var(--text-body); }
-.mono.mute { color: var(--text-muted); }
-.pill { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 11px var(--font-mono); }
-.pill.click { cursor: pointer; }
-.polsel { height: 24px; padding: 0 6px; border: 1px solid var(--border-default); border-radius: 999px; font: 600 11px var(--font-mono); cursor: pointer; outline: none; }
-.polsel:focus { border-color: var(--accent-text); }
+.engcell { display: flex; align-items: center; gap: 7px; min-width: 0; font: 600 12px var(--font-body); color: var(--text-body); }
+.eic { width: 20px; height: 20px; flex-shrink: 0; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted); }
+.hostcell { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* 截断而不是折行:一条 60 字符的 RDS 域名折起来能把整行撑成三倍高,而这一列
+   的作用是"认出是哪台",完整值给 title 和复制按钮。 */
+.hosttxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+/* 网关策略:紧凑的小 select,底色只到"淡"为止。strict 用的是同一枚玫瑰淡底,
+   而不是一块饱和红 —— 这一列是**配置**,不是告警。 */
+.polsel, .polpill {
+  display: inline-flex; align-items: center; height: 24px; max-width: 100%;
+  padding: 0 8px; border-radius: var(--radius-full);
+  font: 600 10.5px var(--font-mono); outline: none;
+}
+.polsel { cursor: pointer; border: 1px solid transparent; -webkit-appearance: none; appearance: none; padding-right: 8px; }
+.polsel:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
 .polsel option { background: var(--surface-card); color: var(--text-body); }
-.dotc { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.statuscell { display: flex; align-items: center; gap: 10px; }
-.editbtn { width: 28px; height: 26px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.editbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+.polsel.strict, .polpill.strict { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-subtle-border, transparent); }
+.polsel.approve, .polpill.approve { background: var(--warning-subtle); color: var(--warning-text); }
+.polsel.audit, .polpill.audit { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
+.opscell { display: flex; align-items: center; justify-content: flex-end; }
+/* 状态:一颗点 + 两个字。点会呼吸,但只在"在线"时 —— 呼吸表示"还活着",
+   而维护态恰恰是不动的那个。 */
+.st { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--text-muted); }
+.st.click { cursor: pointer; }
+.st .sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+.st.online { color: var(--success-text); }
+.st.online .sdot { background: var(--success); animation: breathe 2.4s ease-in-out infinite; }
+.st.maintenance { color: var(--warning-text); }
+.st.maintenance .sdot { background: var(--warning); }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .st.online .sdot { animation: none; } }
+/* 幽灵图标按钮:常态弱,悬停才亮起来并托一层圆底。 */
+.ghost {
+  width: 26px; height: 26px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-full); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ghost:hover { color: var(--accent-text); background: var(--accent-subtle); }
+.ghost.cp { width: 22px; height: 22px; opacity: 0; }
+/* 复制按钮平时不显形,免得每行右边都挂一个图标;悬停整行、或键盘聚焦时出现。 */
+.trow:hover .ghost.cp, .ghost.cp:focus-visible { opacity: 1; }
 /* edit-instance modal */
 .ce-mask { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: var(--surface-overlay); backdrop-filter: blur(3px); padding: 24px; }
 .ce-card { width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border-default); border-radius: 16px; background: var(--surface-card); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
@@ -741,4 +1250,23 @@ async function add() {
 .imp-bad-t { font: 600 12px var(--font-body); color: var(--danger-text); margin-bottom: 4px; }
 .imp-bad-l { font: 400 12px/1.7 var(--font-mono); color: var(--text-muted); }
 .credhint { margin-top: 14px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
+/* 悬浮批量操作条:贴底居中,始终写着选了几台。 */
+.fab {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 70;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: min(920px, 94vw);
+  padding: 10px 14px; border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-default); box-shadow: var(--shadow-lg);
+}
+.fcnt { font: 700 12.5px var(--font-body); color: var(--text-strong); }
+/* 选中里有生产实例时先说出来,而不是等到确认框才提 —— 那时人已经在按确定了。 */
+.fprod { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--danger-subtle); color: var(--danger-text); font: 700 10.5px var(--font-mono); }
+.fab .fsel { height: 30px; font-size: 11.5px; }
+.fbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.fbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); background: var(--accent-subtle); }
+.fbtn:disabled { opacity: 0.55; cursor: default; }
+.fbtn.ghosty { border-color: transparent; background: transparent; color: var(--text-faint); }
 </style>

@@ -28,7 +28,7 @@
   t_perms: '用户与权限', t_permsSub: '5 角色 · 分层授权',
   t_audit: '审计日志', t_auditSub: '不可篡改 · 全量留痕',
   t_settings: '系统设置', t_settingsSub: '网关策略 · 安全 · 通知',
-  subDb: '{n} 实例 · 3 环境分层', subPerms: '{r} 角色 · {u} 用户', subRules: '{n} 条高危命令 · 实时匹配',
+  subPerms: '{r} 角色 · {u} 用户', subRules: '{n} 条高危命令 · 实时匹配',
   // login
   loginTitle: '数据库管理网关', loginSub: '登录以进入控制台', loginEmail: '工作邮箱', loginPassword: '密码',
   loginBtn: '登录', loginHint: "演示账号 linwei{'@'}vela.io · 密码 vela123", loginError: '邮箱或密码错误',
@@ -81,8 +81,18 @@
   scBusyHint: '脚本已下发,正在逐条经网关判定。重复点击不会更快,只会多跑一遍。',
   scSubmitted: '已提交审批 · 通过后回来自己执行', scClose: '关闭', scDrop: '或拖入 .sql 文件',
   // db config
-
- connSub: '个实例 · 按环境分层管理，统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
+  connExpandAll: '全部展开', connCollapseAll: '全部收起', connGroupCount: '{n} 套',
+  connFltStatusAll: '全部状态', connFltStatusBad: '仅看异常', connFltEngineAll: '全部引擎',
+  connCozy: '舒适模式', connDense: '紧凑模式', connShowMore: '还有 {n} 条,点击加载',
+  connSelAllVisible: '全选当前可见', connSelected: '已选 {n} 台', connSelGuarded: '含 {n} 台受管控分层',
+  connBatchPolicy: '批量改策略…', connBatchCheck: '批量巡检', connBatchExport: '导出所选', connSelClear: '取消选择',
+  connBatchConfirm: '把 {n} 台实例的网关策略改为 {p}?此后这些实例上的每条命令都按新策略判定。',
+  connBatchConfirmGuarded: '把 {n} 台实例的网关策略改为 {p}?其中 {d} 台在受管控分层上。此后这些实例上的每条命令都按新策略判定。',
+  connBatchDone: '已更新 {ok} 台', connBatchPartial: '成功 {ok} 台,失败 {bad} 台({names} …),失败的仍按原策略运行',
+  connCheckDone: '巡检完成:{ok} 台可连,{bad} 台失败', connCheckOk: '可连', connCheckBad: '连不上',
+  connExportDone: '已导出 {n} 台的配置(不含凭据)',
+  connBadgeInst: '{n} 个实例', connBadgeEnv: '{n} 种环境',
+  connSubLine: '按环境分层管理，所有命令统一经网关代理执行', importInst: '导入实例', newConn: '新建连接',
   colInst: '实例 / 分层', colEngine: '引擎', colAddr: '地址', colRole: '默认角色', colPolicy: '网关策略', colStatus: '状态',
   online: '在线', maint: '维护',
   formNewConn: '新建连接', formNewConnSub: '接入后由网关代理，所有命令经策略校验与审计。引擎 / 环境 / 策略下拉选择。',
@@ -472,7 +482,13 @@
   // 总览(落地页)
   t_dashboard: '总览', t_dashboardSub: '此刻有什么要管',
   dashPageSub: '可访问 {n} 台实例',
-
+  dashRefresh: '刷新', dashDetail: '查看详情',
+  dashWindowLive: '当前执行窗口 · 正在放行',
+  dashWindowManage: '管理窗口',
+  dashRunConfirm: '执行 {no}?这条命令会立即下发到目标库:{cmd}',
+  dashRunDone: '{no} 已执行',
+  dashTodoEmptySub: '所有到你这里的流程都已处理完',
+  relJustNow: '刚刚', relMin: '{n} 分钟前', relHour: '{n} 小时前', relDay: '{n} 天前',
   dashGreeting: '{name},以下是当前需要处理的事项',
   dashOpenTerminal: '打开命令行',
   dashStatTodo: '等我审批',
@@ -480,7 +496,7 @@
   dashRunTitle: '待执行任务队列', dashRunSub: '已审批通过,等待发起人下发执行',
   dashRunGo: '去执行',
   dashRunStage: '停在「{stage}」',
-
+  dashWinTitle: '执行窗口排期', dashWinSub: '待审批的窗口在前,已批准尚未到点的在后', dashWinQueued: '已批准',
   dashStatWindows: '正开着的执行窗口',
   dashStatInstances: '可访问实例 · 其中 {n} 台受管控',
   dashStatGwOn: '网关在线 · 中位延迟',
