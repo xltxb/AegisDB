@@ -378,7 +378,7 @@ async function load() {
   try {
     conns.value = await api.connections()
     try { projects.value = await api.projects() } catch { /* 归属下拉降级为空 */ }
-    ui.pageSub = t('subDb', { n: conns.value.length })
+    ui.pageSub = { key: 'subDb', params: { n: conns.value.length } }
   } catch (e) {
     ui.notifyError(e, t('actionFailed'))
   }

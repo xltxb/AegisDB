@@ -26,7 +26,7 @@ const envtier = useEnvTierStore()
 // enforces this too); non-admins see the page read-only.
 // Admin if ANY held role is admin (union), falling back to the primary role code.
 const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
-function publishSub() { ui.pageSub = t('subPerms', { r: roles.value.length, u: users.value.length }) }
+function publishSub() { ui.pageSub = { key: 'subPerms', params: { r: roles.value.length, u: users.value.length } } }
 const view = ref<'roles' | 'users'>('roles')
 const roles = ref<RoleBrief[]>([])
 const detail = ref<RoleDetail | null>(null)

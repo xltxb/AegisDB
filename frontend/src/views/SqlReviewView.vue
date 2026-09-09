@@ -84,7 +84,7 @@ function specMeta(s: string) {
 async function load() {
   try {
     rules.value = await api.reviewRules()
-    ui.pageSub = t('srSub2', { n: rules.value.length })
+    ui.pageSub = { key: 'srSub2', params: { n: rules.value.length } }
   } catch (e) { ui.notifyError(e, t('loadFailed')) }
   try { catalog.value = await api.reviewCatalog() } catch { /* keep defaults */ }
   try { conns.value = await api.connections() } catch { /* the dialect picker still works */ }

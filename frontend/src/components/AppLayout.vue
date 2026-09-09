@@ -53,7 +53,13 @@ const activeKey = computed(() => (route.meta.menuKey as string) || '')
 const titleKey = computed(() => (route.meta.menuKey as string) || (route.name as string) || '')
 const pageTitle = computed(() => t(`t_${titleKey.value}` as any))
 // Views may publish a data-driven subtitle via ui.pageSub; otherwise fall back to i18n default.
-const pageSub = computed(() => ui.pageSub || t(`t_${titleKey.value}Sub` as any))
+// 在这里渲染,而不是在各个视图里:t() 在 computed 里跟着 locale 走,所以切语言
+// 这行字会跟着变。视图设的是 key + 参数(见 ui store 里 PageSub 的注释)。
+const pageSub = computed(() => {
+  const s = ui.pageSub
+  if (!s) return t(`t_${titleKey.value}Sub` as any)
+  return typeof s === 'string' ? s : t(s.key as any, (s.params || {}) as any)
+})
 const isDark = computed(() => ui.resolvedTheme() === 'dark')
 
 // Reset the override on navigation so each view starts from its default.

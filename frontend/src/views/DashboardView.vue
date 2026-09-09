@@ -126,7 +126,7 @@ async function load() {
       .catch(() => {}))
   }
   await Promise.all(jobs)
-  ui.pageSub = t('dashPageSub', { n: conns.value.length })
+  ui.pageSub = { key: 'dashPageSub', params: { n: conns.value.length } }
 }
 onMounted(load)
 

@@ -83,7 +83,7 @@ async function load() {
   // M14: 加载失败以 toast 呈现，避免静默失败
   try {
     cmds.value = await api.riskCommands()
-    ui.pageSub = t('subRules', { n: cmds.value.length })
+    ui.pageSub = { key: 'subRules', params: { n: cmds.value.length } }
   } catch (e) {
     ui.notifyError(e, t('loadFailed'))
   }

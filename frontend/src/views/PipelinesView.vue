@@ -50,7 +50,7 @@ const tierOptions = computed(() => [t('plAllTiers'), ...envtier.tierCodes])
 async function load() {
   try {
     pipelines.value = await api.pipelines()
-    ui.pageSub = t('plSub2', { n: pipelines.value.length })
+    ui.pageSub = { key: 'plSub2', params: { n: pipelines.value.length } }
     if (!editing.value && pipelines.value.length) select(pipelines.value[0])
   } catch (e) { ui.notifyError(e, t('loadFailed')) }
 }

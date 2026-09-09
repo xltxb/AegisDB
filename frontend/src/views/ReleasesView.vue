@@ -54,7 +54,7 @@ async function loadList() {
     const page = await api.releases(scope.value, '', 1, 50, projectFilter.value)
     releases.value = page.items
     if (!openId.value && page.items.length) openId.value = page.items[0].id
-    ui.pageSub = t('rlSub2', { n: page.total })
+    ui.pageSub = { key: 'rlSub2', params: { n: page.total } }
   } catch (e) { ui.notifyError(e, t('loadFailed')) }
 }
 async function refreshOpen() {

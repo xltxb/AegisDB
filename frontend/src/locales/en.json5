@@ -353,6 +353,7 @@
   impRowFailed: 'Line {line} "{name}" failed: {msg}',
   // tiers & environments
   etIntro: 'A tier carries the control rules (capability matrix + risk dictionary); an environment groups instances. One tier backs many environments — a second production cluster is a new environment on the prod tier, copying no rules and fully governed the moment it exists.',
+  dow1: 'Mo', dow2: 'Tu', dow3: 'We', dow4: 'Th', dow5: 'Fr', dow6: 'Sa', dow7: 'Su',
   etSub: '{tiers} tiers · {envs} environments',
   etTierTitle: 'Control tiers', etTierSub: 'Rules are keyed by these. Deleting a tier removes its rule rows with it.',
   etEnvTitle: 'Environments', etEnvSub: 'Instances belong to these. An environment holds no rules of its own — they come from the tier it binds.',

@@ -33,7 +33,7 @@ const totals = computed(() => ({
 async function load() {
   try {
     projects.value = await api.projects()
-    ui.pageSub = t('prPageSub', { n: projects.value.length })
+    ui.pageSub = { key: 'prPageSub', params: { n: projects.value.length } }
   } catch { /* 面板自己会报错,这里只是统计条降级为空 */ }
 }
 onMounted(load)

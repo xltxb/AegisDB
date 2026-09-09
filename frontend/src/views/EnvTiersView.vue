@@ -43,7 +43,7 @@ const busy = ref(false)
 async function reload() {
   await envtier.load(true)
   try { usage.value = await api.environmentUsage() } catch { /* counts are advisory */ }
-  ui.pageSub = t('etSub', { tiers: envtier.tiers.length, envs: envtier.environments.length })
+  ui.pageSub = { key: 'etSub', params: { tiers: envtier.tiers.length, envs: envtier.environments.length } }
 }
 
 // ---- 执行窗口(「班车」) ----
@@ -54,7 +54,9 @@ async function reload() {
 const conns = ref<Connection[]>([])
 const windows = ref<ExecWindow[]>([])
 const winForm = ref(false)
-const dayLabels = ['一', '二', '三', '四', '五', '六', '日']
+// 星期缩写也要翻 —— 它长得像图标,但它是文字。1=周一 … 7=周日,与 ISO-8601 一致,
+// 也是下面 daysToIso / isoToDays 用的那套编号。
+const dayLabels = computed(() => [1, 2, 3, 4, 5, 6, 7].map((n) => t(`dow${n}` as any)))
 const kindOptions = computed(() => [t('ewKindRecurring'), t('ewKindOnce')])
 const connOptions = computed(() => conns.value.map((c) => `${c.env}-${c.name}`))
 const connLabel = (id: number) => {
@@ -83,7 +85,7 @@ function whenLabel(w: ExecWindow): string {
     return `${f(w.startsAt)} → ${f(w.endsAt)}`
   }
   const days = w.weekdays.trim()
-    ? w.weekdays.split(',').map((n) => dayLabels[Number(n) - 1] || n).join('')
+    ? w.weekdays.split(',').map((n) => dayLabels.value[Number(n) - 1] || n).join('')
     : t('ewEveryDay')
   const cross = w.endMin <= w.startMin ? ' (+1d)' : ''
   return `${days} ${minToHM(w.startMin)}-${minToHM(w.endMin)}${cross} ${w.timezone}`
@@ -98,7 +100,7 @@ function openWindowForm(w?: ExecWindow) {
   if (w) {
     const local = (s?: string) => (s ? new Date(s).toLocaleString('sv').slice(0, 16).replace(' ', 'T') : '')
     const days = w.weekdays.trim()
-      ? dayLabels.map((_, i) => w.weekdays.split(',').includes(String(i + 1)))
+      ? dayLabels.value.map((_, i) => w.weekdays.split(',').includes(String(i + 1)))
       : [true, true, true, true, true, true, true]
     wf.value = {
       id: w.id, name: w.name, reason: w.reason, database: w.database, enabled: w.enabled,
