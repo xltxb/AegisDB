@@ -384,6 +384,8 @@
   ewSubmitted: 'Request submitted ({ap}); the window goes live only after approval', ewResubmitted: 'Change submitted ({ap}); it goes live only after the new approval',
   ewStCancelled: 'Withdrawn',
   ewStPending: 'Awaiting approval', ewStRejected: 'Rejected',
+  ewDbNoList: 'Cannot list databases on this instance (simulated, or no credentials). The name has to be typed — make sure it really belongs to THIS instance: matching is exact on (instance, database), and a mismatch never fires.',
+  ewDbNotFound: 'No database named "{db}" was found on this instance. Matching is exact on (instance, database); a mismatch does not error, it simply never fires — check whether the instance is the right one.',
   ewDelConfirm: 'Withdraw execution window "{name}"? The door closes immediately.',
   apWindowLive: 'Execution window is live — nothing to run by hand',
   ewTitle: 'Execution windows', ewSub: 'Inside a window, mid/high-risk statements on the named database run without approval. It changes whether a human must approve, not whether the role is permitted — a capability-matrix deny still denies.',

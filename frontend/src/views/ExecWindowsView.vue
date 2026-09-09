@@ -58,12 +58,15 @@ const wf = ref(blankWindow())
 const dbOptions = ref<string[]>([])
 const dbLoading = ref(false)
 const dbErr = ref('')
+/** 探查完成过一次(用来区分"还没查"和"查完了但一个库都没有")。 */
+const dbProbed = ref(false)
 const selectedConn = computed(() => conns.value.find((c) => `${c.env}-${c.name}` === wf.value.connLabel) || null)
 
 async function loadDbOptions(keep = '') {
   const c = selectedConn.value
   dbOptions.value = []
   dbErr.value = ''
+  dbProbed.value = false
   if (!c) return
   dbLoading.value = true
   try {
@@ -74,6 +77,7 @@ async function loadDbOptions(keep = '') {
     dbErr.value = e?.message || String(e)
   } finally {
     dbLoading.value = false
+    dbProbed.value = true
   }
   // 编辑一张老窗口时,它的库可能已经不在列表里(改过名、或者现在连不上)。
   // 把它补回选项里,而不是悄悄换成第一个 —— 那会把这次编辑变成一次改库。
@@ -82,6 +86,28 @@ async function loadDbOptions(keep = '') {
 }
 // 换实例就换库列表:上一台实例的库名在这一台上多半不存在。
 watch(() => wf.value.connLabel, () => { if (winForm.value) loadDbOptions() })
+
+/**
+ * 目标库对不上这台实例时的警告。
+ *
+ * 这是这个功能最容易悄悄配错的地方,而且**错了不会报错** —— 判定按 (实例, 库)
+ * 精确匹配,对不上就是查无此行,而查无此行等于没有窗口。人以为配好了,直到那天
+ * 夜里发现每条语句还在等审批。
+ *
+ * 真实发生过一次:窗口建在 hk-orders/db_orders 上,而 db_orders 其实是 hk-billing
+ * 的库;hk-orders 探查不出任何库,于是那个下拉退回成了输入框,一句提示也没有。
+ *
+ * 两种情况分开说,因为要人做的事不同:
+ *   列不出库  —— 仿真实例或没配凭据。库名只能手填,提醒他确认这个库属于这台实例。
+ *   列得出但没有这一个 —— 几乎可以肯定是选错了实例,或者库名写错了。
+ */
+const dbWarn = computed(() => {
+  if (!winForm.value || dbLoading.value || !dbProbed.value || dbErr.value) return ''
+  const db = wf.value.database.trim()
+  if (!dbOptions.value.length) return t('ewDbNoList')
+  if (db && !dbOptions.value.includes(db)) return t('ewDbNotFound', { db })
+  return ''
+})
 
 const hmToMin = (hm: string) => {
   const [h, m] = (hm || '0:0').split(':').map((x) => Number(x) || 0)
@@ -291,6 +317,8 @@ onMounted(async () => {
               <VSelect v-if="dbOptions.length" v-model="wf.database" :options="dbOptions" />
               <input v-else v-model="wf.database" :placeholder="dbLoading ? $t('schemaLoading') : $t('ewDbPh')" />
               <div v-if="dbErr" class="dberr">{{ dbErr }}</div>
+              <!-- 对不上不会报错,只会让窗口永远不开 —— 所以要在申请时就说出来。 -->
+              <div v-else-if="dbWarn" class="dbwarn">{{ dbWarn }}</div>
             </div>
           </div>
           <div class="frow">
@@ -421,6 +449,7 @@ onMounted(async () => {
 }
 .frow input:focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--focus-ring); }
 .dberr { margin-top: 6px; font: 500 11px/1.5 var(--font-body); color: var(--danger-text); }
+.dbwarn { margin-top: 6px; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--warning-subtle); font: 500 11px/1.6 var(--font-body); color: var(--warning-text); }
 .chk { display: flex; align-items: center; gap: 9px; height: 36px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
 .days { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .day { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; user-select: none; }
