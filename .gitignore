@@ -5,6 +5,10 @@
 *.test
 *.out
 vela-gateway.db
+# 从 backend/ 起服务时,DSN 写相对路径的 sqlite 连接会就地建库(演示数据里的
+# target.db 就是这么来的)。它们是被管理的**目标库**,装的是测试数据,和网关自己
+# 那个 vela-gateway.db 一样不进仓库 —— 按目录整段忽略,免得每换一个库名就漏一次。
+/backend/*.db
 *.db-journal
 *.db-wal
 *.db-shm
