@@ -47,6 +47,9 @@ export class LineEditor {
     term.onData((d) => this.onData(d))
   }
 
+  /** 是否正在等一条语句的回执。调用方据此判断 Ctrl+C 该发"取消执行"还是只清当前行。 */
+  isBusy(): boolean { return this.busy }
+
   /** Print the primary prompt and start accepting input. */
   start() {
     this.busy = false
@@ -85,6 +88,33 @@ export class LineEditor {
   feed(text: string) {
     if (!text) return
     this.onData(text)
+  }
+
+  /** 把整段文本作为**一条命令**提交 —— 不按 `;` 拆开。
+   *
+   *  粘贴一批语句时走它。逐条提交会让安全的那几条先跑掉、只有高危那条去等审批,
+   *  于是审批人看到的是一条脱离上下文的语句,而库里已经变了一半 —— 一批语句本来
+   *  就是一件事,该整批看、整批批、整批执行。
+   *
+   *  判定与执行仍然是逐条的,只是都发生在**服务端**:整批走一次判定取最严裁决,
+   *  下发时一条一条给驱动(见 service.execCommand)。这里改的只是"提交的粒度"。 */
+  submitBatch(text: string) {
+    const stmt = text.trim()
+    if (!stmt || this.busy) return
+    const entry = flattenStatement(stmt)
+    if (entry && this.history[this.history.length - 1] !== entry) this.history.push(entry)
+    // 先把当前输入块整个擦掉(它可能不止一行),再回显这次提交的全文 —— 屏幕和会话
+    // 日志都要留下"到底提交了什么",这是事后唯一能对照的东西。
+    if (this.renderedRow > 0) this.term.write(`\x1b[${this.renderedRow}A`)
+    this.term.write('\r\x1b[0J')
+    this.renderedRow = 0
+    const lines = stmt.split('\n')
+    const paint = (l: string) => this.opts.highlight?.(l) ?? l
+    this.term.write(this.opts.prompt() + paint(lines[0]) + '\r\n')
+    for (const l of lines.slice(1)) this.term.write(this.opts.contPrompt() + paint(l) + '\r\n')
+    this.busy = true
+    this.reset()
+    this.opts.onSubmit(stmt)
   }
 
   /** Abandon the remainder of a pasted batch.

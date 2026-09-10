@@ -33,6 +33,7 @@ package service
 //     两次 —— 一次在这里,一次在还以为自己没跑过的流水线里)
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -109,7 +110,9 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) 
 		// 位置 —— 校验的是"即将执行的这些字节"。
 		res = s.runApprovedScript(ap, conn)
 	} else {
-		res = s.Executor.Run(conn, ap.Command, s.execTimeout())
+		// 工单里可能是一整批语句(终端粘贴的那种):判定当初看的是整批,下发时同样
+		// 逐条给驱动 —— 见 execCommand。
+		res = s.execCommand(context.Background(), conn, ap.Command, s.execTimeout())
 	}
 
 	// 这张单最后怎么样了,以**库那边收没收下**为准。从前只存了输出和行数,失败的

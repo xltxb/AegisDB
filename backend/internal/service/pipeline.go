@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -723,7 +724,7 @@ func (s *Services) stageBackup(rel *model.Release, conn *model.Connection, cfg s
 	var b strings.Builder
 	total := 0
 	for i, one := range stmts {
-		res := s.Executor.Run(conn, one, s.asyncExecTimeout())
+		res := s.Executor.Run(context.Background(), conn, one, s.asyncExecTimeout())
 		if res.Err != nil {
 			return failStage("· 备份第 %d/%d 条失败: %s", i+1, len(stmts), res.Output)
 		}
@@ -789,7 +790,7 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 	var b strings.Builder
 	total := 0
 	for i, one := range stmts {
-		res := s.Executor.Run(conn, one, timeout)
+		res := s.Executor.Run(context.Background(), conn, one, timeout)
 		if res.Err != nil {
 			fmt.Fprintf(&b, "· 第 %d/%d 条失败: %s\n", i+1, len(stmts), clip(res.Output, 300))
 			s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultWarn, rel.RelNo, "exec")
@@ -920,7 +921,7 @@ func (s *Services) stageVerify(rel *model.Release, conn *model.Connection, cfg s
 		// A verification that mutates is a second, unreviewed change.
 		return failStage("· 校验语句必须是只读查询")
 	}
-	res := s.Executor.Run(conn, sql, s.execTimeout())
+	res := s.Executor.Run(context.Background(), conn, sql, s.execTimeout())
 	if res.Err != nil {
 		return failStage("· 校验执行失败: %s", res.Output)
 	}

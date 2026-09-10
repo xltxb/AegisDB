@@ -404,7 +404,21 @@ onMounted(() => {
     contPrompt,
     contPromptLen: promptLen,
     onSubmit: handleSubmit,
-    onInterrupt: () => { /* in-flight result still arrives */ },
+    // Ctrl+C:请求取消正在执行的那条语句。
+    //
+    // 原先这里是个空函数,注释写着"结果照样会回来" —— 那句话没错,但它把"取消"降级成
+    // 了"等着"。操作员按下 Ctrl+C 的意思是让那条语句停下来,而不是让终端安静地继续等。
+    //
+    // 服务端收到这一帧后取消那条语句的上下文;驱动发出去的是 KILL QUERY / cancel
+    // request,所以**取消不等于没执行** —— 最终那句话由服务端说(execCancelled),
+    // 这里只说"已请求",不替它下结论。
+    //
+    // 编辑器仍然保持 busy:释放它的只有那条回执。取消是否成功都会有回执 —— 成功是
+    // 一条取消结果,失败(语句已经跑完)是正常结果。
+    onInterrupt: () => {
+      if (!editor?.isBusy()) return
+      if (ws.send({ type: 'cancel' })) out(c(ANSI.yellow, t('termCancelSent')))
+    },
     highlight: highlightSqlAnsi,
   })
 
@@ -974,7 +988,15 @@ function submitPaste() {
   const text = snippetSubmitText(pasteText.value)
   closePaste()
   if (!text) return
-  editor.feed(text)
+  // **整批一次提交**,不按 ; 拆开逐条送。
+  //
+  // 原先是 editor.feed():一条一条过判定,于是一批里只要有一条高危,前面安全的那几条
+  // 已经跑完了,只有那一条去等审批 —— 审批人看到的是一条脱离上下文的语句,而库里
+  // 已经变了一半;批准之后剩下的还要再跑一轮。一批粘进来的语句本来就是一件事。
+  //
+  // 整批提交之后,判定与执行仍然是逐条的,只是都发生在服务端:一次判定取最严裁决、
+  // 一张审批单带整段命令,下发时一条一条给驱动(见 service.execCommand)。
+  editor.submitBatch(text)
 }
 
 // ---- script upload/scan ----

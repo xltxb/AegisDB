@@ -526,6 +526,9 @@
     // 已知的雷(见 vite 的 strictMessage 预编译),为一句话把计数一路传进渲染器不划算。
     execAffected: 'Executed successfully · {n} row(s) affected',
     execFailed: '· Database execution failed: {err}',
+    execCancelled: '· Cancelled — the target database may have run it, or part of it. Verify before assuming otherwise.',
+    batchDone: 'Batch complete · {n} statements · {rows} row(s) affected',
+    batchFailed: '· Stopped after {done}/{total} · statement {pos}: {err}',
     maintenance: '· Target instance is in maintenance — operations are restricted',
     apWindowLive: '· Approved — the execution window is now in effect',
     apExportQueued: '· Approved — the export job has been queued',
@@ -552,6 +555,7 @@
   termRows: '({n} rows{more} · {ms}ms)',
   termTook: ' · took {ms}ms',
   termExecOk: '✓ Executed successfully',
+  termCancelSent: '· Cancel requested — waiting for the database to respond…',
   termIntercepted: '⚠ Command intercepted, approval required',
   termHitRuleLine: '  matched rule  {rule}',
   termApprovalLine: '  approval  #{no}  · pending',

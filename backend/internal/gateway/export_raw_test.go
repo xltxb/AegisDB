@@ -7,6 +7,7 @@ package gateway
 // 名字必须刺眼(RealQueryEachRaw),否则读代码的人看不出这行调用是不是把明文写了出去。
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -28,10 +29,10 @@ func TestExport_StreamsMaskedByDefault(t *testing.T) {
 	withIDCardRule(t)
 	conn := sqliteConn(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	if _, err := RealRun(conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
 		t.Fatalf("插入: %v", err)
 	}
 
@@ -56,10 +57,10 @@ func TestExport_RawIsTheOnlyWayToPlaintext(t *testing.T) {
 	withIDCardRule(t)
 	conn := sqliteConn(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	if _, err := RealRun(conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
 		t.Fatalf("插入: %v", err)
 	}
 
@@ -81,10 +82,10 @@ func TestExport_StarSelectIsMaskedToo(t *testing.T) {
 	withIDCardRule(t)
 	conn := sqliteConn(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	if _, err := RealRun(conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
 		t.Fatalf("插入: %v", err)
 	}
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -177,7 +178,7 @@ func (s *Services) runApprovedScript(ap *model.Approval, conn *model.Connection)
 				Rows:   i, Err: err,
 			}
 		}
-		res := s.Executor.Run(conn, sql, s.execTimeout())
+		res := s.Executor.Run(context.Background(), conn, sql, s.execTimeout())
 		if res.Err != nil {
 			return gateway.ExecResult{
 				Output: fmt.Sprintf("· 已执行 %d/%d 条后失败 · 第 %d 条: %s", i, len(stmts), i+1, res.Output),

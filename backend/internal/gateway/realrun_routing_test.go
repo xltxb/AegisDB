@@ -14,6 +14,7 @@ package gateway
 // 的理由),但"要不要取结果集"这件事,试一次就知道了。
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -48,7 +49,7 @@ func TestKnownVerb_MarksWhatTheClassifierActuallyKnows(t *testing.T) {
 // 这条用 PRAGMA 做例子:SQLite 认它、它返回结果集,而平台的动词表里没有。
 func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
 	conn := sqliteConn(t)
-	if _, err := RealRun(conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 
@@ -56,7 +57,7 @@ func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
 	if KnownVerb(ParseVerb(`PRAGMA table_info(t_demo)`)) {
 		t.Skip("PRAGMA 已进入动词表,这条用例需要换一个平台不认识的动词")
 	}
-	res, err := RealRun(conn, `PRAGMA table_info(t_demo)`, 0)
+	res, err := RealRun(context.Background(), conn, `PRAGMA table_info(t_demo)`, 0)
 	if err != nil {
 		t.Fatalf("PRAGMA: %v", err)
 	}
@@ -69,10 +70,10 @@ func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
 // 反过来:平台不认识、数据库也不返回行的语句,不能因此报错,要如实说"执行成功"。
 func TestRealRun_UnknownVerbWithNoRowsReportsSuccess(t *testing.T) {
 	conn := sqliteConn(t)
-	if _, err := RealRun(conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY)`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	res, err := RealRun(conn, `PRAGMA foreign_keys = ON`, 0)
+	res, err := RealRun(context.Background(), conn, `PRAGMA foreign_keys = ON`, 0)
 	if err != nil {
 		t.Fatalf("PRAGMA 赋值不该报错: %v", err)
 	}
@@ -85,13 +86,13 @@ func TestRealRun_UnknownVerbWithNoRowsReportsSuccess(t *testing.T) {
 // 认不出来才去问数据库,不是把所有语句都改成问。
 func TestRealRun_KnownWritesStillReportRowsAffected(t *testing.T) {
 	conn := sqliteConn(t)
-	if _, err := RealRun(conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	if _, err := RealRun(conn, `INSERT INTO t_demo (name) VALUES ('a'), ('b')`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `INSERT INTO t_demo (name) VALUES ('a'), ('b')`, 0); err != nil {
 		t.Fatalf("插入: %v", err)
 	}
-	res, err := RealRun(conn, `UPDATE t_demo SET name = 'c'`, 0)
+	res, err := RealRun(context.Background(), conn, `UPDATE t_demo SET name = 'c'`, 0)
 	if err != nil {
 		t.Fatalf("更新: %v", err)
 	}
@@ -103,13 +104,13 @@ func TestRealRun_KnownWritesStillReportRowsAffected(t *testing.T) {
 // 读操作原样不变。
 func TestRealRun_ReadsAreUnchanged(t *testing.T) {
 	conn := sqliteConn(t)
-	if _, err := RealRun(conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
-	if _, err := RealRun(conn, `INSERT INTO t_demo (name) VALUES ('a')`, 0); err != nil {
+	if _, err := RealRun(context.Background(), conn, `INSERT INTO t_demo (name) VALUES ('a')`, 0); err != nil {
 		t.Fatalf("插入: %v", err)
 	}
-	res, err := RealRun(conn, `SELECT id, name FROM t_demo`, 0)
+	res, err := RealRun(context.Background(), conn, `SELECT id, name FROM t_demo`, 0)
 	if err != nil {
 		t.Fatalf("查询: %v", err)
 	}

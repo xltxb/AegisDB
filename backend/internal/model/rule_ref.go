@@ -52,6 +52,9 @@ const (
 const (
 	OutExecAffected   = "execAffected"   // 执行成功(args: n = 受影响行数)
 	OutExecFailed     = "execFailed"     // · 数据库执行失败(args: err = 驱动原文,不翻译)
+	OutExecCancelled  = "execCancelled"  // · 操作员取消(注意:不等于没执行)
+	OutBatchDone      = "batchDone"      // 批量执行完成(args: n = 语句数, rows)
+	OutBatchFailed    = "batchFailed"    // · 批量停在第几条(args: done, total, pos, err)
 	OutMaintenance    = "maintenance"    // · 目标实例处于维护态,操作受限
 	OutApWindowLive   = "apWindowLive"   // · 已批准,执行窗口已生效
 	OutApExportQueued = "apExportQueued" // · 已批准,导出任务已进入队列

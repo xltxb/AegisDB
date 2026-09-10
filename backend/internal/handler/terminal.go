@@ -1,9 +1,10 @@
 package handler
 
 import (
+	"context"
+	"log/slog"
 	"errors"
 	"io"
-	"log/slog"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -108,7 +109,7 @@ func (h *Handler) Exec(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	r, err := h.Svc.Exec(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
+	r, err := h.Svc.Exec(c.Request.Context(), middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
 	if err == service.ErrForbidden {
 		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
 		return
@@ -627,6 +628,24 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		return conn.WriteJSON(v)
 	}
 	execCh := make(chan wsMsg, 1)
+
+	// 正在执行的那条语句的取消函数。
+	//
+	// 操作员按 Ctrl+C 时,客户端发一帧 cancel;它由**读协程**收到 —— 执行发生在下面
+	// 那个循环里,读协程与它并发(它本来就是为了在执行期间还能回心跳而存在的),
+	// 所以这条路是通的。
+	//
+	// 取消**不等于没执行**:驱动取消发出去的是 KILL QUERY / cancel request,语句
+	// 可能已经跑完了,也可能跑了一半。所以这里只负责把取消传下去,结果怎么说由
+	// gateway.Executor 决定 —— 它说的是"可能已执行或部分执行,请自行核对"。
+	var cancelMu sync.Mutex
+	var cancelRunning context.CancelFunc
+	setCancel := func(fn context.CancelFunc) {
+		cancelMu.Lock()
+		cancelRunning = fn
+		cancelMu.Unlock()
+	}
+
 	go func() {
 		defer close(execCh)
 		for {
@@ -640,6 +659,15 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 				// (browsers can't send native WS ping frames).
 				if err := send(gin.H{"type": "pong"}); err != nil {
 					return
+				}
+			case "cancel":
+				// 没有正在跑的语句时按下的取消是个空动作,不必回话:客户端那一侧
+				// 早已把提示打在屏幕上了,再回一条只会显得像出了错。
+				cancelMu.Lock()
+				fn := cancelRunning
+				cancelMu.Unlock()
+				if fn != nil {
+					fn()
 				}
 			case "exec":
 				select {
@@ -671,7 +699,13 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			return
 		}
 		u = fresh
-		r, err := h.Svc.Exec(u, msg.ConnectionID, msg.SQL, msg.Reason, msg.MfaCode, msg.Database)
+		// 每条语句一个上下文,跑完立刻清掉 —— 留着的话,下一次 Ctrl+C 会取消到
+		// **下一条**语句上。
+		ctx, cancel := context.WithCancel(context.Background())
+		setCancel(cancel)
+		r, err := h.Svc.Exec(ctx, u, msg.ConnectionID, msg.SQL, msg.Reason, msg.MfaCode, msg.Database)
+		setCancel(nil)
+		cancel()
 		if err == service.ErrForbidden {
 			send(gin.H{"type": "error", "message": "命令被拒绝:能力矩阵禁止"})
 			continue

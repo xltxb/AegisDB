@@ -543,6 +543,9 @@
   outText: {
     execAffected: '执行成功 · {n} 行受影响',
     execFailed: '· 数据库执行失败: {err}',
+    execCancelled: '· 已取消 —— 目标库可能已执行或部分执行,请自行核对',
+    batchDone: '批量执行完成 · 共 {n} 条语句 · {rows} 行受影响',
+    batchFailed: '· 已执行 {done}/{total} 条后失败 · 第 {pos} 条: {err}',
     maintenance: '· 目标实例处于维护态，操作受限',
     apWindowLive: '· 已批准,执行窗口已生效',
     apExportQueued: '· 已批准,导出任务已进入队列',
@@ -570,6 +573,7 @@
   termRows: '({n} 行{more} · {ms}ms)',
   termTook: ' · 耗时 {ms}ms',
   termExecOk: '✓ 执行成功',
+  termCancelSent: '· 已请求取消,等待目标库响应…',
   termIntercepted: '⚠ 命令被拦截,需审批',
   termHitRuleLine: '  命中规则  {rule}',
   termApprovalLine: '  审批单    #{no}  · 待审批',

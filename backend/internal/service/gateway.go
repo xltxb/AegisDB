@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -95,7 +96,9 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql, database string) 
 }
 
 // Exec runs the full gateway flow: judge → (deny | approve | allow) → audit.
-func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, database string) (*dto.ExecResp, error) {
+// ctx 来自调用方,为的是**取消**:终端里操作员按 Ctrl+C 时,这条正在跑的语句要能停下来。
+// 其余入口(脚本、发布、后台任务)传 context.Background() —— 它们背后没有一个正等着的人。
+func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, reason, mfaCode, database string) (*dto.ExecResp, error) {
 	// Everything on this path may be persisted verbatim (audit command, approval
 	// command — MEDIUMTEXT, migration 0018); refuse past the bound with a message
 	// instead of letting the metadata DB throw "Data too long for column".
@@ -137,10 +140,10 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 	// read-only role (ER3). Splitting normalises the separator away.
 	stmts := sqlutil.SplitStatements(sql)
 	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
-		return s.execJudged(u, conn, sql, reason)
+		return s.execJudged(ctx, u, conn, sql, reason)
 	}
 	v, win := s.judge(u, conn, stmts)
-	return s.applyVerdict(u, conn, sql, v, reason, win)
+	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
 }
 
 // strictestVerdict evaluates every statement and returns the one demanding the
@@ -258,16 +261,16 @@ func actionRank(a string) int {
 // access + maintenance + MFA have already been checked by the caller. Splitting
 // this out lets a whole-script execution validate MFA ONCE up front instead of
 // per statement (which forced an empty code on every line — R18).
-func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
+func (s *Services) execJudged(ctx context.Context, u *model.User, conn *model.Connection, sql, reason string) (*dto.ExecResp, error) {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
 		// 分层解析不出来是 deny,窗口放宽不作用于 deny,所以这里没有窗口可言。
-		return s.applyVerdict(u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason, nil)
+		return s.applyVerdict(ctx, u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason, nil)
 	}
 	// 这条路不经过 strictestVerdict(它按单条语句判),所以放宽要在这里显式接上 ——
 	// 否则同一条语句在终端里免审批、走脚本执行却要审批。
 	v, win := s.relaxByWindow(conn, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql), time.Now())
-	return s.applyVerdict(u, conn, sql, v, reason, win)
+	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
 }
 
 // applyVerdict routes a judged command to deny / approve / allow and records the
@@ -276,7 +279,7 @@ func (s *Services) execJudged(u *model.User, conn *model.Connection, sql, reason
 // win 非空表示这条命令是被执行窗口放行的(本来要审批)。它会写进审计的 Operator ——
 // 那个字段的语义正是"当授权者不是操作者本人时,是谁授权的",而这里授权的不是人,是
 // 当时开着的那扇门。Operator 在审计链的哈希里,事后改不了。
-func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string, win *model.ExecWindow) (*dto.ExecResp, error) {
+func (s *Services) applyVerdict(ctx context.Context, u *model.User, conn *model.Connection, sql string, v gateway.Verdict, reason string, win *model.ExecWindow) (*dto.ExecResp, error) {
 	switch v.Action {
 	case gateway.ActionDeny:
 		s.recordAudit(u, conn, sql, model.RiskHigh, model.ResultRejected, "", "intercept")
@@ -291,10 +294,51 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 		return &dto.ExecResp{Intercepted: true, ApprovalNo: ap.ApNo, AuditID: auditID, Risk: v.Risk, Rule: v.Rule, RuleRef: v.Ref}, nil
 
 	default: // allow
-		res := s.Executor.Run(conn, sql, s.execTimeout())
+		res := s.execCommand(ctx, conn, sql, s.execTimeout())
 		s.recordAuditBy(u, windowOperator(win), conn, sql, v.Risk, execResultStatus(res), "", "exec")
 		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, OutputRef: res.OutputRef, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
+	}
+}
+
+// execCommand 执行一条终端命令 —— 多条语句**逐条下发**。
+//
+// 为什么不能把整段直接交给驱动:MySQL 的 DSN 上 AllowMultiStatements 是**故意**关掉的
+// (见 gateway.engineDriver 里的注释),关掉它正是为了让"一次判定管住的就是这些语句"
+// 没法靠 DSN 绕过。于是同一段批量在 SQLite / PostgreSQL 上能跑、在 MySQL 上直接语法错
+// —— 同一个网关、同一段 SQL,结果取决于对面是什么引擎。那是个陷阱,不是特性。
+//
+// 拆在这里的好处是两件事各归各位:**判定看到的是整批**(最严裁决、一张审批单、
+// RuleBatch 逐条列命中),**下发时一条一条给驱动**。这与脚本工单 runApprovedScript
+// 是同一条路子,连"停在第几条"的说法都刻意保持一致 —— 一个跑到一半的批量,报成功
+// 比报"已执行 3/7 条后失败"糟得多。
+//
+// 单条语句原样走老路:它要带回结果集(列和行),而批量不带 —— 一次回执里塞不下 N 个
+// 结果集,脚本通道当初也是这么定的。
+func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql string, timeout time.Duration) gateway.ExecResult {
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) <= 1 {
+		return s.Executor.Run(ctx, conn, sql, timeout)
+	}
+	total, rows, ms := len(stmts), 0, 0
+	for i, one := range stmts {
+		res := s.Executor.Run(ctx, conn, one, timeout)
+		ms += res.Ms
+		if res.Err != nil {
+			return gateway.ExecResult{
+				Output: fmt.Sprintf("· 已执行 %d/%d 条后失败 · 第 %d 条: %s", i, total, i+1, res.Output),
+				OutputRef: model.NewRuleRef(model.OutBatchFailed,
+					"done", model.Itoa(i), "total", model.Itoa(total),
+					"pos", model.Itoa(i+1), "err", res.Output),
+				Rows: rows, Ms: ms, Err: res.Err,
+			}
+		}
+		rows += res.Rows
+	}
+	return gateway.ExecResult{
+		Output:    fmt.Sprintf("批量执行完成 · 共 %d 条语句 · %d 行受影响", total, rows),
+		OutputRef: model.NewRuleRef(model.OutBatchDone, "n", model.Itoa(total), "rows", model.Itoa(rows)),
+		Rows:      rows, Ms: ms,
 	}
 }
 
@@ -859,7 +903,7 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	}
 	executed := 0
 	for _, sql := range splitStatements(content) {
-		resp, err := s.execJudged(u, conn, sql, "脚本安全语句直接执行")
+		resp, err := s.execJudged(context.Background(), u, conn, sql, "脚本安全语句直接执行")
 		if err != nil {
 			return executed, err
 		}

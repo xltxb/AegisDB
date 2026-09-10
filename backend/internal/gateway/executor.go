@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strconv"
@@ -45,7 +47,7 @@ func NewExecutor() *Executor { return &Executor{} }
 // connection is configured for real execution (credentials present, supported
 // engine) it opens the target DB and runs the statement; otherwise it returns a
 // simulated result (demo instances are unreachable in dev; timeout is ignored).
-func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration) ExecResult {
+func (x *Executor) Run(ctx context.Context, conn *model.Connection, sql string, timeout time.Duration) ExecResult {
 	// Ms is MEASURED here, around the call itself, for every path.
 	//
 	// A real run never set it, so the console reported every query as "0ms"; the
@@ -60,8 +62,17 @@ func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration
 	elapsed := func() int { return int(time.Since(started).Milliseconds()) }
 
 	if RealExecSupported(conn) {
-		res, err := RealRun(conn, sql, timeout)
+		res, err := RealRun(ctx, conn, sql, timeout)
 		if err != nil {
+			// 操作员按下 Ctrl+C 与"数据库报错"是两件事,不能都说成"执行失败"。
+			//
+			// 而且**取消不等于没执行**:驱动取消发出去的是 KILL QUERY / cancel request,
+			// 语句可能已经跑完了、也可能跑了一半。这句话必须说准 —— 说成"已取消,未执行"
+			// 会让人以为库里什么都没发生,那是这个功能最坏的一种错。
+			if errors.Is(err, context.Canceled) {
+				return ExecResult{Output: "· 已取消 —— 目标库可能已执行或部分执行,请自行核对", Err: err, Ms: elapsed(),
+					OutputRef: model.NewRuleRef(model.OutExecCancelled)}
+			}
 			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err, Ms: elapsed(),
 				// 驱动原文不翻译:它是目标库说的话,翻过来就不是它说的了。
 				OutputRef: model.NewRuleRef(model.OutExecFailed, "err", err.Error())}

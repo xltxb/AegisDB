@@ -317,7 +317,12 @@ var schemaIdentRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_$#]*$`)
 // (0 falls back to 30s). A read returns the actual result set (columns + up to
 // maxResultRows rows, marking Truncated if there are more); a write returns
 // rows-affected.
-func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecResult, error) {
+// RealRun 执行一条语句。
+//
+// ctx 是**调用方的**上下文,不是这里凭空造的:终端要能在语句跑到一半时把它取消掉
+// (操作员按了 Ctrl+C)。timeout 仍然叠在它上面 —— 取消和超时是两回事,一个是人说
+// 停,一个是等太久了。
+func RealRun(ctx context.Context, conn *model.Connection, query string, timeout time.Duration) (ExecResult, error) {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return ExecResult{}, err
@@ -326,7 +331,7 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Oracle 换 schema:必须钉住**同一个物理会话**。

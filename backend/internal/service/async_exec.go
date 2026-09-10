@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -161,7 +162,7 @@ func (s *Services) runAsyncJob(id int64) {
 		})
 	} else {
 		// Simulated connection (no credentials): no real DB, so no live NOTICEs.
-		res := s.Executor.Run(conn, job.SQL, timeout)
+		res := s.Executor.Run(context.Background(), conn, job.SQL, timeout)
 		rows = int64(res.Rows)
 		runErr = res.Err
 		writeLine("· (模拟连接,无真实 NOTICE 输出)")

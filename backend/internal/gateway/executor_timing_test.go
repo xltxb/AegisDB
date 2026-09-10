@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ func TestExecutorRun_ReportsAMeasuredDuration(t *testing.T) {
 	conn := &model.Connection{Name: "demo", Engine: "mysql"}
 
 	for _, sql := range []string{"SELECT 1", "UPDATE t SET a = 1 WHERE id = 2"} {
-		res := x.Run(conn, sql, time.Second)
+		res := x.Run(context.Background(), conn, sql, time.Second)
 		if res.Ms < 0 {
 			t.Errorf("%q: negative duration %d", sql, res.Ms)
 		}
@@ -39,7 +40,7 @@ func TestExecutorRun_OutputTextCarriesNoDuration(t *testing.T) {
 	x := NewExecutor()
 	conn := &model.Connection{Name: "demo", Engine: "mysql"}
 	for _, sql := range []string{"SELECT 1", "DELETE FROM t WHERE id = 1"} {
-		if out := x.Run(conn, sql, time.Second).Output; strings.Contains(out, "ms") {
+		if out := x.Run(context.Background(), conn, sql, time.Second).Output; strings.Contains(out, "ms") {
 			t.Errorf("%q: output still embeds a duration: %q", sql, out)
 		}
 	}
@@ -56,7 +57,7 @@ func TestExecutorRun_TimesAFailureToo(t *testing.T) {
 		Name: "unreachable", Engine: "mysql", Host: "127.0.0.1", Port: 1,
 		Username: "u", Password: "p", Database: "d",
 	}
-	res := x.Run(conn, "SELECT 1", 2*time.Second)
+	res := x.Run(context.Background(), conn, "SELECT 1", 2*time.Second)
 	if res.Err == nil {
 		t.Skip("host unexpectedly reachable")
 	}
