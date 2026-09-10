@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -427,7 +428,8 @@ func RealRun(conn *model.Connection, query string, timeout time.Duration) (ExecR
 		return ExecResult{}, err
 	}
 	aff, _ := res.RowsAffected()
-	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", aff), Rows: int(aff)}, nil
+	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", aff), Rows: int(aff),
+		OutputRef: model.NewRuleRef(model.OutExecAffected, "n", strconv.FormatInt(aff, 10))}, nil
 }
 
 // RealQueryEach streams the real result set: onHeader is called once with the

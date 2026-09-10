@@ -533,6 +533,21 @@
     batchHit: '第{pos}条 {command} · {inner}',
     batchHitBare: '第{pos}条 · {inner}',
     batchMore: '…另有 {n} 条命中',
+   },
+  // 终端打出来的那句话。同一套机制的第二处应用(见 lib/ruleText.ts):服务端下发的
+  // 中文串是规范记录,这里只是把同一件事用读者的语言再讲一遍。
+  //
+  // **以 `·` 开头的是提示,不是执行结果** —— 终端据此决定用黄色、且不追加耗时。
+  // 两种语言都必须保留这个前缀,否则一条提示会被显示成一次成功的执行。
+  // 中文这份与服务端的规范串保持一字不差:同一句话有两种说法,比没有翻译更糟。
+  outText: {
+    execAffected: '执行成功 · {n} 行受影响',
+    execFailed: '· 数据库执行失败: {err}',
+    maintenance: '· 目标实例处于维护态，操作受限',
+    apWindowLive: '· 已批准,执行窗口已生效',
+    apExportQueued: '· 已批准,导出任务已进入队列',
+    apPipeline: '· 已批准,由发布流水线继续执行',
+    apAwaitingExec: '· 已批准,等待发起人执行',
   },
   termMetaTitle: ' 元命令',
   termMetaHelp: '  {bs}?            显示帮助',

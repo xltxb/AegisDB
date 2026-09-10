@@ -39,6 +39,26 @@ const (
 	RuleBatchMore     = "batchMore"     // 截断提示(args: n)
 )
 
+// 终端输出文本的标识 —— 同一套机制的第二处应用。
+//
+// 上面那组说的是"为什么拦下来",这组说的是"跑完之后终端上打的那句话"。成因完全
+// 一样:`执行成功 · N 行受影响` 是在 Go 里拼的中文,而它会原样打进一个英文会话的
+// 终端里。规范串仍然照旧下发并进记录(审计、工单的 Result),code 只是让界面用读者
+// 的语言把同一件事再讲一遍。
+//
+// **以 `·` 开头的是提示,不是执行结果** —— 终端据此决定用黄色显示、并且不追加耗时
+// (什么都没跑,没有可计时的东西)。两种语言的文案都必须保留这个前缀,否则一条提示
+// 会被显示成一次成功的执行。
+const (
+	OutExecAffected   = "execAffected"   // 执行成功(args: n = 受影响行数)
+	OutExecFailed     = "execFailed"     // · 数据库执行失败(args: err = 驱动原文,不翻译)
+	OutMaintenance    = "maintenance"    // · 目标实例处于维护态,操作受限
+	OutApWindowLive   = "apWindowLive"   // · 已批准,执行窗口已生效
+	OutApExportQueued = "apExportQueued" // · 已批准,导出任务已进入队列
+	OutApPipeline     = "apPipeline"     // · 已批准,由发布流水线继续执行
+	OutApAwaitingExec = "apAwaitingExec" // · 已批准,等待发起人执行
+)
+
 // NewRuleRef 按 key/value 交替的参数建一个规则标识,省掉每处都写 map 字面量。
 // 参数个数为奇数时丢掉最后一个 —— 这只可能是写错了,而规则标识不值得为此 panic。
 func NewRuleRef(code string, kv ...string) *RuleRef {

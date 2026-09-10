@@ -680,7 +680,10 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			send(gin.H{"type": "intercept", "approvalNo": r.ApprovalNo, "auditId": r.AuditID, "risk": r.Risk, "rule": r.Rule, "ruleRef": r.RuleRef})
 			continue
 		}
-		send(gin.H{"type": "output", "text": r.Output, "rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
+		// outputRef 与 text 一起发:text 是规范中文串(也是旧客户端唯一认得的),
+		// outputRef 让界面用读者的语言重讲一遍 —— 同 intercept 分支的 rule/ruleRef。
+		send(gin.H{"type": "output", "text": r.Output, "outputRef": r.OutputRef,
+			"rows": r.Rows, "ms": r.Ms, "risk": r.Risk,
 			"columns": r.Columns, "data": r.Data, "truncated": r.Truncated})
 	}
 }

@@ -12,7 +12,7 @@ import SnippetModal from '@/components/modals/SnippetModal.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED, CODE_SCRIPT_PATH_UNSET } from '@/api/http'
 import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
-import { renderRule as renderRuleIn } from '@/lib/ruleText'
+import { renderRule as renderRuleIn, renderOutText } from '@/lib/ruleText'
 import type { RuleRef } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
@@ -47,6 +47,9 @@ const { t, te } = useI18n()
 // 规则名按界面语言渲染;服务端认不出的 code 回落到它给的中文原串。
 const ruleI18n = { t: t as never, te: te as never }
 const renderRule = (ref: RuleRef | undefined, canonical: string) => renderRuleIn(ref, canonical, ruleI18n)
+// 服务端打进终端的那句话(执行结果、维护态提示)同样按语言渲染,认不出的 code 回落到
+// 服务端的中文原串 —— 那是降级,不是出错(见 lib/ruleText.ts)。
+const renderOut = (ref: RuleRef | undefined, canonical: string) => renderOutText(ref, canonical, ruleI18n)
 const auth = useAuthStore()
 const envtier = useEnvTierStore()
 const router = useRouter()
@@ -716,7 +719,7 @@ function onWsMessage(m: any) {
   editor.resume()
 }
 
-function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: string[]; data?: string[][]; truncated?: boolean }) {
+function renderOutput(m: { text?: string; outputRef?: RuleRef; rows?: number; ms?: number; columns?: string[]; data?: string[][]; truncated?: boolean }) {
   const rows = m.rows || 0
   if (m.columns && m.columns.length) {
     // Real result set returned by the target DB.
@@ -754,8 +757,13 @@ function renderOutput(m: { text?: string; rows?: number; ms?: number; columns?: 
     // A write reports through `text`, so the timing has to be appended here —
     // the reads above get it from termRows. A notice ("· 目标实例处于维护态") is
     // not an execution and gets no duration: nothing ran to be timed.
-    const notice = m.text.trimStart().startsWith('·')
-    out(notice ? c(ANSI.yellow, m.text) : c(ANSI.green, '✓ ' + m.text) + c(ANSI.gray, t('termTook', { ms: msLabel(m.ms) })))
+    //
+    // 打出来的是**渲染后**的那句话:服务端的中文串是规范记录,而终端上显示的语言
+    // 是读的人的事。提示与执行结果靠开头的 `·` 区分,所以两种语言的文案都保留了
+    // 这个前缀(见 model 里 Out* 常量上方的说明)。
+    const line = renderOut(m.outputRef, m.text)
+    const notice = line.trimStart().startsWith('·')
+    out(notice ? c(ANSI.yellow, line) : c(ANSI.green, '✓ ' + line) + c(ANSI.gray, t('termTook', { ms: msLabel(m.ms) })))
   } else {
     out(c(ANSI.green, t('termExecOk')) + c(ANSI.gray, t('termTook', { ms: msLabel(m.ms) })))
   }

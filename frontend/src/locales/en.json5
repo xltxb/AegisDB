@@ -513,6 +513,24 @@
     batchHit: 'Statement {pos} {command} · {inner}',
     batchHitBare: 'Statement {pos} · {inner}',
     batchMore: '… and {n} more matches',
+   },
+  // Text the terminal PRINTS. Same mechanism as ruleText (see lib/ruleText.ts):
+  // the server's Chinese string is the canonical record; this says the same thing
+  // in the reader's language.
+  //
+  // A leading `·` marks a NOTICE rather than an execution result — the terminal
+  // colours it yellow and appends no duration. Keep the prefix in every locale,
+  // or a notice renders as a successful run.
+  outText: {
+    // row(s) 而不是 rows:vue-i18n 的复数形式要靠 `|` 分隔,而 `|` 在这个仓库里是
+    // 已知的雷(见 vite 的 strictMessage 预编译),为一句话把计数一路传进渲染器不划算。
+    execAffected: 'Executed successfully · {n} row(s) affected',
+    execFailed: '· Database execution failed: {err}',
+    maintenance: '· Target instance is in maintenance — operations are restricted',
+    apWindowLive: '· Approved — the execution window is now in effect',
+    apExportQueued: '· Approved — the export job has been queued',
+    apPipeline: '· Approved — the release pipeline continues from here',
+    apAwaitingExec: '· Approved — waiting for the initiator to execute',
   },
   termMetaTitle: ' Meta-commands',
   termMetaHelp: '  {bs}?            show help',

@@ -18,6 +18,13 @@ import (
 	"velagateway/pkg/totp"
 )
 
+// maintNotice 是维护态那条提示的规范中文串。
+//
+// 它出现在两条入口上(单条执行与脚本执行),原先各写一遍 —— 两份字面量迟早分叉,
+// 而分叉之后界面上会出现两句意思相同、措辞不同的提示。规范串归它,读者看到的那句
+// 由 model.OutMaintenance 渲染。
+const maintNotice = "· 目标实例处于维护态，操作受限"
+
 // BuildMe assembles the /auth/me payload (user + menus + capabilities).
 func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
 	// 主角色可能压根不存在,而这不是错误。
@@ -108,7 +115,8 @@ func (s *Services) Exec(u *model.User, connID int64, sql, reason, mfaCode, datab
 	// FR-CONN-04: maintenance-state instances restrict operations.
 	if conn.Status == "maint" {
 		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
-		return &dto.ExecResp{Risk: model.RiskLow, Output: "· 目标实例处于维护态，操作受限"}, nil
+		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
+			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
 	}
 	// Session & Security · Require MFA: an enrolled user must present a valid
 	// TOTP step-up code before any PROD operation (submit or execute).
@@ -285,7 +293,7 @@ func (s *Services) applyVerdict(u *model.User, conn *model.Connection, sql strin
 	default: // allow
 		res := s.Executor.Run(conn, sql, s.execTimeout())
 		s.recordAuditBy(u, windowOperator(win), conn, sql, v.Risk, execResultStatus(res), "", "exec")
-		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
+		return &dto.ExecResp{Risk: v.Risk, Output: res.Output, OutputRef: res.OutputRef, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
 }
@@ -315,7 +323,8 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	}
 	if conn.Status == "maint" {
 		s.recordAudit(u, conn, "\\i "+filename, model.RiskLow, model.ResultWarn, "", "")
-		return &dto.ExecResp{Risk: model.RiskLow, Output: "· 目标实例处于维护态，操作受限"}, nil
+		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
+			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
 	}
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return nil, err
@@ -530,12 +539,14 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			// 窗口单授权的是"让那扇门在它自己的时间表内生效",不是"执行一条命令"。
 			// 批准即生效,没有什么可等发起人去做的。
 			res.Output = "· 已批准,执行窗口已生效"
+			res.OutputRef = model.NewRuleRef(model.OutApWindowLive)
 			title = "执行窗口审批已通过"
 			s.applyWindowDecision(ap, true)
 		} else if ap.ExportJobID > 0 {
 			// 导出单授权的是"让导出 worker 去跑这次导出",不是"执行一条命令" ——
 			// 所以它不停在等发起人,批准即入队。
 			res.Output = "· 已批准,导出任务已进入队列"
+			res.OutputRef = model.NewRuleRef(model.OutApExportQueued)
 			title = "导出审批已通过,任务已开始"
 			s.releaseApprovedExport(ap)
 		} else if ap.ReleaseID > 0 {
@@ -546,6 +557,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			// has not run. The audit row therefore stays `pending`: approved, not yet
 			// executed, with the execution audited by the stage that performs it.
 			res.Output = "· 已批准,由发布流水线继续执行"
+			res.OutputRef = model.NewRuleRef(model.OutApPipeline)
 			title = "审批已通过,发布流水线继续"
 		} else {
 			// 通过**不再顺带执行**。命令在审批人点下去的那一刻跑,等于让审批人替
@@ -555,6 +567,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			// 工单就停在这里等发起人来执行(ExecuteApproved)。审计行同样记 pending:
 			// 已批准、尚未执行,真正的执行由执行它的那一刻自己写审计。
 			res.Output = model.AwaitingExecution
+			res.OutputRef = model.NewRuleRef(model.OutApAwaitingExec)
 		}
 		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.Rows, now)
 		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
@@ -577,7 +590,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 				operatorName, safeClip(ap.Command, 60))
 		}
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title, body, ap.ApNo)
-		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, Rows: res.Rows, Ms: res.Ms,
+		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, OutputRef: res.OutputRef, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
 	// Same atomic guard on the reject path.

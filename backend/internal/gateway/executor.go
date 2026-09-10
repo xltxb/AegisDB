@@ -3,6 +3,7 @@ package gateway
 import (
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,11 @@ type ExecResult struct {
 	// MaskedColumns:被脱敏的列名。数据本身已经是打码后的了 —— 这个字段只是让
 	// 界面能标一句"该列已脱敏",而不是让前端去做脱敏。
 	MaskedColumns []string
-	Err       error      // non-nil when the target DB rejected the statement
+	Err           error // non-nil when the target DB rejected the statement
+	// OutputRef 是 Output 那句话的机器可读身份,给界面用读者的语言重讲一遍。
+	// Output 仍然是规范记录(进审计、进工单的 Result),两者一起下发 —— 理由与
+	// 裁决的 Rule/RuleRef 完全相同,见 model.RuleRef。
+	OutputRef *model.RuleRef
 }
 
 // Executor proxies a command to the target instance on behalf of the user.
@@ -57,7 +62,9 @@ func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration
 	if RealExecSupported(conn) {
 		res, err := RealRun(conn, sql, timeout)
 		if err != nil {
-			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err, Ms: elapsed()}
+			return ExecResult{Output: "· 数据库执行失败: " + err.Error(), Err: err, Ms: elapsed(),
+				// 驱动原文不翻译:它是目标库说的话,翻过来就不是它说的了。
+				OutputRef: model.NewRuleRef(model.OutExecFailed, "err", err.Error())}
 		}
 		res.Ms = elapsed()
 		return res
@@ -70,7 +77,8 @@ func (x *Executor) Run(conn *model.Connection, sql string, timeout time.Duration
 		return ExecResult{Output: fmt.Sprintf("+ %s rows", thousands(rows)), Rows: rows, Ms: elapsed()}
 	}
 	affected := rand.Intn(5)
-	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", affected), Rows: affected, Ms: elapsed()}
+	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", affected), Rows: affected, Ms: elapsed(),
+		OutputRef: model.NewRuleRef(model.OutExecAffected, "n", strconv.Itoa(affected))}
 }
 
 // Test simulates "test connection & attach to gateway".

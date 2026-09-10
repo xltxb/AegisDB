@@ -81,9 +81,13 @@ type ExecResp struct {
 	Risk        string `json:"risk"`
 	Rule        string         `json:"rule,omitempty"` // matched rule text (why it was intercepted)
 	RuleRef     *model.RuleRef `json:"ruleRef,omitempty"`
-	Output      string `json:"output,omitempty"`
-	Rows        int    `json:"rows,omitempty"`
-	Ms          int    `json:"ms,omitempty"`
+	Output string `json:"output,omitempty"`
+	// OutputRef 是 Output 那句话的机器可读身份。Output 仍然是规范记录(进审计、
+	// 进工单的 Result),OutputRef 只给界面用读者的语言重讲一遍 —— 认不出的 code
+	// 回落到 Output,那是降级不是出错。与 Rule/RuleRef 同一套机制,见 model.RuleRef。
+	OutputRef *model.RuleRef `json:"outputRef,omitempty"`
+	Rows      int            `json:"rows,omitempty"`
+	Ms        int            `json:"ms,omitempty"`
 	// Columns/Data carry the real result set for a read (Data capped for the
 	// terminal); empty for a simulated connection, where the client synthesises a
 	// preview from Rows. Truncated marks a result set larger than the display cap.
