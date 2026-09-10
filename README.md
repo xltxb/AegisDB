@@ -11,7 +11,6 @@ db-gateway/
 ├─ frontend/    Vue 3 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
 ├─ docs/        PRD / 前后端开发文档 / 交互原型 / ADR / 四份数据库规范 / 外部审批与开放接口对接指南
 ├─ deploy/      systemd unit + 环境变量模板
-├─ build.sh     一键打包前后端（默认交叉编译 linux/amd64，产出版本化 tar.gz）
 └─ docker-compose.yml  本地 MySQL 8 + Redis 7（可选）
 ```
 
@@ -30,9 +29,8 @@ db-gateway/
 
 ### 一键启动（Windows，最省事）
 
-双击项目根目录的 **`start-dev.bat`** —— 自动在两个窗口分别拉起后端（SQLite，零依赖）与前端（Vite），
+分别双击 **`backend\run-sqlite.bat`**（后端，SQLite，零依赖）与 **`frontend\run-dev.bat`**（前端，Vite），
 然后浏览器打开 http://localhost:5173 ，用 `linwei@vela.io` / `vela123` 登录。
-（也可单独双击 `backend\run-sqlite.bat` 或 `frontend\run-dev.bat`。）
 
 ### 手动启动
 
@@ -241,16 +239,19 @@ Webhook（HMAC-SHA256 签名 + 指数退避重试）/ 飞书通知 / 外部审�
 ## 生产部署
 
 ```bash
-./build.sh          # 前端构建 + 后端交叉编译 linux/amd64 + 版本化 tar.gz（含部署速查）
+# 1. 打包前的闸：生产环境不得含模拟数据
+(cd backend && go test ./internal/bootstrap/ -run 'TestProductionServesNoSimulatedData|TestSimulationDefaultsToOff|TestSimulatedPathsAreDocumented' -count=1 -timeout 10m)
+# 2. 前端
+(cd frontend && npm ci && npm run build)                 # 产物 frontend/dist/，部署时放到后端的 web_dir
+# 3. 后端（交叉编译 linux/amd64，纯 Go 无需 C 工具链）
+(cd backend && GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=$(git describe --tags --always --dirty)" -o ../dist/vela-gateway ./cmd/server)
 ```
 
 单二进制同时提供 API 与前端 SPA，内嵌 SQL 迁移；子命令 `version` / `migrate` / `init`。
 服务端**只产出 Linux 二进制** —— 在 Windows 工作站上构建时也一样，那台机器不是部署目标。
-归档里的二进制权限 `0755` 是**写进 tar 的**而不是读构建机文件系统的（Git Bash 下 `chmod`
-对 NTFS 是空操作），打包脚本自己会校验这一条，不满足就直接失败。
 
 完整步骤（MySQL 准备、迁移、初始化管理员、systemd 托管、TLS、环境变量一览、升级注意事项）
-见 **`DEPLOY.md`** 与打包产物内的 `README-DEPLOY.md`。
+见 **`DEPLOY.md`**。
 
 **升级已有环境的顺序**：备份数据库 → 停旧进程 → `./vela-gateway migrate` → 起新进程 →
 `./vela-gateway version` 确认版本。反过来做，新二进制会对着旧表结构跑；迁移之后也不要单独

@@ -29,7 +29,8 @@ import (
 
 // SpecPath is where the contract lives relative to the process's working
 // directory — the same path the raw /openapi.yaml route serves, and the layout
-// build.sh ships (binary + docs/ + configs/, with WorkingDirectory set to it).
+// the DEPLOY.md packaging steps ship (binary + docs/ + configs/, with
+// WorkingDirectory set to it).
 const SpecPath = "docs/openapi.yaml"
 
 //go:embed swaggerui/swagger-ui-bundle.js.gz swaggerui/swagger-ui.css.gz

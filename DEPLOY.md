@@ -2,23 +2,45 @@
 
 ## 1. 打包(前后端一体)
 
+在仓库根目录执行(纯 Go,交叉编译到 Linux 无需 C 工具链;`VERSION` 不设则取 `git describe`):
+
 ```bash
-./build.sh                                    # 为当前平台打包
-GOOS=linux GOARCH=amd64 ./build.sh            # 交叉编译到 Linux 服务器(纯 Go,无需 C 工具链)
-VERSION=1.0.0 GOOS=linux GOARCH=amd64 ./build.sh   # 显式版本号(否则取 git describe)
+VERSION="${VERSION:-$(git describe --tags --always --dirty)}"
+rm -rf dist && mkdir -p dist/web dist/configs dist/migrations dist/deploy
+
+# 打包前的闸:生产环境不得含模拟数据
+(cd backend && go test ./internal/bootstrap/ \
+  -run 'TestProductionServesNoSimulatedData|TestSimulationDefaultsToOff|TestSimulatedPathsAreDocumented' \
+  -count=1 -timeout 10m)
+
+# 前端
+(cd frontend && npm ci && npm run build) && cp -r frontend/dist/* dist/web/
+
+# 后端
+(cd backend && GOOS=linux GOARCH=amd64 go build -trimpath \
+  -ldflags "-s -w -X main.version=$VERSION" -o ../dist/vela-gateway ./cmd/server)
+
+# 配置、迁移、部署资产
+cp backend/configs/config.prod.yaml dist/configs/config.yaml   # 二进制默认的 -config 路径
+cp backend/migrations/*.sql dist/migrations/                   # 参考用,同样已内嵌进二进制
+cp -r backend/docs dist/docs                                   # /docs 与 /openapi.yaml 按工作目录读 docs/openapi.yaml
+cp deploy/vela-gateway.service deploy/vela.env.example dist/deploy/
+cp deploy/vela.env.example dist/
+
+tar -czf "vela-gateway-$VERSION-linux-amd64.tar.gz" -C dist .
 ```
 
-产物在 `dist/`,并额外生成 `vela-gateway-<版本>-<os>-<arch>.tar.gz` 归档:
+产物在 `dist/`:
 
 ```
 dist/
-  vela-gateway[.exe]    单一后端二进制(内置 API + 前端 UI + 内嵌 SQL 迁移)
+  vela-gateway          单一后端二进制(内置 API + 前端 UI + 内嵌 SQL 迁移)
   web/                  构建后的前端(后端按 web_dir 提供)
   configs/config.yaml   生产配置(env=prod → MySQL,auto_migrate=false,seed=false)
   migrations/           参考 SQL 迁移(同样已内嵌进二进制)
+  docs/                 OpenAPI 契约(在线接口文档 /docs 与 /openapi.yaml 从这里读)
   deploy/               systemd unit + 环境变量模板
   vela.env.example      环境变量模板(复制为 vela.env 并填写)
-  README-DEPLOY.md      部署速查
 ```
 
 子命令:`vela-gateway version` | `migrate`(仅建/升级表) | `init`(迁移+引用数据+管理员) | 直接运行(服务)。
