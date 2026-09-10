@@ -67,7 +67,7 @@ async function submit() {
       <div class="brand">
         <div class="logo"><Sailboat :size="22" color="#fff" /></div>
         <div>
-          <div class="bn">DP DB GATEWAY</div>
+          <div class="bn">AegisDB</div>
           <div class="bs">{{ $t('loginTitle') }}</div>
         </div>
       </div>

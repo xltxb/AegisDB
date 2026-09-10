@@ -1,4 +1,4 @@
-// Command server boots the DP DB GATEWAY backend.
+// Command server boots the AegisDB backend.
 package main
 
 import (
@@ -172,7 +172,7 @@ func main() {
 	}()
 
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
-	slog.Info("DP DB GATEWAY listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
+	slog.Info("AegisDB listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
 	if cfg.Env == "prod" && !tls {
 		slog.Warn("生产环境未启用 TLS:请配置 server.tls_cert/tls_key,或在前置反向代理终止 TLS,避免凭据 / JWT 明文传输")
 	}

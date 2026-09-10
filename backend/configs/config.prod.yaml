@@ -1,4 +1,4 @@
-# DP DB GATEWAY — PRODUCTION configuration (MySQL).
+# AegisDB — PRODUCTION configuration (MySQL).
 # Initialize once, then run:
 #   VELA_MYSQL_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
 #   VELA_MYSQL_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml

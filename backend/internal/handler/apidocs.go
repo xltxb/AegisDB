@@ -106,7 +106,7 @@ var swaggerShell = template.Must(template.New("swagger").Parse(`<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DP DB GATEWAY · 接口文档</title>
+  <title>AegisDB · 接口文档</title>
   <link rel="stylesheet" href="/docs/swagger-ui.css">
   <style>
     body { margin: 0; background: #fafbfd; }

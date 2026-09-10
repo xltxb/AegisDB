@@ -697,7 +697,7 @@
   setIdleMinutesDesc: 'Minutes of inactivity before the console locks (never longer than the session TTL)',
   etLayerPh: 'L1 core · write',
   // terminal session log (header of the exported text file)
-  tsTitle: 'Vela DB Gateway · terminal session log', tsInstance: 'Instance', tsDb: 'Database', tsUser: 'Operator',
+  tsTitle: 'AegisDB · terminal session log', tsInstance: 'Instance', tsDb: 'Database', tsUser: 'Operator',
   tsExportedAt: 'Exported at', tsCount: 'Entries',
   tsDropped: 'Note: the session outgrew the buffer; the earliest {n} entries were dropped and this file starts mid-session',
   tsRedacted: 'Password literals are masked by the same rule the audit log uses',

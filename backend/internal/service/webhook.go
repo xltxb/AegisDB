@@ -266,7 +266,7 @@ func eventAction(command string) string {
 // verbatim in raw_payload so no detail is lost.
 func buildPlatformEvent(eventType string, data any) map[string]any {
 	ev := map[string]any{
-		"source_system": "DP DB GATEWAY",
+		"source_system": "AegisDB",
 		"occurred_at":   time.Now().Format(platformTimeLayout),
 		"action":        "read",
 		"resource":      eventType,
@@ -364,12 +364,12 @@ func (d *Dispatcher) Test() (bool, string) {
 		return false, err.Error()
 	}
 	body, _ := json.Marshal(map[string]any{
-		"source_system": "DP DB GATEWAY",
+		"source_system": "AegisDB",
 		"occurred_at":   time.Now().Format(platformTimeLayout),
 		"action":        "read",
 		"resource":      "webhook/test",
 		"operator":      "system",
-		"summary":       "DP DB GATEWAY Webhook 连通性测试",
+		"summary":       "AegisDB Webhook 连通性测试",
 		"raw_payload":   map[string]any{"event": "test", "ping": "dp-db-gateway"},
 	})
 	req, err := http.NewRequest(http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
@@ -557,7 +557,7 @@ func larkApprovalCard(ap *model.Approval, consoleURL string) map[string]any {
 		}})
 	}
 	elements = append(elements, map[string]any{"tag": "note", "elements": []any{
-		map[string]any{"tag": "plain_text", "content": "Vela 数据库网关 · " + ap.ApNo}}})
+		map[string]any{"tag": "plain_text", "content": "AegisDB 数据库网关 · " + ap.ApNo}}})
 	return map[string]any{
 		"config":   map[string]any{"wide_screen_mode": true},
 		"header":   map[string]any{"template": tmpl, "title": map[string]any{"tag": "plain_text", "content": "高危命令待审批 · " + ap.ApNo}},

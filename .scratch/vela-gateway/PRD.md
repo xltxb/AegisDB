@@ -1,4 +1,4 @@
-# PRD · Vela 数据库管理网关（DP DB GATEWAY）
+# PRD · AegisDB 数据库管理网关
 
 Status: ready-for-agent
 

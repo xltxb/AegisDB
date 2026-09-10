@@ -135,7 +135,7 @@ test('the downloaded file starts with the UTF-8 byte order mark', () => {
   tr.command('SELECT 1;', AT)
   const file = tr.renderFile(META)
   expect(file.charCodeAt(0)).toBe(0xfeff)
-  expect(file.startsWith(UTF8_BOM + '# Vela')).toBe(true)
+  expect(file.startsWith(UTF8_BOM + '# AegisDB')).toBe(true)
 })
 
 test('the mark is added once, and only where the file is made', () => {
@@ -154,7 +154,7 @@ test('Chinese content survives into the file unchanged', () => {
   const file = tr.renderFile(META)
   expect(file).toContain("SELECT * FROM orders WHERE 状态 = '已支付';")
   expect(file).toContain('· 目标实例处于维护态')
-  expect(file).toContain('# Vela 数据库网关 · 终端会话日志')
+  expect(file).toContain('# AegisDB 数据库网关 · 终端会话日志')
 })
 
 // Mirrors backend/pkg/sqlutil/redact_test.go. The transcript is a file that

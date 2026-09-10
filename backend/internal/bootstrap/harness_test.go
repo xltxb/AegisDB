@@ -1,6 +1,6 @@
 package bootstrap
 
-// harness_test.go boots the entire DP DB GATEWAY against a throwaway SQLite file
+// harness_test.go boots the entire AegisDB against a throwaway SQLite file
 // with seed data and exposes it through an httptest server. Tests drive the real
 // /api/v1 HTTP seam end-to-end (auth -> middleware -> three-layer engine -> audit),
 // asserting only externally observable behaviour, never internal collaborators.

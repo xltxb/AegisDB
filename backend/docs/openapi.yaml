@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: DP DB GATEWAY API
+  title: AegisDB API
   version: "2.0"
   description: |
     数据库管理网关的 HTTP 接口。**每一条**已注册的路由都在本文件里 —— 由

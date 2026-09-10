@@ -1,4 +1,4 @@
-# DP DB GATEWAY — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
+# AegisDB — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
 # Start with:  docker compose up -d
 # The backend reads connection info from backend/configs/config.yaml
 #

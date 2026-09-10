@@ -1101,7 +1101,7 @@ func (s *Services) MFASetup(u *model.User) (*dto.MFASetupResp, error) {
 	if err := s.Repo.UpdateUserMFA(u.ID, false, secret); err != nil {
 		return nil, err
 	}
-	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "DP DB GATEWAY")}, nil
+	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "AegisDB")}, nil
 }
 
 // MFAEnable verifies the first code against the pending secret and turns MFA on.
@@ -1195,7 +1195,7 @@ func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp,
 		return nil, err
 	}
 	s.auditAdminAction(actor, "admin.mfa.bind user="+u.Email)
-	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "DP DB GATEWAY")}, nil
+	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "AegisDB")}, nil
 }
 
 // settingInt reads an int setting (JSON-encoded), falling back to def.

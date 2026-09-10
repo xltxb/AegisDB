@@ -718,7 +718,7 @@
   setIdleMinutesDesc: '无操作多少分钟后自动锁定(不超过会话有效期)',
   etLayerPh: 'L1 核心 · 写',
   // 终端会话日志(导出的文本文件抬头)
-  tsTitle: 'Vela 数据库网关 · 终端会话日志', tsInstance: '实例', tsDb: '库', tsUser: '操作人',
+  tsTitle: 'AegisDB 数据库网关 · 终端会话日志', tsInstance: '实例', tsDb: '库', tsUser: '操作人',
   tsExportedAt: '导出时间', tsCount: '记录条数',
   tsDropped: '注意: 会话过长, 已丢弃最早的 {n} 条记录, 本文件从中途开始',
   tsRedacted: '口令字面量已按审计同规则打码',

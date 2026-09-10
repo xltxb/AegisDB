@@ -1,4 +1,4 @@
-# DP DB GATEWAY — backend configuration
+# AegisDB — backend configuration
 
 # Deployment profile: dev | prod
 #   dev  → SQLite (zero-dependency local run, writes ./vela-gateway.db)

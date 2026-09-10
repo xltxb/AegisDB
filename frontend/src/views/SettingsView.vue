@@ -357,7 +357,7 @@ async function save() {
       <!-- About -->
       <div class="about">
         <div class="alogo"><Sailboat :size="18" color="#fff" /></div>
-        <div class="grow"><div class="an">DP DB GATEWAY</div><div class="av">{{ $t('verLabel') }} 2.4.1 · {{ $t('buildLabel') }} 20260624</div></div>
+        <div class="grow"><div class="an">AegisDB</div><div class="av">{{ $t('verLabel') }} 2.4.1 · {{ $t('buildLabel') }} 20260624</div></div>
         <span v-if="saved" class="savedtag">{{ $t('saved') }}</span>
         <VButton variant="primary" @click="save">{{ $t('saveSettings') }}</VButton>
       </div>
