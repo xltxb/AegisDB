@@ -608,6 +608,13 @@
   plNeedName: 'A flow needs a name', plNeedStage: 'A flow needs at least one stage', plSaved: 'Saved',
   plDelConfirm: 'Delete flow {name}? Running releases keep their own snapshot.',
   plDiscardConfirm: 'Unsaved changes — discard them?',
+  // Names/descriptions of the two release flows that ship with the product. They
+  // are SEED DATA (see pipeline_seed.go), matched by the Chinese string itself —
+  // a flow the operator renamed stops matching and shows their own name instead.
+  plSeedStd: 'Standard release flow',
+  plSeedStdDesc: 'SQL review → approval → backup point → execute → verify → notify',
+  plSeedDevSelf: 'Dev self-service release',
+  plSeedDevSelfDesc: 'SQL review, then execute directly — dev tier only',
   plType_review: 'SQL review', plType_approve: 'Approval', plType_backup: 'Backup point',
   plType_execute: 'Execute', plType_verify: 'Verify', plType_manual: 'Manual gate', plType_notify: 'Notify',
   plHint_review: 'Runs the rule library over the change; error-level findings stop the release (configurable).',

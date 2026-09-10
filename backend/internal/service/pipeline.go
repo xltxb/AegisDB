@@ -105,10 +105,17 @@ func (s *Services) SavePipeline(u *model.User, id int64, req dto.PipelineReq) (*
 				return nil, fmt.Errorf("第 %d 个阶段: %w", i+1, err)
 			}
 		}
-		name := strings.TrimSpace(st.Name)
-		if name == "" {
-			name = stageTypeLabel(st.Type)
-		}
+		// 阶段名由**类型**决定,客户端送什么都不算数。
+		//
+		// 它原先是一个自由文本框,于是界面上出现了两个说同一件事、却可能对不上的
+		// 东西:左边输入框里的名字,和右边的类型下拉框。更麻烦的是这个名字会进记录 ——
+		// 它被快照进 ReleaseStage、写进通知正文("进入阶段:X")和人工确认的审计文本 ——
+		// 所以它必须语言稳定;而一个可编辑的框意味着谁用哪种语言看过、按过保存,记录
+		// 里就留下哪种语言。
+		//
+		// 派生之后两件事一起解决:界面按读者的语言显示(前端用 plType_* 渲染同一个
+		// 类型),记录里始终是这里这份规范中文。与 Rule/RuleRef 是同一条原则。
+		name := stageTypeLabel(st.Type)
 		onFail := st.OnFailure
 		if onFail != model.OnFailureContinue {
 			onFail = model.OnFailureAbort

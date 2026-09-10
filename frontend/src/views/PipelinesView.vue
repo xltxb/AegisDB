@@ -18,6 +18,7 @@ import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
+import { BUILTIN_FLOW_NAME, BUILTIN_FLOW_DESC, builtinLabel } from '@/lib/builtinNames'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useEnvTierStore } from '@/stores/envtier'
@@ -111,6 +112,12 @@ function approverNames(st: any): { names: string[]; empty: boolean } {
   return { names, empty: names.length === 0 }
 }
 
+// 出厂自带的流程/阶段名按读者的语言显示;用户建的、改过名的原样显示。
+// 它们是**种子数据**不是界面文案 —— 连同输入框为什么不用 v-model,都写在
+// lib/builtinNames.ts 里。
+const flowName = (v: string) => builtinLabel(BUILTIN_FLOW_NAME, v, t as never)
+const flowDesc = (v: string) => builtinLabel(BUILTIN_FLOW_DESC, v, t as never)
+
 function select(p: Pipeline) {
   if (dirty.value && !confirmAction(t('plDiscardConfirm'))) return
   editing.value = JSON.parse(JSON.stringify(p))
@@ -119,9 +126,10 @@ function select(p: Pipeline) {
 function newPipeline() {
   editing.value = {
     id: 0, name: '', description: '', tierCode: '', enabled: true, isDefault: false,
+    // name 留空:阶段名由服务端按类型给出规范值,前端说了不算(见 service/pipeline.go)。
     stages: [
-      { name: t('plType_review'), type: 'review', config: '{"failOn":"error"}', onFailure: 'abort' },
-      { name: t('plType_execute'), type: 'execute', config: '', onFailure: 'abort' },
+      { name: '', type: 'review', config: '{"failOn":"error"}', onFailure: 'abort' },
+      { name: '', type: 'execute', config: '', onFailure: 'abort' },
     ],
   }
   dirty.value = true
@@ -129,7 +137,7 @@ function newPipeline() {
 
 function addStage(type: StageType) {
   if (!editing.value) return
-  editing.value.stages.push({ name: t('plType_' + type), type, config: defaultConfig(type), onFailure: 'abort' })
+  editing.value.stages.push({ name: '', type, config: defaultConfig(type), onFailure: 'abort' })
   dirty.value = true
 }
 function defaultConfig(type: StageType) {
@@ -192,7 +200,7 @@ async function save() {
 }
 
 async function remove(p: Pipeline) {
-  if (!confirmAction(t('plDelConfirm', { name: p.name }))) return
+  if (!confirmAction(t('plDelConfirm', { name: flowName(p.name) }))) return
   try {
     const env = await api.deletePipeline(p.id)
     if (env.code !== 0) { ui.notifyError(new Error(env.msg), t('actionFailed')); return }
@@ -219,11 +227,11 @@ async function remove(p: Pipeline) {
       <div class="list">
         <div v-for="p in pipelines" :key="p.id" class="pitem" :class="{ on: editing && editing.id === p.id }" @click="select(p)">
           <div class="ptop">
-            <span class="pname">{{ p.name }}</span>
+            <span class="pname">{{ flowName(p.name) }}</span>
             <span v-if="p.isDefault" class="badge">{{ $t('plDefault') }}</span>
             <span v-if="!p.enabled" class="badge off">{{ $t('plDisabled') }}</span>
           </div>
-          <div class="pdesc">{{ p.description || '—' }}</div>
+          <div class="pdesc">{{ flowDesc(p.description) || '—' }}</div>
           <div class="pmeta">
             <span class="tag">{{ p.tierCode ? p.tierCode.toUpperCase() : $t('plAllTiers') }}</span>
             <span class="dim">{{ $t('plStageCount', { n: p.stages.length }) }}</span>
@@ -251,11 +259,13 @@ async function remove(p: Pipeline) {
 
         <div class="grid2">
           <div><div class="fl">{{ $t('plName') }}</div>
-            <input v-model="editing.name" class="in" :disabled="!isAdmin" @input="dirty = true" /></div>
+            <input :value="flowName(editing.name)" class="in" :disabled="!isAdmin"
+                   @input="editing.name = ($event.target as HTMLInputElement).value; dirty = true" /></div>
           <div><div class="fl">{{ $t('plTier') }}</div><VSelect v-model="tierLabel" :options="tierOptions" /></div>
         </div>
         <div><div class="fl">{{ $t('plDesc') }}</div>
-          <input v-model="editing.description" class="in" :disabled="!isAdmin" @input="dirty = true" /></div>
+          <input :value="flowDesc(editing.description)" class="in" :disabled="!isAdmin"
+                 @input="editing.description = ($event.target as HTMLInputElement).value; dirty = true" /></div>
         <div class="toggles">
           <div class="tg"><VSwitch v-model="editing.enabled" :disabled="!isAdmin" @update:model-value="dirty = true" /><span>{{ $t('plEnabled') }}</span></div>
           <div class="tg"><VSwitch v-model="editing.isDefault" :disabled="!isAdmin" @update:model-value="dirty = true" /><span>{{ $t('plIsDefault') }}</span></div>
@@ -268,7 +278,10 @@ async function remove(p: Pipeline) {
             <div class="sic"><component :is="stageIcon[st.type] || Terminal" :size="15" /></div>
             <div class="sbody">
               <div class="srow">
-                <input v-model="st.name" class="in small" :disabled="!isAdmin" @input="dirty = true" />
+                <!-- 阶段名 = 阶段类型,只读。它和右边的下拉框说的是同一件事,原先是
+                     两个可以对不上的框;而这个名字会进记录(快照 / 通知正文 / 审计),
+                     所以存的那份由服务端按类型给出规范中文,这里只负责按读者的语言显示。 -->
+                <input :value="$t('plType_' + st.type)" class="in small" readonly tabindex="-1" />
                 <VSelect
                   :model-value="$t('plType_' + st.type)" :options="typeLabels" height="34px"
                   @update:model-value="(v: string) => { st.type = typeOf(v); st.config = defaultConfig(st.type); dirty = true }"
@@ -389,6 +402,10 @@ async function remove(p: Pipeline) {
 .in { width: 100%; box-sizing: border-box; height: 38px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-body); color: var(--text-body); outline: none; }
 .in.small { height: 34px; font-size: 12.5px; }
 .in:disabled { opacity: 0.6; }
+/* 只读的阶段名。它是右边那个下拉框的回声,不是一个坏掉的输入框 —— 去掉边框和光标,
+   让它看起来就不是可以往里打字的地方;不用 :disabled 的灰化,因为这里没有"不可用",
+   只有"由别处决定"。 */
+.in[readonly] { border-color: transparent; background: transparent; cursor: default; padding-left: 0; color: var(--text-strong); font-weight: 500; }
 .toggles { display: flex; gap: 22px; margin: 12px 0 4px; }
 .tg { display: flex; align-items: center; gap: 8px; font: 500 12px var(--font-body); color: var(--text-body); }
 .stages { display: flex; flex-direction: column; gap: 8px; }

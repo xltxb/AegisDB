@@ -628,6 +628,13 @@
   plNeedName: '请填写流程名称', plNeedStage: '流程至少需要一个阶段', plSaved: '已保存',
   plDelConfirm: '确定删除流程「{name}」吗?已在运行的发布单不受影响。',
   plDiscardConfirm: '当前修改尚未保存,确定放弃吗?',
+  // 出厂自带的那两条发布流程的名字与描述。它们是**种子数据**(见 pipeline_seed.go),
+  // 这里的中文必须与种子一字不差 —— 匹配就是按原串做的,对不上就换不出译名。
+  plSeedStd: '标准发布流程',
+  plSeedStdDesc: '规范审查 → 人工审批 → 备份点 → 执行 → 校验 → 通知',
+  plSeedDevSelf: '开发自助发布',
+  plSeedDevSelfDesc: '仅规范审查后直接执行,限开发分层',
+  // plType_* 既是新建阶段的默认名,也是出厂阶段名的译名来源 —— 中文值同样与种子一字不差。
   plType_review: '规范审查', plType_approve: '人工审批', plType_backup: '备份/回滚点',
   plType_execute: '执行变更', plType_verify: '执行后校验', plType_manual: '人工确认', plType_notify: '结果通知',
   plHint_review: '按规则库检查变更内容,error 级命中即拦截(可调)。',
