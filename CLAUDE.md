@@ -7,7 +7,7 @@
 
 ### Issue tracker
 
-工单与 PRD 以本地 markdown 形式存于 `.scratch/<feature>/`（远端是华为云 CodeHub，无 GitHub/GitLab 工单系统）。
+工单与 PRD 以本地 markdown 形式存于 `.scratch/<feature>/`；远端是 GitHub（`origin`，https://github.com/xltxb/AegisDB ），代码审查发现的问题记在 GitHub Issues。
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels

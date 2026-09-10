@@ -331,8 +331,8 @@ WARN 审批人自检: 默认审批链(DBA 负责人) severity=deadlock
   0003 外部飞书审批 · 0004 按引擎判定方言 · 0005 发布流水线与规范审查 ·
   0006 开放接口提单 · 0009 敏感字段脱敏在服务端做 · 0010 审批通过不执行 ·
   0013 无 WHERE 拦截按分层 · 0014 脚本扫描按目标分层判 · 0015 执行窗口。
-- `docs/agents/`、`CLAUDE.md`：AI Agent 协作约定（工单以 markdown 存在 `.scratch/`，
-  远端为华为云 CodeHub）。
+- `docs/agents/`、`CLAUDE.md`：AI Agent 协作约定（PRD 与实现工单以 markdown 存在 `.scratch/`，
+  审查发现的问题记在 GitHub Issues，远端为 https://github.com/xltxb/AegisDB ）。
 
 > 说明：未填写连接凭据的实例走**仿真执行**（合成行数/耗时，便于演示）；填入真实凭据后
 > 即按引擎家族走 `database/sql` 真实执行（MySQL/PG/Oracle/SQLite 家族见

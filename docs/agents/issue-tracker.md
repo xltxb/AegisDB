@@ -1,7 +1,7 @@
 # Issue tracker: Local Markdown
 
 Issues and PRDs for this repo live as markdown files in `.scratch/`.
-（远端是华为云 CodeHub（`origin`，推 `main`），没有 GitHub/GitLab 那样的工单系统，工单以本地 markdown 形式管理。）
+（远端是 GitHub `xltxb/AegisDB`（`origin`，推 `main`）。功能 PRD 与实现工单以本地 markdown 形式管理；代码审查发现的缺陷与规范问题记在 GitHub Issues，用 `gh issue` 读写。）
 
 ## Conventions
 
