@@ -263,6 +263,41 @@ func openAndPing(driver, dsn string) (*sql.DB, error) {
 	return db, nil
 }
 
+// pingTimeout 一次连通性探测的上限。
+//
+// 比 openAndPing 里那 8 秒的建连预算略宽:探测要连**并且**确认对面还应答,而巡检
+// 一次可能连几十台,每一台卡满都得有个头。
+const pingTimeout = 10 * time.Second
+
+// RealPing 真的连一次目标库,并确认对面还应答。
+//
+// 这个函数存在的理由:在它之前,"测试连通性"走的是 Executor.Test —— 一个睡 120 毫秒
+// 然后无条件返回"已接入网关"的模拟实现。于是批量巡检把 88 台实例全报成可连,而其中
+// 有的连 dial 都超时。一个永远说好话的巡检比没有巡检更糟:没有巡检时人会自己去试,
+// 有一个说"可连"的巡检时人不会。
+//
+// **Ping 而不是只 openConn**:连接池是缓存的(见 openConn),第二次拿到的是缓存里
+// 那个 *sql.DB,它不会重新拨号 —— 只靠 openConn 成功来判断可连,等于在问"我们以前
+// 连上过吗"。PingContext 才是"现在还连得上吗"。
+func RealPing(conn *model.Connection) (bool, string) {
+	if !RealExecSupported(conn) {
+		// 模拟连接没有远端可探。这里**必须**报不可连:说"已接入网关"是把"我们没配
+		// 凭据"说成了"那台库是好的"。
+		return false, "未配置真实执行凭据,无法验证可连性"
+	}
+	db, release, err := openConn(conn)
+	if err != nil {
+		return false, err.Error()
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
+	defer cancel()
+	if err := db.PingContext(ctx); err != nil {
+		return false, oracleHint(err).Error()
+	}
+	return true, fmt.Sprintf("%s %s · 连接正常", conn.Engine, conn.Host)
+}
+
 // oracleHint rewrites go-ora's cryptic "empty SID and service name" into an
 // actionable message: the Oracle "数据库名" field must hold the service name
 // (or "sid/你的SID" for a SID connection).

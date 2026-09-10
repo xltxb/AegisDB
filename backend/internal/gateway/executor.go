@@ -92,10 +92,16 @@ func (x *Executor) Run(ctx context.Context, conn *model.Connection, sql string, 
 		OutputRef: model.NewRuleRef(model.OutExecAffected, "n", strconv.Itoa(affected))}
 }
 
-// Test simulates "test connection & attach to gateway".
+// Test 探一次连通性 —— **真的连过去**,不是模拟。
+//
+// 它从前是 `sleep(120ms); return true, "已接入网关"`,一个无条件说好话的桩。批量巡检
+// 用的就是它,于是 88 台实例全被报成可连,而其中有的连 dial 都超时。一个永远说好话的
+// 巡检比没有巡检更糟:没有巡检时人会自己去试,有一个说"可连"的巡检时人不会。
+//
+// 没配凭据的模拟连接报**不可连**,并说清是为什么 —— 把"我们没配凭据"说成"那台库是
+// 好的",是同一种谎的另一种说法。
 func (x *Executor) Test(conn *model.Connection) (bool, string) {
-	time.Sleep(120 * time.Millisecond)
-	return true, fmt.Sprintf("%s %s · 已接入网关", conn.Engine, conn.Host)
+	return RealPing(conn)
 }
 
 func thousands(n int) string {

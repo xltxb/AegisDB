@@ -77,7 +77,16 @@ func (h *Handler) TestConnection(c *gin.Context) {
 		return
 	}
 	ok, msg := h.Svc.Executor.Test(conn)
-	resp.OK(c, gin.H{"ok": ok, "message": msg})
+	if !ok {
+		// 连不上就以**失败**回,不能用 code=0 包一个 ok:false 回去。
+		//
+		// 调用方(批量巡检、新建/编辑后的自动测试)判的都是"这次请求有没有抛错",
+		// 一个 code=0 的信封会被一律当成成功 —— 于是即便探测真的失败了,界面照样
+		// 显示"可连"。判定的依据必须和显示的结论是同一个东西。
+		resp.Fail(c, resp.CodeBadRequest, msg)
+		return
+	}
+	resp.OK(c, gin.H{"ok": true, "message": msg})
 }
 
 // SetDatabaseProject files ONE of a connection's databases under a project
