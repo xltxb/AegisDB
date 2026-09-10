@@ -152,7 +152,16 @@ const (
 	ExecStatusFailed  = "failed"
 
 	ResultExecuted = "executed"
-	ResultPending  = "pending"
+	// ResultSimulated:这条命令**根本没有接触任何数据库** —— 它走的是模拟路径
+	// (没有凭据的连接,且当前允许模拟;见 gateway/simulation.go)。
+	//
+	// 单独一个值,而不是记成 executed:审计链要回答的是"谁在什么时候对哪台库执行了
+	// 什么",一条从未发生的执行记成"已执行",是在这条链上写下一句假话 —— 而这条链
+	// 的全部价值就在于它不说假话。也不记成 warn:没有任何东西出错。
+	//
+	// 生产环境不会出现这个值(模拟一律被拒),它只可能来自开发/演示环境。
+	ResultSimulated = "simulated"
+	ResultPending   = "pending"
 	ResultRejected = "rejected"
 	// 工单被发起人撤回。与 rejected 分开,理由同 StatusCancelled。
 	ResultCancelled = "cancelled"

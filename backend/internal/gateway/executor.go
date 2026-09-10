@@ -31,6 +31,11 @@ type ExecResult struct {
 	// Output 仍然是规范记录(进审计、进工单的 Result),两者一起下发 —— 理由与
 	// 裁决的 Rule/RuleRef 完全相同,见 model.RuleRef。
 	OutputRef *model.RuleRef
+	// Simulated:这个结果是**编出来的**,没有接触任何数据库。
+	//
+	// 它必须一路带到审计:一条从未发生的执行如果记成 executed,就是在审计链上写下
+	// 一句假话(见 model.ResultSimulated)。生产环境不会出现它 —— 模拟一律被拒。
+	Simulated bool
 }
 
 // Executor proxies a command to the target instance on behalf of the user.
@@ -80,16 +85,34 @@ func (x *Executor) Run(ctx context.Context, conn *model.Connection, sql string, 
 		res.Ms = elapsed()
 		return res
 	}
+	// 生产环境不返回模拟数据 —— 见 simulation.go。
+	//
+	// 放在这里而不是入口处:模拟分支只有一个,把闸设在它面前,新加的调用路径天然被
+	// 覆盖(与脱敏放在 RealRun/RealQueryEach 里是同一条理由)。
+	if !SimulationAllowed() {
+		return ExecResult{
+			Output:    "· " + ErrSimulationDisabled.Error(),
+			Err:       ErrSimulationDisabled,
+			Ms:        elapsed(),
+			OutputRef: model.NewRuleRef(model.OutExecFailed, "err", ErrSimulationDisabled.Error()),
+		}
+	}
+	// SIMULATED-PATH: exec-run —— 见 docs/simulated-paths.md。
+	//
+	// 这里合成的行数与真实执行的输出**长得一模一样**,用户分辨不出。一台忘了填密码的
+	// 实例跑 SELECT 会拿到一份看似合理的假结果 —— 那是这条路径明知的欠账,选项写在
+	// 那份清单的"待补充"里。
+	//
 	// Simulated: the ROW COUNT is still synthetic (there is no database to ask),
 	// but the duration is the real time this took. The output text no longer
 	// carries it — the console renders Ms uniformly for both paths.
 	if IsRead(sql) {
 		rows := rand.Intn(9000) + 200
-		return ExecResult{Output: fmt.Sprintf("+ %s rows", thousands(rows)), Rows: rows, Ms: elapsed()}
+		return ExecResult{Output: fmt.Sprintf("+ %s rows", thousands(rows)), Rows: rows, Ms: elapsed(), Simulated: true}
 	}
 	affected := rand.Intn(5)
 	return ExecResult{Output: fmt.Sprintf("执行成功 · %d 行受影响", affected), Rows: affected, Ms: elapsed(),
-		OutputRef: model.NewRuleRef(model.OutExecAffected, "n", strconv.Itoa(affected))}
+		OutputRef: model.NewRuleRef(model.OutExecAffected, "n", strconv.Itoa(affected)), Simulated: true}
 }
 
 // Test 探一次连通性 —— **真的连过去**,不是模拟。

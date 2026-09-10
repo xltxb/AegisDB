@@ -50,6 +50,18 @@ echo "==> Clean dist/"
 rm -rf "$DIST"
 mkdir -p "$DIST/web"
 
+# 打包前的一道闸:生产环境不得返回任何模拟数据。
+#
+# 来由是一次线上误判 ——「批量巡检」把 88 台实例全报成「可连」,因为那条探测从仓库
+# 第一笔提交起就是个 `sleep(120ms); return true` 的桩,而且没记在任何待办里。
+#
+# 模拟数据本身留着(本地开发和演示离不开它),但它只能在开发环境生效。这条测试逐条
+# 走 docs/simulated-paths.md 里登记的每一条路径,确认关掉模拟之后它们给的是明确的
+# 拒绝而不是编出来的数据。跑不过就不出包 —— 这正是"打包部署生产时必须都是真实现"
+# 那句话该被强制的位置。
+echo "==> Verify no simulated data in prod"
+(cd "$ROOT/backend" && "$GO" test ./internal/bootstrap/   -run 'TestProductionServesNoSimulatedData|TestSimulationDefaultsToOff|TestSimulatedPathsAreDocumented'   -count=1 -timeout 10m)
+
 echo "==> Build frontend (Vite)"
 cd "$ROOT/frontend"
 if [ ! -d node_modules ]; then

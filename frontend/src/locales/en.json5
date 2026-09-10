@@ -128,6 +128,8 @@
   auditFootHint: 'Click the filter to scope by High / Med / Low · export includes full command & chain',
   allRisk: 'All risk', med: 'Med', low: 'Low',
   rExecuted: 'Executed', rPending: 'Pending', rRejected: 'Rejected', rWarn: 'Alerted', rExported: 'Exported',
+  // Took the simulated path — no database was contacted (dev/demo only).
+  rSimulated: 'Simulated (not run)',
   t24h: 'Last 24h', t7d: 'Last 7 days', t30d: 'Last 30 days', tAll: 'All time',
   auditFrom: 'From', auditTo: 'To', auditClearRange: 'Clear range', auditTotal: '{n} entries', auditPageOf: 'Page {p} / {n}',
   apprSubTail: '· the requester runs it after approval, fully audited', mineAppr: 'To approve', allAppr: 'All',

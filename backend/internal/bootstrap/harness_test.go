@@ -67,6 +67,10 @@ func newTestApp(t *testing.T) *testApp {
 	seedTestFixtures(t, repo) // demo users/connections/approvals/audit the suite asserts on
 	crypto.SetSecretKey(cfg.JWT.Secret)
 	service.AllowPrivateWebhookTargets = true // stub webhook/Lark servers run on loopback
+	// 夹具模拟的是**开发环境**,所以显式打开模拟数据 —— 与 main.go 在 dev 下做的
+	// 事情一样。默认是关的(见 gateway/simulation.go:漏设的后果必须是拒绝),
+	// 生产那一侧由 TestProductionServesNoSimulatedData 单独把关。
+	gateway.AllowSimulation = true
 	engine := gateway.NewRiskEngine(repo)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
 	svc := service.New(repo, engine, jwtMgr)

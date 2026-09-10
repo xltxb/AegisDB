@@ -97,6 +97,12 @@ func main() {
 	// 敏感字段规则的取数入口。挂在这里而不是把规则一路传下去:整个网关只有两处
 	// 把行读出来(RealRun / RealQueryEach),挂一次,新加的调用路径也天然被覆盖。
 	gateway.SensitiveRulesProvider = svc.SensitiveRulesForGateway
+	// 模拟数据只在开发环境生效 —— 生产上一律拒绝(见 gateway/simulation.go)。
+	//
+	// 打进启动日志,而不是让它成为一个只有读代码才知道的事实:一台"怎么点都出数据"
+	// 的网关,和一台"点什么都说没配凭据"的网关,差别就在这一行,运维得看得见。
+	gateway.AllowSimulation = cfg.Env != "prod"
+	slog.Info("simulation mode", "env", cfg.Env, "allowSimulatedData", gateway.AllowSimulation)
 	svc.LogApprovalStaffing()
 	h := handler.New(svc, repo)
 

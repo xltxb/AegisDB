@@ -137,6 +137,8 @@
   auditFootHint: '点击「全部风险」可按 高危 / 中 / 低 过滤 · 导出含完整命令与审批链',
   allRisk: '全部风险', med: '中', low: '低',
   rExecuted: '已执行', rPending: '审批中', rRejected: '已拒绝', rWarn: '已告警', rExported: '已导出',
+  // 走了模拟路径,没有接触任何数据库(开发/演示环境专有;生产上模拟一律被拒)。
+  rSimulated: '模拟(未执行)',
   t24h: '近 24h', t7d: '近 7 天', t30d: '近 30 天', tAll: '全部时间',
   auditFrom: '起始', auditTo: '结束', auditClearRange: '清除时间', auditTotal: '共 {n} 条', auditPageOf: '第 {p} / {n} 页',
   // approval inbox

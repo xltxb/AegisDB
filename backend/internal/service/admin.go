@@ -136,6 +136,13 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 		}
 		return s.labelProjects(connID, out)
 	}
+	// 生产环境不返回模拟数据 —— 见 gateway/simulation.go。种子树是演示数据,
+	// 在生产上把它当成"这台实例的库表"显示,是把演示数据集摆进了生产的树里。
+	if !gateway.SimulationAllowed() {
+		out.Error = gateway.ErrSimulationDisabled.Error()
+		return out
+	}
+	// SIMULATED-PATH: schema-tree —— 见 docs/simulated-paths.md。
 	// No credentials → simulated connection: return the seeded tree (if any).
 	objs, _ := s.Repo.SchemaForConnection(connID)
 	order := []string{}
@@ -201,6 +208,11 @@ func (s *Services) ConnectionObjects(u *model.User, connID int64, scope, databas
 	}
 	applyTargetDatabase(conn, database)
 	if !gateway.RealExecSupported(conn) {
+		// 生产环境不返回模拟数据 —— 见 gateway/simulation.go。
+		if !gateway.SimulationAllowed() {
+			out.Error = gateway.ErrSimulationDisabled.Error()
+			return out
+		}
 		return simulatedObjects(conn.Engine)
 	}
 	objs, err := gateway.RealObjects(conn, strings.TrimSpace(scope))
@@ -237,6 +249,10 @@ func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, ty
 	}
 	applyTargetDatabase(conn, database)
 	if !gateway.RealExecSupported(conn) {
+		// 生产环境不返回模拟数据 —— 见 gateway/simulation.go。
+		if !gateway.SimulationAllowed() {
+			return nil, gateway.ErrSimulationDisabled
+		}
 		return &dto.ObjectSourceResp{Name: name, Type: typ, Source: simulatedObjectSource(conn.Engine, typ, name)}, nil
 	}
 	src, err := gateway.RealObjectSource(conn, strings.TrimSpace(scope), typ, name)
@@ -246,6 +262,8 @@ func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, ty
 	return &dto.ObjectSourceResp{Name: name, Type: typ, Source: src}, nil
 }
 
+// SIMULATED-PATH: objects-list —— 见 docs/simulated-paths.md。
+//
 // simulatedObjects is the demo object set for a credential-less connection,
 // shaped to what the engine family would really have.
 func simulatedObjects(engine string) dto.DbObjectsResp {
@@ -268,6 +286,8 @@ func simulatedObjects(engine string) dto.DbObjectsResp {
 	return out
 }
 
+// SIMULATED-PATH: object-source —— 见 docs/simulated-paths.md。
+//
 // simulatedObjectSource synthesises a plausible body for a demo object.
 func simulatedObjectSource(engine, typ, name string) string {
 	head := "-- 模拟连接(未配置真实凭据),以下为演示内容\n"

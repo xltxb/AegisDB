@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   Filter, Calendar, CircleCheck, Hourglass, CircleX, TriangleAlert, Download, ChevronLeft, ChevronRight, X, FileText,
+  FlaskConical,
 } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -134,6 +135,10 @@ function resMeta(s: string) {
   // it is a fact worth being able to find later. Without this branch it would
   // fall through below and be reported as 已告警, which is simply untrue.
   if (s === 'exported') return { t: t('rExported'), c: 'var(--accent-text)', icon: Download }
+  // 这条命令**根本没有接触任何数据库** —— 它走的是模拟路径(开发/演示环境专有,
+  // 生产上模拟一律被拒)。中性色,不是告警:没有任何东西出错。少了这一条它会落到
+  // 下面的 已告警,而那和"已执行"一样不是真的。
+  if (s === 'simulated') return { t: t('rSimulated'), c: 'var(--text-muted)', icon: FlaskConical }
   return { t: t('rWarn'), c: 'var(--warning-text)', icon: TriangleAlert }
 }
 function kw(cmd: string) { return cmd.split(/\s+/)[0] }

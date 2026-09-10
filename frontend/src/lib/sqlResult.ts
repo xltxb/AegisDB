@@ -111,6 +111,12 @@ export interface SynthTable {
   numeric: boolean[]
 }
 
+// SIMULATED-PATH: exec-result-grid —— 见 docs/simulated-paths.md。
+//
+// 这张表格是**合成的**:没有凭据的实例不会真的去查,行数由服务端随机给出,内容由这里
+// 编。它与真实结果在屏幕上长得一模一样,用户分辨不出 —— 那是明知的欠账,选项写在那份
+// 清单的"待补充"里。
+//
 // synthTable builds display columns + up to `limit` demo rows for a SELECT.
 export function synthTable(sql: string, rowCount: number, limit = 12): SynthTable {
   let columns = parseColumns(sql)

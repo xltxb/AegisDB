@@ -321,9 +321,11 @@ func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql 
 		return s.Executor.Run(ctx, conn, sql, timeout)
 	}
 	total, rows, ms := len(stmts), 0, 0
+	simulated := true // 空批次不会走到这里;逐条都模拟才算整批模拟
 	for i, one := range stmts {
 		res := s.Executor.Run(ctx, conn, one, timeout)
 		ms += res.Ms
+		simulated = simulated && res.Simulated
 		if res.Err != nil {
 			return gateway.ExecResult{
 				Output: fmt.Sprintf("· 已执行 %d/%d 条后失败 · 第 %d 条: %s", i, total, i+1, res.Output),
@@ -339,6 +341,8 @@ func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql 
 		Output:    fmt.Sprintf("批量执行完成 · 共 %d 条语句 · %d 行受影响", total, rows),
 		OutputRef: model.NewRuleRef(model.OutBatchDone, "n", model.Itoa(total), "rows", model.Itoa(rows)),
 		Rows:      rows, Ms: ms,
+		// 整批的性质跟着单条走:逐条都是模拟的,整批当然也没碰过任何数据库。
+		Simulated: simulated,
 	}
 }
 
@@ -347,6 +351,11 @@ func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql 
 func execResultStatus(res gateway.ExecResult) string {
 	if res.Err != nil {
 		return model.ResultWarn
+	}
+	// 模拟结果没有接触任何数据库 —— 记成 executed 就是在审计链上写下一句假话。
+	// 它也不是 warn:没有任何东西出错。见 model.ResultSimulated。
+	if res.Simulated {
+		return model.ResultSimulated
 	}
 	return model.ResultExecuted
 }
