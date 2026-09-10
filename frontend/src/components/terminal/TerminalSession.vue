@@ -19,6 +19,7 @@ import { useEnvTierStore } from '@/stores/envtier'
 import { useSnippetStore } from '@/stores/snippets'
 import { useUIStore } from '@/stores/ui'
 import { LineEditor } from '@/lib/lineEditor'
+import { isCopyShortcut } from '@/lib/copyShortcut'
 import { needsArming, slotFromEvent, slotLabel, snippetPreview, snippetSubmitText } from '@/lib/snippet'
 import { countStatements } from '@/lib/sqlCount'
 import { WsTerminal, type WsStatus } from '@/lib/wsTerminal'
@@ -365,6 +366,19 @@ onMounted(() => {
   // Only the FOCUSED terminal sees the event, so background tabs stay inert.
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true
+    // 有选区时 Ctrl+C 是**复制**,不是中断 —— 见 lib/copyShortcut.ts。
+    //
+    // 复制完把选区清掉:下一次 Ctrl+C 就该是中断了。不清的话选区一直在,中断就永远
+    // 按不出来 —— 这也正是 Windows Terminal 的做法。
+    if (isCopyShortcut(e, term.hasSelection())) {
+      const sel = term.getSelection()
+      // 选中即复制那条路径已经写过一次剪贴板了,这里再写一次是兜底:它在非 HTTPS
+      // 源上会静默失败,而那时用户按下的这一次才是他唯一一次明确的复制动作。
+      if (sel && navigator.clipboard?.writeText) navigator.clipboard.writeText(sel).catch(() => {})
+      term.clearSelection()
+      e.preventDefault()
+      return false
+    }
     const slot = slotFromEvent(e)
     if (slot === null) return true
     e.preventDefault()
