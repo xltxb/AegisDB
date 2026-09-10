@@ -53,3 +53,5 @@ Thumbs.db
 /backend/internal/bootstrap/uploads/
 # 同理,从 backend/ 起服务时上传的脚本落在这里 —— 是用户上传的真实 SQL,不进仓库
 /backend/uploads/
+# CodeGraph 本地索引 (SQLite),按机器生成,不进仓库
+/.codegraph/
