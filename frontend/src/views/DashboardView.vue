@@ -60,8 +60,10 @@ const stats = ref<{ online: boolean; p50Ms: number; p95Ms: number; intercepts: n
 const openWindows = computed(() => windows.value.filter((w) => w.active))
 const pendingWindows = computed(() => windows.value.filter((w) => w.status === 'pending'))
 /** 已批准、启用中、但此刻没开 —— 也就是"接下来会开"的那些。 */
+// 「排期」里不能有已经开完的班车。少了 !w.expired 这一条,一个上周结束的一次性窗口
+// 会永远挂在"已批准尚未到点"下面 —— 那份列表说的是"接下来会开的门",而它不会再开了。
 const queuedWindows = computed(() =>
-  windows.value.filter((w) => w.status === 'approved' && w.enabled && !w.active))
+  windows.value.filter((w) => w.status === 'approved' && w.enabled && !w.active && !w.expired))
 
 /** 等我决定的单子 —— canDecide 也是服务端算好的,前端不再拼一遍那三个条件。 */
 const myTodo = computed(() => approvals.value.filter((a) => a.status === 'pending' && a.canDecide))

@@ -398,7 +398,9 @@
   ewTitle: 'Execution windows', ewSub: 'Inside a window, mid/high-risk statements on the named database run without approval. It changes whether a human must approve, not whether the role is permitted — a capability-matrix deny still denies.',
   ewNew: 'New window', ewEdit: 'Edit window', ewEmpty: 'No windows yet — agree the slot before the change train, and it opens and closes on time',
   ewColName: 'Window', ewColScope: 'Scope', ewColWhen: 'When', ewColState: 'State',
-  ewOpen: 'open now', ewClosed: 'closed', ewDisabled: 'disabled', ewEveryDay: 'daily', ewNoReason: 'no reason given',
+  // 'closed' 原先同时盖住了"还没到"和"已经开完",与中文一样含混 —— 既然要区分,
+  // 两边都得说清楚,否则英文用户只是换了一个词继续被误导。
+  ewOpen: 'open now', ewClosed: 'not open yet', ewExpired: 'expired', ewDisabled: 'disabled', ewEveryDay: 'daily', ewNoReason: 'no reason given',
   ewNamePh: 'e.g. nightly train', ewReasonPh: 'why this door is open', ewDbPh: 'database name, required',
   ewFReason: 'Reason', ewFInstance: 'Instance', ewFDatabase: 'Database', ewFKind: 'Schedule', ewFEnabled: 'Enabled',
   ewEnabledHint: 'kept but inert when off', ewKindRecurring: 'Recurring', ewKindOnce: 'One-off',

@@ -213,3 +213,81 @@ func TestEffectiveDatabase_OraclePrefersSchema(t *testing.T) {
 		t.Errorf("非 Oracle 应取 Database,实际 %q", got)
 	}
 }
+
+// ---- 到期(windowExpired)----
+//
+// 原先界面只分得出"开着"和"没开着",于是一个上周就结束的一次性窗口一直显示成
+// "未到点" —— 一句读起来像"再等等就到了"的话,而它永远不会到。
+
+// 一次性窗口:过了结束时刻就是到期,边界与 windowCovers 一样左闭右开。
+func TestWindowExpired_Once(t *testing.T) {
+	tz := "Asia/Shanghai"
+	s, e := at(t, tz, "2026-09-08 02:00"), at(t, tz, "2026-09-08 04:00")
+	w := &model.ExecWindow{Enabled: true, Kind: model.WindowOnce, Timezone: tz, StartsAt: &s, EndsAt: &e}
+
+	for _, c := range []struct {
+		when string
+		want bool
+	}{
+		{"2026-09-08 01:59", false}, // 还没发车
+		{"2026-09-08 03:00", false}, // 正开着
+		{"2026-09-08 04:00", true},  // 右开:到点那一瞬就算到期
+		{"2026-09-09 10:00", true},
+	} {
+		if got := windowExpired(w, at(t, tz, c.when)); got != c.want {
+			t.Errorf("%s: expired=%v, want %v", c.when, got, c.want)
+		}
+	}
+
+	// 覆盖与到期之间不留缝:任一时刻不会两者都为假又"说不清"。
+	end := at(t, tz, "2026-09-08 04:00")
+	if windowCovers(w, end) || !windowExpired(w, end) {
+		t.Error("结束时刻应当是「不覆盖且已到期」")
+	}
+}
+
+// 周期班车:没设停运时刻就没有到期这回事 —— 它每周都会再来一次。
+func TestWindowExpired_RecurringWithoutNotAfterNeverExpires(t *testing.T) {
+	tz := "Asia/Shanghai"
+	w := &model.ExecWindow{
+		Enabled: true, Kind: model.WindowRecurring, Timezone: tz,
+		StartMin: 2 * 60, EndMin: 4 * 60,
+	}
+	if windowExpired(w, at(t, tz, "2099-01-01 00:00")) {
+		t.Error("没有停运时刻的周期班车不该到期")
+	}
+}
+
+// 设了停运时刻的周期班车:过了就是到期。
+func TestWindowExpired_RecurringAfterNotAfter(t *testing.T) {
+	tz := "Asia/Shanghai"
+	na := at(t, tz, "2026-09-09 00:00")
+	w := &model.ExecWindow{
+		Enabled: true, Kind: model.WindowRecurring, Timezone: tz,
+		StartMin: 2 * 60, EndMin: 4 * 60, NotAfter: &na,
+	}
+	if windowExpired(w, at(t, tz, "2026-09-08 03:00")) {
+		t.Error("停运前不该算到期")
+	}
+	if !windowExpired(w, at(t, tz, "2026-09-09 00:00")) {
+		t.Error("到停运时刻那一瞬就该算到期")
+	}
+}
+
+// 到期只描述**时间表**:停用的、还在等审批的窗口,时段过了同样是到期。
+//
+// 这一条要单独钉住,因为顺手加个 `w.Enabled &&` 或 `status == approved` 看起来很自然,
+// 而那会让"申请了窗口、审批没批下来、时间已经过去"这种最该被看见的情形重新隐身。
+func TestWindowExpired_IgnoresEnabledAndStatus(t *testing.T) {
+	tz := "Asia/Shanghai"
+	s, e := at(t, tz, "2026-09-08 02:00"), at(t, tz, "2026-09-08 04:00")
+	now := at(t, tz, "2026-09-09 10:00")
+	for _, w := range []*model.ExecWindow{
+		{Enabled: false, Kind: model.WindowOnce, Timezone: tz, StartsAt: &s, EndsAt: &e, Status: model.WindowApproved},
+		{Enabled: true, Kind: model.WindowOnce, Timezone: tz, StartsAt: &s, EndsAt: &e, Status: model.WindowPending},
+	} {
+		if !windowExpired(w, now) {
+			t.Errorf("时段已过就该算到期(enabled=%v status=%s)", w.Enabled, w.Status)
+		}
+	}
+}

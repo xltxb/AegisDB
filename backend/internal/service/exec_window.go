@@ -85,6 +85,27 @@ func (s *Services) relaxByWindow(conn *model.Connection, v gateway.Verdict, now 
 	return v, w
 }
 
+// windowExpired 判断这扇门是不是再也不会开了。
+//
+// 只看**时间表**,不看审批状态、也不看启用与否 —— 一张还在等审批、时段却已经过去的
+// 窗口同样是到期的,而那恰恰是最该被看见的一种(见 model.ExecWindow.Expired)。
+//
+// 边界与 windowCovers 一致:左闭右开,所以到了结束时刻的那一瞬,窗口既不覆盖也已到期,
+// 中间不留一个"两边都不是"的缝。
+func windowExpired(w *model.ExecWindow, now time.Time) bool {
+	if w == nil {
+		return false
+	}
+	switch w.Kind {
+	case model.WindowOnce:
+		return w.EndsAt != nil && !now.Before(*w.EndsAt)
+	case model.WindowRecurring:
+		// 没设停运时刻的班车每周都会再来一次,本来就没有到期这回事。
+		return w.NotAfter != nil && !now.Before(*w.NotAfter)
+	}
+	return false
+}
+
 // windowCovers 判断某一时刻是否落在窗口内。
 func windowCovers(w *model.ExecWindow, now time.Time) bool {
 	if w == nil || !w.Enabled {

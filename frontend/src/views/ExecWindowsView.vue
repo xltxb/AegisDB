@@ -10,7 +10,7 @@
 // 条件上,不在这一页)。通过之后它才按自己的时间表开合。
 import { ref, computed, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Clock, Plus, Pencil, Trash2, X, ShieldCheck, Hourglass, Ban, Undo2 } from 'lucide-vue-next'
+import { Clock, Plus, Pencil, Trash2, X, ShieldCheck, Hourglass, Ban, Undo2, CalendarX } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
@@ -138,12 +138,17 @@ function daysOf(w: ExecWindow): boolean[] {
 }
 
 /**
- * 一行的状态。四种,顺序就是它们的优先级:
+ * 一行的状态。五种,顺序就是它们的优先级:
  *
  *   待审批 / 已驳回 —— 还没签字,或者签的是"不行"。这两种下面**没有**开不开的问题,
  *                     所以要先说,不能让一张待审批的窗口显示成"未到时间"。
  *   已停用          —— 签过字,但运维把它关了。
- *   进行中 / 未到时间 —— 签过字、也启用了,剩下的才是时间表的事。
+ *   进行中          —— 签过字、也启用了,而且此刻在时间表内。
+ *   已到期 / 未到点  —— 都不在时间表内,但这两句话方向相反:一个是"再也不会开了",
+ *                     另一个是"再等等就到了"。原先只有后者,于是一个上周就结束的
+ *                     一次性窗口会永远显示成"未到点"。
+ *
+ * 到期与否由后端算(w.expired),和 active 同一个理由:时区与跨午夜写两遍会分叉。
  */
 function stateOf(w: ExecWindow) {
   if (w.status === 'pending') return { cls: 'pending', text: 'ewStPending', icon: Hourglass }
@@ -153,6 +158,8 @@ function stateOf(w: ExecWindow) {
   if (w.status === 'cancelled') return { cls: 'off', text: 'ewStCancelled', icon: Undo2 }
   if (!w.enabled) return { cls: 'off', text: 'ewDisabled', icon: Ban }
   if (w.active) return { cls: 'open', text: 'ewOpen', icon: ShieldCheck }
+  // 已到期用中性灰,不用红:它不是出了问题,只是这班车开完了。
+  if (w.expired) return { cls: 'off', text: 'ewExpired', icon: CalendarX }
   return { cls: 'closed', text: 'ewClosed', icon: Clock }
 }
 /** 只有申请人自己或管理员能改/撤(后端也同样判,这里只是不摆一个必被拒的按钮)。 */

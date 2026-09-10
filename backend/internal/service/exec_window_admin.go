@@ -35,6 +35,8 @@ func (s *Services) ListExecWindows() ([]model.ExecWindow, error) {
 	now := time.Now()
 	for i := range ws {
 		ws[i].Active = ws[i].Status == model.WindowApproved && windowCovers(&ws[i], now)
+		// Expired 只描述时间表,所以**不**看 status —— 理由见 model.ExecWindow.Expired。
+		ws[i].Expired = windowExpired(&ws[i], now)
 	}
 	return ws, nil
 }
