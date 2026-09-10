@@ -766,8 +766,11 @@ function clickInst(id: number) {
 .foot { padding: 12px 14px; border-top: 1px solid var(--border-subtle); font: 500 11px var(--font-mono); color: var(--text-faint); }
 .src-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
 .src-mask { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); }
+/* 宽度按 DDL 的实际行长给,不是按"弹窗惯例"给:一条带属主的 ALTER TABLE …
+   ADD CONSTRAINT … FOREIGN KEY … REFERENCES … 就有一百二十来字符,760px 下会被
+   折断在标识符中间,读起来比横向滚动还费劲。窄屏仍按视口收。 */
 .src-modal {
-  position: relative; width: min(760px, 92vw); max-height: 78vh; display: flex; flex-direction: column;
+  position: relative; width: min(1040px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
   background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden;
 }
 .src-hdr { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }

@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -274,17 +276,33 @@ func pgObjectSource(conn *model.Connection, schema, typ, name string) (string, e
 
 // pgTableDDL reconstructs a readable CREATE TABLE for the PostgreSQL family.
 // PostgreSQL has no SHOW CREATE TABLE and no server function for it (pg_dump
-// builds the DDL client-side), so this composes the honest equivalent from
-// information_schema plus the real index definitions from pg_indexes.
+// builds the DDL client-side), so this composes the honest equivalent from the
+// catalogs — columns, constraints, indexes, comments, tablespace, storage
+// options, and (on DWS/GaussDB) the distribution key. See pg_tableddl.go.
+//
+// information_schema 那条老路留着做退路:pg_catalog 是主路,但万一某个发行版/权限
+// 组合下它走不通,退回去至少还能给出列 —— 而不是给出一个"查不到"。
 func pgTableDDL(conn *model.Connection, schema, name string) (string, error) {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return "", err
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ddlQueryTimeout)
 	defer cancel()
 
+	t, err := pgTableStructure(ctx, db, schema, name)
+	if err == nil {
+		return renderPGTable(t), nil
+	}
+	if errors.Is(err, errPGRelNotFound) {
+		// Same reasoning as pgObjectSource: name the database consulted.
+		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
+	}
+	return pgTableDDLFromInformationSchema(ctx, db, conn, schema, name, err)
+}
+
+func pgTableDDLFromInformationSchema(ctx context.Context, db *sql.DB, conn *model.Connection, schema, name string, cause error) (string, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT column_name, data_type,
 		        COALESCE(character_maximum_length, -1),
@@ -321,8 +339,11 @@ func pgTableDDL(conn *model.Connection, schema, name string) (string, error) {
 		// Same reasoning as pgObjectSource: name the database consulted.
 		return "", fmt.Errorf("对象不存在(数据库 %s, schema %s)", conn.Database, schema)
 	}
-	ddl := fmt.Sprintf("-- 由 information_schema 重建(PostgreSQL 无 SHOW CREATE TABLE)\nCREATE TABLE %s.%s (\n%s\n);",
-		schema, name, strings.Join(lines, ",\n"))
+	// 说清楚这是退路,以及为什么走到了退路上 —— 这一份没有约束、注释、表空间和
+	// 分布键,人得知道少的是什么、该去查谁。
+	ddl := fmt.Sprintf("-- pg_catalog 读取失败(%s),以下仅由 information_schema 重建:\n"+
+		"-- 只有列与索引,不含约束/注释/表空间/存储参数/分布键。\nCREATE TABLE %s.%s (\n%s\n);",
+		errBrief(cause), schema, name, strings.Join(lines, ",\n"))
 
 	irows, err := db.QueryContext(ctx,
 		`SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND tablename = $2 ORDER BY indexname`, schema, name)
@@ -432,56 +453,52 @@ func oracleObjectSource(conn *model.Connection, owner, typ, name string) (string
 }
 
 // oracleTableDDL asks DBMS_METADATA for the authoritative DDL (what SQLcl's
-// `ddl` prints); when the account may not run it, fall back to a readable
-// reconstruction from ALL_TAB_COLUMNS.
+// `ddl` prints); when the account may not run it, fall back to a reconstruction
+// from the data dictionary (oracle_tableddl.go).
+//
+// 权威路径也要补两段。GET_DDL('TABLE') 带列、约束、表空间、存储参数和分区,但
+// **不带索引、不带注释** —— 那两类在 Oracle 眼里是"依赖对象",归
+// GET_DEPENDENT_DDL 管。少了它们,一份看起来权威的 DDL 恰恰缺了看表结构时最常
+// 被问的两件事。
 func oracleTableDDL(conn *model.Connection, owner, name string) (string, error) {
 	db, release, err := openConn(conn)
 	if err != nil {
 		return "", err
 	}
 	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ddlQueryTimeout)
 	defer cancel()
 
 	var ddl string
-	if err := db.QueryRowContext(ctx,
-		`SELECT DBMS_METADATA.GET_DDL('TABLE', :1, :2) FROM dual`, name, owner).Scan(&ddl); err == nil {
-		if strings.TrimSpace(ddl) != "" {
-			return ddl, nil
+	metaErr := db.QueryRowContext(ctx,
+		`SELECT DBMS_METADATA.GET_DDL('TABLE', :1, :2) FROM dual`, name, owner).Scan(&ddl)
+	if metaErr == nil && strings.TrimSpace(ddl) == "" {
+		metaErr = fmt.Errorf("返回为空")
+	}
+	if metaErr == nil {
+		var b strings.Builder
+		b.WriteString(strings.TrimRight(ddl, "\n \t"))
+		// 依赖对象逐类取。没有索引/没有注释时 Oracle 抛 ORA-31608 而不是返回空,
+		// 所以这里的 err 多半是"本来就没有",不该当成故障往上报。
+		for _, dep := range []struct{ kind, title string }{
+			{"INDEX", "索引"},
+			{"COMMENT", "注释"},
+		} {
+			var s string
+			if err := db.QueryRowContext(ctx,
+				`SELECT DBMS_METADATA.GET_DEPENDENT_DDL(:1, :2, :3) FROM dual`,
+				dep.kind, name, owner).Scan(&s); err == nil && strings.TrimSpace(s) != "" {
+				b.WriteString("\n\n-- " + dep.title + "\n" + strings.TrimRight(s, "\n \t"))
+			}
 		}
+		return b.String(), nil
 	}
 
-	rows, err := db.QueryContext(ctx,
-		`SELECT column_name, data_type, data_length, nullable
-		 FROM all_tab_columns WHERE owner = :1 AND table_name = :2 ORDER BY column_id`, owner, name)
+	t, err := oracleTableStructure(ctx, db, owner, name)
 	if err != nil {
 		return "", err
 	}
-	defer rows.Close()
-	lines := []string{}
-	for rows.Next() {
-		var col, dtype, nullable string
-		var dlen int64
-		if err := rows.Scan(&col, &dtype, &dlen, &nullable); err != nil {
-			return "", err
-		}
-		l := fmt.Sprintf("  %s %s", col, dtype)
-		if dlen > 0 && (strings.Contains(dtype, "CHAR") || strings.Contains(dtype, "RAW")) {
-			l += fmt.Sprintf("(%d)", dlen)
-		}
-		if nullable == "N" {
-			l += " NOT NULL"
-		}
-		lines = append(lines, l)
-	}
-	if err := rows.Err(); err != nil {
-		return "", err
-	}
-	if len(lines) == 0 {
-		return "", fmt.Errorf("对象不存在")
-	}
-	return fmt.Sprintf("-- 由 ALL_TAB_COLUMNS 重建(DBMS_METADATA.GET_DDL 不可用)\nCREATE TABLE %s.%s (\n%s\n);",
-		owner, name, strings.Join(lines, ",\n")), nil
+	return renderOracleTable(t, errBrief(metaErr)), nil
 }
 
 // ---------------------------------------------------------------- SQLite

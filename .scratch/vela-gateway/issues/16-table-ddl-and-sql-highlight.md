@@ -38,4 +38,7 @@ Status: ready-for-human（已实现，待真实环境验收）
 ## 待真实环境验收
 
 - MySQL SHOW CREATE TABLE / Oracle DBMS_METADATA 在真实实例上的权限与输出;
+  (Oracle 这一路已在 issue 21 里补全:GET_DDL 不含索引与注释,降级重建也只有列名 ——
+  两处都改了,同样待真实环境验收;PostgreSQL / DWS 那一路见 issue 22,改读 pg_catalog,
+  补上约束/注释/表空间,以及 DWS 的分布键与行列存)
 - 终端高亮在超长语句、多行续行、中文注释下的观感。
