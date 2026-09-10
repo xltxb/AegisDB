@@ -844,9 +844,12 @@ type MetaSync struct {
 	ConnectionID int64     `gorm:"primaryKey" json:"connectionId"`
 	StartedAt    time.Time `json:"startedAt"`
 	FinishedAt   time.Time `json:"finishedAt"`
-	Databases    int       `gorm:"not null;default:0" json:"databases"`
-	Tables       int       `gorm:"not null;default:0" json:"tables"`
-	Columns      int       `gorm:"not null;default:0" json:"columns"`
+	// 列名是 db_count / table_count / column_count,不是 databases / tables / columns:
+	// `databases` 是 MySQL 8 的保留字(生产上第一次 migrate 就炸在这)。Go 字段名与
+	// JSON 保持原样 —— 保留字是 SQL 的事,接口不必跟着别扭。
+	Databases int `gorm:"column:db_count;not null;default:0" json:"databases"`
+	Tables    int `gorm:"column:table_count;not null;default:0" json:"tables"`
+	Columns   int `gorm:"column:column_count;not null;default:0" json:"columns"`
 	// Err 是最近一次失败的原因。成功时清空 —— 留着上次的错误会让一台已经好了的实例
 	// 永远显示成坏的。
 	Err string `gorm:"size:512" json:"err,omitempty"`

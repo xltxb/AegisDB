@@ -77,9 +77,15 @@ CREATE TABLE IF NOT EXISTS tbl_meta_sync (
   connection_id BIGINT       NOT NULL,
   started_at    DATETIME(3)  NULL,
   finished_at   DATETIME(3)  NULL,
-  databases     INT          NOT NULL DEFAULT 0,
-  tables        INT          NOT NULL DEFAULT 0,
-  columns       INT          NOT NULL DEFAULT 0,
+  -- db_count 而不是 `databases`:后者是 MySQL 8 的**保留字**,不加反引号就是语法错。
+  -- 这一条是在生产上第一次 migrate 时炸出来的 —— 开发环境是 SQLite,它不认这套保留字,
+  -- 所以整套测试跑绿也说明不了什么(与 0034 的排序规则是同一类问题)。
+  -- table_count / column_count 一并改名:它们本身不是保留字,但同样读起来像关键字,
+  -- 而这张表当时还没在任何环境上建成,改名不花任何代价。
+  -- 防复发见 bootstrap 的 TestMigrationsAvoidReservedWords。
+  db_count      INT          NOT NULL DEFAULT 0,
+  table_count   INT          NOT NULL DEFAULT 0,
+  column_count  INT          NOT NULL DEFAULT 0,
   -- 最近一次失败的原因。成功时清空 —— 留着上次的错误会让一台已经好了的实例永远
   -- 显示成坏的。
   err           VARCHAR(512) NOT NULL DEFAULT '',
