@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"io"
+	"log/slog"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -201,7 +202,18 @@ func (h *Handler) ScriptConfig(c *gin.Context) {
 // measured by the latency middleware — no hard-coded numbers.
 func (h *Handler) GatewayStats(c *gin.Context) {
 	round := func(v float64) float64 { return math.Round(v*10) / 10 }
-	intercepts, _ := h.Repo.CountProdInterceptions() // real PROD rule hits (0 on error)
+	// 查不出来就记一笔,别只留一个 0。
+	//
+	// 这一行原先是 `intercepts, _ :=`,注释写着"出错就是 0"。它确实不该让整个健康
+	// 探针失败 —— 但一个 0 和"这台库上从没触发过规则"长得一模一样,于是 2026-09-10
+	// 生产上那条 ERROR 1267(跨表 JOIN 的排序规则不一致,见迁移 0034)在界面上的全部
+	// 表现就是"拦截次数 0",没有人会把它当成故障,只有翻 systemd 日志才看得见。
+	//
+	// 静默降级本身没错,错的是**降级时不出声**。
+	intercepts, ierr := h.Repo.CountProdInterceptions()
+	if ierr != nil {
+		slog.Warn("count prod interceptions failed; reporting 0", "err", ierr)
+	}
 	resp.OK(c, gin.H{
 		"online":     true,
 		"p50Ms":      round(metrics.Default.P50()),
