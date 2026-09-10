@@ -2,7 +2,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Database, Tag, Pencil, Search, ChevronDown, X, Plus, Upload, Copy, Check,
-  ChevronsDownUp, ChevronsUpDown, Activity, Download, Rows3, Rows2 } from 'lucide-vue-next'
+  ChevronsDownUp, ChevronsUpDown, Activity, Download, Rows3, Rows2, DatabaseZap } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import TagEditModal from '@/components/modals/TagEditModal.vue'
@@ -650,6 +650,37 @@ async function runBatchCheck() {
   await load()
 }
 
+// 立刻同步一台实例的元数据(表清单 + 列结构)。
+//
+// 它**真的会登录那台库**,所以是一个按钮而不是打开页面就跑。与定时同步的开关无关:
+// 开关关着时这个按钮照样可用 —— 手动本来就是一次明确的决定,也是验证凭据和网络
+// 通不通最快的办法。
+//
+// 结果只留在本次会话里,不写进 c 上:它是"刚才这一次同步的结果",和实例的维护态
+// 是两件事(与批量巡检的 checkResult 同一个理由)。
+const syncBusy = ref<Record<number, boolean>>({})
+const syncResult = ref<Record<number, { ok: boolean; text: string }>>({})
+async function syncMeta(c: Connection) {
+  if (syncBusy.value[c.id]) return
+  syncBusy.value = { ...syncBusy.value, [c.id]: true }
+  try {
+    const r = await api.syncConnectionMetadata(c.id)
+    // 服务端回的是"这台实例现在缓存了多少张表"。0 张是个真实的答案,不是失败 ——
+    // 但它和"没同步过"读起来一样,所以要说成"0 张表"而不是留空。
+    const n = r.sync?.tables ?? r.tables ?? 0
+    syncResult.value = { ...syncResult.value, [c.id]: { ok: true, text: t('connMetaTables', { n }) } }
+    ui.notify(t('connMetaSyncOk', { name: c.name, n }), 'success')
+  } catch (e) {
+    // 失败原因来自服务端(连不上 / 没权限 / 未配凭据),照原样显示。
+    // 换成一句"同步失败"会把这三种完全不同的处置方式压成同一句话。
+    syncResult.value = { ...syncResult.value, [c.id]: { ok: false, text: t('connMetaSyncBad') } }
+    // notifyError 自己会从抛出的错误里取服务端那句话,兜底文案只在取不到时用。
+    ui.notifyError(e, t('connMetaSyncBad'))
+  } finally {
+    syncBusy.value = { ...syncBusy.value, [c.id]: false }
+  }
+}
+
 // 导出所选配置。**不含凭据** —— 口令在库里是加密的,而一份能落到下载目录里的
 // CSV 不该是把它们带出网关的那条路。
 function exportSelected() {
@@ -861,6 +892,11 @@ async function add() {
             </span>
           </div>
           <div class="opscell">
+            <!-- 同步结果只在本次会话里存在,和巡检结论同一个理由 -->
+            <span v-if="syncResult[c.id]" class="ck" :class="syncResult[c.id].ok ? 'ok' : 'bad'">{{ syncResult[c.id].text }}</span>
+            <button v-if="isAdmin" class="ghost" :title="$t('connMetaSync')" :disabled="syncBusy[c.id]" @click="syncMeta(c)">
+              <DatabaseZap :size="14" :class="{ spin: syncBusy[c.id] }" />
+            </button>
             <button v-if="isAdmin" class="ghost" :title="$t('connEdit')" @click="openEdit(c)"><Pencil :size="14" /></button>
           </div>
         </div>
@@ -1205,7 +1241,12 @@ async function add() {
 .polsel.strict, .polpill.strict { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-subtle-border, transparent); }
 .polsel.approve, .polpill.approve { background: var(--warning-subtle); color: var(--warning-text); }
 .polsel.audit, .polpill.audit { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
-.opscell { display: flex; align-items: center; justify-content: flex-end; }
+.opscell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.opscell .ghost:disabled { opacity: .55; cursor: default; }
+/* 同步时让图标转起来 —— 一个点下去没有任何反应的按钮会被连点,
+   而每一次点击都是一次真的登录目标库。 */
+.spin { animation: metaspin 1s linear infinite; }
+@keyframes metaspin { to { transform: rotate(360deg); } }
 /* 状态:一颗点 + 两个字。点会呼吸,但只在"在线"时 —— 呼吸表示"还活着",
    而维护态恰恰是不动的那个。 */
 .st { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--text-muted); }

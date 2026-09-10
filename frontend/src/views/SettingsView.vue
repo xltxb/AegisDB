@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { EyeOff, Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound, Webhook } from 'lucide-vue-next'
+import { EyeOff, Shield, GitPullRequestArrow, Lock, Bell, Palette, Sailboat, KeyRound, Webhook, DatabaseZap } from 'lucide-vue-next'
 import VButton from '@/components/common/VButton.vue'
 import VSwitch from '@/components/common/VSwitch.vue'
 import VSelect from '@/components/common/VSelect.vue'
@@ -29,6 +29,7 @@ const auth = useAuthStore()
 // Tabbed sections — only the active panel renders, so the page stays compact.
 const tabs = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
+  { id: 'meta', icon: DatabaseZap, label: 'setMeta' },
   { id: 'approval', icon: GitPullRequestArrow, label: 'setAppr' },
   { id: 'security', icon: Lock, label: 'setSec' },
   { id: 'sensitive', icon: EyeOff, label: 'sensTitle' },
@@ -115,6 +116,11 @@ const exportMaxRows = ref(5000000) // per-job export caps; 0 = unlimited
 const exportMaxBytes = ref(2000000000)
 const exportTimeout = ref(1800) // per-job export execution budget, seconds
 const exportRetention = ref(3)  // 归档在服务器上保留几天,0 = 永久保留
+// 元数据同步。默认**关着** —— 打开它意味着这台网关会周期性地登录每一台实例,
+// 那必须是一次明确的决定,不能因为升级了一个版本就自己开始跑。
+const metaEnabled = ref(false)
+const metaIntervalHrs = ref(24)
+const metaConcurrency = ref(2)
 
 const policyOpts = ['strict', 'approve-1', 'audit-only']
 
@@ -158,6 +164,9 @@ onMounted(async () => {
     // `|| 3` 会把用户设的 0(永久保留)悄悄改回 3,所以这里不能用它兜底。
     exportRetention.value = Math.max(0, Number(parse(g['export.retentionDays'], 3)))
     execTimeout.value = Number(parse(g['gateway.execTimeout'], 30)) || 30
+    metaEnabled.value = parse(g['meta.sync.enabled'], false)
+    metaIntervalHrs.value = Number(parse(g['meta.sync.intervalHours'], 24)) || 24
+    metaConcurrency.value = Number(parse(g['meta.sync.concurrency'], 2)) || 2
     // External approval — secrets (token/callbackSecret) are never returned; keep
     // the fields blank (blank on save == keep unchanged) and just note presence.
     extEnabled.value = parse(g['approval.external.enabled'], false)
@@ -193,6 +202,9 @@ async function save() {
       'export.execTimeout': Math.max(1, Math.round(Number(exportTimeout.value) || 1800)),
       // 0 = 永久保留,和 maxRows 的 0=不限一致;负数是笔误,归零
       'export.retentionDays': Math.max(0, Math.round(Number(exportRetention.value) || 0)),
+      'meta.sync.enabled': metaEnabled.value,
+      'meta.sync.intervalHours': Math.max(1, Math.min(720, Math.round(Number(metaIntervalHrs.value) || 24))),
+      'meta.sync.concurrency': Math.max(1, Math.min(8, Math.round(Number(metaConcurrency.value) || 2))),
       'security.sessionTTL': ttlKey,
       'security.requireMFA': mfa.value,
       'security.mfaMandatory': mfaMandatory.value,
@@ -250,6 +262,21 @@ async function save() {
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportMaxBytes') }}</div><div class="rd">{{ $t('setExportMaxBytesD') }}</div></div><div class="w160"><input v-model.number="exportMaxBytes" type="number" min="0" class="lkin" /></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setExportTimeout') }}</div><div class="rd">{{ $t('setExportTimeoutD') }}</div></div><div class="w160"><input v-model.number="exportTimeout" type="number" min="1" class="lkin" /></div></div>
         <div class="srow last"><div class="grow"><div class="rt">{{ $t('setExportRetention') }}</div><div class="rd">{{ $t('setExportRetentionD') }}</div></div><div class="w160"><input v-model.number="exportRetention" type="number" min="0" class="lkin" /></div></div>
+      </section>
+
+      <!-- 元数据同步 -->
+      <section v-show="activeTab === 'meta'" class="card">
+        <div class="shead"><div class="sic"><DatabaseZap :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setMeta') }}</div><div class="ss">{{ $t('setMetaSub') }}</div></div></div>
+        <div class="srow"><div class="grow"><div class="rt">{{ $t('setMetaEnabled') }}</div><div class="rd">{{ $t('setMetaEnabledD') }}</div></div><VSwitch v-model="metaEnabled" /></div>
+        <div v-if="metaEnabled" class="srow"><div class="grow"><div class="rt">{{ $t('setMetaInterval') }}</div><div class="rd">{{ $t('setMetaIntervalD') }}</div></div><div class="w160"><input v-model.number="metaIntervalHrs" type="number" min="1" max="720" class="lkin" /></div></div>
+        <div v-if="metaEnabled" class="srow"><div class="grow"><div class="rt">{{ $t('setMetaConcurrency') }}</div><div class="rd">{{ $t('setMetaConcurrencyD') }}</div></div><div class="w160"><input v-model.number="metaConcurrency" type="number" min="1" max="8" class="lkin" /></div></div>
+        <!-- 这三句不是客套话,是这个功能真实的三处行为。少说任何一句,人都会等在
+             一个不会发生的事情上,或者以为某台实例是空的。 -->
+        <div class="srow last"><div class="grow"><div class="rt">{{ $t('setMetaNote') }}</div>
+          <div class="rd">{{ $t('setMetaNoteFirst') }}</div>
+          <div class="rd">{{ $t('setMetaNoteSkip') }}</div>
+          <div class="rd">{{ $t('setMetaNoteStale') }}</div>
+        </div><RouterLink class="srlink" to="/connections">{{ $t('setMetaGo') }}</RouterLink></div>
       </section>
 
       <!-- Approval -->

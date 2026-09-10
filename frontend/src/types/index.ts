@@ -495,6 +495,36 @@ export interface DbObjects {
  * units 是具体哪几个单元失效了:包的规范是好的、只有包体 INVALID,和两者都 INVALID,
  * 对 DBA 不是一回事。编译动作按 kind 走(编包 = 规范加包体一起编)。
  */
+/**
+ * 一台实例最近一次元数据同步的结果。
+ *
+ * 它不是"可有可无的进度条":没有它,"这台实例为什么一张表都没有"就没有答案 ——
+ * 是还没轮到它、连不上、账号没权限,还是它真的空着?界面必须能把这几种分开说。
+ *
+ * err 非空表示上一次同步失败,此时那几个计数是**上一次成功**留下的旧值。
+ */
+export interface MetaSync {
+  connectionId: number
+  startedAt: string
+  finishedAt: string
+  databases: number
+  tables: number
+  columns: number
+  err?: string
+}
+
+/** 缓存下来的一张表(或视图)。syncedAt 是这一行的年龄 —— 界面必须显示它。 */
+export interface MetaTable {
+  id: number
+  connectionId: number
+  dbName: string
+  schemaName: string
+  tableName: string
+  kind: string
+  comment: string
+  syncedAt: string
+}
+
 export interface InvalidObject {
   owner: string
   name: string

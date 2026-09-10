@@ -1,7 +1,7 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp, ExecWindow,
-  ExportJob, InvalidObject, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, RecompileReport, Release, ReleasePage, ReviewCatalog,
+  ExportJob, InvalidObject, LoginResp, Me, Member, MetaSync, MetaTable, Notification, ObjectSource, Pipeline, Project, RecompileReport, Release, ReleasePage, ReviewCatalog,
   SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
@@ -194,6 +194,19 @@ export const api = {
   objectSource: (id: number, scope: string, type: string, name: string, database = '') =>
     http.get<any, Envelope<ObjectSource>>(
       `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
+    ).then(ok),
+
+  // ---- 元数据缓存 ----
+  // 立刻同步一台实例。它**真的会登录那台库**,所以是一次明确的动作(管理员),
+  // 而不是定时任务的一部分 —— 定时开关关着的时候这个接口照样可用。
+  syncConnectionMetadata: (id: number) =>
+    http.post<any, Envelope<{ tables: number; sync: MetaSync | null }>>(
+      `/connections/${id}/metadata/sync`,
+    ).then(ok),
+  // sync 为 null 表示这台实例从没同步过 —— 和"同步过但一张表都没有"不是一回事。
+  connectionMetadata: (id: number, database = '') =>
+    http.get<any, Envelope<{ tables: MetaTable[]; sync: MetaSync | null }>>(
+      `/connections/${id}/metadata${database ? `?database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
 
   // ---- roles ----
