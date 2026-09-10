@@ -1,6 +1,6 @@
 # 07 · 用户与权限管理（菜单 + 能力矩阵 + 成员 + 用户）
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；能力矩阵扩至 8 维，权限页尚未渲染 release 行，见 GitHub issue）
 
 ## What to build
 

@@ -1,9 +1,12 @@
 # PRD · 环境与分层标签解耦(标签绑定制)
 
-Status: done(01–04 全部实现;上线前需确认 webhook 契约,见 issues/03)
+Status: done(01–04 全部实现;webhook 契约已于 2026-08-12 确认无需改动,见文末「遗留」表)
 
 > 本文由 2026-08-04 两轮需求分析收敛而成。实现拆单见本目录 `issues/01..04`。
 > 决策记录见文末「已定决策」。
+>
+> **2026-09-11 以代码为准校准**:模型与判定解耦已全部落地;与本文原稿不一致的实现细节、以及尚未闭合的口子,
+> 集中在「交付现状」一节。
 
 > **2026-08-06 语义纠正**:本文以下所有把 `gli` 写作「灰度」、`staging` 写作「演练UAT」的地方**都是错的**。
 > 正确含义见文末「内置分层标签的含义」。代码从未错 —— 错的一直只是标签。
@@ -92,24 +95,27 @@ tbl_connection
 
 ```
 tbl_env_tier                      分层标签 = 管控等级
-  code              PK size:16    prod / gli / staging / dev / …
+  code              PK size:16    prod / gli / staging / uat / dev / …
   display_name      size:64
   sort_order        int           UI 排序(prod 在最前)
   require_mfa       bool          ← 替 gateway.go:704 的 == EnvProd
   danger_banner     bool          ← 替 TerminalSession.vue:161
   counts_in_pending bool          ← 替 repository.go:1014
   scan_baseline     bool          ← 替 gateway.go:562;全局唯一
+  strict_nowhere    bool          ← 无 WHERE 拦截,2026-09 由全局开关改为按分层(迁移 0030、ADR 0013)
   conn_layer        size:64       ← 替 connEnvMeta 的 "L1 核心 · 写"
   default_role      size:64       ← 替 connEnvMeta 的 dba_l2 / developer
 
 tbl_environment                   环境 = 实例分组
-  code              PK size:32    prod-hk / prod-sh / uat-结算
-  display_name      size:64
+  code              PK size:32    prod-hk / prod-sh / uat-settle
+  display_name      size:64       ← 中文名放这里;code 只能是 [a-z0-9-]
   tier_code         size:16 idx   → tbl_env_tier.code
   sort_order        int
 
 tbl_connection.env  → tbl_environment.code(列不改名,语义变为环境)
-tbl_role_capability.env / tbl_risk_command.env → tier code(语义变,数据不动)
+tbl_role_capability.env / tbl_risk_command.env → **已于迁移 0016 改名为 `tier_code`**
+  (原稿说"列不改名,数据不动";数据确实没动,但列名跟着语义一起改了 —— 留着叫 env 的规则表列,
+   下一个读代码的人还会以为规则挂在环境上)
 ```
 
 `conn_layer` / `default_role` 挂在 tier 上,用于替换 `service/admin.go:21` 的硬编码映射。注意 `admin.go:69` 当前会在切换分层时**覆盖**实例的 `Layer` 与 `DefaultRole`,这个派生关系必须跟着搬进 tier 表。
@@ -154,6 +160,33 @@ tbl_role_capability.env / tbl_risk_command.env → tier code(语义变,数据不
 ## 已知 trade-off
 
 分层显示名从 i18n key(`envProd` / `envGli` / …)变为库内字符串后,**自定义 tier / environment 的名字无法国际化**,中英界面显示同一字面值。内置四个 tier 保留 i18n 回退,自定义的只能用管理员输入值。
+
+## 交付现状(2026-09-11 以代码为准校准)
+
+模型本身完全按本文落地:两张表、克隆事务、空规则防护、删除迁移、双快照、规则写入由服务端按全部 tier 展开,
+后端判定路径 8 处**全部**改读 `tierOf(conn)`,且解析不出分层时一律 fail-closed(不按放行处理)。
+以下是与原稿不一致、或尚未闭合的部分。
+
+### 与原稿不一致
+
+| 原稿 | 实际 |
+|---|---|
+| `tbl_role_capability.env` / `tbl_risk_command.env` **列不改名** | 迁移 0016 把两列都改名为 `tier_code`(数据未动)。超出本单范围,但语义更清楚 |
+| environment code 举例 `uat-结算` | code 受 `^[a-z0-9][a-z0-9-]{0,31}$` 约束,**中文建不出来**;中文名请填 `display_name` |
+| `seedGliEnv` 可从启动路径退役为历史迁移 | **未退役**,仍挂在 `Seed` / `InitDatabase` / `Migrate` 三处(注释已改口解释原因) |
+| 能力矩阵第 7 个维度 `explain` | 其后又加了第 8 个 `release`(能否**发起发布**,与语句本身能否跑是两个问题) |
+| 内置四个 tier | 实际五个:`prod` / `gli` / `staging` / `uat` / `dev`(见文末「内置分层标签的含义」) |
+
+### 尚未闭合(均已建 GitHub issue)
+
+| 问题 | 后果 |
+|---|---|
+| `correctBuiltinTiers` 逐行补建内置 tier(而非按表为空判定) | 管理员删掉的 `uat` 会在下次 `migrate` 时连同同名环境、staging 规则一起**复活**;且复活的行不做 ADR 0013 要求的 `strict_nowhere` 二次 UPDATE,`dev` 会以拦截态回来。issue 01 的 Comments 明确承诺过不这样做 |
+| 前端仍有 2 处按环境名判生产 | `RiskInspector.vue` 用环境 code 查以 tier code 为键的字典 → 第二个生产集群的「受限命令」列表为空;`ExportView.vue` 的红色生产警告按 `env === 'prod'` → `prod-hk` 不出警告。正确写法是 `tierOf(env).dangerBanner`(`TerminalSession.vue` 已如此) |
+| `tierLabel` 对内置 code **先**取 i18n、从不读 `displayName` | 管理员把 `staging` 改名"预发布-A",库里保住了,页面永远显示译文 —— 后端特意用 `wrongBuiltinNames` 保护改过的名字,前端把这层保护抵消了 |
+| tier code 正则允许 32 字符,而 `EnvTier.Code` 等列是 `size:16` | SQLite 开发库能建 20 字符的 tier,同一操作在 MySQL 上报 Data too long |
+| `DeleteEnvTier` 的三项检查在事务外(check-then-act) | 并发建环境可造出指向已删 tier 的环境(后果 fail-closed,属可用性问题);另不处理 `tbl_pipeline.tier_code` 悬空 |
+| `CountProdInterceptions` 按**当前**绑定 join,而非审计行自己的 `tier_code` 快照 | 环境改绑后历史命中数随之漂移 —— 双快照(issue 03)的意义正是让统计不随当前绑定变化 |
 
 ## 已定决策(2026-08-04)
 

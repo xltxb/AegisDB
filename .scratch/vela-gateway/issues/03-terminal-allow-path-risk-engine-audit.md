@@ -1,6 +1,6 @@
 # 03 · 终端放行通路 + 风险引擎 + 审计哈希链
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；判定已由三层扩为四层并改按分层，见 ADR 0013）
 
 ## What to build
 

@@ -1,6 +1,6 @@
 # 10 · 系统设置（网关 / 审批超时 / 安全 / 通知 / 外观语言）
 
-Status: ready-for-agent
+Status: ready-for-human（已交付并扩至九个页签；MFA 宽限期/强制绑定、异步超时暂无界面控件）
 
 ## What to build
 

@@ -1,6 +1,6 @@
 # 04 · Phase 2 · 超时回写取消
 
-Status: ready-for-human
+Status: ready-for-human（超时 PATCH 回写 cancel 已交付；/reply 回帖飞书仍未做，待厂商确认 om_ message_id）
 
 ## 范围决定(2026-07-24)
 

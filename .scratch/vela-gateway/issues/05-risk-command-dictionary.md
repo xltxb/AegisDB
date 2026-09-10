@@ -1,6 +1,6 @@
 # 05 · 高危命令规则字典（环境三态 + 严格模式 + 即时生效）
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；严格模式由全局开关改为按分层，见 ADR 0013）
 
 ## What to build
 

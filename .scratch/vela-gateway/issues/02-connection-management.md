@@ -1,6 +1,6 @@
 # 02 · 数据库连接管理
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；引擎为 7 项关系型，无 ClickHouse/Redis，见 PRD「验收校准」）
 
 ## What to build
 

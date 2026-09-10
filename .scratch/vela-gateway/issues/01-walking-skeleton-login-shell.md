@@ -1,6 +1,6 @@
 # 01 · 行走骨架：登录 + 菜单驱动应用壳
 
-Status: ready-for-agent
+Status: ready-for-human（已交付，回归测试覆盖，待人工验收）
 
 ## What to build
 

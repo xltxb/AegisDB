@@ -1,6 +1,6 @@
 # 09 · Webhook 外推（持久化 + HMAC 签名 + 指数退避重试 + 测试事件）
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；X-Vela-Signature HMAC-SHA256 未实现，改用 Bearer，见 GitHub issue）
 
 ## What to build
 

@@ -1,6 +1,6 @@
 # 06 · SQL 脚本上传扫描 + 整脚本审批/执行
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；扫描基准按目标分层，见 ADR 0014）
 
 ## What to build
 

@@ -1,6 +1,6 @@
 # 04 · 高危拦截 → 审批 → 代执行 闭环
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；「审批通过后代执行」已被 ADR 0010 推翻为「通过不执行，由有权者自己执行」）
 
 ## What to build
 

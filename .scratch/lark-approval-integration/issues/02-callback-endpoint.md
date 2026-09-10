@@ -1,6 +1,6 @@
 # 02 · 回调端点 + 外部决策路径(复用执行内核)
 
-Status: ready-for-human
+Status: ready-for-human（已交付；鉴权头改为 Authorization: Bearer / ?secret=，且回调只置状态不执行（ADR 0010）；空 approver 绕过禁自审、reason 未落库两项见 GitHub issue）
 
 ## What to build
 

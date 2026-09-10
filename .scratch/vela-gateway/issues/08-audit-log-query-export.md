@@ -1,6 +1,6 @@
 # 08 · 审计日志查询（筛选 + 时间范围 + CSV 导出）
 
-Status: ready-for-agent
+Status: ready-for-human（已交付；CSV 不含审批链、无读侧哈希链校验端点，两项验收未闭合）
 
 ## What to build
 

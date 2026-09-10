@@ -1,6 +1,6 @@
 # 11 · 终端 WebSocket 流式执行 + REST 回退 + 布局变体 A/B/C
 
-Status: ready-for-agent
+Status: ready-for-human（WebSocket 流式执行与 REST 回退已交付；布局变体 A/B/C 未实现）
 
 ## What to build
 
