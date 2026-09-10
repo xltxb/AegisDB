@@ -483,6 +483,42 @@ export interface DbObjects {
   error?: string
 }
 
+/**
+ * 一个 INVALID 的 Oracle 可编译对象。
+ *
+ * units 是具体哪几个单元失效了:包的规范是好的、只有包体 INVALID,和两者都 INVALID,
+ * 对 DBA 不是一回事。编译动作按 kind 走(编包 = 规范加包体一起编)。
+ */
+export interface InvalidObject {
+  owner: string
+  name: string
+  kind: string
+  units: string[]
+}
+
+/** 一个对象重编译之后的结局。status 是回读 all_objects 得到的,不是"调用成功了"。 */
+export interface RecompileItem {
+  owner: string
+  name: string
+  kind: string
+  status: 'VALID' | 'INVALID' | 'ERROR'
+  errors?: { type: string; line: number; position: number; text: string }[]
+  err?: string
+  passes: number
+}
+
+/** 一次批量重编译的结果。skipped 是超出单次上限、这次没碰的。 */
+export interface RecompileReport {
+  owner: string
+  total: number
+  fixed: number
+  failed: number
+  skipped: number
+  passes: number
+  ms: number
+  items: RecompileItem[]
+}
+
 /** One programmable object's source text. */
 export interface ObjectSource {
   name: string

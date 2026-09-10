@@ -902,6 +902,38 @@ func (h *Handler) CompileObject(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": rep.OK(), "report": rep})
 }
 
+// InvalidObjects lists the INVALID compilable objects under one Oracle schema.
+// Read-only: it goes through access control but not the DDL gate.
+func (h *Handler) InvalidObjects(c *gin.Context) {
+	items, err := h.Svc.InvalidObjects(middleware.CurrentUser(c), pathID(c),
+		c.Query("scope"), c.Query("database"))
+	if err != nil {
+		resp.Fail(c, compileErrCode(err), err.Error())
+		return
+	}
+	resp.OK(c, gin.H{"items": items, "total": len(items)})
+}
+
+// RecompileInvalid recompiles the INVALID objects under one Oracle schema.
+// It is a batch of DDL against the target and carries the same three-layer gate
+// as a single compile, judged over the WHOLE batch — see service.RecompileInvalid.
+func (h *Handler) RecompileInvalid(c *gin.Context) {
+	var req dto.RecompileReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	rep, err := h.Svc.RecompileInvalid(middleware.CurrentUser(c), pathID(c),
+		req.Scope, req.Database, req.Names)
+	if err != nil {
+		resp.Fail(c, compileErrCode(err), err.Error())
+		return
+	}
+	// ok 的定义是"这次没有留下编不过的对象",而不是"请求成功返回了" —— 与单个编译
+	// 同一个口径:失败的编译也会正常返回,只是对象还是 INVALID。
+	resp.OK(c, gin.H{"ok": rep.Failed == 0, "report": rep})
+}
+
 func compileErrCode(err error) int {
 	switch {
 	case errors.Is(err, service.ErrForbidden):

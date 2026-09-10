@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { Search, ChevronDown, ChevronRight, Database, FolderOpen, Table2, PanelLeftClose, X, Hammer, TriangleAlert, Copy, Check } from 'lucide-vue-next'
 import api from '@/api'
 import ObjectGroups from './ObjectGroups.vue'
+import InvalidObjects from './InvalidObjects.vue'
 import { highlightSqlHtml } from '@/lib/sqlHighlight'
 import { copyText } from '@/lib/clipboard'
 import { engineDisplay, engineLabels } from '@/lib/engines'
@@ -150,6 +151,9 @@ const srcCopyErr = ref(false)
 // 其它引擎上的 "procedure" 没有 ALTER … COMPILE 这回事。
 const COMPILABLE = ['package', 'procedure', 'function', 'trigger', 'type']
 const compileState = ref<{ busy: boolean; report: any | null; err: string }>({ busy: false, report: null, err: '' })
+// 无效对象那一块只对 Oracle 有意义 —— 别的引擎没有 INVALID 这个状态。
+const isOracleConn = (cid: number) =>
+  /oracle/i.test(props.connections.find((x) => x.id === cid)?.engine || '')
 const srcConn = computed(() => props.connections.find((x) => x.id === src.value.cid) || null)
 const isOracleSrc = computed(() => !!srcConn.value && /oracle/i.test(srcConn.value.engine))
 const canCompile = computed(() => isOracleSrc.value && COMPILABLE.includes(src.value.type))
@@ -609,6 +613,10 @@ function clickInst(id: number) {
                     <div v-if="!d.tables.length" class="tbl empty">{{ $t('treeEmptyDb') }}</div>
                     <ObjectGroups :objects="objFor(c.id, d.name)"
                                   @open="(ty, nm) => openSource(c.id, d.name, ty, nm)" />
+                    <!-- Oracle 的无效对象:挂在 owner 下,因为编译就是按 owner 走的。
+                         只在真有 INVALID 时出现(组件内部判断)。 -->
+                    <InvalidObjects v-if="instOpen(c.id) && isDbOpen(c.id, d.name)"
+                                    :cid="c.id" :scope="d.name" :oracle="isOracleConn(c.id)" />
                   </template>
                 </div>
               </template>

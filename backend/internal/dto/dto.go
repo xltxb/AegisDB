@@ -596,3 +596,13 @@ type CompileReq struct {
 	Name     string `json:"name"`
 	Database string `json:"database"`
 }
+
+// RecompileReq 批量重编译一个 schema 下的无效对象。
+//
+// Names 为空 = 该 schema 下**全部**无效对象;非空 = 只编这几个(界面上勾选的情形)。
+// 区分这两者是有意义的:全量重编译是变更窗口里的动作,勾选几个是定点修复。
+type RecompileReq struct {
+	Scope    string   `json:"scope"`
+	Database string   `json:"database"`
+	Names    []string `json:"names"`
+}

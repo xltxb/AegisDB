@@ -173,6 +173,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/connections/:id/object-source", menu("terminal"), h.GetConnectionObjectSource)
 		// Oracle 包/存储程序重新编译 —— 一次 DDL,判定与审计同终端(service.CompileObject)。
 		a.POST("/connections/:id/objects/compile", menu("terminal"), h.CompileObject)
+		// Oracle 无效对象:清点是只读,批量重编译是一批 DDL —— 整批一起判,判不过整批不执行。
+		a.GET("/connections/:id/objects/invalid", menu("terminal"), h.InvalidObjects)
+		a.POST("/connections/:id/objects/recompile", menu("terminal"), h.RecompileInvalid)
 
 		// control tiers & environments — reads are open to any authenticated caller
 		// (the terminal tree, instance labels and the connection form all render

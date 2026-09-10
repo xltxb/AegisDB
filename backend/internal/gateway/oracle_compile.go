@@ -108,6 +108,12 @@ func oracleCompileSQL(owner, kind, name string) ([]string, error) {
 		return []string{"ALTER FUNCTION " + qname + " COMPILE"}, nil
 	case "trigger":
 		return []string{"ALTER TRIGGER " + qname + " COMPILE"}, nil
+	// 视图和物化视图同样会因为底表变更而 INVALID,而且是批量重编译里最常见的两类。
+	// 它们只有一个编译单元,没有 body。
+	case "view":
+		return []string{"ALTER VIEW " + qname + " COMPILE"}, nil
+	case "materialized view":
+		return []string{"ALTER MATERIALIZED VIEW " + qname + " COMPILE"}, nil
 	}
 	return nil, fmt.Errorf("对象类型 %q 不可编译(只有包 / 过程 / 函数 / 触发器 / 类型有编译单元)", kind)
 }
@@ -151,6 +157,10 @@ func oracleUnitTypes(kind string) []string {
 		return []string{"FUNCTION"}
 	case "trigger":
 		return []string{"TRIGGER"}
+	case "view":
+		return []string{"VIEW"}
+	case "materialized view":
+		return []string{"MATERIALIZED VIEW"}
 	}
 	return nil
 }

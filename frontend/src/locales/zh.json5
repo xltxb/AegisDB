@@ -297,6 +297,13 @@
   plApproverWho: '将由 {n} 人审批:', plApproverEmpty: '该角色当前没有成员 —— 走到这一步会失败,请先为角色添加成员或换一个角色',
   objCompile: '编译', objCompiling: '编译中…', objCompileOk: '编译通过', objCompileBad: '编译未通过',
   objCompileFail: '编译请求失败',
+  // Oracle 无效对象(status = INVALID)与批量重编译
+  invTitle: '无效对象', invRecompile: '全部重编译', invRunning: '编译中…',
+  invLoadFail: '无法读取无效对象清单',
+  invConfirm: '将对 schema {schema} 下的 {n} 个无效对象逐个执行 ALTER … COMPILE。这是一批 DDL，会按本实例的规则整批判定并逐个记审计。继续？',
+  invReportTitle: '重编译结果 · {schema}',
+  invFixed: '已修复 {n}', invFailed: '仍失败 {n}', invSkipped: '本次未处理 {n}（超出单次上限）',
+  invPasses: '{n} 轮',
   connSearchPh: '搜索:名称 / 地址 / 库名 / 标签 / 引擎', connAllEnv: '全部', connNoMatch: '没有匹配的数据源 —— 换个关键词,或清除环境筛选',
   rlConfirmExec: '确认执行',
   rlChangeType: '变更类型', rlCtAuto: '自动识别',

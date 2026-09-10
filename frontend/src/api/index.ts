@@ -1,7 +1,8 @@
 import http, { ok, type Envelope } from './http'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp, ExecWindow,
-  ExportJob, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, Release, ReleasePage, ReviewCatalog, SensitiveColumn, ServiceAccount,
+  ExportJob, InvalidObject, LoginResp, Me, Member, Notification, ObjectSource, Pipeline, Project, RecompileReport, Release, ReleasePage, ReviewCatalog,
+  SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RiskCommandView, RoleBrief, RoleDetail,
   ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery,
 } from '@/types'
@@ -183,6 +184,13 @@ export const api = {
   // Oracle 存储程序重新编译。它是一次 DDL,后端按终端同一套闸门判定并记审计。
   compileObject: (id: number, body: { scope: string; type: string; name: string; database?: string }) =>
     http.post<any, Envelope<{ ok: boolean; report: any }>>(`/connections/${id}/objects/compile`, body),
+  // Oracle 无效对象:清点是只读,批量重编译是一批 DDL(整批一起判定,判不过整批不执行)。
+  invalidObjects: (id: number, scope = '', database = '') =>
+    http.get<any, Envelope<{ items: InvalidObject[]; total: number }>>(
+      `/connections/${id}/objects/invalid?scope=${encodeURIComponent(scope)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,
+    ).then(ok),
+  recompileInvalid: (id: number, body: { scope: string; database?: string; names?: string[] }) =>
+    http.post<any, Envelope<{ ok: boolean; report: RecompileReport }>>(`/connections/${id}/objects/recompile`, body),
   objectSource: (id: number, scope: string, type: string, name: string, database = '') =>
     http.get<any, Envelope<ObjectSource>>(
       `/connections/${id}/object-source?scope=${encodeURIComponent(scope)}&type=${encodeURIComponent(type)}&name=${encodeURIComponent(name)}${database ? `&database=${encodeURIComponent(database)}` : ''}`,

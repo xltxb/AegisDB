@@ -277,6 +277,13 @@
   plApproverWho: 'Will be approved by {n}:', plApproverEmpty: 'This role has no members — the stage will fail here; add members or pick another role',
   objCompile: 'Compile', objCompiling: 'Compiling…', objCompileOk: 'Compiled', objCompileBad: 'Compile failed',
   objCompileFail: 'Compile request failed',
+  // Oracle INVALID objects and batch recompilation
+  invTitle: 'Invalid objects', invRecompile: 'Recompile all', invRunning: 'Compiling…',
+  invLoadFail: 'Could not read the list of invalid objects',
+  invConfirm: 'This runs ALTER … COMPILE on each of the {n} invalid objects in schema {schema}. It is a batch of DDL: judged as one batch against this instance and audited one row per object. Continue?',
+  invReportTitle: 'Recompile result · {schema}',
+  invFixed: '{n} fixed', invFailed: '{n} still failing', invSkipped: '{n} not attempted (over the per-request cap)',
+  invPasses: '{n} passes',
   connSearchPh: 'Search: name / address / database / tag / engine', connAllEnv: 'All', connNoMatch: 'No matching connections — try another keyword or clear the env filter',
   rlConfirmExec: 'Confirm & execute',
   rlChangeType: 'Change type', rlCtAuto: 'Auto-detect',

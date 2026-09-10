@@ -319,9 +319,18 @@ components:
       required: [type, name]
       properties:
         scope: { type: string, description: 'owner / schema;留空用连接账号的当前 schema' }
-        type: { type: string, enum: [package, procedure, function, trigger, type] }
+        type: { type: string, enum: [package, procedure, function, trigger, type, view, materialized view] }
         name: { type: string, description: 对象名;必须是合法 Oracle 标识符(拼入语句,不可绑定) }
         database: { type: string }
+    RecompileReq:
+      type: object
+      properties:
+        scope: { type: string, description: 'owner / schema;留空用连接账号的当前 schema' }
+        database: { type: string }
+        names:
+          type: array
+          items: { type: string }
+          description: 留空 = 该 schema 下全部无效对象;非空 = 只编这几个(界面勾选)
     CompileResp:
       type: object
       properties:
@@ -953,6 +962,46 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CompileResp' }
+  /connections/{id}/objects/invalid:
+    get:
+      tags: [connections]
+      summary: '[terminal] Oracle 无效对象清单(status = INVALID)'
+      description: |
+        一次表结构变更能让几十个包/视图/触发器一起变成 INVALID。Oracle 会在下次调用时**隐式**
+        重编译,所以它们看起来还能用 —— 直到某个业务请求第一次踩上去。这个接口把它们摊开。
+
+        只读:走访问控制,不走 DDL 闸。一个包的 PACKAGE 与 PACKAGE BODY 在数据字典里是两行,
+        这里合成一条(它们由同一次 ALTER 一起编),units 里说明具体哪几个单元失效了。
+        同义词、Java 类等 `ALTER … COMPILE` 修不了的类型不会出现在清单里。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string }, description: 'owner / schema;留空用连接账号的当前 schema' }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/objects/recompile:
+    post:
+      tags: [connections]
+      summary: '[terminal] 批量重编译 Oracle 无效对象'
+      description: |
+        utlrp 做的事,但用业务账号做(UTL_RECOMP 要 SYSDBA)。
+
+        **整批一起判定**:把这一批要执行的 ALTER 全部交给同一次判定,只要其中任何一条在这台
+        实例上是 deny 或需审批,整批都不执行 —— 逐个判、能编的先编,会在需要审批的库上留下
+        "编了一半"。执行仍然复用单个编译那条路,因此同样回读 all_objects.status 与 all_errors。
+
+        **多轮**:编译顺序影响结果(先编依赖别人的那个,它照样失败),所以"上一轮修好了至少
+        一个就再来一轮",最多三轮。**逐个记审计**,记的是每个对象这次的最终状态。
+
+        一次最多处理 200 个对象,超出的部分在 report.skipped 里明确报告,不会悄悄只做一半。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecompileReq' }
+      responses:
+        '200':
+          description: 'OK(ok=false 表示仍有对象编不过,items 里逐个说明)/ 40300 无权或整批判定被拒 / 40001 引擎非 Oracle、实例未配置真实凭据、命中需审批'
+          content: { application/json: { schema: { $ref: '#/components/responses/Ok' } } }
   /connections/{id}/object-source:
     get:
       tags: [connections]
