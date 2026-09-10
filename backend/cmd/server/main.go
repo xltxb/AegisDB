@@ -127,6 +127,28 @@ func main() {
 		}
 	}()
 
+	// Background: 元数据同步 —— 把远端库的表清单与表结构抓一份到本地。
+	//
+	// **默认关着**(meta.sync.enabled)。打开它意味着这台网关会周期性地登录你的每一台
+	// 生产实例,那必须是一次明确的决定,不能因为升级了一个版本就自己开始跑。
+	//
+	// 与导出保留不同,这里**启动时不跑一次**:进程重启是件很常见的事,而每次重启都
+	// 顺手扫一遍所有生产库,会让"重启网关"变成一个有副作用的动作。第一轮等到间隔到点。
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		last := time.Now()
+		for range ticker.C {
+			// 间隔是运行时设置,可能被改小/改大,所以每小时醒一次、自己比对是否到点 ——
+			// 而不是按启动时读到的那个值把 ticker 钉死。
+			if time.Since(last) < svc.MetaSyncInterval() {
+				continue
+			}
+			last = time.Now()
+			svc.SweepMetadata()
+		}
+	}()
+
 	// Background: resume release pipelines whose approval has been decided.
 	//
 	// A sweeper rather than a callback, because a decision arrives through four

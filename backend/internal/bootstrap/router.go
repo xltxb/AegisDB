@@ -175,6 +175,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/connections/:id/objects/compile", menu("terminal"), h.CompileObject)
 		// Oracle 无效对象:清点是只读,批量重编译是一批 DDL —— 整批一起判,判不过整批不执行。
 		a.GET("/connections/:id/objects/invalid", menu("terminal"), h.InvalidObjects)
+		// 元数据缓存:远端库的表清单与表结构,本地留一份(见 service/metadata.go)。
+		// 读走终端菜单 —— 它服务的是同一件事:找到那张表。同步是**主动去连生产库**,
+		// 所以要 admin:定时任务默认关着,而手动那一下同样不该谁都能按。
+		a.GET("/metadata/search", menu("terminal"), h.SearchMetadata)
+		a.GET("/connections/:id/metadata", menu("terminal"), h.ConnectionMetadata)
+		a.POST("/connections/:id/metadata/sync", menu("db"), admin, h.SyncConnectionMetadata)
 		a.POST("/connections/:id/objects/recompile", menu("terminal"), h.RecompileInvalid)
 
 		// control tiers & environments — reads are open to any authenticated caller

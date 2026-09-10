@@ -776,6 +776,75 @@ type SchemaObject struct {
 
 func (SchemaObject) TableName() string { return "tbl_schema_object" }
 
+// ---------------------------------------------------------------- 元数据缓存
+//
+// 远端库的**表清单与表结构**在本地留一份。
+//
+// 在此之前,树每展开一次就实时探一次目标库,而"搜索所有实例里的某张表"意味着挨个连
+// 88 台生产实例问一遍 —— 慢,而且是把一次界面操作变成一轮对生产的扫描。
+//
+// 这份缓存是**只读的副本,不是真相**。判定、执行、导出一律仍然走实时的目标库:一份
+// 可能过期的结构如果被用来做判断,它就从"快"变成了"错"。所以每一行都带 SyncedAt,
+// 界面必须把"这份数据是什么时候的"显示出来 —— 一个不说明年龄的缓存,读的人会当成现状。
+
+// MetaTable — 远端一张表(或视图)在本地的一行。
+//
+// Schema 为空表示扁平引擎(MySQL / SQLite / Oracle 按 owner 归组时 owner 落在
+// DBName 上),PostgreSQL 家族才有 schema 这一层 —— 与 gateway.SchemaGroup 的形状一致。
+type MetaTable struct {
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64  `gorm:"index:idx_meta_table_scope,priority:1;not null" json:"connectionId"`
+	DBName       string `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;size:128;not null" json:"database"`
+	SchemaName   string `gorm:"column:schema_name;size:128;not null" json:"schema"`
+	Name         string `gorm:"column:table_name;index:idx_meta_table_name;size:128;not null" json:"name"`
+	Kind         string `gorm:"size:16;not null" json:"kind"` // table | view
+	Comment      string `gorm:"size:512" json:"comment"`
+	SyncedAt     time.Time `json:"syncedAt"`
+}
+
+func (MetaTable) TableName() string { return "tbl_meta_table" }
+
+// MetaColumn — 远端一张表的一列。
+//
+// 不做外键指向 MetaTable:同步是"整台实例删了重写",外键只会让那次删除变成一场级联
+// 风暴,而这份数据本来就没有引用完整性可言 —— 它是一张照片。定位靠与 MetaTable 相同
+// 的四元组(连接 / 库 / schema / 表名)。
+type MetaColumn struct {
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64  `gorm:"index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
+	DBName       string `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;size:128;not null" json:"database"`
+	SchemaName   string `gorm:"column:schema_name;size:128;not null" json:"schema"`
+	TableName_   string `gorm:"column:table_name;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
+	Ordinal      int    `gorm:"not null" json:"ordinal"`
+	Name         string `gorm:"column:column_name;index:idx_meta_col_name;size:128;not null" json:"name"`
+	DataType     string `gorm:"size:128;not null" json:"dataType"`
+	Nullable     bool   `gorm:"not null;default:true" json:"nullable"`
+	ColDefault   string `gorm:"column:col_default;size:512" json:"default"`
+	Comment      string `gorm:"size:512" json:"comment"`
+	IsPK         bool   `gorm:"column:is_pk;not null;default:false" json:"isPk"`
+	SyncedAt     time.Time `json:"syncedAt"`
+}
+
+func (MetaColumn) TableName() string { return "tbl_meta_column" }
+
+// MetaSync — 每台实例最近一次同步的结果。
+//
+// 没有它,"这台实例为什么一张表都没有"就没有答案:是还没轮到它、连不上、账号没权限,
+// 还是它真的空着?这四种在界面上长得一模一样,而只有第一种是正常的。
+type MetaSync struct {
+	ConnectionID int64     `gorm:"primaryKey" json:"connectionId"`
+	StartedAt    time.Time `json:"startedAt"`
+	FinishedAt   time.Time `json:"finishedAt"`
+	Databases    int       `gorm:"not null;default:0" json:"databases"`
+	Tables       int       `gorm:"not null;default:0" json:"tables"`
+	Columns      int       `gorm:"not null;default:0" json:"columns"`
+	// Err 是最近一次失败的原因。成功时清空 —— 留着上次的错误会让一台已经好了的实例
+	// 永远显示成坏的。
+	Err string `gorm:"size:512" json:"err,omitempty"`
+}
+
+func (MetaSync) TableName() string { return "tbl_meta_sync" }
+
 // Setting — generic JSON key/value system settings.
 type Setting struct {
 	K string `gorm:"primaryKey;size:64" json:"k"`

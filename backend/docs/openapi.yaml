@@ -1002,6 +1002,48 @@ paths:
         '200':
           description: 'OK(ok=false 表示仍有对象编不过,items 里逐个说明)/ 40300 无权或整批判定被拒 / 40001 引擎非 Oracle、实例未配置真实凭据、命中需审批'
           content: { application/json: { schema: { $ref: '#/components/responses/Ok' } } }
+  /metadata/search:
+    get:
+      tags: [connections]
+      summary: '[terminal] 在元数据缓存里按表名 / 列名检索'
+      description: |
+        远端库的表清单与表结构在本地留了一份(见 `POST /connections/{id}/metadata/sync`),
+        这个接口在那份副本里检索。**按列名找**是它换来的能力 —— 实时探查做不到:那意味着
+        把每台实例的每张表都问一遍列,是一轮对生产的全量扫描。
+
+        范围收在 SQL 里,只查调用者按标签授权够得到的实例:表名和列名本身就是信息。
+
+        结果**可能过期**。判定、执行、导出一律仍然走实时的目标库 —— 一份过期的结构如果被
+        拿去做判断,它就从"快"变成了"错"。每行都带 syncedAt。
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 200, maximum: 500 } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/metadata:
+    get:
+      tags: [connections]
+      summary: '[terminal] 一台实例缓存下来的表清单与最近一次同步的结果'
+      description: |
+        `sync` 为 null 表示这台实例**还没同步过** —— 与"同步过但一张表都没有"不是一回事,
+        而这两者在界面上长得一模一样。`sync.err` 非空说明最近一次失败了,原因在里面。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/metadata/sync:
+    post:
+      tags: [connections]
+      summary: '[db · admin] 立刻同步一台实例的元数据'
+      description: |
+        主动去连目标库把表与列读回来,**整台实例先删后插**(一次事务:中途失败时缓存要么
+        是旧的那份、要么是新的那份,不会是"删了一半")。
+
+        要 admin:定时同步默认关着,而手动这一下同样是让网关去登录一台生产实例。
+
+        PostgreSQL 家族只同步**连接上配置的那个库** —— 它的目录按库隔离,读别的库要重新
+        建连接,而连接凭据未必在每个库上都成立。要覆盖更多库就为它们各配一条连接。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /connections/{id}/object-source:
     get:
       tags: [connections]
