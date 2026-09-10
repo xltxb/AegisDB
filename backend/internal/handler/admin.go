@@ -697,7 +697,7 @@ func (h *Handler) SetUserPassword(c *gin.Context) {
 		return
 	}
 	if err := h.Svc.AdminSetPassword(middleware.CurrentUser(c), pathID(c), req.Password); err != nil {
-		resp.Fail(c, resp.CodeBadRequest, "重置失败:密码至少 6 位")
+		resp.Fail(c, resp.CodeBadRequest, "重置失败:密码至少 8 位")
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})

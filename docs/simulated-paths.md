@@ -58,14 +58,14 @@
 | `TestSimulatedPathsAreDocumented` | 加了模拟实现却不登记 / 清单里留着已删的条目 |
 | `TestAudit_SimulatedRunIsNotRecordedAsExecuted` | 模拟执行不得记成「已执行」 |
 
-前三条**接在 `build.sh` 里**，在编译之前跑：
+前三条是**打包前的闸**（`DEPLOY.md` 第 1 节第一步），在编译之前跑：
 
 ```
-==> Verify no simulated data in prod
+(cd backend && go test ./internal/bootstrap/ -run 'TestProductionServesNoSimulatedData|TestSimulationDefaultsToOff|TestSimulatedPathsAreDocumented' -count=1 -timeout 10m)
 ```
 
 跑不过就不出包。实测过两个方向：正常时正常出包；把默认值改成 `true` 之后，
-`build.sh` 退出码 1、停在这一步、`dist/` 里没有二进制。
+这条命令退出码 1、停在这一步，不应继续编译。
 
 每一条都验过"会咬人"：临时塞一个未登记的标记进去、临时把默认改成 `true`，测试都
 带着可照做的提示失败；撤掉后恢复通过。

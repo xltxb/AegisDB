@@ -166,7 +166,7 @@ const sample = computed(() => {
   return `curl -X POST ${base}/api/v1/open/releases \\
   -H "Authorization: Bearer <key>.<secret>" \\
   -H "Content-Type: application/json" \\
-  -d '{"title":"订单表加字段","externalRef":"CHG-1001","instance":"order-cluster","database":"orders","pipeline":"标准发布流程","sql":"ALTER TABLE ...;","reason":"需求 #123"}'`
+  -d '{"title":"订单表加字段","externalRef":"CHG-1001","instance":"order-cluster","database":"orders","sql":"ALTER TABLE ...;","reason":"需求 #123"}'`
 })
 </script>
 
