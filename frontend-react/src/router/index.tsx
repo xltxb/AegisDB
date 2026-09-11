@@ -4,6 +4,7 @@ import AppShell from '@/components/AppShell'
 import RouteError from '@/components/common/RouteError'
 import LoginPage from '@/pages/login'
 import ApprovalsPage from '@/pages/approvals'
+import ExecWindowsPage from '@/pages/execWindows'
 import Placeholder from '@/pages/Placeholder'
 
 /**
@@ -25,7 +26,7 @@ export const router = createBrowserRouter([
       { path: 'terminal', loader: requireMenu('terminal'), element: <Placeholder titleKey="navTerminal" /> },
       { path: 'approvals', loader: requireMenu('approve'), element: <ApprovalsPage /> },
       { path: 'changes', loader: requireMenu('pipeline'), element: <Placeholder titleKey="navChanges" /> },
-      { path: 'exec-windows', loader: requireMenu('execwindow'), element: <Placeholder titleKey="navExecWindows" /> },
+      { path: 'exec-windows', loader: requireMenu('execwindow'), element: <ExecWindowsPage /> },
       { path: 'async-jobs', loader: requireMenu('terminal'), element: <Placeholder titleKey="navAsyncJobs" /> },
       { path: 'export', loader: requireMenu('terminal'), element: <Placeholder titleKey="navExport" /> },
       { path: 'scripts', loader: requireMenu('terminal'), element: <Placeholder titleKey="navScripts" /> },
