@@ -1,6 +1,7 @@
 import { http, ok, type Envelope } from '@/api/shared'
 import type {
-  Connection, ConnectionSchema, DbObjects, InvalidObject, MetaSync, MetaTable, ObjectSource, RecompileReport,
+  Connection, ConnectionSchema, DbObjects, InvalidObject, MetaSearchResult, MetaSync, MetaTable,
+  ObjectSource, RecompileReport,
 } from '@/types'
 
 export const connectionsApi = {
@@ -57,6 +58,12 @@ export const connectionsApi = {
     http.get<any, Envelope<{ tables: MetaTable[]; sync: MetaSync | null }>>(
       `/connections/${id}/metadata${database ? `?database=${encodeURIComponent(database)}` : ''}`,
     ).then(ok),
+  // 跨实例检索。范围由服务端按标签收在 SQL 里 —— 够不到那台实例的人,连它有哪些
+  // 表和列都不该出现在结果里(表名和列名本身就是信息)。
+  metadataSearch: (q: string, limit = 200) =>
+    http.get<any, Envelope<MetaSearchResult>>(
+      `/metadata/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    ).then(ok),
 }
 
 // ---- TanStack Query 绑定 ----
@@ -68,5 +75,57 @@ export const connectionsQueryOptions = () =>
   queryOptions({
     queryKey: ['connections'] as const,
     queryFn: connectionsApi.connections,
+    staleTime: 60_000,
+  })
+
+/**
+ * 一台实例上可选的库清单(实时探查,和终端用的是同一个接口)。
+ *
+ * `retry: false`:探查失败几乎总是"实例不可达 / 没凭据",重试只是把这句话晚十几秒
+ * 才说出口;调用方拿空清单退回手填就行。
+ */
+export const connectionSchemaQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['connection-schema', id] as const,
+    queryFn: () => connectionsApi.connectionSchema(id),
+    enabled: id > 0,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+/**
+ * 选哪个库:**实例自己填了库就用那个,没填才退回探查到的第一个**。
+ *
+ * 这条规则曾经被导出页、后台执行页、发布页各抄了一份,而漏掉它的那份提交上去的
+ * 导出没有 schema,目标库回一句 "No database selected"。所以它是一条领域规则,
+ * 放在连接这个域里只写一次。
+ */
+export function preferredDatabase(options: string[], own?: string): string {
+  return own && options.includes(own) ? own : options[0] || ''
+}
+
+/**
+ * 一台实例的元数据副本。
+ *
+ * `staleTime` 给得比连接列表长:这份数据的粒度是"上一次同步",几分钟内重新拉一次
+ * 拿到的还是同一张照片。真正需要刷新的时刻是点了「立即同步」之后,那时由 mutation
+ * 失效这个 key。
+ */
+export const connectionMetadataQueryOptions = (id: number, database = '') =>
+  queryOptions({
+    queryKey: ['connection-metadata', id, database] as const,
+    queryFn: () => connectionsApi.connectionMetadata(id, database),
+    enabled: id > 0,
+    staleTime: 5 * 60_000,
+    // 无权限(40300)重试没有意义,只会把同一个 403 再打三遍。
+    retry: false,
+  })
+
+/** 空查询不发请求:后端对空 q 一律返回空,白跑一趟还会盖掉上一次的结果。 */
+export const metadataSearchQueryOptions = (q: string) =>
+  queryOptions({
+    queryKey: ['metadata-search', q] as const,
+    queryFn: () => connectionsApi.metadataSearch(q),
+    enabled: q.trim().length > 0,
     staleTime: 60_000,
   })

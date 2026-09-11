@@ -513,16 +513,54 @@ export interface MetaSync {
   err?: string
 }
 
-/** 缓存下来的一张表(或视图)。syncedAt 是这一行的年龄 —— 界面必须显示它。 */
+/**
+ * 缓存下来的一张表(或视图)。syncedAt 是这一行的年龄 —— 界面必须显示它。
+ *
+ * 字段名照抄后端的 json tag(`database` / `schema` / `name`),不是 Go 结构体的
+ * 字段名 —— 之前这里写的是 dbName / schemaName / tableName,三个都对不上,任何
+ * 读它的界面都会安静地显示 undefined 而不是报错。
+ *
+ * schema 为空表示扁平引擎(MySQL / SQLite / Oracle),PostgreSQL 家族才有这一层。
+ */
 export interface MetaTable {
   id: number
   connectionId: number
-  dbName: string
-  schemaName: string
-  tableName: string
+  database: string
+  schema: string
+  name: string
+  /** table | view */
   kind: string
   comment: string
   syncedAt: string
+}
+
+/** 缓存下来的一列。定位靠与 MetaTable 相同的四元组(连接 / 库 / schema / 表名)。 */
+export interface MetaColumn {
+  id: number
+  connectionId: number
+  database: string
+  schema: string
+  table: string
+  ordinal: number
+  name: string
+  dataType: string
+  nullable: boolean
+  default: string
+  comment: string
+  isPk: boolean
+  syncedAt: string
+}
+
+/**
+ * `/metadata/search` 的返回。
+ *
+ * 两条腿是分开的:tables 按**表名**命中,columns 按**列名**命中 —— 后者才是这份
+ * 缓存真正换来的能力(实时探查做不到"哪些表里有 id_card 这一列")。它们各自独立,
+ * columns 里的列并不是 tables 里那些表的列。
+ */
+export interface MetaSearchResult {
+  tables: MetaTable[]
+  columns: MetaColumn[]
 }
 
 export interface InvalidObject {

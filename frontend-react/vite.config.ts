@@ -10,8 +10,9 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/api': { target: 'http://localhost:8080', changeOrigin: true },
-      '/terminal/ws': { target: 'ws://localhost:8080', ws: true },
+      // 终端 WS 的实际路径是 /api/v1/terminal/ws,所以 ws 必须开在 /api 这条上,
+      // 单独写一条 /terminal/ws 永远不会被命中。
+      '/api': { target: 'http://localhost:8080', changeOrigin: true, ws: true },
     },
   },
 })

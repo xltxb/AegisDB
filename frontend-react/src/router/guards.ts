@@ -4,10 +4,18 @@ import { meQueryOptions } from '@/api/modules/auth'
 import { useAuthStore, isAdminOf, type Portal } from '@/stores/auth'
 import type { Me } from '@/types'
 
-/** 后台路由的菜单键 —— 这些页面除了菜单开关,还要求以管理后台身份登录。 */
-const ADMIN_KEYS = new Set([
-  'db', 'rules', 'perms', 'users', 'pipeline', 'audit', 'settings', 'envtier',
-])
+/**
+ * 后台身份要求由路由**显式声明**,不再从菜单键反推。
+ *
+ * 反推过一次,错了:`pipeline` 这个键同时给 `/changes`(运维前台的变更工单)和
+ * `/pipelines`(管理后台的流程配置)用,于是「这个键属于后台」这条规则把非管理员
+ * 挡在了他本该能进的前台页面外面。菜单键管的是"看不看得见",入口身份管的是
+ * "哪一侧",两件事不能共用一个判断。
+ */
+export interface GuardOpts {
+  /** 需要以管理后台身份登录,且角色并集里含 admin。 */
+  adminOnly?: boolean
+}
 
 /**
  * 落地候选表,**按入口分开**。
@@ -51,7 +59,7 @@ export function firstVisibleRoute(me: Me | null, portal?: Portal): string {
  * 后台路由按 **portal + role 双重校验**:只隐藏入口不算门禁,以运维身份登录时
  * 直接拒绝。这仍然只是界面表达,服务端对每个请求独立重判。
  */
-export function requireMenu(key?: string): LoaderFunction {
+export function requireMenu(key?: string, opts: GuardOpts = {}): LoaderFunction {
   return async () => {
     const { token, portal } = useAuthStore.getState()
     if (!token) throw redirect('/login')
@@ -73,9 +81,8 @@ export function requireMenu(key?: string): LoaderFunction {
       useAuthStore.getState().clearSession()
       throw redirect('/login')
     }
+    if (opts.adminOnly && (portal !== 'backend' || !isAdminOf(me))) throw redirect(home)
     if (!key) return null
-
-    if (ADMIN_KEYS.has(key) && (portal !== 'backend' || !isAdminOf(me))) throw redirect(home)
     if (!me.menus[key]) throw redirect(home)
     return null
   }

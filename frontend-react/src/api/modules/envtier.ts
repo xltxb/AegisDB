@@ -31,3 +31,36 @@ export const envtierApi = {
       data: { moveTo },
     }).then(ok),
 }
+
+// ---- TanStack Query 绑定 ----
+// 分层与环境在一次会话里基本不变,但它们决定的是「要不要出红色警告」这类判断,
+// 所以放在共用的 key 下由 Query 缓存,而不是各页各拉一次。
+import { queryOptions } from '@tanstack/react-query'
+
+export const envTiersQueryOptions = () =>
+  queryOptions({
+    queryKey: ['env-tiers'] as const,
+    queryFn: envtierApi.envTiers,
+    staleTime: 5 * 60_000,
+  })
+
+export const environmentsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['environments'] as const,
+    queryFn: envtierApi.environments,
+    staleTime: 5 * 60_000,
+  })
+
+/**
+ * 一个环境码归属哪个分层。
+ *
+ * 判「是不是生产」要走这里,而不是看环境码是不是叫 prod:规则挂在**分层**上,
+ * 环境只决定实例归属。第二个生产集群(prod-hk)照样该出警告,而把 prod 环境改挂
+ * 到 dev 分层之后就不该出。
+ */
+export function tierOfEnv(
+  envCode: string, tiers: EnvTier[], envs: Environment[],
+): EnvTier | undefined {
+  const e = envs.find((x) => x.code === envCode)
+  return e ? tiers.find((x) => x.code === e.tierCode) : undefined
+}

@@ -5,7 +5,21 @@ import RouteError from '@/components/common/RouteError'
 import LoginPage from '@/pages/login'
 import ApprovalsPage from '@/pages/approvals'
 import ExecWindowsPage from '@/pages/execWindows'
-import Placeholder from '@/pages/Placeholder'
+import AuditPage from '@/pages/audit'
+import SettingsPage from '@/pages/settings'
+import CatalogPage from '@/pages/catalog'
+import ChangesPage from '@/pages/changes'
+import PipelinesPage from '@/pages/pipelines'
+import TerminalPage from '@/pages/terminal'
+import AsyncJobsPage from '@/pages/asyncJobs'
+import ExportPage from '@/pages/export'
+import ScriptsPage from '@/pages/scripts'
+import PermissionsPage from '@/pages/permissions'
+import UsersPage from '@/pages/users'
+import GovPage from '@/pages/gov'
+import ConnectionsPage from '@/pages/connections'
+import RiskRulesPage from '@/pages/riskRules'
+import SqlReviewPage from '@/pages/sqlReview'
 
 /**
  * data router:取数与守卫都在 loader 里,组件只负责渲染(前端文档 §03)。
@@ -23,25 +37,25 @@ export const router = createBrowserRouter([
       { index: true, loader: rootLoader, element: null },
 
       // ---- 用户前台 ----
-      { path: 'terminal', loader: requireMenu('terminal'), element: <Placeholder titleKey="navTerminal" /> },
+      { path: 'terminal', loader: requireMenu('terminal'), element: <TerminalPage /> },
       { path: 'approvals', loader: requireMenu('approve'), element: <ApprovalsPage /> },
-      { path: 'changes', loader: requireMenu('pipeline'), element: <Placeholder titleKey="navChanges" /> },
+      { path: 'changes', loader: requireMenu('pipeline'), element: <ChangesPage /> },
       { path: 'exec-windows', loader: requireMenu('execwindow'), element: <ExecWindowsPage /> },
-      { path: 'async-jobs', loader: requireMenu('terminal'), element: <Placeholder titleKey="navAsyncJobs" /> },
-      { path: 'export', loader: requireMenu('terminal'), element: <Placeholder titleKey="navExport" /> },
-      { path: 'scripts', loader: requireMenu('terminal'), element: <Placeholder titleKey="navScripts" /> },
-      { path: 'catalog', loader: requireMenu('terminal'), element: <Placeholder titleKey="navCatalog" /> },
+      { path: 'async-jobs', loader: requireMenu('terminal'), element: <AsyncJobsPage /> },
+      { path: 'export', loader: requireMenu('terminal'), element: <ExportPage /> },
+      { path: 'scripts', loader: requireMenu('terminal'), element: <ScriptsPage /> },
+      { path: 'catalog', loader: requireMenu('terminal'), element: <CatalogPage /> },
 
       // ---- 管理后台(portal + role 双重校验,见 guards) ----
-      { path: 'connections', loader: requireMenu('db'), element: <Placeholder titleKey="navConnections" /> },
-      { path: 'sql-review', loader: requireMenu('rules'), element: <Placeholder titleKey="navSqlReview" /> },
-      { path: 'risk-rules', loader: requireMenu('rules'), element: <Placeholder titleKey="navRiskRules" /> },
-      { path: 'gov', loader: requireMenu('settings'), element: <Placeholder titleKey="navGov" /> },
-      { path: 'permissions', loader: requireMenu('perms'), element: <Placeholder titleKey="navPermissions" /> },
-      { path: 'users', loader: requireMenu('perms'), element: <Placeholder titleKey="navUsers" /> },
-      { path: 'pipelines', loader: requireMenu('pipeline'), element: <Placeholder titleKey="navPipelines" /> },
-      { path: 'audit', loader: requireMenu('audit'), element: <Placeholder titleKey="navAudit" /> },
-      { path: 'settings', loader: requireMenu('settings'), element: <Placeholder titleKey="navSettings" /> },
+      { path: 'connections', loader: requireMenu('db', { adminOnly: true }), element: <ConnectionsPage /> },
+      { path: 'sql-review', loader: requireMenu('rules', { adminOnly: true }), element: <SqlReviewPage /> },
+      { path: 'risk-rules', loader: requireMenu('rules', { adminOnly: true }), element: <RiskRulesPage /> },
+      { path: 'gov', loader: requireMenu('settings', { adminOnly: true }), element: <GovPage /> },
+      { path: 'permissions', loader: requireMenu('perms', { adminOnly: true }), element: <PermissionsPage /> },
+      { path: 'users', loader: requireMenu('perms', { adminOnly: true }), element: <UsersPage /> },
+      { path: 'pipelines', loader: requireMenu('pipeline', { adminOnly: true }), element: <PipelinesPage /> },
+      { path: 'audit', loader: requireMenu('audit', { adminOnly: true }), element: <AuditPage /> },
+      { path: 'settings', loader: requireMenu('settings', { adminOnly: true }), element: <SettingsPage /> },
     ],
   },
   { path: '*', element: <Navigate to="/" replace /> },

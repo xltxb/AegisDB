@@ -59,3 +59,52 @@ export const pipelineApi = {
     http.put<any, Envelope<APIClient>>(`/api-clients/${id}`, body),
   deleteApiClient: (id: number) => http.delete<any, Envelope<any>>(`/api-clients/${id}`),
 }
+
+// ---- TanStack Query 绑定(变更工单 / 变更流程) ----
+import { queryOptions } from '@tanstack/react-query'
+import type { RunStatus } from '@/types'
+
+/**
+ * 还会自己变的运行状态。
+ *
+ * `waiting` 也算:那一步的决定是从审批队列(或飞书卡片、或外部回调)回来的,
+ * 服务端的巡检把流程接着往下推 —— 在这里停掉轮询,界面就会在流程早已跑完之后
+ * 还一直显示「等待处理」。
+ */
+export function isLiveRun(status: RunStatus): boolean {
+  return status === 'pending' || status === 'running' || status === 'waiting'
+}
+
+const POLL_MS = 2500
+
+/** 失效时用的前缀键。把它们写在接口旁边,改了 key 不至于漏掉某个 invalidate。 */
+export const pipelineQueryKeys = {
+  pipelines: ['pipelines'] as const,
+  releases: ['releases'] as const,
+  release: ['release'] as const,
+}
+
+export const pipelinesQueryOptions = () =>
+  queryOptions({
+    queryKey: ['pipelines'] as const,
+    queryFn: pipelineApi.pipelines,
+    staleTime: 60_000,
+  })
+
+export const releasesQueryOptions = (
+  scope: 'mine' | 'all' = 'mine', status = '', page = 1, pageSize = 50,
+) =>
+  queryOptions({
+    queryKey: ['releases', scope, status, page, pageSize] as const,
+    queryFn: () => pipelineApi.releases(scope, status, page, pageSize),
+    // 全部落到终态就停,不给一个没人在动的看板留一条每 2.5 秒一次的请求。
+    refetchInterval: (q) => (q.state.data?.items.some((r) => isLiveRun(r.status)) ? POLL_MS : false),
+  })
+
+export const releaseQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['release', id] as const,
+    queryFn: () => pipelineApi.release(id),
+    enabled: id > 0,
+    refetchInterval: (q) => (q.state.data && isLiveRun(q.state.data.status) ? POLL_MS : false),
+  })

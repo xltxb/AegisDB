@@ -7,14 +7,11 @@ export interface Envelope<T = unknown> {
   data: T
 }
 
-export const CODE_OK = 0
-export const CODE_INTERCEPTED = 42200 // 命中高危,已转审批,带 apNo
-export const CODE_SCRIPT_PATH_UNSET = 42600
-export const CODE_EXPORT_PATH_UNSET = 42601
-export const CODE_MFA_REQUIRED = 42800 // 需二次验证
-export const CODE_LOGIN_THROTTLED = 42900
-export const CODE_FORBIDDEN = 40300
-export const CODE_IP_NOT_ALLOWED = 40301
+export {
+  CODE_OK, CODE_INTERCEPTED, CODE_SCRIPT_PATH_UNSET, CODE_EXPORT_PATH_UNSET,
+  CODE_MFA_REQUIRED, CODE_LOGIN_THROTTLED, CODE_FORBIDDEN, CODE_IP_NOT_ALLOWED,
+} from './codes'
+import { CODE_OK } from './codes'
 
 export const TOKEN_KEY = 'aegis_token'
 
