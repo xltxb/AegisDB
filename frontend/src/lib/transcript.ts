@@ -16,7 +16,7 @@
 //     `IDENTIFIED BY 'hunter2'`, and it would be a strange kind of care that
 //     redacted the tamper-proof copy and shipped the plaintext one.
 
-import { i18n } from '@/locales'
+import i18n from '@/locales'
 
 /** Matches a single- or double-quoted SQL literal — mirrors sqlutil.quotedVal. */
 const QUOTED = `(?:'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*")`
@@ -186,7 +186,7 @@ export class Transcript {
     // The header follows the console's language, like everything else the user
     // reads. It goes through the i18n instance directly (as the ui store does)
     // because a lib has no component context to call useI18n() from.
-    const tr = i18n.global.t as (k: string, p?: Record<string, unknown>) => string
+    const tr = i18n.t as unknown as (k: string, p?: Record<string, unknown>) => string
     const lines: string[] = []
     lines.push(`# ${tr('tsTitle')}`)
     lines.push(`# ${tr('tsInstance')}: ${meta.instance}${meta.database ? ` · ${tr('tsDb')}: ${meta.database}` : ''}`)

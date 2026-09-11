@@ -9,7 +9,8 @@
 ```
 db-gateway/
 ├─ backend/     Go + Gin + GORM 后端（REST + WebSocket；风险引擎/RBAC/审批/审计哈希链/多引擎真实执行）
-├─ frontend/    Vue 3 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
+├─ frontend/    React 19 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
+├─ frontend-vue/ 被它取代的 Vue 3 实现，留作对照与回退（见文末「两套前端」）
 ├─ docs/        PRD / 前后端开发文档 / 交互原型 / ADR / 四份数据库规范 / 外部审批与开放接口对接指南
 ├─ deploy/      systemd unit + 环境变量模板
 └─ docker-compose.yml  本地 MySQL 8 + Redis 7（可选；后端目前不使用 Redis）
@@ -19,7 +20,7 @@ db-gateway/
 
 | 层 | 选型 |
 |----|------|
-| 前端 | Vue 3 (`<script setup>`) · TypeScript · Vite · Pinia · Vue Router · vue-i18n（构建期预编译） · xterm.js · lucide |
+| 前端 | React 19.3（函数组件 + Hooks · React Compiler） · TypeScript · Vite 6 · Zustand（客户端状态） · TanStack Query（服务端状态） · React Router 7 data router · react-i18next · xterm.js · lucide |
 | 后端 | Go 1.23 · Gin · GORM · JWT · gorilla/websocket · bcrypt / HMAC / AES-GCM · TOTP |
 | 网关目标库 | MySQL / MariaDB / TiDB / PolarDB · PostgreSQL / DWS / GaussDB · Oracle（新建实例的引擎下拉即这 7 项；SQLite 只有后端驱动，界面不提供） |
 | 自身存储 | MySQL 8（生产）/ SQLite（零依赖本地开发） |
@@ -463,16 +464,22 @@ WARN 审批人自检: 默认审批链(DBA 负责人) severity=deadlock
   规范审查等单元测试。
   bootstrap 包每个用例都会启动一次完整应用并灌种子数据，整包约 12 分钟，**超过 `go test`
   默认的 10 分钟包超时**，所以上面那条命令带了 `-timeout`；不带会在跑完前被判超时失败。
-- **前端构建**：`npm run build` = `vue-tsc` 类型检查 + Vite 打包 + vue-i18n 严格模式构建期预编译
-  （非法文案直接构建失败）；`npm run type-check` 单独跑类型检查。
-- **前端单元测试**：`npm run test:unit`（210 个用例 / 23 个文件，Playwright runner）：`src/lib/*` 的纯逻辑
-  （终端行编辑器、结果渲染的控制字符、会话日志脱敏、导入表解析、规则文案等），以及对 `.vue`
-  与词条文件的结构性检查（autofocus、modal 根节点、中英词条对齐、引擎表、内置名）。
-  它用 `tsconfig.unit.json` 把 `@/locales` 指向一个测试替身 —— 裸 Node runner 既读不了 `.json5`
-  也没有 `localStorage`，而那次失败炸的是**收集阶段**：整套一个用例都不执行。替身只替掉加载，
-  词条与 vue-i18n 都是真的，因为这里的断言看的正是用户会读到的那段中文。
-- **前端 e2e**：`npm run test:e2e`（5 个浏览器用例：分层树、导出实例选择、元数据同步、权限矩阵、
-  减少动效），自动起 Vite :5174，接口用 mock，不依赖 Go 后端。
+- **前端构建**：`npm run build` = `tsc --noEmit` 类型检查 + Vite 打包，**按路由懒加载分包**
+  （17 个页面各自成块，只想看一眼审批的人不必先下载终端与 xterm）。`npm run type-check` 单独跑类型检查。
+- **前端约定**：不写 `forwardRef`（ref 是普通 prop）；不手写 `useMemo` / `useCallback`（交给 React Compiler，
+  除非 profiler 证明必要）；`useEffect` 必须返回清理函数 —— StrictMode 下会双调用，xterm / WebSocket /
+  定时器的泄漏在那里暴露。
+- **服务端状态一律归 TanStack Query**，只有真正属于客户端的才进 Zustand。把列表塞进客户端 store 会得到
+  两份真相，而它们分叉时的表现是「刷新一下就变了」。
+
+### 两套前端
+
+`frontend/` 是当前实现（React 19）。`frontend-vue/` 是被它取代的 Vue 3 实现，**留在仓库里**作为对照与回退：
+它功能更全（CSV 批量导入导出、批量巡检、库归属、连接页的检索与分组），React 版尚未补齐这些，
+清单见 `.scratch/` 与 GitHub issue。两边连同一个后端，可以同时起：React 在 5173，Vue 在 5174。
+
+Vue 版自带 218 个单元测试（`cd frontend-vue && npm run test:unit`，Playwright runner 跑 `src/lib/*` 的纯逻辑
+与词条、结构检查）与 5 个浏览器 e2e。React 版的纯逻辑从那里原样移植，测试尚未搬过来。
 
 ## 文档
 

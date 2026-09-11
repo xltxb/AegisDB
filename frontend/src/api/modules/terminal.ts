@@ -1,5 +1,5 @@
-import { http, ok, type Envelope } from '../shared'
-import { SCRIPT_TIMEOUT_MS } from '../shared'
+import { http, ok, type Envelope } from '@/api/shared'
+import { SCRIPT_TIMEOUT_MS } from '@/api/shared'
 import type {
   AsyncJob, ExecResp, ExportJob, RiskCheckResp, ScriptScanResp, ScriptUpload, SnippetLimits, TerminalSnippet,
 } from '@/types'
@@ -79,3 +79,81 @@ export const terminalApi = {
       : http.post<any, Envelope<TerminalSnippet>>('/snippets', body),
   snippetDelete: (id: number) => http.delete<any, Envelope<any>>(`/snippets/${id}`).then(ok),
 }
+
+// ---- TanStack Query 绑定 ----
+// 三个前台页面(后台执行 / 导出 / 脚本库)共用这一组 key。列表与详情分开成两个
+// key,是因为它们的轮询节奏不一样:列表一直在页面上,详情只在人点开某一条时才有。
+import { queryOptions } from '@tanstack/react-query'
+
+/** 终态的任务不会再变,`refetchInterval` 据此收手。 */
+const ASYNC_ACTIVE = new Set(['pending', 'running'])
+export const isAsyncJobActive = (j: AsyncJob) => ASYNC_ACTIVE.has(j.status)
+
+/** 导出任务里 `awaiting` 等的是人,不是机器 —— 它不该让页面一直轮询。 */
+const EXPORT_ACTIVE = new Set(['pending', 'running'])
+export const isExportJobActive = (j: ExportJob) => EXPORT_ACTIVE.has(j.status)
+
+export const asyncJobsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['async-jobs'] as const,
+    queryFn: terminalApi.asyncJobs,
+    // 只要还有没跑完的任务就 2s 拉一次;全部终态后返回 false,轮询自己停下 ——
+    // 一张全是历史记录的列表不该每两秒打一次网关。
+    refetchInterval: (q) => ((q.state.data ?? []).some(isAsyncJobActive) ? 2000 : false),
+  })
+
+export const asyncJobQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['async-job', id] as const,
+    queryFn: () => terminalApi.asyncJob(id),
+    enabled: id > 0,
+    // 日志是一行行追加的,所以详情比列表更需要跟着跑;同样在终态停。
+    refetchInterval: (q) => (q.state.data && isAsyncJobActive(q.state.data) ? 2000 : false),
+  })
+
+export const exportJobsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['export-jobs'] as const,
+    queryFn: terminalApi.exportJobs,
+    refetchInterval: (q) => ((q.state.data ?? []).some(isExportJobActive) ? 2000 : false),
+  })
+
+/** 归档保留天数由服务端设置决定,不给默认值 —— 取不到就不提保留期,别编一个。 */
+export const exportConfigQueryOptions = () =>
+  queryOptions({
+    queryKey: ['export-config'] as const,
+    queryFn: terminalApi.exportConfig,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+
+export const scriptUploadsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['script-uploads'] as const,
+    queryFn: terminalApi.scriptUploads,
+  })
+
+export const scriptUploadContentQueryOptions = (id: number) =>
+  queryOptions({
+    queryKey: ['script-upload-content', id] as const,
+    queryFn: () => terminalApi.scriptUploadContent(id),
+    enabled: id > 0,
+    staleTime: Infinity,
+  })
+
+/**
+ * 扫描一份**已经上传**的脚本。
+ *
+ * `content` 传空、只给 uploadId:文件在服务器上,网关自己读它。把正文一起发回去
+ * 就多出一份可能和它对不上的副本(Vue 版终端里的同一条约定)。
+ *
+ * `staleTime: Infinity` —— 上传的文件不会自己变,同一份扫两次只是白等十几秒。
+ */
+export const scriptScanQueryOptions = (id: number, filename: string) =>
+  queryOptions({
+    queryKey: ['script-scan', id] as const,
+    queryFn: () => terminalApi.scriptScan('', filename, 0, id),
+    enabled: id > 0,
+    staleTime: Infinity,
+    retry: false,
+  })

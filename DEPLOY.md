@@ -13,7 +13,7 @@ rm -rf dist && mkdir -p dist/web dist/configs dist/migrations dist/deploy
   -run 'TestProductionServesNoSimulatedData|TestSimulationDefaultsToOff|TestSimulatedPathsAreDocumented' \
   -count=1 -timeout 10m)
 
-# 前端
+# 前端(React 19;`npm run build` 会先跑 tsc 类型检查,再按路由分包)
 (cd frontend && npm ci && npm run build) && cp -r frontend/dist/* dist/web/
 
 # 后端

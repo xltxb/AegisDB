@@ -55,6 +55,6 @@ Thumbs.db
 /backend/uploads/
 # CodeGraph 本地索引 (SQLite),按机器生成,不进仓库
 /.codegraph/
-# ---- React 重写(进行中);依赖与产物不进仓库 ----
-/frontend-react/node_modules/
-/frontend-react/dist/
+# ---- 被取代的 Vue 实现,留作对照与回退 ----
+/frontend-vue/node_modules/
+/frontend-vue/dist/

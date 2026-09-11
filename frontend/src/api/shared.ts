@@ -1,8 +1,7 @@
-import http, { ok, type Envelope } from './http'
+import http, { ok, type Envelope } from '@/api/http'
 import type { AuditQuery } from '@/types'
 
-// auditQS builds the audit query string, omitting empty filters. An absolute
-// from/to window takes precedence over the relative range on the backend.
+// auditQS 拼审计查询串,空过滤项不带上。绝对起止时间优先于相对范围。
 export function auditQS(q: AuditQuery): string {
   const p = new URLSearchParams()
   p.set('risk', q.risk || 'all')
@@ -14,9 +13,7 @@ export function auditQS(q: AuditQuery): string {
   return p.toString()
 }
 
-// Script scan/execute are bounded by the server side cap on script size (32MB),
-// not by this. It is the ceiling on how long the browser will wait for work it
-// knows is slow.
+// 脚本扫描/执行的上限由服务端定(32MB),这个只是浏览器愿意等多久。
 export const SCRIPT_TIMEOUT_MS = 120000
 
 export { http, ok }

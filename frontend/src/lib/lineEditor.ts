@@ -29,6 +29,22 @@ export interface LineEditorOpts {
   highlight?: (s: string) => string
 }
 
+/**
+ * 返回 `rest` 开头那条转义序列的长度(至少 1,即 ESC 本身)。
+ *
+ * CSI: `ESC [` 后跟参数字节 0x30–0x3F、中间字节 0x20–0x2F,以 0x40–0x7E 收尾。
+ * SS3: `ESC O` 再跟一个字节(F1–F4 等)。
+ */
+export function escapeLength(rest: string): number {
+  if (rest[1] === '[') {
+    let i = 2
+    while (i < rest.length && /[\x30-\x3f\x20-\x2f]/.test(rest[i])) i++
+    return i < rest.length && /[\x40-\x7e]/.test(rest[i]) ? i + 1 : rest.length
+  }
+  if (rest[1] === 'O' && rest.length >= 3) return 3
+  return 1
+}
+
 export class LineEditor {
   private buf = ''
   private cur = 0
@@ -324,7 +340,17 @@ export class LineEditor {
         else if (rest.startsWith('\x1b[H') || rest.startsWith('\x1b[1~')) { this.toHome(); i += rest.startsWith('\x1b[1~') ? 3 : 2 }
         else if (rest.startsWith('\x1b[F') || rest.startsWith('\x1b[4~')) { this.toEnd(); i += rest.startsWith('\x1b[4~') ? 3 : 2 }
         else if (rest.startsWith('\x1b[3~')) { this.del(); i += 3 }
-        else { /* unknown escape: skip the introducer */ }
+        else {
+          // 未识别的转义序列:**整条吞掉**,不能只跳过 ESC 引导符。
+          //
+          // 只跳 ESC 的话,后面的 `[`、`1`、`;`、`2`、`C` 会被当成可打印字符逐个
+          // 写进 SQL 缓冲 —— 按一下 Shift+→ 就在语句里留下 `[1;2C`,F1 留下 `OP`,
+          // 然后随语句一起提交到目标库。
+          //
+          // CSI(`ESC [` … 终止符在 @~ 之间)与 SS3(`ESC O` + 一个字母)覆盖了
+          // 绝大多数键盘会发出的序列;再认不出来的,至少把 ESC 自己丢掉。
+          i += escapeLength(rest) - 1
+        }
         continue
       }
       // ---- control chars ----

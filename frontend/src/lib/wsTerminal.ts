@@ -159,14 +159,28 @@ export class WsTerminal {
     }
   }
 
-  /** Force an immediate reconnect (e.g. user hit "refresh session"). */
+  /**
+   * 立即重连(「刷新会话」按的就是它)。
+   *
+   * 必须先把挂着的退避定时器清掉再自己 open。只调 `close()` 是不够的:socket
+   * 早就 CLOSED 了,close 是空操作,不会触发 onclose,于是这一次"立即"要等退避
+   * 定时器到期 —— 最长 15 秒里按钮看着像没反应。`close()` 那边清了这个定时器,
+   * 说明作者知道要清,只是这里漏了。
+   */
   reconnect() {
     this.attempt = 0
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+    const live = this.ws && this.ws.readyState === WebSocket.OPEN
     try {
       this.ws?.close()
     } catch {
       /* ignore */
     }
+    // socket 已经关着时不会有 onclose 把我们带回 open(),自己来。
+    if (!live) this.open()
   }
 
   close() {

@@ -147,9 +147,10 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
 /** Columns the importer reads, for the UI's help text. */
 export const IMPORT_COLUMNS = KNOWN
 
-import { i18n } from '@/locales'
+import i18n from '@/locales'
 
 // Validation messages are read by whoever pasted the sheet, so they follow the
 // console's language. A lib has no component context, so it goes through the
 // i18n instance directly — the same way the ui store does.
-const tr = (k: string, p?: Record<string, unknown>) => i18n.global.t(k as never, p as never) as string
+const tr = (k: string, p?: Record<string, unknown>) =>
+  (i18n.t as unknown as (k: string, p?: Record<string, unknown>) => string)(k, p)

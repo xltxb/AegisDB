@@ -1,6 +1,7 @@
 # AegisDB 数据库管理网关 — Agent 指引
 
-全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（Vue 3 · TS · Vite · Pinia）。
+全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（React 19 · TS · Vite · Zustand · TanStack Query）。
+`frontend-vue/` 是被它取代的 Vue 3 实现，留作对照与回退，不要往那边加新功能。
 本地零依赖启动见 `README.md`（分别双击 `backend\run-sqlite.bat` 与 `frontend\run-dev.bat`，演示登录 `linwei@vela.io / vela123`）。
 
 ## Agent skills
