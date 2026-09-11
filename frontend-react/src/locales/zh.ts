@@ -39,6 +39,10 @@ export const zh = {
   themeDark: '深色',
   themeLight: '浅色',
   themeSystem: '跟随系统',
+  gwOnline: '网关在线',
+  pendingN: '待审批',
+  notifications: '通知',
+  navGov: '数据治理',
 
   // 通用
   loading: '加载中',

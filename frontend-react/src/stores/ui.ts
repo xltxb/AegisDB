@@ -35,7 +35,8 @@ export function applyTheme(theme: Theme) {
 let seq = 0
 
 export const useUIStore = create<UIState>()((set, get) => ({
-  theme: (localStorage.getItem(THEME_KEY) as Theme) || 'light',
+  // 原型是深色优先的,默认跟它一致;切换仍然可用。
+  theme: (localStorage.getItem(THEME_KEY) as Theme) || 'dark',
   lang: (localStorage.getItem(LANG_KEY) as Lang) || 'zh',
   sidebarCollapsed: false,
   toasts: [],

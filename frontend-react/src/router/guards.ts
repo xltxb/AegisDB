@@ -6,7 +6,7 @@ import type { Me } from '@/types'
 
 /** 后台路由的菜单键 —— 这些页面除了菜单开关,还要求以管理后台身份登录。 */
 const ADMIN_KEYS = new Set([
-  'db', 'sqlreview', 'rules', 'perms', 'users', 'pipeline', 'audit', 'settings', 'envtier',
+  'db', 'rules', 'perms', 'users', 'pipeline', 'audit', 'settings', 'envtier',
 ])
 
 /**

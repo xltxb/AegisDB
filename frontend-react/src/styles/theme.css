@@ -46,48 +46,101 @@ a { color: inherit; text-decoration: none; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
 
-/* ============ 应用外壳 ============ */
-.shell { display: flex; height: 100%; }
+/* ============ 应用外壳(尺寸取自原型 v2) ============ */
+.shell { display: flex; height: 100%; overflow: hidden; }
 
-.side {
-  width: 84px; flex: 0 0 84px;
-  display: flex; flex-direction: column; align-items: center; gap: var(--space-2, 8px);
-  padding: var(--space-4, 16px) 0;
-  background: var(--surface-raised); border-right: 1px solid var(--border-subtle);
+/* 左侧 74px 图标栏 —— 不是带文字的侧边栏。17 个模块分两个门户,
+   每侧最多 9 项,图标 + 两字短标签正好放得下。 */
+.rail {
+  width: 74px; flex: 0 0 74px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0;
+  background: var(--surface-sunken);
+  border-right: 1px solid var(--border-subtle);
 }
-.side-mark {
-  width: 34px; height: 34px; border-radius: var(--radius-md);
-  display: grid; place-items: center; margin-bottom: var(--space-3, 12px);
-  background: var(--accent); color: var(--text-on-accent);
-  font: 700 15px var(--font-display);
+.rail-logo {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; color: #fff;
+  background: linear-gradient(135deg, #3b6ef6, #2dcde6);
+  box-shadow: 0 0 18px -4px rgba(45, 205, 230, .6);
 }
-.side nav { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-.side-item {
-  display: flex; flex-direction: column; align-items: center; gap: 4px;
-  padding: 9px 4px; margin: 0 8px; border-radius: var(--radius-md);
-  color: var(--text-muted); font: 500 11px var(--font-body);
-}
-.side-item:hover { background: var(--surface-sunken); color: var(--text-body); }
-.side-item.on { background: var(--accent-subtle); color: var(--accent-text); }
 
+/* 门户切换器在 rail 里,不在顶栏。 */
+.portal-sw {
+  width: 56px; margin-top: 16px; padding: 4px;
+  display: flex; flex-direction: column; gap: 4px;
+  border: 1px solid var(--border-subtle); border-radius: 12px;
+  background: var(--surface-card);
+}
+.portal-sw-item {
+  height: 32px; border: 0; border-radius: 8px; cursor: pointer;
+  display: grid; place-items: center;
+  background: transparent; color: var(--text-muted);
+  transition: all var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.portal-sw-item.on { background: var(--accent-subtle); color: var(--accent-text); }
+
+.rail-nav { margin-top: 22px; display: flex; flex-direction: column; gap: 6px; }
+.rail-item {
+  width: 58px; height: 52px; border-radius: 12px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: var(--text-muted); border: 1px solid transparent; background: transparent; cursor: pointer;
+  transition: all var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.rail-item span { font: 600 9px var(--font-mono); letter-spacing: .02em; }
+.rail-item:hover { color: var(--text-body); }
+.rail-item.on {
+  background: var(--accent-subtle);
+  color: var(--accent-text);
+  border-color: var(--accent-subtle-border);
+}
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.rail-logout { width: 58px; height: 46px; }
+.rail-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; color: #fff;
+  font: 600 12px var(--font-body);
+  background: linear-gradient(135deg, #5e83fb, #2dcde6);
+}
+
+/* 顶栏 54px。 */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .top {
-  height: 58px; flex: 0 0 58px;
-  display: flex; align-items: center; gap: var(--space-3, 12px);
-  padding: 0 var(--space-5, 20px);
-  background: var(--surface-card); border-bottom: 1px solid var(--border-subtle);
+  height: 54px; flex: 0 0 54px;
+  display: flex; align-items: center; gap: 14px; padding: 0 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
 }
-.top-title { font: 600 14px var(--font-display); color: var(--text-strong); }
-.top-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2, 8px); }
-.who { font: 500 12.5px var(--font-body); color: var(--text-muted); }
+.top-head { display: flex; align-items: baseline; gap: 10px; }
+.top-title { font: 700 16px var(--font-display); color: var(--text-strong); letter-spacing: -.01em; }
+.top-sub { font: 500 12px var(--font-mono); color: var(--text-faint); }
+.top-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+
+.pill {
+  height: 30px; display: inline-flex; align-items: center; gap: 7px;
+  padding: 0 12px; border-radius: 999px; cursor: default;
+  border: 1px solid var(--border-subtle); background: transparent;
+  font: 500 11.5px var(--font-mono); color: var(--text-muted);
+}
+.pill-search { cursor: pointer; border-color: var(--border-default); }
+.pill-search kbd {
+  padding: 1px 5px; border-radius: 5px;
+  background: var(--surface-sunken); color: var(--text-faint);
+  font: 600 10px var(--font-mono);
+}
+.pill-health svg { color: var(--cyan-400); }
+.pill-pending { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
 .iconbtn {
   display: grid; place-items: center; width: 30px; height: 30px;
   border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
-  background: var(--surface-card); color: var(--text-muted); cursor: pointer;
+  background: transparent; color: var(--text-muted); cursor: pointer;
+  transition: all var(--dur-fast, .15s) var(--ease-out, ease);
 }
 .iconbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+.iconbtn.bell { position: relative; border-color: transparent; }
+.lock-hint { color: var(--text-faint); display: inline-flex; }
 
-.content { flex: 1; min-height: 0; overflow: auto; padding: var(--space-6, 24px); }
+.content { flex: 1; min-height: 0; overflow: auto; padding: 24px 28px; }
 
 /* ============ 页面骨架 ============ */
 .page-head { display: flex; align-items: flex-start; gap: var(--space-4, 16px); margin-bottom: var(--space-5, 20px); }

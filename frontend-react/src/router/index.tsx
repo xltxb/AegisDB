@@ -33,8 +33,9 @@ export const router = createBrowserRouter([
 
       // ---- 管理后台(portal + role 双重校验,见 guards) ----
       { path: 'connections', loader: requireMenu('db'), element: <Placeholder titleKey="navConnections" /> },
-      { path: 'sql-review', loader: requireMenu('sqlreview'), element: <Placeholder titleKey="navSqlReview" /> },
+      { path: 'sql-review', loader: requireMenu('rules'), element: <Placeholder titleKey="navSqlReview" /> },
       { path: 'risk-rules', loader: requireMenu('rules'), element: <Placeholder titleKey="navRiskRules" /> },
+      { path: 'gov', loader: requireMenu('settings'), element: <Placeholder titleKey="navGov" /> },
       { path: 'permissions', loader: requireMenu('perms'), element: <Placeholder titleKey="navPermissions" /> },
       { path: 'users', loader: requireMenu('perms'), element: <Placeholder titleKey="navUsers" /> },
       { path: 'pipelines', loader: requireMenu('pipeline'), element: <Placeholder titleKey="navPipelines" /> },
