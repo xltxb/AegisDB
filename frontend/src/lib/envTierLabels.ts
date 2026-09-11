@@ -23,6 +23,29 @@ import type { EnvTier, Environment } from '@/types'
 export const BUILTIN_TIER_LABEL: Record<string, string> = {
   prod: 'envProd', gli: 'envGli', staging: 'envStaging', uat: 'envUat', dev: 'envDev',
 }
+
+/**
+ * 出厂时这个产品给每个内置分层写下过的名字 —— 当前的,以及历史上错过的那两个。
+ *
+ * 它是**判断「这个名字是不是我们自己写的」**的依据,与后端 `wrongBuiltinNames`
+ * 同源(bootstrap/seed.go):后端用它决定要不要覆盖一行,前端用它决定要不要翻译
+ * 一行。两边问的是同一个问题。
+ *
+ * 键是存进库的那串中文,不是 code —— 这一点是关键,`builtinNames.ts` 早就这么做了:
+ * **用户改过名之后自然不再匹配**,于是显示他自己的名字,不需要另外记一个"改过没有"
+ * 的标志位。
+ */
+export const SHIPPED_TIER_NAME: Record<string, string> = {
+  '生产环境 · PROD': 'envProd',
+  '法务环境 · GLI': 'envGli',
+  '预发布环境 · STAGING': 'envStaging',
+  '演练环境 · UAT': 'envUat',
+  '开发环境 · DEV': 'envDev',
+  // 2026-08-06 之前错标的三个,同样是本产品写下的,同样该翻译。
+  '灰度 · GLI': 'envGli',
+  '演练UAT · STAGING': 'envStaging',
+  '测试 · DEV': 'envDev',
+}
 /** Colour per built-in tier — the palette operators already read at a glance. */
 export const BUILTIN_DOT: Record<string, string> = {
   prod: 'danger', gli: 'info', staging: 'warning', dev: 'success',
@@ -36,14 +59,30 @@ type Translate = (key: string) => string
 /**
  * Display name for a tier code.
  *
- * Built-ins go through i18n so they stay translated. A tier an administrator
- * created can only show the name that was typed — it has no translations, which
- * is the accepted trade-off of making tiers data. An unknown code shows itself:
- * for a deleted tier that is the only true thing left to say about it.
+ * 顺序是:**先看库里存的那串字,再决定要不要翻译**。
+ *
+ * 原先是反过来的 —— 内置 code 一律走 i18n、从不读 `displayName`。那样做有两个后果,
+ * 都在 2026-09 暴露了:
+ *
+ * - 管理员把 `staging` 改名「预发布-A」,库里存住了,页面永远显示译文。后端特意用
+ *   `wrongBuiltinNames` 只覆盖"本产品自己写下的"名字来保护这次改名,前端把这层保护
+ *   整个抵消掉了。
+ * - 更糟的是它**会遮住数据问题**。dev 那行的 `display_name` 曾经被写成乱码
+ *   `???? � DEV`,而这一页照样显示「开发环境」,没有任何人看得见 —— 直到另一个不走
+ *   这条捷径的界面把它露出来。
+ *
+ * 判据是名字本身在不在 `SHIPPED_TIER_NAME` 里,和 `builtinNames.ts` 同一套做法:
+ * 还是出厂那串 → 按读者的语言说;被人改过 → 显示他改的那串,它没有译文,这是把分层
+ * 做成数据要付的代价。未知 code 显示自身 —— 对一个已被删除的分层,那是唯一还成立的话。
  */
 export function tierLabel(code: string, tiers: EnvTier[], t: Translate): string {
-  if (BUILTIN_TIER_LABEL[code]) return t(BUILTIN_TIER_LABEL[code])
-  return tiers.find((x) => x.code === code)?.displayName || code
+  const stored = tiers.find((x) => x.code === code)?.displayName?.trim()
+  if (!stored) {
+    // 查不到这一行:内置 code 仍按译文说(分层列表还没加载完时走这条),否则显示 code。
+    return BUILTIN_TIER_LABEL[code] ? t(BUILTIN_TIER_LABEL[code]) : code
+  }
+  const shipped = SHIPPED_TIER_NAME[stored]
+  return shipped ? t(shipped) : stored
 }
 
 /** Display name for an environment code; unknown codes show verbatim. */
