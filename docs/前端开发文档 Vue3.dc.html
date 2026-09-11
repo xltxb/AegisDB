@@ -70,14 +70,14 @@
   <tbody>
     <tr><td>框架</td><td>Vue 3 (Composition API, <code class="inl">&lt;script setup&gt;</code>)</td><td>组合式 API + TypeScript 全量类型。</td></tr>
     <tr><td>构建</td><td>Vite 5</td><td>开发热更新、生产构建、按模块分包。</td></tr>
-    <tr><td>状态管理</td><td>Pinia</td><td>按领域拆 store(auth/connections/roles…)。</td></tr>
+    <tr><td>状态管理</td><td>Pinia</td><td>按领域拆 store(auth / connections / envtier / snippets / ui)。</td></tr>
     <tr><td>路由</td><td>Vue Router 4</td><td>动态路由 + 菜单权限守卫。</td></tr>
     <tr><td>HTTP</td><td>Axios</td><td>统一实例、拦截器、错误码处理。</td></tr>
     <tr><td>终端</td><td>xterm.js</td><td>Web 命令行渲染;WebSocket 流式交互。</td></tr>
-    <tr><td>SQL 编辑</td><td>CodeMirror 6 (sql)</td><td>语法高亮、脚本预览。</td></tr>
+    <tr><td>SQL 编辑</td><td>自研 <code class="inl">lib/sqlHighlight</code></td><td>输入行与脚本预览的语法高亮。终端是逐字符受控的行编辑器,塞一个完整编辑器进去反而要和它抢按键。</td></tr>
     <tr><td>国际化</td><td>vue-i18n</td><td>zh / en 双语,与设置联动。</td></tr>
     <tr><td>UI 基础</td><td>Vela Design Tokens</td><td>沿用设计系统 CSS 变量与深/浅主题;组件按 Vela 视觉自建或封装。</td></tr>
-    <tr><td>工具</td><td>VueUse · dayjs · zod</td><td>组合工具、时间、表单/响应校验。</td></tr>
+    <tr><td>工具</td><td>无额外工具库</td><td>纯逻辑集中在 <code class="inl">src/lib</code>,由单测直接覆盖;时间与组合逻辑就地实现,少一层依赖。</td></tr>
   </tbody>
 </table>
 
@@ -91,37 +91,58 @@
 │  ├─ index.ts             <span class="c"># 路由表</span>
 │  └─ guards.ts            <span class="c"># 登录 + 菜单权限守卫</span>
 ├─ stores/                 <span class="c"># Pinia</span>
-│  ├─ auth.ts  connections.ts  roles.ts  users.ts
-│  ├─ riskRules.ts  approvals.ts  audit.ts  terminal.ts
-│  └─ settings.ts  i18n.ts
+│  ├─ auth.ts              <span class="c"># user/menus/capabilities · isAdmin · can()</span>
+│  ├─ connections.ts       <span class="c"># 实例列表 · byEnv · databasesOf()</span>
+│  ├─ envtier.ts           <span class="c"># 分层与环境 · tierOf()</span>
+│  └─ snippets.ts  ui.ts   <span class="c"># 快捷脚本 · 主题/语言/toast</span>
 ├─ api/
 │  ├─ http.ts              <span class="c"># axios 实例 + 拦截器</span>
-│  └─ modules/*.ts         <span class="c"># 各领域接口</span>
-├─ views/                  <span class="c"># 路由级页面 = 七大模块</span>
-│  ├─ terminal/  approvals/  connections/  riskRules/
+│  ├─ codes.ts             <span class="c"># 业务码(与 axios 解耦,供纯逻辑单测)</span>
+│  ├─ shared.ts            <span class="c"># 共用查询串与超时常量</span>
+│  └─ modules/*.ts         <span class="c"># 11 个领域接口,index.ts 合并成一个调用面</span>
+├─ views/                  <span class="c"># 路由级页面,按模块分目录</span>
+│  ├─ terminal/            <span class="c"># 终端 · 导出 · 上传 · 后台执行 · 规范审查</span>
+│  ├─ approvals/           <span class="c"># 审批 · 执行窗口(「班车」)</span>
+│  ├─ connections/         <span class="c"># 数据源 · 项目</span>
+│  ├─ riskRules/           <span class="c"># 高危字典 · 分层与环境</span>
+│  ├─ pipeline/            <span class="c"># 发布单 · 流程</span>
 │  ├─ permissions/  audit/  settings/
-├─ components/             <span class="c"># 复用组件</span>
-│  ├─ terminal/Xterm.vue  RiskInspector.vue  InterceptModal.vue
-│  ├─ script/ScriptScanModal.vue
-│  ├─ permission/CapabilityMatrix.vue  MenuAccess.vue
-│  └─ common/*  (VButton VBadge VSwitch VSelect …)
-├─ directives/permission.ts <span class="c"># v-permission</span>
-├─ locales/  zh.ts  en.ts
-├─ styles/  tokens.css  theme.css
-└─ types/  *.d.ts          <span class="c"># 与后端 DTO 对齐</span>
+│  └─ DashboardView.vue  LoginView.vue   <span class="c"># 落地页与登录不属于任何模块</span>
+├─ components/             <span class="c"># 复用组件(不并进 views,单测按此目录认定弹窗)</span>
+│  ├─ terminal/TerminalSession.vue  DbTree.vue  RiskInspector.vue  ResultGrid.vue
+│  ├─ modals/ScriptScanModal.vue  ApprovalModal.vue  MfaModal.vue  …
+│  ├─ settings/ApiClientsPanel.vue  WebhookPanel.vue  SensitiveColumnsPanel.vue  …
+│  └─ common/*  (VButton VSelect VSwitch VDateTime Toasts)
+├─ directives/
+│  ├─ permission.ts        <span class="c"># v-permission(能力层)</span>
+│  └─ autofocus.ts         <span class="c"># v-autofocus(弹窗焦点)</span>
+├─ lib/                    <span class="c"># 纯逻辑:行编辑器、结果渲染、脱敏、元命令…单测直接打这一层</span>
+├─ locales/  zh.json5  en.json5
+├─ styles/  main.css  tokens/*.css
+└─ types/index.ts          <span class="c"># 与后端 DTO 对齐</span>
 </code></pre>
 
 <!-- 3 -->
 <h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">03</span> 路由与菜单权限</h2>
 <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Routing &amp; Menu Guard</div>
-<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">每个路由声明 <code class="inl">meta.menuKey</code>,与后端返回的 <code class="inl">menus</code> 对应。守卫在导航时校验登录态与菜单可见性,无权限重定向到首个可见菜单。</p>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">每个路由声明 <code class="inl">meta.menuKey</code>,与后端返回的 <code class="inl">menus</code> 对应。守卫在导航时校验登录态与菜单可见性,无权限重定向到<strong>总览</strong>,一个菜单都没有的账户弹回登录页。部分页面用 <code class="inl">meta.gate</code> 复用另一个菜单的权限 —— 导出 / 上传 / 后台执行 / 规范审查都挂在<code class="inl">terminal</code> 下(上线前自查是写变更的一部分,不该是另一项特权),发布单与流程共用 <code class="inl">pipeline</code>。总览带 <code class="inl">meta.home</code>,在闸门之前放行。</p>
 <table class="t">
-  <thead><tr><th style="width:30%">路由</th><th style="width:24%">menuKey</th><th>页面</th></tr></thead>
+  <thead><tr><th style="width:30%">路由</th><th style="width:24%">生效菜单键</th><th>页面</th></tr></thead>
   <tbody>
+    <tr><td class="id">/dashboard</td><td class="id">dashboard</td><td>总览(落地页,不设菜单闸)</td></tr>
     <tr><td class="id">/terminal</td><td class="id">terminal</td><td>Web 命令行终端</td></tr>
+    <tr><td class="id">/export</td><td class="id">terminal</td><td>数据导出</td></tr>
+    <tr><td class="id">/uploads</td><td class="id">terminal</td><td>SQL 脚本上传</td></tr>
+    <tr><td class="id">/async-jobs</td><td class="id">terminal</td><td>后台执行</td></tr>
+    <tr><td class="id">/sql-review</td><td class="id">terminal</td><td>数据库规范审查</td></tr>
     <tr><td class="id">/approvals</td><td class="id">approve</td><td>审批待办</td></tr>
-    <tr><td class="id">/connections</td><td class="id">db</td><td>数据库配置</td></tr>
+    <tr><td class="id">/exec-windows</td><td class="id">execwindow</td><td>执行窗口(「班车」)</td></tr>
+    <tr><td class="id">/connections</td><td class="id">db</td><td>数据源配置</td></tr>
+    <tr><td class="id">/projects</td><td class="id">project</td><td>项目</td></tr>
     <tr><td class="id">/risk-rules</td><td class="id">rules</td><td>高危命令规则</td></tr>
+    <tr><td class="id">/env-tiers</td><td class="id">envtier</td><td>分层与环境</td></tr>
+    <tr><td class="id">/releases</td><td class="id">pipeline</td><td>变更发布单</td></tr>
+    <tr><td class="id">/pipelines</td><td class="id">pipeline</td><td>发布流程</td></tr>
     <tr><td class="id">/permissions</td><td class="id">perms</td><td>用户与权限</td></tr>
     <tr><td class="id">/audit</td><td class="id">audit</td><td>审计日志</td></tr>
     <tr><td class="id">/settings</td><td class="id">settings</td><td>系统设置</td></tr>
@@ -246,9 +267,9 @@ http.interceptors.response.use(r =&gt; {
 <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Build &amp; Conventions</div>
 <ul style="margin:0; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
   <li><strong>规范:</strong>ESLint + Prettier + <code class="inl">vue-tsc</code> 类型检查;组件 PascalCase,store/composable <code class="inl">useXxx</code>。</li>
-  <li><strong>类型:</strong><code class="inl">types/</code> 与后端 DTO 一一对应,接口返回经 zod 校验。</li>
+  <li><strong>类型:</strong><code class="inl">types/</code> 与后端 <code class="inl">docs/openapi.yaml</code> 一一对应;契约由后端的 <code class="inl">TestOpenAPICoversEveryRoute</code> 双向守住,前端不再做一次运行时校验。</li>
   <li><strong>构建:</strong>Vite 按路由懒加载分包;环境变量 <code class="inl">VITE_API_BASE</code> / <code class="inl">VITE_WS_BASE</code>。</li>
-  <li><strong>测试:</strong>Vitest 单测核心 store 与风险预检逻辑;Playwright 走通拦截→审批→执行主流程。</li>
+  <li><strong>测试:</strong><code class="inl">npm run test:unit</code> 用 Playwright runner 跑 <code class="inl">src/lib</code> 的纯逻辑与词条/结构检查(210 例);<code class="inl">npm run test:e2e</code> 5 例走浏览器。拦截→审批→执行的整链由后端 httptest 覆盖,不在浏览器侧重复搭。</li>
 </ul>
 
 <div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>DP DB GATEWAY · 前端开发文档 (Vue 3)</span><span style="margin-left:auto">机密 · 内部</span></div>
