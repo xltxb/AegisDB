@@ -4,6 +4,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import {
   permissionsApi, rolesQueryOptions, roleQueryOptions, usersQueryOptions,
+  userTagsQueryOptions, allTagsQueryOptions,
   type RoleDetailFull,
 } from '@/api/modules/permissions'
 import type { CapLevel } from '@/types'
@@ -259,6 +260,105 @@ export function useCreateUser() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['users'] })
       qc.invalidateQueries({ queryKey: ['roles'] })
+      n.saved()
+    },
+    onError: n.failed,
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 数据范围(标签)
+//
+// 一个人能碰哪些实例,由**标签**说了算,而不是由实例清单说了算:实例是天天在增的,
+// 授权却不该跟着天天改。角色带一组标签,某个人还可以另带一组;**带了就以人为准,
+// 空着才回落到角色**(service 那边同样是这个口径),所以"清空"是一个有意义的动作,
+// 不是"没填"。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 候选标签池。取自所有实例已经用过的标签,只是建议,不是可选值的全集。 */
+export function useAllTags() {
+  return useQuery(allTagsQueryOptions())
+}
+
+export function useSetRoleTags() {
+  const qc = useQueryClient()
+  const n = useNotifier()
+  return useMutation({
+    mutationFn: ({ id, tags }: { id: number; tags: string[] }) =>
+      permissionsApi.setRoleTags(id, tags),
+    onSuccess: (detail, v) => {
+      // 这一条回的是整份 RoleDetail,直接坐进缓存,省掉一次往返。
+      qc.setQueryData(['role', v.id], detail)
+      n.saved()
+    },
+    onError: n.failed,
+  })
+}
+
+/** 某个人**单独**被授的标签。空数组是合法值,含义是「按角色来」。 */
+export function useUserTags(id: number) {
+  return useQuery(userTagsQueryOptions(id))
+}
+
+export function useSetUserTags() {
+  const qc = useQueryClient()
+  const n = useNotifier()
+  return useMutation({
+    mutationFn: ({ id, tags }: { id: number; tags: string[] }) =>
+      permissionsApi.setUserTags(id, tags),
+    // 这一条只回 { ok: true },拿不到新值,所以老老实实失效重取。
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: ['user-tags', v.id] })
+      n.saved()
+    },
+    onError: n.failed,
+  })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 管理员代为处置一个账户的凭据
+//
+// 这三条都是**替别人做**的动作,所以它们不走 toast 了事:调用点要么先二次确认,
+// 要么把结果就地写在那一小节里(代绑 OTP 会吐出一个只出现这一次的密钥)。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 重置口令。长度后端也判(≥8),前端先判一次是为了少一次白跑的往返。 */
+export function useSetUserPassword() {
+  const n = useNotifier()
+  return useMutation({
+    mutationFn: ({ id, password }: { id: number; password: string }) =>
+      permissionsApi.setUserPassword(id, password),
+    onSuccess: n.saved,
+    onError: n.failed,
+  })
+}
+
+/**
+ * 代绑 OTP。
+ *
+ * 服务端**当场生成新密钥并直接置为已启用**(service 的 UpdateUserMFA(id, true, …)),
+ * 也就是说这次调用本身就改了那个人的登录方式 —— 他旧的验证器从这一刻起不再有效。
+ * 返回的 otpauth URI 只在这次响应里出现,离开这个弹窗就再也拿不到,所以调用点要把
+ * 它画成二维码留在屏幕上,而不是弹一下就收。
+ */
+export function useBindUserMfa() {
+  const qc = useQueryClient()
+  const n = useNotifier()
+  return useMutation({
+    mutationFn: (id: number) => permissionsApi.bindUserMfa(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['users'] }),
+    onError: n.failed,
+  })
+}
+
+/** 解绑 OTP —— 那个人下次登录不再需要动态码。危险,调用点必须先二次确认。 */
+export function useResetUserMfa() {
+  const qc = useQueryClient()
+  const n = useNotifier()
+  return useMutation({
+    mutationFn: (id: number) => permissionsApi.resetUserMfa(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['users'] })
       n.saved()
     },
     onError: n.failed,

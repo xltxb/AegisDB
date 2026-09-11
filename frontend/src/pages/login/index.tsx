@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ShieldCheck } from 'lucide-react'
 import clsx from 'clsx'
@@ -18,6 +18,9 @@ import { firstVisibleRoute } from '@/router/guards'
 export default function LoginPage() {
   const { t } = useTranslation()
   const nav = useNavigate()
+  // 空闲锁定把人送回这里时带着这一位。说一句为什么被踢出来 —— 否则一次静默的
+  // 跳转看起来就像"刚才那一下点崩了"。
+  const locked = !!(useLocation().state as { locked?: boolean } | null)?.locked
   const login = useAuthStore((s) => s.login)
   const portal = useAuthStore((s) => s.portal)
   const setPortal = useAuthStore((s) => s.setPortal)
@@ -98,6 +101,7 @@ export default function LoginPage() {
           </>
         )}
 
+        {locked && !err && <div className="notice warn">{t('sessionLocked')}</div>}
         {err && <div className="login-err">{err}</div>}
         <button className="login-submit" type="submit" disabled={busy}>{t('loginSubmit')}</button>
       </form>

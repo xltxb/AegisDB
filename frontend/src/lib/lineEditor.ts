@@ -27,6 +27,14 @@ export interface LineEditorOpts {
   /** ANSI syntax colouring for the input line. MUST keep the printable length
    *  unchanged (colours only) — all cursor math runs on the raw buffer. */
   highlight?: (s: string) => string
+  /**
+   * 当前输入行(及光标位置)变化时的通知。
+   *
+   * 补全浮层要跟着人敲的字走,而 xterm 的按键已经被这个编辑器消费掉了 —— 在外面
+   * 再挂一个 `onData` 去影子记账,等于把退格、历史上翻、粘贴这些分支各抄一遍,
+   * 抄错的那一份就是浮层里出现半截词的原因。所以由持有缓冲的人来说它变成了什么。
+   */
+  onChange?: (line: string, cursor: number) => void
 }
 
 /**
@@ -66,6 +74,29 @@ export class LineEditor {
   /** 是否正在等一条语句的回执。调用方据此判断 Ctrl+C 该发"取消执行"还是只清当前行。 */
   isBusy(): boolean { return this.busy }
 
+  /** 当前正在编辑的那一行(不含已经冻结在上面的续行)。 */
+  get line(): string { return this.buf }
+  /** 光标在 `line` 里的字符下标。 */
+  get cursor(): number { return this.cur }
+
+  /**
+   * 用 `text` 替换光标前的 `back` 个字符 —— 补全采纳走这里。
+   *
+   * 放在编辑器内部,是因为替换之后要重画的是**带提示符、可能已经折行**的那一整块,
+   * 那套行列算术只有这里有(见 redraw)。外面拿到 buf 自己拼字符串,再 feed 回来,
+   * 就变成先删后插的两次回显,屏幕上会闪一下半截语句。
+   */
+  complete(back: number, text: string) {
+    if (this.busy) return
+    const n = Math.max(0, Math.min(back, this.cur))
+    this.buf = this.buf.slice(0, this.cur - n) + text + this.buf.slice(this.cur)
+    this.cur = this.cur - n + text.length
+    this.redraw()
+    this.emitChange()
+  }
+
+  private emitChange() { this.opts.onChange?.(this.buf, this.cur) }
+
   /** Print the primary prompt and start accepting input. */
   start() {
     this.busy = false
@@ -74,6 +105,7 @@ export class LineEditor {
     this.queued = ''
     this.reset()
     this.term.write(this.opts.prompt())
+    this.emitChange()
   }
 
   /** True while a submitted statement is executing (input is ignored). */
@@ -130,6 +162,7 @@ export class LineEditor {
     for (const l of lines.slice(1)) this.term.write(this.opts.contPrompt() + paint(l) + '\r\n')
     this.busy = true
     this.reset()
+    this.emitChange()
     this.opts.onSubmit(stmt)
   }
 
@@ -157,6 +190,7 @@ export class LineEditor {
     this.inCont = false
     this.pending = ''
     this.reset()
+    this.emitChange()
     this.term.write('\r\n' + this.opts.prompt())
     // Continue a pasted multi-statement batch: re-feed the stashed remainder,
     // which echoes + submits the next statement (and re-stashes what's left).
@@ -292,6 +326,7 @@ export class LineEditor {
       const stmt = this.pending
       this.busy = true
       this.reset()
+      this.emitChange()
       this.opts.onSubmit(stmt)
     } else {
       this.inCont = true
@@ -382,6 +417,9 @@ export class LineEditor {
       // treat embedded newlines already handled above; strip any stray \r
       this.insert(run.replace(/[\r\n]/g, ' '))
     }
+    // 一次 data 事件处理完再通知一次,而不是每个分支各喊一遍:一次粘贴、一次
+    // 方向键、一次退格在这里都只是"缓冲变成了这样",订阅者要的也只有这一个结论。
+    this.emitChange()
   }
 
   private backspace() {

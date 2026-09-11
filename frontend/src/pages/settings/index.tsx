@@ -6,14 +6,16 @@ import {
   Bell, DatabaseZap, EyeOff, GitPullRequestArrow, KeyRound, Lock, Palette, Shield, Webhook,
 } from 'lucide-react'
 import {
-  useApiClients, useSaveSettings, useSetApiClientEnabled, useSettings, useTestLark, useTestWebhook,
+  useApprovalChain, useSaveSettings, useSettings, useTestLark, useTestWebhook,
 } from '@/hooks/useSettings'
+import ApiClientsPanel from '@/components/settings/ApiClientsPanel'
+import { invalidIpEntries, normalizeIpAllowlist } from '@/lib/ipAllowlist'
+import { parseSetting } from '@/lib/settingOptions'
 import { Card, CardHead, CardRow } from '@/components/common/Card'
-import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Switch } from '@/components/common/Switch'
 import { Segmented } from '@/components/common/Segmented'
-import { Loading, ErrorState, Empty } from '@/components/common/States'
+import { Loading, ErrorState } from '@/components/common/States'
 import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 import type { SettingsResp } from '@/types'
 
@@ -55,12 +57,6 @@ const LABEL_OF: Record<string, string> = {
 /** Webhook 只转发审计类事件;命令拦截与审批流转不走它。 */
 const WEBHOOK_EVENTS = ['exec', 'login'] as const
 
-/** 设置值在库里是 JSON 编码的。后端存了别的东西时回落到文档里的默认值,而不是崩掉。 */
-function parse<T>(raw: string | undefined, def: T): T {
-  if (raw === undefined) return def
-  try { return JSON.parse(raw) as T } catch { return def }
-}
-
 /** 服务端存着界面不认识的值时,回落到默认值而不是把它显示出来。 */
 function keyOf<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
   return (allowed as readonly string[]).includes(value) ? (value as T) : fallback
@@ -100,61 +96,62 @@ function SettingsForm({ data }: { data: SettingsResp }) {
   const { t } = useTranslation()
   const g = data.settings ?? {}
   const save = useSaveSettings()
+  const notify = useUIStore((s) => s.notify)
   const testLark = useTestLark()
   const testWebhook = useTestWebhook()
   const [active, setActive] = useState<string>(SECTIONS[0].id)
 
   const [f, setF] = useState(() => ({
     // ---- 网关策略 ----
-    policy: keyOf(parse<string>(g['gateway.defaultPolicy'], 'strict'), POLICY_KEYS, 'strict'),
-    execTimeout: Number(parse(g['gateway.execTimeout'], 30)) || 30,
+    policy: keyOf(parseSetting<string>(g['gateway.defaultPolicy'], 'strict'), POLICY_KEYS, 'strict'),
+    execTimeout: Number(parseSetting(g['gateway.execTimeout'], 30)) || 30,
     // Vue 版没有这一项的界面控件,但后端一直在读它(service/async_exec.go)。
     // 没有控件意味着只能改库 —— 于是它实际上是个隐藏设置。补上。
-    asyncExecTimeout: Number(parse(g['gateway.asyncExecTimeout'], 5400)) || 5400,
-    scriptPath: parse<string>(g['script.savePath'], ''),
-    exportPath: parse<string>(g['export.savePath'], ''),
-    exportMaxRows: Number(parse(g['export.maxRows'], 5_000_000)),
-    exportMaxBytes: Number(parse(g['export.maxBytes'], 2_000_000_000)),
-    exportTimeout: Number(parse(g['export.execTimeout'], 1800)) || 1800,
+    asyncExecTimeout: Number(parseSetting(g['gateway.asyncExecTimeout'], 5400)) || 5400,
+    scriptPath: parseSetting<string>(g['script.savePath'], ''),
+    exportPath: parseSetting<string>(g['export.savePath'], ''),
+    exportMaxRows: Number(parseSetting(g['export.maxRows'], 5_000_000)),
+    exportMaxBytes: Number(parseSetting(g['export.maxBytes'], 2_000_000_000)),
+    exportTimeout: Number(parseSetting(g['export.execTimeout'], 1800)) || 1800,
     // `|| 3` 会把用户设的 0(永久保留)悄悄改回 3,所以这里不能用它兜底。
-    exportRetention: Math.max(0, Number(parse(g['export.retentionDays'], 3))),
+    exportRetention: Math.max(0, Number(parseSetting(g['export.retentionDays'], 3))),
 
     // ---- 审批 ----
-    onTimeout: keyOf(parse<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate'),
-    escalate: parse(g['approval.escalate'], true),
-    allowSelf: parse(g['approval.allowSelfApprove'], false),
-    extEnabled: parse(g['approval.external.enabled'], false),
-    extBaseURL: parse<string>(g['approval.external.baseURL'], ''),
-    extAiGroup: parse<string>(g['approval.external.aiGroup'], ''),
-    extCallbackBaseURL: parse<string>(g['approval.external.callbackBaseURL'], ''),
-    extAllowIPs: parse<string>(g['approval.external.callbackAllowIPs'], ''),
+    onTimeout: keyOf(parseSetting<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate'),
+    escalate: parseSetting(g['approval.escalate'], true),
+    allowSelf: parseSetting(g['approval.allowSelfApprove'], false),
+    extEnabled: parseSetting(g['approval.external.enabled'], false),
+    extBaseURL: parseSetting<string>(g['approval.external.baseURL'], ''),
+    extAiGroup: parseSetting<string>(g['approval.external.aiGroup'], ''),
+    extCallbackBaseURL: parseSetting<string>(g['approval.external.callbackBaseURL'], ''),
+    extAllowIPs: parseSetting<string>(g['approval.external.callbackAllowIPs'], ''),
     // 密钥从不回传。输入框留空 = 保持不变,所以初值只能是空串。
     extToken: '',
     extCallbackSecret: '',
 
     // ---- 会话与安全 ----
-    ttl: keyOf(parse<string>(g['security.sessionTTL'], '8h'), SESSION_TTL_KEYS, '8h'),
-    idle: parse(g['security.idleLock'], true),
-    idleMinutes: Number(parse(g['security.idleMinutes'], 15)) || 15,
-    mfa: parse(g['security.requireMFA'], true),
+    ttl: keyOf(parseSetting<string>(g['security.sessionTTL'], '8h'), SESSION_TTL_KEYS, '8h'),
+    idle: parseSetting(g['security.idleLock'], true),
+    idleMinutes: Number(parseSetting(g['security.idleMinutes'], 15)) || 15,
+    mfa: parseSetting(g['security.requireMFA'], true),
     // 下面两项后端在用(service 里读得到),Vue 版却没有控件。补上。
-    mfaMandatory: parse(g['security.mfaMandatory'], false),
-    mfaGrace: Number(parse(g['security.mfaGraceMinutes'], 30)) || 30,
-    ipAllowEnabled: parse(g['security.ipAllowEnabled'], false),
-    ipAllow: parse<string>(g['security.ipAllowlist'], ''),
+    mfaMandatory: parseSetting(g['security.mfaMandatory'], false),
+    mfaGrace: Number(parseSetting(g['security.mfaGraceMinutes'], 30)) || 30,
+    ipAllowEnabled: parseSetting(g['security.ipAllowEnabled'], false),
+    ipAllow: parseSetting<string>(g['security.ipAllowlist'], ''),
 
     // ---- 元数据同步 ----
-    metaEnabled: parse(g['meta.sync.enabled'], false),
-    metaIntervalHrs: Number(parse(g['meta.sync.intervalHours'], 24)) || 24,
-    metaConcurrency: Number(parse(g['meta.sync.concurrency'], 2)) || 2,
+    metaEnabled: parseSetting(g['meta.sync.enabled'], false),
+    metaIntervalHrs: Number(parseSetting(g['meta.sync.intervalHours'], 24)) || 24,
+    metaConcurrency: Number(parseSetting(g['meta.sync.concurrency'], 2)) || 2,
 
     // ---- 通知 ----
-    lark: parse(g['notify.lark'], true),
-    email: parse(g['notify.email'], false),
-    push: parse(g['notify.push'], true),
-    larkWebhook: parse<string>(g['notify.larkWebhook'], ''),
+    lark: parseSetting(g['notify.lark'], true),
+    email: parseSetting(g['notify.email'], false),
+    push: parseSetting(g['notify.push'], true),
+    larkWebhook: parseSetting<string>(g['notify.larkWebhook'], ''),
     larkSecret: '',
-    consoleURL: parse<string>(g['notify.consoleURL'], ''),
+    consoleURL: parseSetting<string>(g['notify.consoleURL'], ''),
 
     // ---- Webhook(审计事件转发,独立接口) ----
     whEnabled: data.webhook?.enabled ?? false,
@@ -190,7 +187,14 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     return () => io.disconnect()
   }, [])
 
+  const badIps = f.ipAllowEnabled ? invalidIpEntries(f.ipAllow) : []
+
   function onSave() {
+    // 白名单开着却有写错的条目时不提交:存下去等于让人以为它生效了。
+    if (badIps.length) {
+      notify(t('ipInvalidEntries', { list: badIps.join(', ') }), 'error')
+      return
+    }
     save.mutate({
       settings: {
         'gateway.defaultPolicy': f.policy,
@@ -221,7 +225,7 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'security.mfaGraceMinutes': clampInt(f.mfaGrace, 1, 1440, 30),
         'security.idleLock': f.idle,
         'security.idleMinutes': clampInt(f.idleMinutes, 1, 1440, 15),
-        'security.ipAllowlist': f.ipAllow.trim(),
+        'security.ipAllowlist': normalizeIpAllowlist(f.ipAllow),
         'security.ipAllowEnabled': f.ipAllowEnabled,
         'meta.sync.enabled': f.metaEnabled,
         'meta.sync.intervalHours': clampInt(f.metaIntervalHrs, 1, 720, 24),
@@ -327,6 +331,7 @@ function SettingsForm({ data }: { data: SettingsResp }) {
             </select>
           </CardRow>
           <CardRow title={t('setDefApprovers')} hint={t('setDefApproversD')}>
+            <ApprovalChain />
             <Link className="set-link" to="/permissions">{t('setApproversManage')}</Link>
           </CardRow>
           <CardRow title={t('setEscalate')} hint={t('setEscalateD')}>
@@ -412,9 +417,17 @@ function SettingsForm({ data }: { data: SettingsResp }) {
           {f.ipAllowEnabled && (
             <div className="set-sub">
               <Field label={t('setIpAllowList')}>
-                <textarea className="set-in set-ta" value={f.ipAllow} placeholder={t('setIpAllowPh')}
+                <textarea className={clsx('set-in set-ta', badIps.length && 'is-bad')}
+                          value={f.ipAllow} placeholder={t('setIpAllowPh')}
                           onChange={(e) => set({ ipAllow: e.target.value })} />
               </Field>
+              {/*
+                非法条目当场标红并挡住保存。Vue 版是保存时把它们静默丢掉 —— 输入框里
+                那一行还在,人由此以为白名单已经放行了那台机器,直到它被挡在门外。
+              */}
+              <div className={clsx('set-hint', badIps.length && 'bad')}>
+                {badIps.length ? t('ipInvalidEntries', { list: badIps.join(', ') }) : t('setIpAllowHint')}
+              </div>
             </div>
           )}
         </Card></section>
@@ -467,7 +480,7 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         {/* ---------------- 开放接口 ---------------- */}
         <section id="set-openapi" className="set-sec"><Card>
           <CardHead icon={<KeyRound size={17} />} title={t('setOpenApi')} sub={t('setOpenApiSub')} />
-          <ApiClientList />
+          <ApiClientsPanel />
         </Card></section>
 
         {/* ---------------- 通知 ---------------- */}
@@ -618,43 +631,29 @@ function AppearanceRows() {
 }
 
 /**
- * 开放接口凭据:看得见、停得掉。
+ * 默认审批链上的人。
  *
- * **建凭据不在这里** —— 那一步会当场返回一次明文令牌,之后再也取不到,需要一整套
- * "只显示这一次、请立刻抄走"的交接界面。把它塞进一行设置里,最可能的结果是令牌在
- * 界面上一闪而过然后永远丢了。
+ * 取不到就**说取不到**,不画一个空列表:空列表会被读成"这条链上没有人",而真正的
+ * 原因通常是这个角色还没配人,或者调用者看不到成员名单 —— 两件事要人去做的动作
+ * 完全不同。
  */
-function ApiClientList() {
+function ApprovalChain() {
   const { t } = useTranslation()
-  const { data, isLoading, error, refetch } = useApiClients()
-  const toggle = useSetApiClientEnabled()
+  const { data, isLoading, error } = useApprovalChain()
 
-  if (isLoading) return <Loading />
-  if (error) return <ErrorState error={error} retry={() => refetch()} />
-  if (!data?.length) return <Empty hint={t('apiCliEmpty')} />
+  if (isLoading) return <span className="set-hint">{t('loading')}…</span>
+  if (error) return <span className="set-hint bad">{t('setApproversUnavailable')}</span>
+
+  const chain = data?.chain ?? []
+  if (!chain.length) return <span className="set-hint bad">{t('setApproversEmpty')}</span>
 
   return (
-    <>
-      {data.map((c) => (
-        <CardRow
-          key={c.id}
-          title={c.name}
-          hint={<>
-            <span className="mono">{c.key}</span>
-            {' · '}{t('apiCliActs', { name: c.userName })}
-            {' · '}{c.lastUsedAt ? t('apiCliLastUsed', { at: c.lastUsedAt.slice(0, 16).replace('T', ' ') }) : t('apiCliNeverUsed')}
-          </>}
-        >
-          <Badge tone={c.enabled ? 'success' : 'neutral'}>
-            {t(c.enabled ? 'enabledTag' : 'disabledTag')}
-          </Badge>
-          <Switch
-            checked={c.enabled}
-            disabled={toggle.isPending}
-            onChange={(v) => toggle.mutate({ id: c.id, enabled: v })}
-          />
-        </CardRow>
+    <div className="apv-list">
+      {chain.map((m) => (
+        <span key={m.id} className="apv">
+          <span className="apv-ava">{m.initials}</span>{m.name}
+        </span>
       ))}
-    </>
+    </div>
   )
 }

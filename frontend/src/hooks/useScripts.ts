@@ -22,16 +22,25 @@ export function useScriptContent(id: number) {
  * 脚本服务端要跑十几秒,十份就是一次两分钟的列表加载。所以只扫人真的打开过的那些,
  * 其余的卡片老老实实显示"未扫描",而不是填一个看起来像真的零。
  */
+/**
+ * 已扫过的那几份的结果。
+ *
+ * 除了结果本身,还要把**失败**交出去。只返回成功的那些,调用方就没法区分「还在扫」
+ * 与「扫不了」—— 界面上两者都是一个转不完的圈,而后者常常是文件在服务器上找不到
+ * 这类一眼能说清的原因。
+ */
 export function useScriptScans(ids: number[], nameOf: (id: number) => string) {
   const results = useQueries({
     queries: ids.map((id) => scriptScanQueryOptions(id, nameOf(id))),
   })
   const byId = new Map<number, ScriptScanResp>()
+  const errById = new Map<number, Error>()
   ids.forEach((id, i) => {
-    const d = results[i]?.data
-    if (d) byId.set(id, d)
+    const r = results[i]
+    if (r?.data) byId.set(id, r.data)
+    else if (r?.error) errById.set(id, r.error as Error)
   })
-  return byId
+  return Object.assign(byId, { errorOf: (id: number) => errById.get(id) })
 }
 
 export function useScriptScan(id: number, filename: string) {

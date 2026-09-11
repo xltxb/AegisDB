@@ -127,6 +127,25 @@ export const exportConfigQueryOptions = () =>
     retry: false,
   })
 
+/**
+ * 本人存下的快捷脚本,以及它们的上限。
+ *
+ * 两个 key 分开:清单随增删改变,上限是服务端的配置 —— 一天里不会变第二次,所以
+ * 给它一个长 `staleTime`,而不是每次打开管理弹窗都再问一遍同一个数字。
+ */
+export const snippetsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['snippets'] as const,
+    queryFn: terminalApi.snippets,
+  })
+
+export const snippetLimitsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['snippet-limits'] as const,
+    queryFn: terminalApi.snippetLimits,
+    staleTime: 10 * 60_000,
+  })
+
 export const scriptUploadsQueryOptions = () =>
   queryOptions({
     queryKey: ['script-uploads'] as const,

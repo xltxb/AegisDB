@@ -1,0 +1,16 @@
+{
+  // Node-runner variant of the app tsconfig: identical except that `@/locales`
+  // resolves to a test double. See tests/unit/stubs/locales.ts for why — in
+  // short, importing the real module runs `localStorage.getItem` at module load,
+  // and there is no such global in Node.
+  //
+  // The order matters: the more specific mapping must come first, everything
+  // else still points at the real src/.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/locales": ["./tests/unit/stubs/locales.ts"],
+      "@/*": ["./src/*"]
+    }
+  }
+}

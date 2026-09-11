@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query'
 import { http, ok, type Envelope } from '@/api/shared'
+import { connectionsApi } from '@/api/modules/connections'
 import type {
   RoleBrief, RoleDetail, UserView,
 } from '@/types'
@@ -85,6 +86,19 @@ export const roleQueryOptions = (id: number) =>
 
 export const usersQueryOptions = () =>
   queryOptions({ queryKey: ['users'] as const, queryFn: permissionsApi.users })
+
+/**
+ * 全部标签候选(`GET /tags`)。
+ *
+ * 它不是一张受管的字典表:服务端扫的是**所有实例的 `tags` 字段**,切分、转小写、
+ * 去重之后回来(repository.AllConnectionTags)。所以这份清单只是"别人已经用过什么"
+ * 的一个建议,不是可选值的全集 —— 标签选择器允许自由输入正是因为这一点。
+ *
+ * 请求本身住在 connections 模块(标签是实例的属性,那里才是它的家),这里只补一个
+ * 查询绑定,好让角色页与用户页共用同一份缓存。
+ */
+export const allTagsQueryOptions = () =>
+  queryOptions({ queryKey: ['tags'] as const, queryFn: connectionsApi.tags })
 
 export const userTagsQueryOptions = (id: number) =>
   queryOptions({

@@ -12,6 +12,7 @@ import { Badge } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
 import { Modal } from '@/components/common/Modal'
+import ScriptScanModal from '@/components/script/ScriptScanModal'
 import { Empty, ErrorState, Loading } from '@/components/common/States'
 import type { ScriptScanResp, ScriptUpload } from '@/types'
 
@@ -28,6 +29,8 @@ export default function ScriptsPage() {
   const del = useDeleteScriptUpload()
   const fileRef = useRef<HTMLInputElement>(null)
   const [openId, setOpenId] = useState(0)
+  // 要下发的那一份。与只读预览分开:预览只看,下发要选实例与库并真的跑。
+  const [runId, setRunId] = useState(0)
   const [dragging, setDragging] = useState(false)
   /**
    * 扫过哪几份。
@@ -43,6 +46,12 @@ export default function ScriptsPage() {
 
   function open(u: ScriptUpload) {
     setOpenId(u.id)
+    setScanned((ids) => (ids.includes(u.id) ? ids : [...ids, u.id]))
+  }
+
+  /** 下发前必须先有扫描结果 —— 没扫过就不知道该给「执行」还是「提交审批」。 */
+  function run(u: ScriptUpload) {
+    setRunId(u.id)
     setScanned((ids) => (ids.includes(u.id) ? ids : [...ids, u.id]))
   }
 
@@ -93,6 +102,7 @@ export default function ScriptsPage() {
                 uploader={me?.name ?? ''}
                 scan={scans.get(u.id)}
                 onView={() => open(u)}
+                onRun={() => run(u)}
                 onDispatch={() =>
                   // 终端才是执行脚本的地方 —— 这里只把"用哪一份"交过去,等同于在
                   // 终端里敲 `\i 文件名`。不另开一条执行路径,是因为网关的判定挂在
@@ -111,6 +121,17 @@ export default function ScriptsPage() {
       )}
 
       <ViewModal file={current} onClose={() => setOpenId(0)} />
+
+      {/* 下发走扫描弹窗:它同时负责"全安全直接跑"和"有高危转审批"两条路。 */}
+      <ScriptScanModal
+        open={!!runId}
+        filename={files.find((f) => f.id === runId)?.filename ?? ''}
+        scan={scans.get(runId) ?? null}
+        error={scans.errorOf(runId)}
+        uploadId={runId}
+        onClose={() => setRunId(0)}
+        onDispatched={() => refetch()}
+      />
     </div>
   )
 }
@@ -124,12 +145,13 @@ function riskBadge(scan: ScriptScanResp | undefined) {
 }
 
 function ScriptCard({
-  file, uploader, scan, onView, onDispatch, onDelete,
+  file, uploader, scan, onView, onRun, onDispatch, onDelete,
 }: {
   file: ScriptUpload
   uploader: string
   scan: ScriptScanResp | undefined
   onView: () => void
+  onRun: () => void
   onDispatch: () => void
   onDelete: () => void
 }) {
@@ -168,6 +190,9 @@ function ScriptCard({
 
       <div className="sc-ops">
         <Button variant="secondary" onClick={onView}>{t('scriptsView')}</Button>
+        <Button variant="primary" onClick={onRun}>
+          <ScanLine size={13} />{t('scriptsRun')}
+        </Button>
         <Button variant="ghost" title={t('scriptsDispatchTip')} onClick={onDispatch}>
           <Terminal size={13} />{t('scriptsDispatch')}
         </Button>

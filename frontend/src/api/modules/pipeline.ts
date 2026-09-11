@@ -108,3 +108,17 @@ export const releaseQueryOptions = (id: number) =>
     enabled: id > 0,
     refetchInterval: (q) => (q.state.data && isLiveRun(q.state.data.status) ? POLL_MS : false),
   })
+
+/**
+ * 项目清单。
+ *
+ * 它是两个界面的同一份数据:连接页展开一台实例时,每个库的归属下拉要列出它;
+ * 项目管理面板增删改的也是它。放在一个 key 下,新建的项目立刻能在下拉里选到,
+ * 不用刷新页面 —— Vue 版就是各读各的,于是刚建的项目要刷新才出现。
+ */
+export const projectsQueryOptions = () =>
+  queryOptions({
+    queryKey: ['projects'] as const,
+    queryFn: pipelineApi.projects,
+    staleTime: 60_000,
+  })

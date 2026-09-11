@@ -11,6 +11,18 @@
 // The model therefore stores the KEY — which is also what the backend stores —
 // and the label is derived for display only.
 
+/**
+ * 设置值在库里是 JSON 编码的字符串。
+ *
+ * 后端存着别的东西(手改过库、旧版本留下的格式)时回落到文档里的默认值,而不是
+ * 让一整页设置连带崩掉 —— 一个解不开的 `security.idleMinutes` 不该把网关策略也
+ * 一起带走。
+ */
+export function parseSetting<T>(raw: string | undefined, def: T): T {
+  if (raw === undefined) return def
+  try { return JSON.parse(raw) as T } catch { return def }
+}
+
 /** Values `approval.onTimeout` accepts. */
 export const APPROVAL_TIMEOUT_KEYS = ['auto-reject', 'auto-escalate', 'keep-waiting'] as const
 /** Values `security.sessionTTL` accepts. */

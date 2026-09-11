@@ -64,3 +64,17 @@ export function tierOfEnv(
   const e = envs.find((x) => x.code === envCode)
   return e ? tiers.find((x) => x.code === e.tierCode) : undefined
 }
+
+/**
+ * 每个环境名下有多少台实例。
+ *
+ * 删除环境时必须指定实例迁往哪里,而"要迁多少台"正是这个数 —— 它是那句确认文案
+ * 里唯一的事实。服务端算不出来时(接口缺失/无权限)界面按 0 显示,不拦住删除:
+ * 迁移目标仍然是必填的,真正的约束在服务端。
+ */
+export const environmentUsageQueryOptions = () =>
+  queryOptions({
+    queryKey: ['environment-usage'] as const,
+    queryFn: envtierApi.environmentUsage,
+    staleTime: 60_000,
+  })

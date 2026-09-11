@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
+import QRCode from 'qrcode'
 import {
   MailPlus, UserPlus, ShieldOff, ShieldCheck, Check, ChevronDown, Tag,
+  KeyRound, Smartphone, Unlink,
 } from 'lucide-react'
 import {
   useUsers, useRoles, useEnvTiers, useIsAdmin, useEffectiveMatrix,
   useSetUserRoles, useToggleUserStatus, useInviteUser, useCreateUser,
+  useUserTags, useSetUserTags, useAllTags,
+  useSetUserPassword, useBindUserMfa, useResetUserMfa,
 } from '@/hooks/usePermissions'
-import { userTagsQueryOptions } from '@/api/modules/permissions'
+import { TagEditModal } from '@/components/modals/TagEditModal'
 import { CapabilityMatrix } from '@/components/permission/CapabilityMatrix'
 import { Card, CardHead } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
@@ -257,9 +260,13 @@ function RoleAssigner({ user, roles, onDone }: { user: UserView; roles: RoleBrie
 
 function UserDetail({ user, onClose }: { user: UserView; onClose: () => void }) {
   const { t } = useTranslation()
+  const isAdmin = useIsAdmin()
   const { data: tiers } = useEnvTiers()
-  const { data: tags, isError: tagsFailed } = useQuery(userTagsQueryOptions(user.id))
+  const { data: tags, isError: tagsFailed } = useUserTags(user.id)
+  const { data: allTags } = useAllTags()
+  const setTags = useSetUserTags()
   const { matrix, isLoading } = useEffectiveMatrix(user.roleIds ?? [])
+  const [tagging, setTagging] = useState(false)
 
   const cols = (tiers ?? []).map((x) => ({ code: x.code, label: x.displayName || x.code.toUpperCase() }))
 
@@ -280,7 +287,28 @@ function UserDetail({ user, onClose }: { user: UserView; onClose: () => void }) 
           : tags?.length
             ? tags.map((g) => <span key={g} className="us-rolechip">{g}</span>)
             : <span className="cell-sub">{t('usTagsFromRole')}</span>}
+        {/* 读失败时不给编辑入口:那时手上这份「当前值」是假的,保存等于拿一份空草稿
+            去覆盖人家真正的授权。 */}
+        {isAdmin && !tagsFailed && (
+          <button type="button" className="us-tagedit" onClick={() => setTagging(true)}>
+            {t('usTagsEdit')}
+          </button>
+        )}
       </div>
+
+      {isAdmin && <CredentialPane user={user} />}
+
+      <TagEditModal
+        key={`utags-${user.id}-${tagging}`}
+        open={tagging}
+        title={t('usTagsTitle')}
+        sub={user.email}
+        tags={tags ?? []}
+        suggestions={allTags ?? []}
+        busy={setTags.isPending}
+        onClose={() => setTagging(false)}
+        onSave={(next) => setTags.mutate({ id: user.id, tags: next }, { onSuccess: () => setTagging(false) })}
+      />
 
       <Card className="us-dcard">
         <CardHead title={t('usEffective')} sub={t('usEffectiveSub')} />
@@ -298,6 +326,113 @@ function UserDetail({ user, onClose }: { user: UserView; onClose: () => void }) 
         </div>
       </Card>
     </Modal>
+  )
+}
+
+/**
+ * 管理员代为处置一个账户的凭据:重置口令、代绑 OTP、解绑 OTP。
+ *
+ * 三件事放在同一小节里,是因为它们有同一个性质:**做的人不是被做的人**。所以这里
+ * 一条也不走"改完弹个已保存"的路子 ——
+ *
+ *  - 结果就地写在按钮旁边(`us-cmsg`),而不是一闪而过的 toast:管理员多半是在
+ *    电话/工位旁边替人操作,需要一句能停在屏幕上、可以念给对方听的话。
+ *  - 代绑会**当场把旧的验证器作废**(服务端生成新密钥并直接置为已启用),解绑会
+ *    让那个人下次登录不再需要动态码 —— 两件都要先二次确认。
+ *  - 新密钥只在那一次响应里出现,离开这个弹窗就再也拿不到。所以二维码画出来就留在
+ *    那儿,旁边附明文密钥给手输的人,而不是弹一下就收。
+ *
+ * 重置口令没有二次确认:它要先键入一串新口令(且 ≥8 位),这个动作本身已经足够
+ * 说明来意了,再拦一道只是多一次点击。
+ */
+function CredentialPane({ user }: { user: UserView }) {
+  const { t } = useTranslation()
+  const setPw = useSetUserPassword()
+  const bind = useBindUserMfa()
+  const reset = useResetUserMfa()
+
+  const [pw, setPw2] = useState('')
+  const [pwMsg, setPwMsg] = useState('')
+  const [otp, setOtp] = useState<{ secret: string; otpauthUri: string } | null>(null)
+  const [qr, setQr] = useState('')
+  const [otpMsg, setOtpMsg] = useState('')
+
+  function savePw() {
+    // 长度后端也判(≥8)。前端先判一次是为了省一次白跑的往返,不是为了代替它。
+    if (pw.length < 8) { setPwMsg(t('usPwTooShort')); return }
+    setPw.mutate({ id: user.id, password: pw }, {
+      onSuccess: () => { setPwMsg(t('usPwSaved')); setPw2('') },
+      onError: () => setPwMsg(t('usPwFailed')),
+    })
+  }
+
+  async function bindOtp() {
+    // 已经绑过的时候,这一下是**换掉**他现在用的那个 —— 旧验证器立刻失效。
+    if (user.mfaEnabled && !confirmAction(t('usOtpRebindConfirm', { name: user.name }))) return
+    try {
+      const r = await bind.mutateAsync(user.id)
+      setOtp(r)
+      setOtpMsg('')
+      // 二维码只是把同一个 otpauth URI 画出来,画不出来不影响绑定本身 ——
+      // 下面那行明文密钥仍然可用,所以这里只是少一张图,不是一次失败。
+      setQr(await QRCode.toDataURL(r.otpauthUri, { margin: 1, width: 160 }).catch(() => ''))
+    } catch {
+      setOtpMsg(t('usOtpFailed'))
+    }
+  }
+
+  function resetOtp() {
+    if (!confirmAction(t('usOtpResetConfirm', { name: user.name }))) return
+    reset.mutate(user.id, {
+      onSuccess: () => { setOtp(null); setQr(''); setOtpMsg(t('usOtpUnbound')) },
+      onError: () => setOtpMsg(t('usOtpFailed')),
+    })
+  }
+
+  return (
+    <Card className="us-dcard">
+      <CardHead title={t('usCred')} sub={t('usCredSub')} />
+      <div className="perm-sec us-cred">
+        <div className="us-credrow">
+          <div className="us-credl"><KeyRound size={14} />{t('usPwReset')}</div>
+          <input
+            type="password"
+            value={pw}
+            autoComplete="new-password"
+            placeholder={t('usPwPh')}
+            onChange={(e) => { setPw2(e.target.value); setPwMsg('') }}
+          />
+          <Button disabled={setPw.isPending || !pw} onClick={savePw}>{t('usPwSubmit')}</Button>
+          {pwMsg && <span className="us-cmsg">{pwMsg}</span>}
+        </div>
+
+        <div className="us-credrow">
+          <div className="us-credl"><Smartphone size={14} />{t('usOtp')}</div>
+          <span className="cell-sub">{t(user.mfaEnabled ? 'usOtpOn' : 'usOtpOff')}</span>
+          <Button disabled={bind.isPending} onClick={bindOtp}>
+            {t(user.mfaEnabled ? 'usOtpRebind' : 'usOtpBind')}
+          </Button>
+          {user.mfaEnabled && (
+            <Button variant="danger" disabled={reset.isPending} onClick={resetOtp}>
+              <Unlink size={14} />{t('usOtpUnbind')}
+            </Button>
+          )}
+          {otpMsg && <span className="us-cmsg">{otpMsg}</span>}
+        </div>
+
+        {otp && (
+          <div className="us-otpbox">
+            {qr && <img className="us-otpqr" src={qr} alt="OTP QR" />}
+            <div className="us-otptext">
+              <div className="cell-strong">{t('usOtpScan')}</div>
+              {/* 密钥是数据,不进 i18n;等宽字体是为了让人能一位一位念出来。 */}
+              <code className="us-otpsecret">{otp.secret}</code>
+              <div className="cell-sub">{t('usOtpOnce')}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
   )
 }
 

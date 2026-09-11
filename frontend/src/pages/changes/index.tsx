@@ -465,7 +465,10 @@ function NewChangeModal({
       {needMfa && (
         <div className="fld">
           <label>{t('chgMfa')}</label>
-          <input value={f.mfaCode ?? ''} onChange={(e) => set({ mfaCode: e.target.value })} />
+          {/* 这一段是被动弹出来的:用户刚按下提交,手还在键盘上,接下来敲的六位数字
+              必须有地方落。不聚焦的话它们会落进后面的表单里。 */}
+          <input autoFocus inputMode="numeric" maxLength={6} autoComplete="one-time-code"
+            value={f.mfaCode ?? ''} onChange={(e) => set({ mfaCode: e.target.value })} />
         </div>
       )}
 

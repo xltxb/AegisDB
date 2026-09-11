@@ -4,13 +4,14 @@ import clsx from 'clsx'
 import {
   Crown, Shield, UserCog, Code, Eye, Search, X, Plus, UserPlus, Check,
   SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound,
-  ScrollText, Settings, Rocket, Clock, type LucideIcon,
+  ScrollText, Settings, Rocket, Clock, Tags, Info, type LucideIcon,
 } from 'lucide-react'
 import {
   useRoles, useRole, useUsers, useEnvTiers, useIsAdmin,
   useSetRoleCapabilities, useSetRoleMenus, useUpdateRole,
-  useAddRoleMember, useRemoveRoleMember,
+  useAddRoleMember, useRemoveRoleMember, useSetRoleTags, useAllTags,
 } from '@/hooks/usePermissions'
+import { TagEditModal } from '@/components/modals/TagEditModal'
 import { CapabilityMatrix } from '@/components/permission/CapabilityMatrix'
 import { Card, CardHead } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
@@ -107,6 +108,16 @@ export default function PermissionsPage() {
               {shown.map((r) => <RoleCard key={r.id} role={r} on={r.id === roleId} onPick={() => setPicked(r.id)} />)}
               {!shown.length && <Empty hint={t('pmNoRole')} />}
             </div>
+            {/* 这一句是补的,不是装饰。
+                角色只能改、不能新增:后端根本没有 `POST /roles`,这五个是 seed.go
+                种下去的。Vue 版在这里摆着一个写「新建角色」的按钮,点下去其实打开的
+                是**当前角色**的编辑表单 —— 比没有按钮更坏。这里两件事一起做:不放那
+                个按钮,并且把"为什么找不到新建入口"直说,免得有人在页面上找半天,再
+                去翻接口文档,最后才明白这不是他没找到。 */}
+            <div className="perm-rnote">
+              <Info size={13} />
+              <span>{t('pmRolesFixed')}</span>
+            </div>
           </aside>
 
           <div className="perm-detail">
@@ -145,8 +156,11 @@ function RolePanes({
   const caps = useSetRoleCapabilities()
   const menus = useSetRoleMenus()
   const removeMember = useRemoveRoleMember()
+  const setTags = useSetRoleTags()
+  const { data: allTags } = useAllTags()
   const [editing, setEditing] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [tagging, setTagging] = useState(false)
 
   // 列头用分层自己的 displayName:它是服务端的行,管理员改了名这里就跟着改,
   // 不需要前端再维护一份 code→名字的对照。
@@ -210,6 +224,27 @@ function RolePanes({
 
       <Card>
         <CardHead
+          title={t('pmScopeSection')}
+          sub={t('pmScopeSub')}
+          actions={isAdmin && (
+            <Button onClick={() => setTagging(true)}><Tags size={14} />{t('pmScopeEdit')}</Button>
+          )}
+        />
+        <div className="perm-sec">
+          <div className="tagpick-chips">
+            {detail.tags?.length
+              ? detail.tags.map((g) => <span key={g} className="tagpick-chip ro">{g}</span>)
+              : (
+                // 空标签**不是**"还没配":它的含义是这个角色不受标签限制,能力矩阵
+                // 说什么就是什么。写成一句话,而不是留一片空白让人自己猜是哪种。
+                <Badge tone="warning">{t('pmScopeAll')}</Badge>
+              )}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHead
           title={t('pmMembersSection')}
           sub={t('pmMembersN', { n: detail.members.length })}
         />
@@ -247,6 +282,18 @@ function RolePanes({
       {/* key 绑在「角色 id + 开没开」上:换角色或重开表单都重挂一次,草稿不串台。 */}
       <RoleForm key={`${detail.id}-${editing}`} open={editing} detail={detail} onClose={() => setEditing(false)} />
       <MemberPicker open={picking} detail={detail} onClose={() => setPicking(false)} />
+      {/* 同样按「角色 id + 开没开」重挂:换角色不该把上一份草稿带过来。 */}
+      <TagEditModal
+        key={`tags-${detail.id}-${tagging}`}
+        open={tagging}
+        title={t('pmScopeTitle', { role: detail.name })}
+        sub={t('pmScopeSub')}
+        tags={detail.tags ?? []}
+        suggestions={allTags ?? []}
+        busy={setTags.isPending}
+        onClose={() => setTagging(false)}
+        onSave={(tags) => setTags.mutate({ id: detail.id, tags }, { onSuccess: () => setTagging(false) })}
+      />
     </>
   )
 }

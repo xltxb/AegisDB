@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import {
-  apiClientsQueryOptions, settingsApi, settingsQueryOptions,
+  apiClientsQueryOptions, serviceAccountsQueryOptions, settingsApi, settingsQueryOptions,
 } from '@/api/modules/settings'
+import { approvalChainQueryOptions } from '@/api/modules/auth'
 import { useUIStore } from '@/stores/ui'
 import type { WebhookConfig } from '@/types'
 
@@ -12,6 +13,21 @@ export function useSettings() {
 
 export function useApiClients() {
   return useQuery(apiClientsQueryOptions())
+}
+
+export function useServiceAccounts() {
+  return useQuery(serviceAccountsQueryOptions())
+}
+
+/**
+ * 默认审批链上的人。
+ *
+ * 取不到时**不要显示成空**:一个空列表会被读成"审批链上没有人",而真实情况通常是
+ * 这个角色还没配人、或者调用者看不到成员名单 —— 两件事要人去做的动作完全不同。
+ * 调用方照着 `error` 分开说(见设置页的审批分区)。
+ */
+export function useApprovalChain() {
+  return useQuery(approvalChainQueryOptions())
 }
 
 /**
@@ -70,6 +86,59 @@ export function useTestWebhook() {
       qc.invalidateQueries({ queryKey: ['webhook-deliveries'] })
     },
     onError: (e: Error) => notify(e.message || t('whTestFail'), 'error'),
+  })
+}
+
+/**
+ * 发一张新凭据。
+ *
+ * **不 notify("已保存")** —— 这一步的结果不是"存好了",而是一段只出现这一次的
+ * 明文令牌。把它降格成一条 4 秒后消失的 toast,等于把令牌弄丢。调用方拿返回值去
+ * 开那一屏交接页,人确认抄走了才算完。
+ */
+export function useCreateApiClient() {
+  const qc = useQueryClient()
+  const notify = useUIStore((s) => s.notify)
+  const { t } = useTranslation()
+  return useMutation({
+    mutationFn: settingsApi.createApiClient,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['api-clients'] })
+      qc.invalidateQueries({ queryKey: ['service-accounts'] }) // 每个账号名下的凭据数会变
+    },
+    onError: (e: Error) => notify(e.message || t('actionFailed'), 'error'),
+  })
+}
+
+/** 删凭据是不可逆的:对面那套系统下一次调用就会 401,所以调用方要先确认。 */
+export function useDeleteApiClient() {
+  const qc = useQueryClient()
+  const notify = useUIStore((s) => s.notify)
+  const { t } = useTranslation()
+  return useMutation({
+    mutationFn: (id: number) => settingsApi.deleteApiClient(id),
+    onSuccess: () => {
+      notify(t('saved'), 'ok')
+      qc.invalidateQueries({ queryKey: ['api-clients'] })
+      qc.invalidateQueries({ queryKey: ['service-accounts'] })
+    },
+    onError: (e: Error) => notify(e.message || t('actionFailed'), 'error'),
+  })
+}
+
+/** 建服务账号。建完通常紧接着就要给它发凭据,调用方据此把创建表单顺手打开。 */
+export function useCreateServiceAccount() {
+  const qc = useQueryClient()
+  const notify = useUIStore((s) => s.notify)
+  const { t } = useTranslation()
+  return useMutation({
+    mutationFn: settingsApi.createServiceAccount,
+    onSuccess: () => {
+      notify(t('saved'), 'ok')
+      qc.invalidateQueries({ queryKey: ['service-accounts'] })
+      qc.invalidateQueries({ queryKey: ['users'] })
+    },
+    onError: (e: Error) => notify(e.message || t('actionFailed'), 'error'),
   })
 }
 
