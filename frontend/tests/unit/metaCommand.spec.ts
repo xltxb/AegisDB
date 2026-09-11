@@ -190,3 +190,36 @@ test('列表类命令不带第二段', () => {
     expect(translateMetaSql(cmd, 'dws')!.follow).toBeUndefined()
   }
 })
+
+// SQLite 走自己的分支,不落进 MySQL 兜底。
+//
+// 兜底的意思是「认不出的引擎当 MySQL」,而 SQLite 连 SHOW 都不认 —— 敲 \dt 换回来
+// 的是一句语法错误。开发库与全部演示实例都是 SQLite,等于这套元命令在最常用的环境
+// 里不可用,所以这几条要钉住。
+test('SQLite 的元命令不发 SHOW', () => {
+  for (const engine of ['sqlite', 'SQLite']) {
+    expect(translateMetaSql('\\dt', engine)?.sql).toContain('sqlite_master')
+    expect(translateMetaSql('\\dt', engine)?.sql).not.toContain('SHOW')
+    expect(translateMetaSql('\\conninfo', engine)?.sql).toContain('sqlite_version()')
+    expect(translateMetaSql('\\di', engine)?.sql).toContain('sqlite_master')
+    expect(translateMetaSql('\\di orders', engine)?.sql).toContain('pragma_index_list')
+  }
+})
+
+// 内部表不该出现在 \dt 里:它们不是用户的表,列出来只会让人以为自己的库多了几张。
+test('SQLite 的表清单排除 sqlite_ 内部表', () => {
+  expect(translateMetaSql('\\dt', 'sqlite')?.sql).toContain("NOT LIKE 'sqlite_%'")
+})
+
+// \du / \dg 在 SQLite 上没有对应物。返回 null 让它原样送去被拒绝,好过编一条
+// 查得出东西但答非所问的 SQL。
+test('SQLite 上没有用户概念的命令返回 null', () => {
+  expect(translateMetaSql('\\du', 'sqlite')).toBeNull()
+  expect(translateMetaSql('\\dg', 'sqlite')).toBeNull()
+})
+
+// 其它引擎不受影响。
+test('SQLite 分支不影响 MySQL 与 PG', () => {
+  expect(translateMetaSql('\\dt', 'mysql')?.sql).toContain('SHOW FULL TABLES')
+  expect(translateMetaSql('\\dt', 'postgres')?.sql).toContain('information_schema')
+})

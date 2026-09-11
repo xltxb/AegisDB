@@ -45,6 +45,7 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
   const arg = m[2].trim().replace(/;$/, '')
   const isPG = /postgre|dws|gauss/i.test(engine)
   const isOra = /oracle/i.test(engine)
+  const isSqlite = /sqlite/i.test(engine)
   const q = (sql: string): MetaTranslation => ({ sql })
 
   if (isPG) {
@@ -117,6 +118,33 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
         if (!arg) return q(`SELECT owner AS "Owner", table_name AS "Name" FROM all_tables WHERE owner ${notSys} ORDER BY 1,2`)
         // 与 DESC 同一个描述实现:两种拼法回答同一个问题,不该给出两种答案。
         return describeSql(engine, arg)
+    }
+    return null
+  }
+
+  /*
+   * SQLite 要单独一支,不能落进 MySQL 兜底。
+   *
+   * 兜底是「认不出来的引擎就当 MySQL」,对 SQLite 会发出 `SHOW FULL TABLES`,
+   * 而它连 SHOW 都不认 —— 敲 `\dt` 换回来一句 `near "SHOW": syntax error`。
+   * 本地开发库、以及演示实例全是 SQLite,等于这套元命令在最常用的环境里不可用。
+   */
+  if (isSqlite) {
+    const master = (type: string) =>
+      `SELECT name FROM sqlite_master WHERE type='${type}' AND name NOT LIKE 'sqlite_%' ORDER BY 1`
+    switch (verb) {
+      case 'l': case 'list': case 'dn': return q(`PRAGMA database_list`)
+      case 'dt': return q(master('table'))
+      case 'dv': return q(master('view'))
+      case 'di': return arg
+        ? q(`SELECT name FROM pragma_index_list('${ident(arg)}') ORDER BY 1`)
+        : q(master('index'))
+      case 'conninfo': return q(`SELECT sqlite_version() AS "Version"`)
+      case 'd':
+        // 带参数时与 DESC 同一个实现:两种拼法回答同一个问题。
+        return arg ? describeSql(engine, arg) : q(master('table'))
+      // \du / \dg 在 SQLite 上没有对应物 —— 返回 null,让它原样送去被拒绝,
+      // 好过编一条查得出东西但答非所问的 SQL。
     }
     return null
   }
