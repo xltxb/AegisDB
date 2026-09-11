@@ -1,0 +1,178 @@
+/* Vela 设计系统的语义 token 在 tokens/ 下,这里只做主题切换与全局底座。
+   业务样式一律只用语义 token(var(--surface-card) 这类),不写死色值 —— 写死的那些
+   在另一套主题下要么看不见,要么刺眼。 */
+@import './base.css';
+@import './colors.css';
+@import './effects.css';
+@import './fonts.css';
+@import './motion.css';
+@import './spacing.css';
+@import './typography.css';
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: var(--surface-page, #f7f8fa);
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 能力层被判 deny 时由 <Can> / disabled prop 落到这个类上:禁用而不是隐藏,
+   用户看得到按钮,也看得到为什么点不动。 */
+.is-denied { opacity: .45; cursor: not-allowed; }
+
+button { font: inherit; }
+a { color: inherit; text-decoration: none; }
+
+/* ---- toast ---- */
+.toasts {
+  position: fixed; right: 20px; bottom: 20px; z-index: 90;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  font: 500 13px/1.5 var(--font-body);
+  background: var(--surface-card); color: var(--text-body);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0,0,0,.12));
+  animation: toast-in .18s ease-out;
+}
+.toast-ok { border-color: var(--success, #16a34a); }
+.toast-error { border-color: var(--danger, #dc2626); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
+
+/* ============ 应用外壳 ============ */
+.shell { display: flex; height: 100%; }
+
+.side {
+  width: 84px; flex: 0 0 84px;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2, 8px);
+  padding: var(--space-4, 16px) 0;
+  background: var(--surface-raised); border-right: 1px solid var(--border-subtle);
+}
+.side-mark {
+  width: 34px; height: 34px; border-radius: var(--radius-md);
+  display: grid; place-items: center; margin-bottom: var(--space-3, 12px);
+  background: var(--accent); color: var(--text-on-accent);
+  font: 700 15px var(--font-display);
+}
+.side nav { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+.side-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 9px 4px; margin: 0 8px; border-radius: var(--radius-md);
+  color: var(--text-muted); font: 500 11px var(--font-body);
+}
+.side-item:hover { background: var(--surface-sunken); color: var(--text-body); }
+.side-item.on { background: var(--accent-subtle); color: var(--accent-text); }
+
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.top {
+  height: 58px; flex: 0 0 58px;
+  display: flex; align-items: center; gap: var(--space-3, 12px);
+  padding: 0 var(--space-5, 20px);
+  background: var(--surface-card); border-bottom: 1px solid var(--border-subtle);
+}
+.top-title { font: 600 14px var(--font-display); color: var(--text-strong); }
+.top-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2, 8px); }
+.who { font: 500 12.5px var(--font-body); color: var(--text-muted); }
+.iconbtn {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
+  background: var(--surface-card); color: var(--text-muted); cursor: pointer;
+}
+.iconbtn:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+
+.content { flex: 1; min-height: 0; overflow: auto; padding: var(--space-6, 24px); }
+
+/* ============ 页面骨架 ============ */
+.page-head { display: flex; align-items: flex-start; gap: var(--space-4, 16px); margin-bottom: var(--space-5, 20px); }
+.page-head h1 { margin: 0 0 4px; font: 600 20px var(--font-display); color: var(--text-strong); }
+.page-head p { margin: 0; font: 400 13px var(--font-body); color: var(--text-muted); }
+.seg { margin-left: auto; display: flex; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-sunken); }
+.seg-item {
+  padding: 6px 14px; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+  background: transparent; color: var(--text-muted); font: 500 12.5px var(--font-body);
+}
+.seg-item.on { background: var(--surface-card); color: var(--accent-text); box-shadow: var(--glow-sm); }
+
+.hint { padding: var(--space-6, 24px); color: var(--text-faint); font: 400 13px var(--font-body); }
+.hint.err { color: var(--danger-text); }
+
+.cards { display: flex; flex-direction: column; gap: var(--space-3, 12px); }
+.card {
+  padding: var(--space-4, 16px); border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+}
+.card-top { display: flex; align-items: center; gap: var(--space-3, 12px); margin-bottom: 10px; }
+.apno { font: 600 12.5px var(--font-mono); color: var(--accent-text); }
+.badge {
+  padding: 2px 9px; border-radius: var(--radius-full);
+  font: 600 11px var(--font-mono); background: var(--surface-sunken); color: var(--text-muted);
+}
+.badge.st-approved { background: var(--accent-subtle); color: var(--accent-text); }
+.badge.st-rejected, .badge.st-expired { background: var(--danger-subtle); color: var(--danger-text); }
+.cmd {
+  margin: 0 0 10px; padding: 10px 12px; overflow-x: auto;
+  border-radius: var(--radius-md); background: var(--surface-sunken);
+  font: 500 12px/1.6 var(--font-mono); color: var(--text-body);
+}
+.meta { display: flex; flex-wrap: wrap; gap: var(--space-5, 20px); margin: 0; }
+.meta dt { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.meta dd { margin: 2px 0 0; font: 400 13px var(--font-body); color: var(--text-body); }
+.card-act { display: flex; align-items: center; gap: var(--space-3, 12px); margin-top: var(--space-4, 16px); padding-top: var(--space-3, 12px); border-top: 1px solid var(--border-subtle); }
+.waiting { font: 500 12.5px var(--font-body); color: var(--text-muted); }
+.btn-primary {
+  margin-left: auto; padding: 8px 18px; border: 0; cursor: pointer;
+  border-radius: var(--radius-md); background: var(--accent); color: var(--text-on-accent);
+  font: 600 13px var(--font-body);
+}
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+
+.placeholder, .routeerr { padding: var(--space-8, 32px); }
+.placeholder h2, .routeerr h2 { margin: 0 0 8px; font: 600 18px var(--font-display); color: var(--text-strong); }
+.placeholder p, .routeerr p { margin: 0; color: var(--text-muted); font: 400 13.5px var(--font-body); }
+
+/* ============ 登录 ============ */
+.login { height: 100%; display: grid; place-items: center; background: var(--surface-page); }
+.login-card {
+  width: 380px; padding: var(--space-7, 28px);
+  border-radius: var(--radius-2xl); background: var(--surface-card);
+  border: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);
+}
+.login-brand { display: flex; align-items: center; gap: 9px; margin-bottom: var(--space-5, 20px); }
+.login-mark {
+  width: 30px; height: 30px; border-radius: var(--radius-md); display: grid; place-items: center;
+  background: var(--accent); color: var(--text-on-accent);
+}
+.login-name { font: 700 15px var(--font-display); color: var(--text-strong); }
+.login-card h1 { margin: 0 0 4px; font: 700 21px var(--font-display); color: var(--text-strong); }
+.login-sub { margin: 0 0 var(--space-5, 20px); font: 400 13px var(--font-body); color: var(--text-muted); }
+.fld-label { display: block; margin: var(--space-4, 16px) 0 6px; font: 600 11px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .07em; }
+.login-card input {
+  width: 100%; padding: 10px 12px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-default); background: var(--surface-page); color: var(--text-body);
+  font: 400 13.5px var(--font-body);
+}
+.login-card input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.portal-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.portal-opt {
+  display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; cursor: pointer; text-align: left;
+  border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--surface-card);
+}
+.portal-opt.on { border-color: var(--accent); background: var(--accent-subtle); box-shadow: var(--glow-sm); }
+.portal-label { font: 600 13px var(--font-body); color: var(--text-strong); }
+.portal-hint { font: 400 10.5px/1.35 var(--font-body); color: var(--text-faint); }
+.login-err { margin-top: var(--space-4, 16px); padding: 9px 12px; border-radius: var(--radius-md); background: var(--danger-subtle); color: var(--danger-text); font: 500 12.5px var(--font-body); }
+.login-submit {
+  width: 100%; margin-top: var(--space-5, 20px); padding: 11px; border: 0; cursor: pointer;
+  border-radius: var(--radius-md); background: var(--accent); color: var(--text-on-accent);
+  font: 600 14px var(--font-body);
+}
+.login-submit:hover { background: var(--accent-hover); }
+.login-submit:disabled { opacity: .6; cursor: not-allowed; }
