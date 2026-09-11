@@ -28,7 +28,7 @@ const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
 const envtier = useEnvTierStore()
-const isAdmin = computed(() => auth.me?.roleCode === 'admin' || (auth.me?.roleCodes || []).includes('admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 const pipelines = ref<Pipeline[]>([])
 const editing = ref<Pipeline | null>(null)

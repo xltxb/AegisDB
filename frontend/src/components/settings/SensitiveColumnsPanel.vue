@@ -19,7 +19,7 @@ import type { SensitiveColumn } from '@/types'
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
-const isAdmin = computed(() => auth.me?.roleCode === 'admin' || (auth.me?.roleCodes || []).includes('admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 const rows = ref<SensitiveColumn[]>([])
 const editing = ref<{ id: number; tableName: string; columnName: string; maskStyle: SensitiveColumn['maskStyle']; note: string; enabled: boolean } | null>(null)

@@ -20,6 +20,7 @@ import api from '@/api'
 import { CODE_MFA_REQUIRED } from '@/api/http'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
+import { useConnectionsStore } from '@/stores/connections'
 import { useAuthStore } from '@/stores/auth'
 import type { Project, Connection, Pipeline, Release, ReleaseStage, ReviewResult } from '@/types'
 
@@ -35,6 +36,7 @@ const route = useRoute()
 const projectFilter = ref(0)
 const projects = ref<Project[]>([])
 const pipelines = ref<Pipeline[]>([])
+const connStore = useConnectionsStore()
 const conns = ref<Connection[]>([])
 const openStage = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -72,7 +74,7 @@ function select(r: Release) {
 }
 
 onMounted(async () => {
-  try { conns.value = await api.connections() } catch { /* the form falls back to an empty picker */ }
+  try { conns.value = await connStore.fetch() } catch { /* the form falls back to an empty picker */ }
   try { pipelines.value = await api.pipelines() } catch { /* same */ }
   try { projects.value = await api.projects() } catch { /* 筛选器降级为“全部项目” */ }
   // 从「项目」页点进来时带着 ?project=<id>:直接落到筛过的列表,而不是让人
@@ -180,14 +182,9 @@ const pipeLabelSel = computed({
 })
 
 async function loadDbs(id: number) {
-  f.value.database = ''; dbOptions.value = []
-  try {
-    const sc = await api.connectionSchema(id)
-    dbOptions.value = sc.databases.map((d) => d.name)
-    const c = conns.value.find((x) => x.id === id)
-    if (c?.database && dbOptions.value.includes(c.database)) f.value.database = c.database
-    else if (dbOptions.value.length) f.value.database = dbOptions.value[0]
-  } catch { /* the field stays free text */ }
+  const { options, preferred } = await connStore.databasesOf(id)
+  dbOptions.value = options
+  f.value.database = preferred
 }
 
 function openForm() {

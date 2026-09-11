@@ -9,11 +9,15 @@ import {
 import VButton from '@/components/common/VButton.vue'
 import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
+import { useConnectionsStore } from '@/stores/connections'
+import { useEnvTierStore } from '@/stores/envtier'
 import { CODE_OK, CODE_EXPORT_PATH_UNSET } from '@/api/http'
 import type { Connection, ExportJob } from '@/types'
 
 const router = useRouter()
 const { t } = useI18n()
+const connStore = useConnectionsStore()
+const envtier = useEnvTierStore()
 const conns = ref<Connection[]>([])
 const connId = ref<number>(0)
 const db = ref('')                       // target database within the instance ('' = connection default)
@@ -34,6 +38,15 @@ const retentionDays = ref(0)
 let timer: ReturnType<typeof setInterval> | null = null
 
 const activeConn = computed(() => conns.value.find((c) => c.id === connId.value) || null)
+
+// 红色警告的判据是**分层的属性位**,不是环境叫不叫 prod。规则挂在分层上,环境只决定
+// 实例归属 —— 第二个生产集群(prod-hk)照样该出警告,而把 prod 环境改挂到 dev 分层之后
+// 就不该出。
+const activeDanger = computed(() => !!activeConn.value && !!envtier.tierOf(activeConn.value.env)?.dangerBanner)
+
+// 能力层收敛(前端开发文档 §07):导出是一次读,所以看 `select`;分层取自选中的实例。
+// 只有矩阵明确判 deny 才灰掉 —— 服务端仍会再判一次,这里只是把话早点说出来。
+const exportCap = computed(() => `select:${activeConn.value ? envtier.tierOf(activeConn.value.env)?.code || '' : ''}`)
 const anyActive = computed(() => jobs.value.some((j) => j.status === 'pending' || j.status === 'running'))
 
 async function loadJobs() {
@@ -51,19 +64,9 @@ async function refresh() {
 // Load the selectable databases for the chosen instance (same live introspection
 // the terminal uses). Defaults to the connection's own database when it has one.
 async function loadDbs(id: number) {
-  db.value = ''
-  dbOptions.value = []
-  if (!id) return
-  try {
-    const sc = await api.connectionSchema(id)
-    dbOptions.value = sc.databases.map((d) => d.name)
-    const c = conns.value.find((x) => x.id === id)
-    // Pre-select a real database so an export isn't submitted with no schema (which
-    // fails on the target with "No database selected"): the connection's own
-    // database if it has one, else the first introspected database.
-    if (c?.database && dbOptions.value.includes(c.database)) db.value = c.database
-    else if (dbOptions.value.length) db.value = dbOptions.value[0]
-  } catch { /* leave on default */ }
+  const { options, preferred } = await connStore.databasesOf(id)
+  dbOptions.value = options
+  db.value = preferred
 }
 // The instance picker is a searchable VSelect, which works on display labels, so
 // the selection round-trips through `env-name` (the same label the terminal and
@@ -84,8 +87,10 @@ const selectedLabel = computed({
 
 onMounted(async () => {
   try {
-    conns.value = await api.connections()
-    const first = conns.value.find((c) => c.env === 'prod') ?? conns.value[0]
+    conns.value = await connStore.fetch()
+    // 生产警告与默认选中都读分层的属性位,这里先把分层拉下来。
+    await envtier.load().catch(() => {})
+    const first = conns.value.find((c) => envtier.tierOf(c.env)?.dangerBanner) ?? conns.value[0]
     if (first) { connId.value = first.id; await loadDbs(first.id) }
   } catch { /* ignore */ }
   try { retentionDays.value = (await api.exportConfig()).retentionDays ?? 0 } catch { /* 取不到就不提保留期,别编一个 */ }
@@ -231,7 +236,7 @@ const awaiting = ref(false)
             <div class="lbl">{{ $t('exportName') }}</div>
             <input v-model="name" class="nameinput" :placeholder="$t('exportNamePh')" />
           </div>
-          <div v-if="activeConn?.env === 'prod'" class="prodwarn"><TriangleAlert :size="13" />{{ $t('opWarnPrefix') }} <b>PROD · {{ activeConn.name }}</b> · {{ $t('opWarnCaution') }}</div>
+          <div v-if="activeDanger" class="prodwarn"><TriangleAlert :size="13" />{{ $t('opWarnPrefix') }} <b>{{ envtier.envLabel(activeConn!.env) }} · {{ activeConn!.name }}</b> · {{ $t('opWarnCaution') }}</div>
 
           <div class="field">
             <div class="lbl">{{ $t('exportSql') }}</div>
@@ -249,7 +254,7 @@ const awaiting = ref(false)
           <div v-if="awaiting" class="notice">{{ $t('exportAwaitingNotice') }}</div>
           <div v-if="err" class="err">{{ err }}</div>
 
-          <VButton class="submit" variant="primary" :disabled="busy" @click="submit">
+          <VButton v-permission="exportCap" class="submit" variant="primary" :disabled="busy" @click="submit">
             {{ busy ? $t('exportRunning') : $t('exportSubmit') }}
           </VButton>
           <!-- 保留期写在提交按钮下面,而不是藏进帮助文档:导出成功后才知道"三天后

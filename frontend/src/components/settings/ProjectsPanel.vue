@@ -17,7 +17,7 @@ import type { Project } from '@/types'
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
-const isAdmin = computed(() => auth.me?.roleCode === 'admin' || (auth.me?.roleCodes || []).includes('admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 // 列表变了就喊一声 —— 别处(数据源行的归属下拉)拿的是同一份数据,
 // 不同步的话新建的项目要刷新页面才选得到。

@@ -31,7 +31,7 @@ const ui = useUIStore()
 const auth = useAuthStore()
 const envtier = useEnvTierStore()
 // Every mutation is admin-only server-side; non-admins get the page read-only.
-const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 // 三个子领域分成页签,而不是一路铺下去。它们是三张各自完整的表,叠在一页里要滚
 // 三屏才看得完,而每次进来其实只处理其中一件事。

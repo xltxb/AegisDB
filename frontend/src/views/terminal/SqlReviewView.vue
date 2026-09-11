@@ -24,7 +24,7 @@ import type { Connection, ReviewCatalog, ReviewResult, ReviewRule } from '@/type
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
-const isAdmin = computed(() => auth.me?.roleCode === 'admin' || (auth.me?.roleCodes || []).includes('admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 const rules = ref<ReviewRule[]>([])
 const catalog = ref<ReviewCatalog>({ dialects: ['all'], categories: [], levels: ['error', 'warn', 'info'] })

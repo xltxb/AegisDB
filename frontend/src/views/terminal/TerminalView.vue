@@ -296,10 +296,13 @@ onMounted(async () => {
   // Fetch independently: a failure of one (e.g. a non-admin lacking access to
   // the risk dictionary) must NOT prevent the connection list from loading.
   await loadConns()
+  // 默认选中哪台实例要看分层的 dangerBanner,所以分层得先到手 —— 拉不到就退回
+  // 列表里的第一台,而不是把整页卡住。
+  await envtier.load().catch(() => {})
   try { riskCommands.value = await api.riskCommands() } catch { /* optional reference data */ }
   try { chain.value = (await api.approvalChain()).chain } catch { /* ignore */ }
   try { const sc = await api.scriptConfig(); scriptEnabled.value = sc.enabled; scriptSavePath.value = sc.savePath } catch { /* ignore */ }
-  const first = conns.value.find((c) => c.env === 'prod') ?? conns.value[0]
+  const first = conns.value.find((c) => envtier.tierOf(c.env)?.dangerBanner) ?? conns.value[0]
   if (first) openConn(first.id)
 })
 </script>

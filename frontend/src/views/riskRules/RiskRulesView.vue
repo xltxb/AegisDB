@@ -16,7 +16,7 @@ const ui = useUIStore()
 const auth = useAuthStore()
 const envtier = useEnvTierStore()
 // Rule configuration is platform-admin only (backend enforces it too).
-const isAdmin = computed(() => auth.me?.roleCode === 'admin')
+const isAdmin = computed(() => auth.isAdmin)
 const cmds = ref<RiskCommandView[]>([])
 // The dictionary is keyed by control tier, and tiers are rows an administrator
 // creates — so the visible tab set comes from the store, not from a union type.

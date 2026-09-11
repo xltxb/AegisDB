@@ -25,7 +25,7 @@ const envtier = useEnvTierStore()
 // Role/permission + user-credential edits are platform-admin only (backend
 // enforces this too); non-admins see the page read-only.
 // Admin if ANY held role is admin (union), falling back to the primary role code.
-const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
+const isAdmin = computed(() => auth.isAdmin)
 function publishSub() { ui.pageSub = { key: 'subPerms', params: { r: roles.value.length, u: users.value.length } } }
 const view = ref<'roles' | 'users'>('roles')
 const roles = ref<RoleBrief[]>([])

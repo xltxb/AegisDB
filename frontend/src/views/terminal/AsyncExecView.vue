@@ -7,10 +7,12 @@ import VSelect from '@/components/common/VSelect.vue'
 import api from '@/api'
 import { CODE_OK, CODE_INTERCEPTED } from '@/api/http'
 import { useUIStore } from '@/stores/ui'
+import { useConnectionsStore } from '@/stores/connections'
 import type { Connection, AsyncJob } from '@/types'
 
 const { t } = useI18n()
 const ui = useUIStore()
+const connStore = useConnectionsStore()
 const conns = ref<Connection[]>([])
 const connId = ref<number>(0)
 const db = ref('')
@@ -46,20 +48,14 @@ async function refreshOpen() {
 }
 
 async function loadDbs(id: number) {
-  db.value = ''; dbOptions.value = []
-  if (!id) return
-  try {
-    const sc = await api.connectionSchema(id)
-    dbOptions.value = sc.databases.map((d) => d.name)
-    const c = conns.value.find((x) => x.id === id)
-    if (c?.database && dbOptions.value.includes(c.database)) db.value = c.database
-    else if (dbOptions.value.length) db.value = dbOptions.value[0]
-  } catch { /* leave default */ }
+  const { options, preferred } = await connStore.databasesOf(id)
+  dbOptions.value = options
+  db.value = preferred
 }
 
 onMounted(async () => {
   try {
-    conns.value = await api.connections()
+    conns.value = await connStore.fetch()
     const first = conns.value[0]
     if (first) { connId.value = first.id; await loadDbs(first.id) }
   } catch { /* ignore */ }

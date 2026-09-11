@@ -23,7 +23,7 @@ import type { Connection, ExecWindow } from '@/types'
 const { t } = useI18n()
 const ui = useUIStore()
 const auth = useAuthStore()
-const isAdmin = computed(() => auth.me?.roleCodes?.includes('admin') ?? (auth.me?.roleCode === 'admin'))
+const isAdmin = computed(() => auth.isAdmin)
 
 const conns = ref<Connection[]>([])
 const windows = ref<ExecWindow[]>([])
