@@ -52,6 +52,10 @@ export const router = createBrowserRouter([
       { path: 'sql-review', loader: requireMenu('rules', { adminOnly: true }), lazy: () => page(() => import('@/pages/sqlReview')) },
       { path: 'risk-rules', loader: requireMenu('rules', { adminOnly: true }), lazy: () => page(() => import('@/pages/riskRules')) },
       { path: 'gov', loader: requireMenu('settings', { adminOnly: true }), lazy: () => page(() => import('@/pages/gov')) },
+      // 审批待办挂 approve 菜单,**不设 adminOnly** —— 审批人不一定是平台管理员,
+      // 而这张页面读的正是「轮到我签字的单」。门户位置是后台(原型 v3),但门户
+      // 归属和"必须是管理员"是两件事。
+      { path: 'inbox', loader: requireMenu('approve'), lazy: () => page(() => import('@/pages/inbox')) },
       { path: 'permissions', loader: requireMenu('perms', { adminOnly: true }), lazy: () => page(() => import('@/pages/permissions')) },
       { path: 'users', loader: requireMenu('perms', { adminOnly: true }), lazy: () => page(() => import('@/pages/users')) },
       { path: 'pipelines', loader: requireMenu('pipeline', { adminOnly: true }), lazy: () => page(() => import('@/pages/pipelines')) },

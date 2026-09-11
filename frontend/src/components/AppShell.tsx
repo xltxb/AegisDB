@@ -7,10 +7,10 @@ import {
   LayoutDashboard, SquareTerminal, ClipboardCheck, GitPullRequestArrow, FileCode2, FileDown, ListChecks,
   BusFront, BookOpen, Database, ShieldAlert, ScanLine, VenetianMask, ShieldCheck,
   Workflow, UsersRound, ScrollText, Settings, SlidersHorizontal, Lock,
-  Activity, Hourglass, Languages, Search, Moon, Sun,
+  Activity, Hourglass, Languages, Search, Moon, Sun, Stamp,
 } from 'lucide-react'
 import { meQueryOptions } from '@/api/modules/auth'
-import { pendingApprovalsQueryOptions } from '@/api/modules/approvals'
+import { inboxPendingQueryOptions, pendingApprovalsQueryOptions } from '@/api/modules/approvals'
 import { terminalApi } from '@/api/modules/terminal'
 import { useAuthStore, isAdminOf, type Portal } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
@@ -31,15 +31,25 @@ interface NavItem {
   /** 文案键 —— 命令面板按它显示与匹配,跟着语言走。 */
   labelKey: string
   icon: typeof Database
-  /** 顶上挂待审批计数的那一项。 */
-  badge?: boolean
+  /**
+   * 挂哪一个计数。
+   *
+   * `sent` 是顶栏那颗(scope=all:我发起的 + 我要签的);`inbox` 只数轮到我签字的。
+   * 两个数字口径不同,不能互相顶替 —— 一个提了单等着别人批的人,待办上不该有
+   * 红点,而「我的申请」上该有。
+   */
+  badge?: 'sent' | 'inbox'
 }
 
 /** 用户前台 —— 运维 DBA 的日常(原型 v2 八项)。 */
 const FRONT_NAV: NavItem[] = [
   { to: '/dashboard', key: '*', short: '总览', title: '总览', labelKey: 'navDashboard', icon: LayoutDashboard },
   { to: '/terminal', key: 'terminal', short: '终端', title: '终端', labelKey: 'navTerminal', icon: SquareTerminal },
-  { to: '/approvals', key: 'approve', short: '申请', title: '我的申请', labelKey: 'navApprovals', icon: ClipboardCheck, badge: true },
+  { to: '/approvals', key: 'approve', short: '申请', title: '我的申请', labelKey: 'navApprovals', icon: ClipboardCheck, badge: 'sent' },
+  // 审批待办也挂在前台。原型 v3 只把它画在管理后台,但 owner / l2 两个角色有
+  // approve 菜单却不是平台管理员 —— React 的门户切换器只对管理员渲染,只放后台
+  // 等于让真正的审批人永远够不到自己的待办。菜单闸仍是 approve,谁有谁见。
+  { to: '/inbox', key: 'approve', short: '待办', title: '审批待办', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
   { to: '/changes', key: 'pipeline', short: '变更', title: '变更工单', labelKey: 'navChanges', icon: GitPullRequestArrow },
   { to: '/scripts', key: 'terminal', short: '脚本', title: '脚本库', labelKey: 'navScripts', icon: FileCode2 },
   { to: '/export', key: 'terminal', short: '导出', title: '数据导出', labelKey: 'navExport', icon: FileDown },
@@ -55,6 +65,8 @@ const BACK_NAV: NavItem[] = [
   { to: '/risk-rules', key: 'rules', short: '规则', title: '高危规则', labelKey: 'navRiskRules', icon: ShieldAlert },
   { to: '/sql-review', key: 'rules', short: '审查', title: 'SQL 审查规范', labelKey: 'navSqlReview', icon: ScanLine },
   { to: '/gov', key: 'settings', short: '治理', title: '数据治理', labelKey: 'navGov', icon: VenetianMask },
+  // 原型 v3 的位置:数据治理与角色权限之间。
+  { to: '/inbox', key: 'approve', short: '待办', title: '审批待办', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
   { to: '/permissions', key: 'perms', short: '权限', title: '角色与权限', labelKey: 'navPermissions', icon: ShieldCheck },
   { to: '/pipelines', key: 'pipeline', short: '流程', title: '变更流程配置', labelKey: 'navPipelines', icon: Workflow },
   { to: '/users', key: 'perms', short: '用户', title: '用户管理', labelKey: 'navUsers', icon: UsersRound },
@@ -101,6 +113,10 @@ export default function AppShell() {
    */
   const pending = useQuery({ ...pendingApprovalsQueryOptions(), enabled: !!menus.approve })
   const pendingN = pending.data ?? 0
+
+  /** 轮到我签字的条数 —— 「审批待办」那颗红点,与上面那个不是一个口径。 */
+  const inbox = useQuery({ ...inboxPendingQueryOptions(), enabled: !!menus.approve })
+  const inboxN = inbox.data ?? 0
 
   /**
    * 空闲自动锁定。
@@ -191,9 +207,10 @@ export default function AppShell() {
             >
               <i.icon size={21} />
               <span>{i.short}</span>
-              {i.badge && pendingN > 0 && (
-                <span className="rail-dot">{pendingN > 99 ? '99+' : pendingN}</span>
-              )}
+              {i.badge && (() => {
+                const n = i.badge === 'inbox' ? inboxN : pendingN
+                return n > 0 ? <span className="rail-dot">{n > 99 ? '99+' : n}</span> : null
+              })()}
             </NavLink>
           ))}
         </nav>

@@ -2223,3 +2223,112 @@ a { color: inherit; text-decoration: none; }
 .ac-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12.5px var(--font-mono); }
 .ac-kind { font: 500 9.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; }
 .ac-hint { margin-top: 4px; padding: 6px 10px 3px; border-top: 1px solid var(--border-subtle); font: 500 9.5px var(--font-mono); color: var(--text-faint); }
+
+/* ============ 审批待办 /inbox (原型 v3) ============ */
+/* 左清单、右详情。右栏定宽 400(与 /async-jobs 同一个数):详情里全是短标签加
+   短值,再宽只会把标签和值拉到两端;而左边的命令是要读的。 */
+.ib-grid { display: grid; grid-template-columns: 1fr 400px; gap: 16px; align-items: start; }
+.ib-main { min-width: 0; }
+.ib-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.ib-bar .grow { margin-left: auto; }
+
+.ib-warn {
+  display: flex; align-items: flex-start; gap: 9px; padding: 11px 14px; margin-bottom: 16px;
+  border-left: 3px solid var(--danger); border-radius: 0 10px 10px 0; background: var(--danger-subtle);
+  font: 500 12px/1.6 var(--font-body); color: var(--text-body);
+}
+.ib-warn svg { flex-shrink: 0; margin-top: 1px; color: var(--danger-text); }
+.ib-warn strong { color: var(--danger-text); }
+
+.ib-list { display: flex; flex-direction: column; gap: 10px; }
+.ib-row {
+  display: block; width: 100%; text-align: left; padding: 14px 16px;
+  border: 1px solid var(--border-subtle); border-radius: 13px; background: var(--surface-card);
+  cursor: pointer; transition: border-color var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.ib-row:hover { border-color: var(--accent-subtle-border); }
+.ib-row.on { border-color: var(--accent); }
+.ib-row-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ib-no { font: 600 11.5px var(--font-mono); color: var(--accent-text); }
+.ib-when { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+
+/* 命令整条显示,不截断:一条被省略号切掉尾巴的 DELETE,看不出它有没有 WHERE。 */
+.ib-cmd, .ib-dcmd {
+  border-radius: 9px; background: var(--surface-sunken);
+  font: 500 12.5px/1.5 var(--font-mono); color: var(--text-body); word-break: break-all; white-space: pre-wrap;
+}
+.ib-cmd { margin-top: 9px; padding: 9px 12px; }
+.ib-dcmd { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.6; }
+.ib-kw { font-style: normal; color: var(--danger-text); }
+
+.ib-row-foot { display: flex; align-items: center; gap: 9px; margin-top: 9px; flex-wrap: wrap; }
+.ib-ini {
+  width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%; background: var(--surface-sunken);
+  display: flex; align-items: center; justify-content: center;
+  font: 600 9px var(--font-body); color: var(--text-muted);
+}
+.ib-who { font: 500 11px var(--font-mono); color: var(--text-muted); }
+.ib-wait { font: 500 11px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+
+.ib-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px;
+  padding: 60px 20px; border: 1px dashed var(--border-default); border-radius: 14px;
+  font: 500 13px var(--font-body); color: var(--text-muted);
+}
+.ib-empty svg { color: var(--text-faint); }
+
+.ib-side {
+  padding: 20px 22px; border: 1px solid var(--border-subtle); border-radius: 14px;
+  background: var(--surface-card);
+}
+.ib-sec {
+  font: 600 10.5px var(--font-mono); letter-spacing: .12em; color: var(--text-muted); text-transform: uppercase;
+}
+.ib-sec.sp { margin-top: 18px; margin-bottom: 8px; }
+.ib-dhead { display: flex; align-items: center; gap: 9px; margin-top: 12px; flex-wrap: wrap; }
+.ib-dno { font: 700 17px var(--font-display); color: var(--text-strong); letter-spacing: -.01em; }
+
+.ib-kv { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ib-kv > div { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.ib-kv span { font: 500 12px var(--font-body); color: var(--text-muted); white-space: nowrap; }
+.ib-kv b { font: 500 12px var(--font-mono); color: var(--text-body); text-align: right; word-break: break-all; }
+.ib-kv b.warn { color: var(--danger-text); }
+
+.ib-reason {
+  padding: 11px 13px; border: 1px solid var(--border-subtle); border-radius: 10px;
+  background: var(--surface-sunken); font: 400 12.5px/1.65 var(--font-body); color: var(--text-body);
+}
+.ib-reason.muted { color: var(--text-faint); }
+
+.ib-chain { display: flex; flex-direction: column; gap: 9px; }
+.ib-step { display: flex; align-items: center; gap: 10px; }
+.ib-dot {
+  width: 24px; height: 24px; flex-shrink: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-sunken); color: var(--text-faint);
+}
+.ib-dot.st-approved { background: var(--success-subtle); color: var(--success-text); }
+.ib-dot.st-rejected { background: var(--danger-subtle); color: var(--danger-text); }
+.ib-dot.st-active { background: var(--warning-subtle); color: var(--warning-text); }
+/* waiting 是"还没轮到",不是"正在等你" —— 给它中性色,免得链上出现两个橙点。 */
+.ib-dot.st-waiting { background: var(--surface-sunken); color: var(--text-faint); }
+.ib-step-t { flex: 1; min-width: 0; }
+.ib-step-t b { display: block; font: 600 12px var(--font-body); color: var(--text-body); }
+.ib-step-t i { display: block; margin-top: 1px; font: 500 10px var(--font-mono); font-style: normal; color: var(--text-faint); }
+.ib-step-s { font: 600 10px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+
+.ib-acts { margin-top: 18px; display: flex; gap: 10px; }
+.ib-acts .c-btn { flex: 1; height: 40px; justify-content: center; }
+.ib-after, .ib-blocked { display: flex; align-items: flex-start; gap: 7px; margin-top: 11px; }
+.ib-after svg, .ib-blocked svg { flex-shrink: 0; margin-top: 1px; }
+.ib-after { font: 500 10.5px/1.6 var(--font-mono); color: var(--text-faint); }
+.ib-blocked {
+  margin-top: 18px; padding: 11px 13px; border-radius: 10px;
+  border: 1px solid var(--border-subtle); background: var(--surface-sunken);
+  font: 500 11.5px/1.6 var(--font-body); color: var(--text-muted);
+}
+.ib-blocked svg { color: var(--warning-text); }
+
+@media (max-width: 1100px) {
+  .ib-grid { grid-template-columns: 1fr; }
+}

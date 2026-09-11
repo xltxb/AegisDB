@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import clsx from 'clsx'
+import { Segmented } from '@/components/common/Segmented'
 import { useApprovals, useExecuteApproval } from '@/hooks/useApprovals'
 import type { ApprovalScope } from '@/api/modules/approvals'
 import type { Approval } from '@/types'
@@ -25,13 +26,17 @@ export default function ApprovalsPage() {
           <h1>{t('apTitle')}</h1>
           <p>{t('apSubtitle')}</p>
         </div>
-        <div className="seg">
-          {(['mine', 'all'] as const).map((s) => (
-            <button key={s} className={clsx('seg-item', scope === s && 'on')} onClick={() => setScope(s)}>
-              {t(s === 'mine' ? 'apScopeMine' : 'apScopeAll')}
-            </button>
-          ))}
-        </div>
+        {/* 用通用的 Segmented。这里原来写的是裸 `.seg` / `.seg-item` —— 样式表里
+            没有这两个类(实际的是 `.c-seg` / `.c-seg-item`),所以选中的那一段一直
+            看不出被选中。 */}
+        <Segmented
+          value={scope}
+          options={[
+            { value: 'mine', label: t('apScopeMine') },
+            { value: 'all', label: t('apScopeAll') },
+          ]}
+          onChange={setScope}
+        />
       </header>
 
       {isLoading && <div className="hint">{t('loading')}…</div>}
