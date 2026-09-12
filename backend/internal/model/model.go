@@ -257,6 +257,14 @@ type RoleCapability struct {
 func (RoleCapability) TableName() string { return "tbl_role_capability" }
 
 // Connection — a managed database instance proxied by the gateway.
+// 实例的两种状态。判定层认的是 ConnMaint,**别的一律当在线** —— 所以这里只有两个值,
+// 而写入口必须挡住第三种:一个打错的 "maintenance" 存进去之后,界面上显示「维护中」,
+// 而网关照常放行。
+const (
+	ConnOnline = "online"
+	ConnMaint  = "maint"
+)
+
 type Connection struct {
 	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name        string    `gorm:"size:64;uniqueIndex:idx_connection_name;not null" json:"name"`
@@ -281,7 +289,7 @@ type Connection struct {
 	Password    string    `gorm:"size:255" json:"-"`                   // never serialized
 	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema / sqlite file
 	Tags        string    `gorm:"size:255" json:"tags"` // comma-separated labels for group access
-	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // online|maint
+	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // ConnOnline | ConnMaint
 	CreatedAt   time.Time `json:"createdAt"`
 }
 

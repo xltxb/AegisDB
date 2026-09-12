@@ -34,6 +34,12 @@ func (s *Services) connEnvMeta(envCode string) (layer, role string, err error) {
 }
 
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
+	// policy 决定这台实例走哪条闸(strict / approve-1 / audit-only)。改连接那一路一直
+	// 校验它,建连接这一路没有 —— 于是打错一个字就建出一台带着谁也不认得的 policy 的
+	// 实例,而判定层读一个认不出的值等于"不是 strict",也就是最松的那一档。
+	if !validPolicies[req.Policy] {
+		return nil, ErrBadRequest
+	}
 	host, port := splitHostPort(req.Host)
 	env := strings.ToLower(strings.TrimSpace(req.Env))
 	layer, role, err := s.connEnvMeta(env)
@@ -473,11 +479,16 @@ func (s *Services) ToggleConnection(id int64, status string) error {
 		return ErrNotFound
 	}
 	if status == "" {
-		if c.Status == "online" {
-			status = "maint"
+		if c.Status == model.ConnOnline {
+			status = model.ConnMaint
 		} else {
-			status = "online"
+			status = model.ConnOnline
 		}
+	}
+	// 只认这两种。判定层认的是 "maint",别的一律当在线 —— 于是一个打错的
+	// "maintenance" 存进去之后,界面上显示「维护中」,而网关照常放行。
+	if status != model.ConnOnline && status != model.ConnMaint {
+		return ErrBadRequest
 	}
 	c.Status = status
 	return s.Repo.UpdateConnection(c)
