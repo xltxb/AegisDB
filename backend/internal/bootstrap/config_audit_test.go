@@ -125,3 +125,20 @@ func TestConfigAudit_WebhookChangesAreLogged(t *testing.T) {
 		t.Error("webhook 密钥被写进了审计链")
 	}
 }
+
+// IP 白名单里的非法条目,保存时就要挡住。
+func TestSettings_RejectsAnInvalidIPAllowlist(t *testing.T) {
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+
+	r := app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
+		"security.ipAllowlist": "10.20.0.0/16, 10.20.0.300",
+	})
+	if r.Code == 0 {
+		t.Error("一份带非法条目的白名单被存下来了 —— 判定层会静默跳过那一条,而人以为它生效了")
+	}
+
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
+		"security.ipAllowlist": "10.20.0.0/16, 10.20.0.7",
+	}).Code, 0, "合法的白名单应当能存")
+}
