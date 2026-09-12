@@ -37,10 +37,10 @@ type SensitiveRule struct {
 //
 // 匹配分两步,第二步是为了兜住别名:
 //
-//	1. **按列名**:回传的列名就是敏感字段名。`SELECT *` 落在这一步,而且它恰恰是
-//	   最安全的形态 —— 驱动回传的就是真实列名。
-//	2. **按算法**:选择列表第 k 项的表达式里提到了敏感字段,第 k 列就打码。
-//	   `SELECT id_card AS x`、`SELECT SUBSTR(id_card,1,6) AS x` 都在这一步兜住。
+//  1. **按列名**:回传的列名就是敏感字段名。`SELECT *` 落在这一步,而且它恰恰是
+//     最安全的形态 —— 驱动回传的就是真实列名。
+//  2. **按算法**:选择列表第 k 项的表达式里提到了敏感字段,第 k 列就打码。
+//     `SELECT id_card AS x`、`SELECT SUBSTR(id_card,1,6) AS x` 都在这一步兜住。
 //
 // 只看**选择列表**,不看整条语句:`SELECT count(1) FROM t WHERE id_card = ?` 的输出
 // 是个计数,不是敏感数据,把它打码只会让人觉得这道闸没道理。
@@ -86,7 +86,22 @@ func SensitiveMaskTargets(sql string, cols []string, rules []SensitiveRule) []in
 	//
 	// 只在项数与列数一一对应时才做:出现 `*` 或项数对不上时位置会错位,而错位地
 	// 打码比不打更糟 —— 它打了不该打的,却漏了该打的。
-	if items, ok := selectListItems(clean); ok && len(items) == len(cols) {
+	// 每一个 UNION 分支都要看。
+	//
+	// 结果集的列名来自**第一个**分支:`SELECT phone AS c FROM a UNION ALL SELECT
+	// id_card FROM t_user` 回来的列叫 c,按列名匹配不上,而只读第一个分支的话,第二个
+	// 分支里那个 id_card 从头到尾没有被看见 —— 身份证号原样刷在屏幕上,那一列的名字
+	// 还是个人畜无害的 c。
+	//
+	// 按位置合并:第 k 列对应每个分支的第 k 项,任一分支命中就打第 k 列。UNION 本来就
+	// 要求各分支列数一致、第 k 列是同一个东西,所以这个对应关系是 SQL 自己保证的。
+	for _, branch := range unionBranches(clean) {
+		items, ok := selectListItems(branch)
+		// 只在项数与列数一一对应时才做:出现 `*` 或项数对不上时位置会错位,而错位地
+		// 打码比不打更糟 —— 它打了不该打的,却漏了该打的。
+		if !ok || len(items) != len(cols) {
+			continue
+		}
 		for i, item := range items {
 			if hit[i] {
 				continue
@@ -331,4 +346,27 @@ func maskStream(sql string, cols []string) (apply func([]string), masked []strin
 			}
 		}
 	}, names
+}
+
+// setOpRe finds a set operator that joins two query branches.
+var setOpRe = regexp.MustCompile(`(?i)\b(UNION\s+ALL|UNION|INTERSECT|EXCEPT|MINUS)\b`)
+
+// unionBranches 把一条语句按**顶层**的集合运算符切成各个查询分支。
+//
+// 只切顶层:子查询里的 UNION(`WHERE id IN (SELECT … UNION SELECT …)`)不是这条语句的
+// 分支,它的列不出现在结果集里,按位置去对会整个错位。
+//
+// 没有集合运算符时返回整条语句本身 —— 调用方因此不必分两种写法。
+func unionBranches(sql string) []string {
+	var out []string
+	last := 0
+	for _, loc := range setOpRe.FindAllStringIndex(sql, -1) {
+		if parenDepth(sql[:loc[0]]) != 0 {
+			continue // 子查询里的,不是这条语句的分支
+		}
+		out = append(out, sql[last:loc[0]])
+		last = loc[1]
+	}
+	out = append(out, sql[last:])
+	return out
 }
