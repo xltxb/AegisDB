@@ -870,7 +870,7 @@ func (s *Services) scanScriptFor(conn *model.Connection, filename, content strin
 	stmts := splitStatements(content)
 	out := &dto.ScriptScanResp{Filename: filename, Statements: []dto.ScannedStmt{}}
 	for i, sql := range stmts {
-		cmd, risk, noWhere := s.Engine.ScanStatement(tier, sql)
+		cmd, risk, noWhere := s.Engine.ScanStatement(conn.Engine, tier, sql)
 		out.Statements = append(out.Statements, dto.ScannedStmt{
 			Index: i + 1, SQL: sql, Command: cmd, Risk: risk, NoWhere: noWhere,
 		})

@@ -628,24 +628,31 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 // tier that actually exists: an empty or unknown code matches no dictionary rows
 // and reports every statement as safe, without erroring. Callers resolve it via
 // Repo.ScanBaselineTier and refuse to scan when that fails.
-func (e *RiskEngine) ScanStatement(tier, sql string) (string, string, bool) {
+func (e *RiskEngine) ScanStatement(engine, tier, sql string) (string, string, bool) {
+	// 按**目标实例的引擎**读这条语句 —— 反斜杠在 MySQL 的字符串里是转义,在标准
+	// 字符串里不是,同一串字节因此是两条不同的语句(见 backslashEscapes)。
+	//
+	// 不带引擎调 NoWhere 会走"两种读法取最严",那在判定层是安全余量,在**报告**层
+	// 却是假警报:一份合法的 PostgreSQL 脚本被报成整表更新,在严格分层上升成 high。
+	// 而扫描器手里就攥着目标连接,引擎就在上面。
+	d := DialectFor(engine)
 	// Same reasoning as EvaluateFor: a plan-only EXPLAIN executes nothing, so a
 	// script line that merely asks for a plan is not what makes the script risky.
 	if PlanOnly(sql) {
-		return ParseVerb(sql), "safe", false
+		return d.Verb(sql), "safe", false
 	}
 	matched, lvl, err := e.matchCommand(sql, tier)
 	if err != nil {
 		// The dictionary is unreadable; report the statement as high risk rather
 		// than clearing it (ED3). A script scan that silently downgrades every
 		// statement to "safe" during an outage is worse than a noisy one.
-		return ParseVerb(sql), model.RiskHigh, NoWhere(sql)
+		return d.Verb(sql), model.RiskHigh, d.UnscopedMutation(sql)
 	}
 	verb := matched
 	if verb == "" {
-		verb = ParseVerb(sql)
+		verb = d.Verb(sql)
 	}
-	noWhere := NoWhere(sql)
+	noWhere := d.UnscopedMutation(sql)
 	// The baseline tier's own setting governs the scan, exactly as its dictionary
 	// does. An unreadable flag is treated as ON: the scan already reports a
 	// statement high when the dictionary cannot be read, and clearing one here
