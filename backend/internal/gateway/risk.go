@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"velagateway/internal/model"
+	"velagateway/pkg/sqlutil"
 )
 
 // Action results of a verdict.
@@ -357,35 +358,12 @@ var whereRe = regexp.MustCompile(`(?i)\bwhere\b`)
 func blankQuoted(sql string) string { return blankQuotedEsc(sql, false) }
 
 // blankQuotedEsc is blankQuoted told how the target engine reads a `\` inside a
-// string literal. See backslashEscapes.
+// string literal (see backslashEscapes). The masking itself lives in sqlutil —
+// the review package needs the same thing with different quoting rules, and two
+// copies of it had already drifted apart on exactly this question.
 func blankQuotedEsc(sql string, backslash bool) string {
-	b := []byte(sql)
-	for i := 0; i < len(b); i++ {
-		q := b[i]
-		if q != '\'' && q != '"' && q != '`' {
-			continue
-		}
-		esc := backslash && q != '`'
-		i++
-		for i < len(b) {
-			if esc && b[i] == '\\' && i+1 < len(b) { // `\x` 整对都是内容,下一个字节不是收尾引号
-				b[i], b[i+1] = ' ', ' '
-				i += 2
-				continue
-			}
-			if b[i] == q {
-				if i+1 < len(b) && b[i+1] == q { // doubled quote = escaped, stay inside
-					b[i], b[i+1] = ' ', ' '
-					i += 2
-					continue
-				}
-				break // closing delimiter
-			}
-			b[i] = ' '
-			i++
-		}
-	}
-	return string(b)
+	// 反引号要当引号:MySQL 的 `drop` 是一个标识符,不是那个动词。
+	return sqlutil.MaskLiterals(sql, sqlutil.LiteralMask{Backtick: true, Backslash: backslash})
 }
 
 // quotedContents is blankQuoted's mirror: it returns only what was INSIDE the
