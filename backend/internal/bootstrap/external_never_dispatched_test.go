@@ -14,7 +14,12 @@ package bootstrap
 // 所以改成 fail closed:手上没有 task id,就不认外部回调。代价是那个竞态里的回调会
 // 被拒(厂商重试即可,站内审批这条路始终可用),换来的是"没外发过的单外部动不了"。
 
-import "testing"
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+)
 
 func TestExternalApproval_CallbackRefusedForNeverDispatchedTicket(t *testing.T) {
 	app := newTestApp(t)
@@ -126,4 +131,56 @@ func TestExternalApproval_RejectWithoutApproverStillWorks(t *testing.T) {
 	})
 	eq(t, r.Code, 0, "没有审批人的驳回应当照常生效")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "rejected", "驳回落库")
+}
+
+// 驳回的理由要落库 —— 那是发起人唯一能看到的「为什么」。
+//
+// 工单 02 步骤 6 写着「approved:false → 标记 rejected、存 reason」,而回调里那句 reason
+// 从头到尾没有被读过:驳回路径写的是 `SetApprovalResult(ap.ID, "", …)`,一个空串。
+//
+// 于是发起人在列表上看到的是「已驳回」,没有下文。他会去问,而审批人已经在飞书那边
+// 写过一遍了。
+func TestExternalApproval_RejectionReasonIsPersisted(t *testing.T) {
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	app.setSettings(token, map[string]any{
+		"approval.external.enabled":        true,
+		"approval.external.callbackSecret": "s3cr3t",
+	})
+	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
+
+	const why = "这张表还在跑对账,今晚不能删"
+	r, _ := app.postLarkCallback("s3cr3t", map[string]any{
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": false,
+		"reason": why, "approver": []string{"herbert@tbu.net"},
+	})
+	eq(t, r.Code, 0, "驳回回调被接受")
+
+	var row struct {
+		Status string `json:"status"`
+		Result string `json:"result"`
+	}
+	items := app.auditlessApprovalRow(token, ap.ApNo, &row)
+	_ = items
+	eq(t, row.Status, "rejected", "单据应当是驳回")
+	if !strings.Contains(row.Result, why) {
+		t.Errorf("驳回理由没落库:result=%q —— 发起人看到的是「已驳回」,没有下文", row.Result)
+	}
+}
+
+// auditlessApprovalRow 按单号取一行审批单并解进 out。
+func (a *testApp) auditlessApprovalRow(token, apNo string, out any) bool {
+	a.t.Helper()
+	r := a.do(http.MethodGet, "/api/v1/approvals?ap="+apNo, token, nil)
+	var page struct {
+		Items []json.RawMessage `json:"items"`
+	}
+	if err := json.Unmarshal(r.Data, &page); err != nil || len(page.Items) != 1 {
+		a.t.Fatalf("按单号查 %s 失败: %v", apNo, err)
+	}
+	if err := json.Unmarshal(page.Items[0], out); err != nil {
+		a.t.Fatalf("decode approval: %v", err)
+	}
+	return true
 }
