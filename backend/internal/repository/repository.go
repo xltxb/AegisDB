@@ -1575,6 +1575,25 @@ func (r *Repo) AllSettings() (map[string]string, error) {
 	return out, nil
 }
 
+// SetSettings 在**一个事务里**写下一批设置。
+//
+// 界面上点的是一个「保存」,所以它要么全生效、要么一条都不生效。逐条写的话,中途一次
+// 失败会留下半套配置:管理员看到一句报错,而他无从知道哪几条其实已经生效了 —— 而这
+// 半套里可能正好有一条是把某道闸关掉。
+func (r *Repo) SetSettings(kv map[string]string) error {
+	if len(kv) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for k, v := range kv {
+			if err := tx.Save(&model.Setting{K: k, V: v}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Repo) SetSetting(k, v string) error {
 	return r.db.Save(&model.Setting{K: k, V: v}).Error
 }
