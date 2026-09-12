@@ -346,6 +346,22 @@ type sqlRunner interface {
 // 只对 Oracle 生效,并且名字必须是一个规规矩矩的标识符 —— 它要拼进
 // ALTER SESSION SET CURRENT_SCHEMA,不能带引号、分号或空格。校验不过就当没选,
 // 让语句在登录用户自己的 schema 里跑(而不是把一段可疑文本拼进 SQL)。
+// oracleSetSchemaSQL 生成切 schema 的那一句。
+//
+// **不加引号**。Oracle 把未加引号的标识符大写化后存进数据字典,所以那里的名字是 HR;
+// 加上引号就是要求字面匹配,于是用户在对象树上选的那个小写 `hr` 找不到,切换失败 ——
+// 而树上显示给他的正是这个小写名字。
+//
+// 不加引号是安全的:能走到这里的 schema 名一定先过了 schemaIdentRe
+// (`^[A-Za-z][A-Za-z0-9_$#]*$`),引号、空格、分号一个都进不来。它同时也是用户自己在
+// SQL*Plus 里会敲的那一行。
+//
+// 代价:真的用引号建出来的混合大小写 schema(`CREATE USER "MySchema"`)从此切不过去。
+// 那是 Oracle 上极少见的用法,而它的代价是每一个正常的小写 schema 都切不过去。
+func oracleSetSchemaSQL(schema string) string {
+	return `ALTER SESSION SET CURRENT_SCHEMA = ` + schema
+}
+
 func oracleTargetSchema(conn *model.Connection) string {
 	if conn == nil || !IsOracleEngine(conn.Engine) {
 		return ""
@@ -397,7 +413,7 @@ func RealRun(ctx context.Context, conn *model.Connection, query string, timeout 
 			return ExecResult{}, cerr
 		}
 		defer sc.Close()
-		if _, aerr := sc.ExecContext(ctx, `ALTER SESSION SET CURRENT_SCHEMA = "`+schema+`"`); aerr != nil {
+		if _, aerr := sc.ExecContext(ctx, oracleSetSchemaSQL(schema)); aerr != nil {
 			return ExecResult{}, fmt.Errorf("切换 schema 到 %s 失败: %w", schema, aerr)
 		}
 		runner = sc
@@ -527,7 +543,7 @@ func realQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 			return cerr
 		}
 		defer sc.Close()
-		if _, aerr := sc.ExecContext(ctx, `ALTER SESSION SET CURRENT_SCHEMA = "`+schema+`"`); aerr != nil {
+		if _, aerr := sc.ExecContext(ctx, oracleSetSchemaSQL(schema)); aerr != nil {
 			return fmt.Errorf("切换 schema 到 %s 失败: %w", schema, aerr)
 		}
 		runner = sc
@@ -592,17 +608,19 @@ func realQueryEach(conn *model.Connection, query string, timeout time.Duration, 
 // pg-family driver; other engines run without live logs. Returns rows-affected
 // (best-effort; 0 for statements that don't report it).
 func RealRunAsync(conn *model.Connection, query string, timeout time.Duration, onNotice func(string)) (int64, error) {
-	drv, dsn, ok := engineDriver(conn)
+	drv, _, ok := engineDriver(conn)
 	if !ok {
 		return 0, fmt.Errorf("引擎 %q 未配置真实执行(需填写连接凭据)", conn.Engine)
 	}
-	db, err := dialPool(drv, dsn)
+	// 走 openConn 而不是自己 dialPool:后者每次都新建一个连接池,而这里**从不关闭**它
+	// (只有 sqlite 那一支 defer 了 Close)。一个跑了几百次的异步任务队列,就是几百个
+	// 各自握着连接的池 —— 数据库那边看到的是连接数只增不减,而网关这边毫无迹象。
+	// openConn 按 driver+dsn 复用同一个池,sqlite 仍旧一次性(它自己的 release 会关)。
+	db, release, err := openConn(conn)
 	if err != nil {
 		return 0, err
 	}
-	if drv == "sqlite" {
-		defer db.Close() // sqlite handles are one-off (not pooled)
-	}
+	defer release()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
