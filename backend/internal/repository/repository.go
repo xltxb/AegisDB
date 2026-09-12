@@ -703,6 +703,51 @@ func clearOtherBaselines(tx *gorm.DB, keep string) error {
 
 // DeleteEnvTier removes a tier and every rule row keyed by it. Callers must have
 // verified that no environment still binds it (service layer).
+// DeleteEnvTierIfUnused 删一个分层 —— **检查和删除在同一次操作里**。
+//
+// 原先三项检查跑在事务外、删除是第四步。中间那一瞬里,另一个人可以把一个环境绑到这个
+// 分层上:检查说「没有环境」,删除照做,而那个环境从此指向一个不存在的分层。后果是
+// fail-closed(解析不到分层 → 拒绝每一条命令),所以不是安全洞,是一台谁也说不清为什么
+// 用不了的实例。
+//
+// 条件写在 WHERE 里,谁先谁赢由数据库裁 —— 与 ClaimApproval 是同一个手法。返回值说的是
+// 「这一次删掉了没有」:false 不是错误,是「删的时候条件已经不成立了」,调用方据此去查明
+// 到底是哪一条挡住的,给人一句说得清的话。
+//
+// 绑着**流程模板**的分层同样不能删:模板按分层绑(Pipeline.TierCode),分层没了它就永远
+// 匹配不上任何东西 —— 躺在列表里看起来好好的,用的时候才报「仅适用于一个不存在的分层」。
+func (r *Repo) DeleteEnvTierIfUnused(code string) (bool, error) {
+	deleted := false
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where(`code = ? AND scan_baseline = ?
+			AND NOT EXISTS (SELECT 1 FROM tbl_environment WHERE tier_code = ?)
+			AND NOT EXISTS (SELECT 1 FROM tbl_pipeline WHERE tier_code = ?)
+			AND (SELECT COUNT(*) FROM tbl_env_tier) > 1`,
+			code, false, code, code).Delete(&model.EnvTier{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return nil // 条件已经不成立 —— 规则行一行都不动
+		}
+		deleted = true
+		// 分层没了,挂在它上面的规则行就该一起走:留着的话,重新建一个同名分层会把
+		// 上一次的规则原样继承过来,而那不是任何人的意图。
+		if err := tx.Where("tier_code = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("tier_code = ?", code).Delete(&model.RiskCommand{}).Error
+	})
+	return deleted, err
+}
+
+// CountPipelinesOfTier 报告有几个流程模板绑在这个分层上。
+func (r *Repo) CountPipelinesOfTier(code string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Pipeline{}).Where("tier_code = ?", code).Count(&n).Error
+	return n, err
+}
+
 func (r *Repo) DeleteEnvTier(code string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("tier_code = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
