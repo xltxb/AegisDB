@@ -632,7 +632,26 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 		if err := s.validateRoleIDs(req.RoleIDs); err != nil {
 			return err
 		}
-		return s.Repo.SetUserRoles(id, req.RoleIDs)
+		if err := s.Repo.SetUserRoles(id, req.RoleIDs); err != nil {
+			return err
+		}
+		// 这一支原先直接 return 就走了,跳过了下面两件事 —— 而它们正是这个函数存在的
+		// 一半理由:
+		//
+		//   · **进审计链**:同一个函数里停用那一支写、单角色那一支写,唯独这一支不写。
+		//     于是有人可以把账户换成高权角色、以它的名义做事、再换回来,链上只看得到
+		//     那次动作,看不到允许它的那次授权(EU4)。
+		//   · **作废 MFA 宽限**:mfaGraceKey 的注释声称「角色变更会使宽限失效」,而这一支
+		//     什么也没做,那句话一直是空的。宽限的意思是「这个会话刚刚证明过自己」,
+		//     而它证明的是**那时那个角色** —— 一个刚被提到能写生产库的人,不该靠十分钟前
+		//     为只读操作做的那次验证就直接下发。
+		//
+		// 刻意**不** bump token version(那样也能作废宽限):那会把人踢下线,而权限本身是
+		// 每个请求实时查库的,降权不靠踢下线生效;「改完角色同一个会话立刻用上新权限」
+		// 是这套东西明确要的行为(TestMultiRole_UnionGrantsAndRevokesAdmin 钉着它)。
+		s.voidMFAGraceFor(id)
+		s.auditPatchUser(actor, target, req)
+		return nil
 	}
 	// Keep membership in sync when only the single primary role changed, so the
 	// role view and union permissions reflect the new role.
@@ -751,6 +770,13 @@ func (s *Services) CreateUser(req dto.UserCreateReq) (*model.User, error) {
 }
 
 func (s *Services) Invite(req dto.InviteReq) (*model.User, error) {
+	// 别的入口(AddRoleMember、PatchUser、CreateUser)都校验角色存在,唯独这一条漏了。
+	// 建出来的账户挂着一个不存在的角色,在能力矩阵里一条规则都对不上 —— 而空角色集的
+	// 处理是「处处被拒」,所以它不是一个安全洞,是一个**建出来就用不了、也看不出为什么**
+	// 的账户。
+	if err := s.validateRoleIDs([]int64{req.RoleID}); err != nil {
+		return nil, err
+	}
 	name := req.Email
 	if at := strings.Index(req.Email, "@"); at > 0 {
 		name = req.Email[:at]
