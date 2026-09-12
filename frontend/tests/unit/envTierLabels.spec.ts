@@ -134,3 +134,18 @@ test('grouping keeps every tier, including ones holding no environments', () => 
   // the full set of control levels rather than only the populated ones.
   expect(grouped['canary']).toEqual([])
 })
+
+// 内置分层的颜色表要和后端发货的那一套对齐。
+//
+// uat 是内置分层(后端 seed.go 明确"adds the missing uat tier"),但前端的颜色表漏了
+// 它 —— 于是 uat 的圆点落进「认不出的 code」那一档,显示成中性灰。而中性灰在这里是
+// 一句**有含义的话**:它说的是"这一层的管控级别没人能担保"。对一个本产品自己发货的
+// 分层说这句话,是错的。
+//
+// 只有 `tiers` 给不出这一行时才会暴露 —— 而那恰恰是最常见的情形:分层列表还没加载完
+// 的那一瞬,以及任何不传 tiers 的调用点。
+test('内置分层都有自己的颜色,不落进「认不出」那一档', () => {
+  for (const code of ['prod', 'gli', 'staging', 'uat', 'dev']) {
+    expect(dotFor(code, []), `内置分层 ${code} 没有颜色`).not.toBe(UNKNOWN_DOT)
+  }
+})

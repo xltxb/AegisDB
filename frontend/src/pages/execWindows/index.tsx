@@ -11,7 +11,8 @@ import { Modal } from '@/components/common/Modal'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
 import type { ExecWindow, Connection } from '@/types'
 
-const WEEKDAY = ['一', '二', '三', '四', '五', '六', '日']
+/** ISO 星期(1=周一…7=周日)的文案键 —— 值跟着界面语言走。 */
+const WEEKDAY_KEY = ['wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7']
 
 /** 把 00:00 起的分钟数显示成 HH:MM。 */
 function hhmm(min: number): string {
@@ -78,7 +79,7 @@ export default function ExecWindowsPage() {
         w.kind === 'once'
           ? '—'
           : w.weekdays
-            ? w.weekdays.split(',').map((d) => WEEKDAY[Number(d) - 1]).join(' ')
+            ? w.weekdays.split(',').map((d) => t(WEEKDAY_KEY[Number(d) - 1])).join(' ')
             : t('winEveryDay'),
     },
     {

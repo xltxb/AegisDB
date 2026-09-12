@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { auditApi, auditQueryOptions } from '@/api/modules/audit'
 import { useUIStore } from '@/stores/ui'
 import type { AuditQuery } from '@/types'
+import { downloadBlob } from '@/lib/download'
 
 export function useAudit(q: AuditQuery) {
   return useQuery(auditQueryOptions(q))
@@ -32,12 +33,7 @@ export function useAuditExport() {
         const env = JSON.parse(await blob.text()) as { msg?: string }
         throw new Error(env.msg || t('exportFailed'))
       }
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'audit_export.csv'
-      a.click()
-      URL.revokeObjectURL(url)
+      downloadBlob('audit_export.csv', blob)
     },
     onSuccess: () => notify(t('auditExported'), 'ok'),
     onError: (e: Error) => notify(e.message || t('exportFailed'), 'error'),

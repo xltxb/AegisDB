@@ -1,5 +1,6 @@
 import clsx from 'clsx'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useCan } from '@/hooks/useCan'
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
@@ -12,13 +13,14 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function Button({ variant = 'secondary', capability, disabled, children, ...rest }: Props) {
+  const { t } = useTranslation()
   const can = useCan()
   const denied = capability ? !can(capability) : false
   return (
     <button
       {...rest}
       disabled={disabled || denied}
-      title={denied ? '你的角色在该分层没有此项能力' : rest.title}
+      title={denied ? t('capDeniedTip') : rest.title}
       className={clsx('c-btn', `v-${variant}`, denied && 'is-denied', rest.className)}
     >
       {children}

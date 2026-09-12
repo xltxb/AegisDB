@@ -4,6 +4,7 @@ import { pipelineApi, projectsQueryOptions } from '@/api/modules/pipeline'
 import { CODE_OK } from '@/api/http'
 import { useUIStore } from '@/stores/ui'
 import type { Envelope } from '@/api/shared'
+import i18n from '@/locales'
 
 /**
  * 项目 —— 库与升级单的归属。
@@ -20,7 +21,7 @@ export function useProjects() {
 
 /** 项目接口回的是原始信封(没走 ok),这里统一拆:非 0 就是失败,原样抛服务端那句话。 */
 function unwrap<T>(env: Envelope<T>): T {
-  if (env.code !== CODE_OK) throw new Error(env.msg || '请求失败')
+  if (env.code !== CODE_OK) throw new Error(env.msg || i18n.t('reqFailed'))
   return env.data
 }
 

@@ -40,6 +40,7 @@ import (
 	"velagateway/internal/dto"
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
+	"velagateway/pkg/sqlutil"
 )
 
 // ExecuteApproved runs the command of a ticket that has been approved, on behalf
@@ -81,12 +82,25 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) 
 	// 事后看的;而这一次是真的要下发,该按实例**现在**属于哪一层来判。实例被挪进
 	// 更严的分层之后,拿旧快照复判等于按已经作废的规则放行。发布流水线的执行阶段
 	// 一直用实时 tier,两条路不该给出不同答案。
-	tier, terr := s.tierCodeOf(conn)
-	if terr != nil {
+	if _, terr := s.tierCodeOf(conn); terr != nil {
 		return nil, ErrBadRequest // 分层解析不出来就不执行,不按"放行"处理
 	}
+	// 复判看的是**即将下发的每一条语句**,不是工单正文这一整串。
+	//
+	// 判定引擎不拆句,只认首动词。把整串交给它,`SELECT 1; DROP TABLE t` 就复判成一次
+	// select —— 而下面的 execCommand 是拆开逐条真下发的。判的是一条,跑的是两条:
+	// 一个只读角色靠一张批过的单子就能删掉生产表。前导分隔符(";UPDATE …")是同一个
+	// 洞的另一种形态:解析不出动词,未知动词落进读维度。
+	//
+	// 终端提交那一路早就是"拆句 + 取最严"(A1/ER3),这里改用同一个 rawVerdict,两条
+	// 路从此给同一个答案。拆不出语句时(空白、纯注释)退回整串,那种工单本来也没有
+	// 东西可跑。
+	stmts := sqlutil.SplitStatements(ap.Command)
+	if len(stmts) == 0 {
+		stmts = []string{ap.Command}
+	}
 	// 只在结论变成"拒绝"时拦下:命中"需审批"是正常的,这张工单正是那次审批的结果。
-	if v := s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(actor), conn.Engine, tier, ap.Command); v.Action == gateway.ActionDeny {
+	if v := s.rawVerdict(actor, conn, stmts); v.Action == gateway.ActionDeny {
 		return nil, fmt.Errorf("规则已变化,该命令现在被禁止执行(%s),请重新提交", v.Rule)
 	}
 

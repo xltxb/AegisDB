@@ -9,6 +9,7 @@
 //    一个没转义的逗号会把一行悄悄错开一列,而错开的那份表看起来完全正常。
 
 import { UTF8_BOM } from '@/lib/transcript'
+import { downloadBlob } from './download'
 
 /** 一个字段。含逗号 / 引号 / 换行时加引号,内部的引号翻倍。 */
 export function csvEscape(v: unknown): string {
@@ -24,16 +25,9 @@ export function toCsv(head: readonly string[], rows: readonly unknown[][]): stri
 /**
  * 把文本存成一个文件。
  *
- * `revokeObjectURL` 延后一拍:同步撤销时 Safari 偶尔会在下载真正开始之前就丢掉
- * 那个 URL,表现为"点了没反应"。
+ * 真正的下载动作在 lib/download —— 那里记着 Firefox 与 Safari 各自的一条坑。
  */
 export function downloadCsv(filename: string, text: string): void {
-  const url = URL.createObjectURL(new Blob([UTF8_BOM + text], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+  // BOM 不能省:没有它,Excel 会把 UTF-8 的中文猜成 GBK,每一行都是乱码。
+  downloadBlob(filename, new Blob([UTF8_BOM + text], { type: 'text/csv;charset=utf-8' }))
 }

@@ -46,9 +46,14 @@ export function engineFamily(engine: string): EngineFamily {
   if (!e) return ''
   if (e.includes('sqlite')) return 'sqlite'
   if (e.includes('oracle')) return 'oracle'
-  // PolarDB is MySQL-compatible, so it speaks the MySQL protocol.
-  if (e.includes('mysql') || e.includes('mariadb') || e.includes('tidb') || e.includes('polardb')) return 'mysql'
+  // Postgres 标记要在 MySQL 那一串**之前**判 —— 与后端 realdb.go 同样的顺序,理由
+  // 也一样:PolarDB 有 MySQL 兼容版和 PostgreSQL 兼容版,**两个的标签里都带 polardb**,
+  // 谁先匹配谁就赢。先匹配 polardb 会把 PolarDB for PostgreSQL 判成 MySQL,在后端那
+  // 边是送去了连不上的驱动,在这边是元命令翻译成另一个方言的 SQL、对象浏览按错的
+  // 协议取库表 —— 而连接本身是通的,于是看起来像"这台库怎么什么都查不到"。
   if (e.includes('postgre') || e.includes('dws') || e.includes('gauss')) return 'postgres'
+  // PolarDB(MySQL 版)、TiDB、MariaDB 都说 MySQL 协议。
+  if (e.includes('mysql') || e.includes('mariadb') || e.includes('tidb') || e.includes('polardb')) return 'mysql'
   return ''
 }
 

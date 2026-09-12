@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WsTerminal } from '@/lib/wsTerminal'
 import { LineEditor } from '@/lib/lineEditor'
+import { copyText } from '@/lib/clipboard'
 import { isCopyShortcut } from '@/lib/copyShortcut'
 import { highlightSqlAnsi } from '@/lib/sqlHighlight'
 import { TOKEN_KEY } from '@/api/http'
@@ -145,7 +146,7 @@ export function useTerminalSession(opts: Opts) {
       // 是中断了 —— 不清的话中断永远按不出来。
       if (isCopyShortcut(e, term.hasSelection())) {
         const sel = term.getSelection()
-        if (sel && navigator.clipboard?.writeText) navigator.clipboard.writeText(sel).catch(() => {})
+        if (sel) void copyText(sel)
         term.clearSelection()
         e.preventDefault()
         return false
@@ -154,13 +155,13 @@ export function useTerminalSession(opts: Opts) {
     })
 
     // 选中即复制,像原生终端一样。选择是用户手势,所以 writeText 允许;拿不到剪贴板
-    // API(非 HTTPS 源)就安静地什么也不做。
+    // API(非 HTTPS 源)也要能用 —— copyText 还有 execCommand 那条兜底路。
     let lastCopied = ''
     const selSub = term.onSelectionChange(() => {
       const sel = term.getSelection()
       if (!sel || sel === lastCopied) return
       lastCopied = sel
-      if (navigator.clipboard?.writeText) navigator.clipboard.writeText(sel).catch(() => {})
+      void copyText(sel)
     })
 
     const PROMPT = 'aegis> '

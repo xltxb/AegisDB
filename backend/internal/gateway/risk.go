@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"velagateway/internal/model"
+	"velagateway/pkg/sqlutil"
 )
 
 // Action results of a verdict.
@@ -89,7 +90,11 @@ var verbRe = regexp.MustCompile(`(?i)^\s*([a-z_]+)`)
 // DROP TABLE y (A3). Quoted literals/identifiers are copied verbatim; stripping
 // inside a string only ever makes a statement look more dangerous (safe
 // direction), and the dictionary scan backs the heuristic regardless.
-func StripComments(sql string) string {
+func StripComments(sql string) string { return stripCommentsEsc(sql, false) }
+
+// stripCommentsEsc is StripComments told how the target engine reads a `\` inside
+// a string literal. See backslashEscapes for why that is not one answer.
+func stripCommentsEsc(sql string, backslash bool) string {
 	var b strings.Builder
 	n := len(sql)
 	execDepth := 0 // >0 while inside /*!ver ... */: keep the body, drop the markers
@@ -98,11 +103,18 @@ func StripComments(sql string) string {
 		switch {
 		case c == '\'' || c == '"' || c == '`': // quoted literal / identifier — copy verbatim
 			q := c
+			esc := backslash && q != '`' // 反引号括的是标识符,里面的反斜杠哪个引擎都不转义
 			b.WriteByte(c)
 			i++
 			for i < n {
 				d := sql[i]
 				b.WriteByte(d)
+				if esc && d == '\\' && i+1 < n { // `\x` 整对都是内容 —— 包括 `\'`
+					i++
+					b.WriteByte(sql[i])
+					i++
+					continue
+				}
 				if d == q {
 					if i+1 < n && sql[i+1] == q { // doubled quote = escaped quote
 						i++
@@ -273,14 +285,54 @@ func firstWord(s string) string {
 // are stripped first so a `/* where */` decoy can't mask a full-table mutation.
 // WHERE is matched as a whole word, so an identifier like `elsewhere`/`nowhere`
 // no longer masquerades as a WHERE clause (B7).
-func NoWhere(sql string) bool {
+func NoWhere(sql string) bool { return noWhereIn("", sql) }
+
+// backslashEscapes 说一族引擎把字符串字面量里的 `\'` 读成什么。
+//
+// 这不是一个可以随便挑一边的细节:同一串字节在两族引擎里是两条不同的语句。
+//
+//	UPDATE t SET a='x\' WHERE 1=1 --'
+//
+// MySQL 默认 sql_mode 下 `\'` 是转义的引号,字符串一直延伸到末尾那个引号 ——
+// 整条语句没有 WHERE,是一次整表更新。PostgreSQL(standard_conforming_strings)、
+// Oracle、SQLite 的标准字符串里反斜杠只是一个普通字符,字符串在第二个引号处就
+// 结束了,后面的 `WHERE 1=1` 是真的子句。
+//
+// known=false 表示这个标签解析不出引擎族(自建、改过名、CSV 导入的连接都会这样)。
+func backslashEscapes(engine string) (esc, known bool) {
+	switch engineFamily(engine) {
+	case familyMySQL:
+		return true, true
+	case familyPostgres, familyOracle, familySQLite:
+		return false, true
+	}
+	return false, false
+}
+
+// noWhereIn 是 NoWhere 加上目标引擎 —— 无 WHERE 拦截是唯一必须按引擎读字符串的
+// 地方,理由是它找的是"**缺**了一段结构"。
+//
+// 别处的启发式(字典扫描、动词解析)找的都是"**有**某段结构",把字面量当结构只会
+// 让语句看起来更危险 —— 误报,安全方向。无 WHERE 反过来:把 WHERE 从字面量里读成
+// 结构,拦截整层就被跳过了,是漏判。所以这一处不能沿用"一律不认反斜杠"。
+//
+// 引擎认不出来时两种读法都试,任一读出无 WHERE 就按无 WHERE 判:一个认不出的标签
+// 背后可能就是 MySQL,而这一层在那种情况下宁可多拦。
+func noWhereIn(engine, sql string) bool {
+	if esc, known := backslashEscapes(engine); known {
+		return noWhere(sql, esc)
+	}
+	return noWhere(sql, false) || noWhere(sql, true)
+}
+
+func noWhere(sql string, backslash bool) bool {
 	// A plan-only EXPLAIN mutates nothing, so there is no unscoped mutation to
 	// guard against — `EXPLAIN DELETE FROM t` deletes no rows.
 	if PlanOnly(sql) {
 		return false
 	}
 	verb := strings.ToLower(ParseVerb(sql))
-	structure := blankQuoted(StripComments(sql))
+	structure := blankQuotedEsc(stripCommentsEsc(sql, backslash), backslash)
 	// A CTE can carry the DELETE/UPDATE (`WITH d AS (DELETE ...) SELECT ...`), so
 	// gating on the leading verb alone let a full-table mutation past the guard
 	// (ER9). Treat such a statement as the mutation it performs.
@@ -303,28 +355,15 @@ var whereRe = regexp.MustCompile(`(?i)\bwhere\b`)
 // with spaces, leaving the delimiters and everything else in place. Keyword
 // heuristics run over the result so data can never be mistaken for syntax.
 // Lengths are preserved so any positional reporting stays meaningful.
-func blankQuoted(sql string) string {
-	b := []byte(sql)
-	for i := 0; i < len(b); i++ {
-		q := b[i]
-		if q != '\'' && q != '"' && q != '`' {
-			continue
-		}
-		i++
-		for i < len(b) {
-			if b[i] == q {
-				if i+1 < len(b) && b[i+1] == q { // doubled quote = escaped, stay inside
-					b[i], b[i+1] = ' ', ' '
-					i += 2
-					continue
-				}
-				break // closing delimiter
-			}
-			b[i] = ' '
-			i++
-		}
-	}
-	return string(b)
+func blankQuoted(sql string) string { return blankQuotedEsc(sql, false) }
+
+// blankQuotedEsc is blankQuoted told how the target engine reads a `\` inside a
+// string literal (see backslashEscapes). The masking itself lives in sqlutil —
+// the review package needs the same thing with different quoting rules, and two
+// copies of it had already drifted apart on exactly this question.
+func blankQuotedEsc(sql string, backslash bool) string {
+	// 反引号要当引号:MySQL 的 `drop` 是一个标识符,不是那个动词。
+	return sqlutil.MaskLiterals(sql, sqlutil.LiteralMask{Backtick: true, Backslash: backslash})
 }
 
 // quotedContents is blankQuoted's mirror: it returns only what was INSIDE the

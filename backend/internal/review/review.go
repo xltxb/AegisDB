@@ -333,32 +333,12 @@ func indexFrom(hay, needle string, from int) int {
 // maskLiterals blanks the CONTENT of quoted strings while preserving length and
 // the quote characters, so `WHERE note = 'delete from x'` can never be read as a
 // DELETE, and offsets computed on the masked text still line up with the source.
+//
+// 反引号**不**当引号:这里的规则正要看见那些标识符(列名前缀、表名规范),抹掉就一条
+// 也触发不了。反斜杠按 MySQL 读 —— 规范库里的语句以 MySQL/DWS 为主,而这一层没有
+// 连接可问引擎。
 func maskLiterals(s string) string {
-	b := []byte(s)
-	var quote byte
-	for i := 0; i < len(b); i++ {
-		c := b[i]
-		if quote != 0 {
-			if c == '\\' && i+1 < len(b) {
-				b[i] = ' '
-				b[i+1] = ' '
-				i++
-				continue
-			}
-			if c == quote {
-				quote = 0
-				continue
-			}
-			if c != '\n' {
-				b[i] = ' '
-			}
-			continue
-		}
-		if c == '\'' || c == '"' {
-			quote = c
-		}
-	}
-	return string(b)
+	return sqlutil.MaskLiterals(s, sqlutil.LiteralMask{Backslash: true})
 }
 
 // ---------------------------------------------------------------- params

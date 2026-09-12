@@ -12,20 +12,15 @@
 // component) is what makes the distinction testable.
 
 import { CODE_OK, CODE_INTERCEPTED, CODE_MFA_REQUIRED } from '@/api/codes'
-import type { RuleRef } from '@/types'
+import type { ExecResp, RuleRef } from '@/types'
 
-export interface ExecPayload {
-  output?: string
-  rows?: number
-  ms?: number
-  columns?: string[]
-  data?: string[][]
-  truncated?: boolean
-  intercepted?: boolean
-  approvalNo?: string
-  rule?: string
-  ruleRef?: RuleRef
-}
+/**
+ * 信封里那一坨 —— 就是 ExecResp,只是每一项都可能缺席。
+ *
+ * 原先这里另起了一份字段清单,于是同一个契约有了两份类型:后端加一个字段,两边
+ * 各改各的,而漏改的那一边不会报错,只会悄悄把数据丢掉。派生出来就不会再分叉。
+ */
+export type ExecPayload = Partial<ExecResp>
 
 export interface ExecEnvelope {
   code: number

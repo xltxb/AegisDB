@@ -45,21 +45,23 @@ func DialectFor(engine string) Dialect {
 	if engineFamily(engine) == familyMongo {
 		return mongoDialect{}
 	}
-	return sqlDialect{}
+	return sqlDialect{engine: engine}
 }
 
 // ---------------------------------------------------------------- SQL
 
 // sqlDialect is the original behaviour, unchanged, expressed through the
 // interface so SQL and MongoDB are judged by the same engine code.
-type sqlDialect struct{}
+// engine 是连接上那个引擎标签的原文。三层判定本身与引擎无关,但**读**一条命令
+// 要按它写给谁来读 —— 目前只有字符串字面量里的反斜杠(见 backslashEscapes)。
+type sqlDialect struct{ engine string }
 
-func (sqlDialect) Name() string                    { return "sql" }
-func (sqlDialect) Split(cmd string) []string       { return sqlutil.SplitStatements(cmd) }
-func (sqlDialect) Verb(cmd string) string          { return ParseVerb(cmd) }
-func (sqlDialect) Capability(verb string) string   { return MapVerbToCapability(verb) }
-func (sqlDialect) IsRead(cmd string) bool          { return IsRead(cmd) }
-func (sqlDialect) UnscopedMutation(c string) bool  { return NoWhere(c) }
+func (sqlDialect) Name() string                     { return "sql" }
+func (sqlDialect) Split(cmd string) []string        { return sqlutil.SplitStatements(cmd) }
+func (sqlDialect) Verb(cmd string) string           { return ParseVerb(cmd) }
+func (sqlDialect) Capability(verb string) string    { return MapVerbToCapability(verb) }
+func (sqlDialect) IsRead(cmd string) bool           { return IsRead(cmd) }
+func (d sqlDialect) UnscopedMutation(c string) bool { return noWhereIn(d.engine, c) }
 
 // ---------------------------------------------------------------- MongoDB
 

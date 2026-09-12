@@ -47,7 +47,11 @@ export const SHIPPED_TIER_NAME: Record<string, string> = {
 }
 /** Colour per built-in tier — the palette operators already read at a glance. */
 export const BUILTIN_DOT: Record<string, string> = {
-  prod: 'danger', gli: 'info', staging: 'warning', dev: 'success',
+  // uat 与 staging 同属 L3(后端 seed 里一个是「L3 预发布」、一个是「L3 演练」),所以
+  // 同一档颜色。漏掉它的后果不是少个颜色 —— 是它落进「认不出的 code」那一档,而那
+  // 一档的中性灰是**一句有含义的话**:这一层的管控级别没人能担保。对一个本产品自己
+  // 发货的分层说这句话,是错的。
+  prod: 'danger', gli: 'info', staging: 'warning', uat: 'warning', dev: 'success',
 }
 
 /** Neutral colour for a code that resolves to no tier. */

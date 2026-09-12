@@ -9,6 +9,8 @@
 // columns you can see" — real psql reports `Did not find any relation named "…"`.
 // So a translation carries a NoticeRef for that case — an i18n id, never text.
 
+import { engineFamily } from './engines'
+
 /** A message to display, as an i18n id plus its parameters. This module holds no
  *  human-language text: it cannot know the active locale, and returning a literal
  *  made the terminal print Chinese after the UI was switched to English. */
@@ -43,9 +45,12 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
   if (!m) return null
   const verb = m[1].toLowerCase()
   const arg = m[2].trim().replace(/;$/, '')
-  const isPG = /postgre|dws|gauss/i.test(engine)
-  const isOra = /oracle/i.test(engine)
-  const isSqlite = /sqlite/i.test(engine)
+  // 家族只认 lib/engines 那一张表 —— 在这里再写一遍正则,就等于让同一台实例在两处
+  // 得到两个答案(PolarDB 的两个版本正是这么判岔的,见 engineFamily 的注释)。
+  const family = engineFamily(engine)
+  const isPG = family === 'postgres'
+  const isOra = family === 'oracle'
+  const isSqlite = family === 'sqlite'
   const q = (sql: string): MetaTranslation => ({ sql })
 
   if (isPG) {
@@ -164,7 +169,7 @@ export function translateMetaSql(cmd: string, engine: string): MetaTranslation |
 }
 
 /** MySQL 家族把 DESC 当作合法 SQL,其余引擎不认。 */
-const isMySQLFamily = (engine: string) => /mysql|tidb|mariadb|polardb/i.test(engine)
+const isMySQLFamily = (engine: string) => engineFamily(engine) === 'mysql'
 
 /**
  * translateDescribe — DESC / DESCRIBE。
@@ -208,7 +213,7 @@ function describeSql(engine: string, arg: string): MetaTranslation | null {
   const owner = parts.pop() || ''
   if (!name) return null
 
-  if (/oracle/i.test(engine)) {
+  if (engineFamily(engine) === 'oracle') {
     const NAME = name.toUpperCase()
     const OWNER = owner.toUpperCase()
     const ownerCol = OWNER ? ` AND owner = '${OWNER}'` : ''
@@ -231,7 +236,7 @@ function describeSql(engine: string, arg: string): MetaTranslation | null {
     }
   }
 
-  if (/postgre|dws|gauss/i.test(engine)) {
+  if (engineFamily(engine) === 'postgres') {
     const sch = owner ? ` AND table_schema = '${owner}'` : ''
     return {
       sql:

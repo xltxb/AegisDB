@@ -14,7 +14,6 @@ export type Env = string
 export type TierCode = string
 export type CapLevel = 'allow' | 'approve' | 'deny'
 export type RiskLevel = 'high' | 'mid' | 'off' | 'low'
-export type MenuKey = 'terminal' | 'approve' | 'db' | 'rules' | 'envtier' | 'perms' | 'audit' | 'settings'
 
 /**
  * A control tier: the unit the capability matrix and risk dictionary are keyed
@@ -140,8 +139,20 @@ export interface ExecResp {
   rule?: string
   ruleRef?: RuleRef
   output?: string
+  /**
+   * OutputRef 是 output 那句话的机器可读身份 —— 界面用读者的语言重讲一遍,认不出的
+   * code 回落到 output(降级,不是出错)。与 rule / ruleRef 同一套机制。
+   */
+  outputRef?: RuleRef
   rows?: number
   ms?: number
+  /**
+   * 读操作真正的结果集。模拟连接上为空 —— 那时客户端按 rows 自己合成一份预览。
+   * truncated 标记结果集超过了展示上限。
+   */
+  columns?: string[]
+  data?: string[][]
+  truncated?: boolean
 }
 
 export interface Connection {

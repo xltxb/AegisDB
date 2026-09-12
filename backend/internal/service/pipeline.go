@@ -917,13 +917,29 @@ func (s *Services) stageVerify(rel *model.Release, conn *model.Connection, cfg s
 	if sql == "" {
 		return stageOutcome{status: model.RunSkipped, log: "· 未配置校验语句,本阶段跳过"}
 	}
-	if !gateway.IsRead(sql) {
-		// A verification that mutates is a second, unreviewed change.
-		return failStage("· 校验语句必须是只读查询")
+	// 逐条判,判完再跑 —— 与备份阶段(stageBackup)同一个口径。
+	//
+	// IsRead 只看首动词,把整串交给它,`SELECT 1; DROP TABLE t` 就判成一次只读查询,
+	// 随后原样下发:PostgreSQL/DWS/GaussDB 的 simple query 协议一次报文把整串跑完,
+	// 第二条真的执行了 —— 一次没有人审过的变更,挂在"校验"这个名字底下。
+	stmts := sqlutil.SplitStatements(sql)
+	if len(stmts) == 0 {
+		return stageOutcome{status: model.RunSkipped, log: "· 校验配置中没有可执行的语句,本阶段跳过"}
 	}
-	res := s.Executor.Run(context.Background(), conn, sql, s.execTimeout())
-	if res.Err != nil {
-		return failStage("· 校验执行失败: %s", res.Output)
+	for _, one := range stmts {
+		if !gateway.IsRead(one) {
+			// A verification that mutates is a second, unreviewed change.
+			return failStage("· 校验语句必须是只读查询,拒绝执行 %s", gateway.ParseVerb(one))
+		}
+	}
+	// 断言看的是**最后一条**的结果:多条校验是"先把上下文查出来,最后一条给结论",
+	// 拿中间某一条的行数去比 expect 只会让人困惑。
+	var res gateway.ExecResult
+	for i, one := range stmts {
+		res = s.Executor.Run(context.Background(), conn, one, s.execTimeout())
+		if res.Err != nil {
+			return failStage("· 校验第 %d/%d 条失败: %s", i+1, len(stmts), res.Output)
+		}
 	}
 	creator, _ := s.Repo.GetUserByID(rel.CreatorID)
 	if creator != nil {

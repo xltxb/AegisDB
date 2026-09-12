@@ -11,6 +11,7 @@ import { useTierOf } from '@/hooks/useTier'
 import { connectionsQueryOptions } from '@/api/modules/connections'
 import { isExportJobActive } from '@/api/modules/terminal'
 import { CODE_OK } from '@/api/http'
+import { copyText } from '@/lib/clipboard'
 import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
@@ -65,9 +66,15 @@ export default function ExportPage() {
     setFormSeq((n) => n + 1)
   }
 
-  /** 失败/过期的出口是「重填」:凭旧参数再建一个,该由人确认一次。 */
+  /**
+   * 失败/过期的出口是「重填」:凭旧参数再建一个,该由人确认一次。
+   *
+   * 认 id,不认名字。`j.instance` 是**建单那一刻的名字快照**,实例改过名之后就再也
+   * 对不上了 —— 于是重填出来的表单目标实例是空的,而人看着它明明写着旧名字,不会
+   * 想到要重新选一次。connectionId 就在这张单上,它是主键,改名不影响它。
+   */
   function reuse(j: ExportJob) {
-    const c = ((conns ?? []) as Connection[]).find((x) => x.name === j.instance)
+    const c = ((conns ?? []) as Connection[]).find((x) => x.id === j.connectionId)
     openForm({
       connectionId: c?.id ?? 0,
       database: j.database,
@@ -136,12 +143,13 @@ function JobCard({
   const [shown, setShown] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // 口令只回显这一次,所以这里尤其不能静默失败:走 lib/clipboard 才有非安全上下文
+  // (局域网 IP 打开)下的 execCommand 兜底,而且它如实返回成没成 —— 没成就不给
+  // "已复制"的绿勾,口令还显示在旁边,人至少知道要自己选中。
   async function copyPw() {
-    try {
-      await navigator.clipboard.writeText(job.password)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch { /* 剪贴板被浏览器拦了就算了,密码本身还显示在旁边 */ }
+    if (!(await copyText(job.password))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
   }
 
   return (

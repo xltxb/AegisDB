@@ -9,7 +9,7 @@
 // until the caller invokes resume(). Ctrl+C always works.
 
 import type { Terminal } from '@xterm/xterm'
-import { dispWidth, isWideChar } from './textWidth'
+import { dispWidth, nextCharIndex, prevCharIndex } from './textWidth'
 import { flattenStatement } from './sqlFlatten'
 
 export interface LineEditorOpts {
@@ -370,8 +370,8 @@ export class LineEditor {
         const rest = data.slice(i)
         if (rest.startsWith('\x1b[A')) { this.historyPrev(); i += 2 }
         else if (rest.startsWith('\x1b[B')) { this.historyNext(); i += 2 }
-        else if (rest.startsWith('\x1b[C')) { if (this.cur < this.buf.length) { this.cur++; this.term.write('\x1b[C') } i += 2 }
-        else if (rest.startsWith('\x1b[D')) { if (this.cur > 0) { this.cur--; this.term.write('\x1b[D') } i += 2 }
+        else if (rest.startsWith('\x1b[C')) { this.moveRight(); i += 2 }
+        else if (rest.startsWith('\x1b[D')) { this.moveLeft(); i += 2 }
         else if (rest.startsWith('\x1b[H') || rest.startsWith('\x1b[1~')) { this.toHome(); i += rest.startsWith('\x1b[1~') ? 3 : 2 }
         else if (rest.startsWith('\x1b[F') || rest.startsWith('\x1b[4~')) { this.toEnd(); i += rest.startsWith('\x1b[4~') ? 3 : 2 }
         else if (rest.startsWith('\x1b[3~')) { this.del(); i += 3 }
@@ -422,21 +422,54 @@ export class LineEditor {
     this.emitChange()
   }
 
+  // ← / → 挪一个**字符**,并按它的**显示宽度**挪光标。
+  //
+  // 原先是 cur±1 配一格 `\x1b[C`/`\x1b[D`,两处都不对:一个 emoji 是一对代理(两个
+  // UTF-16 单元),挪一个单元就停在它正中间;而中日韩字符和 emoji 在终端里占两格,
+  // 只挪一格光标就和文字错开了,越挪越远。
+  //
+  // 跨行时列算术不成立(光标要回到上一行的行尾,`\x1b[D` 不会带它换行),交给 redraw。
+  private moveLeft() {
+    if (this.cur <= 0) return
+    const to = prevCharIndex(this.buf, this.cur)
+    const cells = dispWidth(this.buf.slice(to, this.cur))
+    const col = this.curPromptLen() + dispWidth(this.buf.slice(0, this.cur))
+    this.cur = to
+    if (this.crossesRow(col, col - cells)) { this.redraw(); return }
+    this.term.write(`\x1b[${cells}D`)
+  }
+
+  private moveRight() {
+    if (this.cur >= this.buf.length) return
+    const to = nextCharIndex(this.buf, this.cur)
+    const cells = dispWidth(this.buf.slice(this.cur, to))
+    const col = this.curPromptLen() + dispWidth(this.buf.slice(0, this.cur))
+    this.cur = to
+    if (this.crossesRow(col, col + cells)) { this.redraw(); return }
+    this.term.write(`\x1b[${cells}C`)
+  }
+
+  private crossesRow(from: number, to: number): boolean {
+    const cols = this.cols()
+    return Math.floor(from / cols) !== Math.floor(to / cols)
+  }
+
   private backspace() {
     if (this.cur <= 0) return
     const cols = this.cols()
     const before = this.curPromptLen() + dispWidth(this.buf)
-    const removed = this.buf[this.cur - 1] ?? ''
+    const from = prevCharIndex(this.buf, this.cur)
+    const removed = this.buf.slice(from, this.cur)
     const atEnd = this.cur === this.buf.length
-    this.buf = this.buf.slice(0, this.cur - 1) + this.buf.slice(this.cur)
-    this.cur--
+    this.buf = this.buf.slice(0, from) + this.buf.slice(this.cur)
+    this.cur = from
     // Same reasoning as insert: deleting the last character of a line that does
     // not sit on a row boundary is "back up, blank it, back up" — no repaint.
     //
     // 宽字符占两格,要退两格、擦两格。只擦一格会留下半个汉字的残影,而那半格之后
     // 还会被当成一格参与计算,错位一路带下去。删掉它之后如果正好落在行边界上,
     // 这条快捷路径就不成立了(光标要跨行回去),交给 redraw。
-    const cells = isWideChar(removed.codePointAt(0) || 0) ? 2 : 1
+    const cells = dispWidth(removed)
     if (atEnd && before % cols !== 0 && (before - cells) % cols !== 0) {
       this.term.write('\b'.repeat(cells) + ' '.repeat(cells) + '\b'.repeat(cells))
       return
@@ -445,7 +478,7 @@ export class LineEditor {
   }
   private del() {
     if (this.cur < this.buf.length) {
-      this.buf = this.buf.slice(0, this.cur) + this.buf.slice(this.cur + 1)
+      this.buf = this.buf.slice(0, this.cur) + this.buf.slice(nextCharIndex(this.buf, this.cur))
       this.redraw()
     }
   }

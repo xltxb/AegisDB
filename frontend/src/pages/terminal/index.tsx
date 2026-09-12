@@ -33,6 +33,8 @@ import { PasteModal } from './PasteModal'
 import { Completion, META_COMMANDS, type AcItem } from './Completion'
 import type { Connection, ConnectionSchema, RuleRef, SchemaDB } from '@/types'
 import '@xterm/xterm/css/xterm.css'
+import { engineFamily } from '@/lib/engines'
+import { downloadBlob } from '@/lib/download'
 
 // ---- 面板宽度的边界 ----
 // 存像素而不是百分比:树和执行上下文装的是**定宽的东西**(实例名、字段标签),
@@ -326,8 +328,8 @@ export default function TerminalPage() {
 
   function printMetaHelp() {
     const engine = conn?.engine ?? ''
-    const isPG = /postgre|dws|gauss/i.test(engine)
-    const isOra = /oracle/i.test(engine)
+    const isPG = engineFamily(engine) === 'postgres'
+    const isOra = engineFamily(engine) === 'oracle'
     const pad = (s: string) => (s + '            ').slice(0, 12)
     const line = (token: string, descKey: string) => '  ' + c(ANSI.cyan, pad(token)) + c(ANSI.gray, tr(descKey))
     const lines = [c(ANSI.bold, t('termMetaTitle'))]
@@ -522,14 +524,7 @@ export default function TerminalPage() {
     // renderFile 而不是 render:文件带 BOM,打开它的编辑器才不会猜成 GBK,把每
     // 一行中文显示成乱码。
     const blob = new Blob([ts.renderFile(meta)], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = name
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
+    downloadBlob(name, blob)
     // 审计放在文件已经交给浏览器之后:一次失败的审计调用不该让人丢掉他要的文件,
     // 但它仍然要说出来。
     try {
