@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,16 +20,16 @@ import (
 
 // Services is the application service container wired in bootstrap.
 type Services struct {
-	Repo       *repository.Repo
-	Engine     *gateway.RiskEngine
-	Executor   *gateway.Executor
-	JWT        *jwt.Manager
-	Webhook    *Dispatcher
+	Repo     *repository.Repo
+	Engine   *gateway.RiskEngine
+	Executor *gateway.Executor
+	JWT      *jwt.Manager
+	Webhook  *Dispatcher
 
 	apCounter    atomic.Int64
 	auditCounter atomic.Int64
 	relCounter   atomic.Int64 // REL-<n> release numbers
-	auditMu      sync.Mutex // serialize audit-chain writes (prev-read + insert must be atomic)
+	auditMu      sync.Mutex   // serialize audit-chain writes (prev-read + insert must be atomic)
 	// 敏感字段规则的短缓存。挂在实例上而不是做成包级变量:包级的那一份会在
 	// 多个 Services 之间串味(测试里一个用例的规则漏进另一个用例),而一个
 	// "有时候用的是别人的规则"的脱敏开关,比没有还危险。
@@ -36,10 +38,10 @@ type Services struct {
 	sensitiveAt    time.Time
 	// mfaGrace remembers a successful PROD step-up per user/session/instance so a
 	// code vouches for a working session rather than a single command.
-	mfaGraceMu sync.Mutex
-	mfaGrace   map[string]time.Time
-	exportQueue  chan int64 // async export-job ids, drained by a worker pool
-	asyncQueue   chan int64 // async SQL-exec-job ids, drained by a worker pool
+	mfaGraceMu  sync.Mutex
+	mfaGrace    map[string]time.Time
+	exportQueue chan int64 // async export-job ids, drained by a worker pool
+	asyncQueue  chan int64 // async SQL-exec-job ids, drained by a worker pool
 	// releaseQueue carries release ids for the CI/CD runner. A negative id means
 	// "resume an already-claimed run" — see dispatchReleaseJob.
 	releaseQueue chan int64
@@ -343,6 +345,26 @@ func (s *Services) mfaVerifiedRecently(u *model.User, conn *model.Connection) bo
 	defer s.mfaGraceMu.Unlock()
 	at, ok := s.mfaGrace[mfaGraceKey(u, conn)]
 	return ok && time.Since(at) < window
+}
+
+// voidMFAGraceFor 作废一个账户所有实例上的 MFA 宽限。
+//
+// 角色变了就该重新验证:宽限的意思是「这个会话刚刚证明过自己」,而它证明的是**那时那个
+// 角色**。一个刚被提到能写生产库的人,不该靠十分钟前为只读操作做的那次验证就直接下发。
+//
+// 为什么不是 bump token version(那样也会作废宽限):因为那会把人**踢下线**。权限本身是
+// 每个请求实时查库的(middleware → EffectiveRoleIDs),降权不需要靠踢下线来生效;而
+// 「改完角色同一个会话立刻用上新权限」是这套东西明确要的行为(见
+// TestMultiRole_UnionGrantsAndRevokesAdmin)。要作废的只有宽限,那就只作废宽限。
+func (s *Services) voidMFAGraceFor(userID int64) {
+	s.mfaGraceMu.Lock()
+	defer s.mfaGraceMu.Unlock()
+	prefix := strconv.FormatInt(userID, 10) + ":"
+	for k := range s.mfaGrace {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.mfaGrace, k)
+		}
+	}
 }
 
 // mfaGraceKey binds a grace entry to the user, their SESSION GENERATION and the
