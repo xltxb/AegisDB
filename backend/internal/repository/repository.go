@@ -1615,10 +1615,24 @@ func (r *Repo) Count(m any) int64 {
 // literal counted only the one that happens to be named after its tier.
 func (r *Repo) CountProdInterceptions() (int64, error) {
 	var n int64
+	// 按**这一行自己的快照**算,不按实例此刻绑在哪一层算。
+	//
+	// 双快照(issue 03)存在的全部意义就是这个:这一行说「一条命令当时被判成 high」,
+	// 而只有当时那一层能解释为什么。拿当前绑定去 join 有两个后果 ——
+	//
+	//   · 把一台实例从 prod 改绑到 dev,**历史拦截数当场变少**:上个月发生过的事,
+	//     不会因为今天改了配置就没发生
+	//   · 连接被删之后,它名下的审计行**一条都不算**,而删掉一台实例恰恰是那段历史
+	//     更值得留着的时候
+	//
+	// 拆分之前的老行没有 tier_code,只能回退到当前绑定 —— 尽力而为,而不是一概不算。
+	// 两个 LEFT JOIN 就是为这条回退留的路:新行根本用不到它们。
 	err := r.db.Model(&model.AuditLog{}).
-		Joins("JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
-		Joins("JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
-		Joins("JOIN tbl_env_tier ON tbl_env_tier.code = tbl_environment.tier_code").
+		Joins("LEFT JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
+		Joins("LEFT JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
+		Joins(`JOIN tbl_env_tier ON tbl_env_tier.code = CASE
+		         WHEN tbl_audit_log.tier_code IS NOT NULL AND tbl_audit_log.tier_code <> ''
+		         THEN tbl_audit_log.tier_code ELSE tbl_environment.tier_code END`).
 		Where("tbl_env_tier.counts_in_pending = ? AND tbl_audit_log.result IN ?", true, []string{"rejected", "pending"}).
 		Count(&n).Error
 	return n, err
