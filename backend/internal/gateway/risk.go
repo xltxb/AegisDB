@@ -233,6 +233,18 @@ func parseVerbExplain(sql string) (verb string, planOnly bool) {
 			rest = strings.TrimSpace(rest[len(w):])
 			continue
 		}
+		// MySQL 8 的 `FORMAT=TREE|JSON|TRADITIONAL`。它只决定计划怎么打印,不决定跑
+		// 不跑 —— 但 firstWord 读到 `FORMAT` 就停了(`=` 不是词字符),于是动词成了
+		// FORMAT。配上 ANALYZE(那条 DML **真的会执行**)就是:一条真会清空表的语句,
+		// verb 不是 delete,无 WHERE 拦截整层跳过,而工单上写的动词还是个 FORMAT。
+		if up == "FORMAT" {
+			rest = strings.TrimSpace(rest[len(w):])
+			rest = strings.TrimSpace(strings.TrimPrefix(rest, "="))
+			if v := firstWord(rest); v != "" { // 跳过 TREE / JSON / TRADITIONAL
+				rest = strings.TrimSpace(rest[len(v):])
+			}
+			continue
+		}
 		break
 	}
 	if strings.HasPrefix(rest, "(") { // EXPLAIN (ANALYZE, BUFFERS, …) <stmt>
@@ -439,6 +451,20 @@ var readVerbs = map[string]bool{
 // ANALYZE resolves to the DML verb and is conservatively treated as a write,
 // which is the safe direction for audit classification.
 func IsRead(sql string) bool {
+	// plan-only 的 EXPLAIN 只产出一张计划表,不执行被它包住的那条语句。
+	//
+	// ParseVerb 把 `EXPLAIN DELETE …` 解包成 DELETE —— 那是**判定**要的答案(判定层
+	// 另有 PlanOnly 短路把它当读放行)。但执行这一路读的是同一个动词,于是 IsRead
+	// 为 false、KnownVerb 为 true,语句走了 Exec:判定层按只读放行了它,执行层却把它
+	// 当写,终端上显示「0 行受影响」,而计划 —— 这条语句唯一的产出 —— 被丢掉了。
+	// 人看到的是「命令没有反应」(ADR 0008 表一「有结果集却走 Exec」)。
+	//
+	// EXPLAIN ANALYZE 不在此列:它真的会执行被包的那条语句,PlanOnly 对它为 false,
+	// 于是照旧按它包住的动词路由 —— 把一条真会删数据的语句当成查询,比丢结果集严重
+	// 得多。
+	if PlanOnly(sql) {
+		return true
+	}
 	verb := ParseVerb(sql)
 	// A CTE may carry the mutation: `WITH d AS (DELETE ... RETURNING *) SELECT ...`
 	// really deletes rows on PostgreSQL. WITH leads, so keying on the first verb
@@ -610,7 +636,7 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 	// 被判成高危 DELETE 并整脚本送审。数据里的词不是语法。
 	clean := StripComments(sql)
 	structure := blankQuoted(clean)
-	m := re.FindString(structure)
+	m := strictestHit(re.FindAllString(structure, -1), levelByName)
 
 	// 但字符串里的关键词有一种情况确实会执行:动态 SQL。抹掉字面量会连
 	// `EXECUTE IMMEDIATE 'DROP TABLE t'` 里那个真的要跑的 DROP 一起抹掉。所以只要
@@ -619,7 +645,7 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 	// 从前这类语句是**碰巧**被覆盖的(字典扫原文,顺带扫到了引号里)。现在是明确的
 	// 规则:命中时能说清这是动态 SQL 的载荷,而不是某个字段的值。
 	if m == "" && dynamicExecRe.MatchString(structure) {
-		m = re.FindString(quotedContents(clean))
+		m = strictestHit(re.FindAllString(quotedContents(clean), -1), levelByName)
 	}
 	if m == "" {
 		return "", model.RiskOff, nil
@@ -647,6 +673,18 @@ func (e *RiskEngine) ScanStatement(engine, tier, sql string) (string, string, bo
 	// Same reasoning as EvaluateFor: a plan-only EXPLAIN executes nothing, so a
 	// script line that merely asks for a plan is not what makes the script risky.
 	if PlanOnly(sql) {
+		return d.Verb(sql), "safe", false
+	}
+	// 会话级设置在执行那一路是短路放行的(见 EvaluateFor):`ALTER SESSION SET
+	// CURRENT_SCHEMA = x` 既不读也不写数据,只配置这条连接,而在 Oracle 上切 schema
+	// 正是读数据的前置步骤。扫描这一路漏了这道短路,于是同一条语句扫描报 high、执行
+	// 却放行 —— 人照着报告去拆语句、去提审批,而报告说的事根本不会发生(ADR 0014
+	// 「扫描必须和执行同一把尺子」)。
+	//
+	// **执行窗口的放宽刻意不在这里对齐**:窗口说的是"此刻这扇门开着吗",而扫描是提交
+	// **之前**的静态报告 —— 到真执行时窗口可能已经关了。按不放宽报告是偏严的一侧,
+	// 多报一条远好过让人以为某条语句到时候会免审批。
+	if SessionScoped(sql) {
 		return d.Verb(sql), "safe", false
 	}
 	matched, lvl, err := e.matchCommand(sql, tier)
@@ -925,6 +963,29 @@ func doBlockEffectiveVerb(s string) string {
 		up := strings.ToUpper(m)
 		if r := capabilityRank[MapVerbToCapability(up)]; r > bestRank {
 			best, bestRank = up, r
+		}
+	}
+	return best
+}
+
+// dictLevelRank orders dictionary levels by how much they gate.
+var dictLevelRank = map[string]int{model.RiskOff: 0, model.RiskMid: 1, model.RiskHigh: 2}
+
+// strictestHit 从一条语句的所有字典命中里挑**最严**的那一个。
+//
+// 取第一个是不对的:谁在前取决于 SQL 怎么写。`ALTER TABLE t DROP PARTITION p` 里
+// ALTER 在前,于是在 ALTER=mid、DROP=high 的字典下整条判成 mid —— 一条删分区的语句
+// 按「需审批」走了普通流程,而运维把 DROP 设成 high 的本意正是"这种事要按最高规格看"。
+// 让语序决定闸门的松紧,等于把它交给了句子怎么写。
+//
+// 同分时保留先出现的那个:等级一样时谁来背这个名字并不影响结论,而稳定的选择让同一条
+// 语句每次都报出同一个词。
+func strictestHit(hits []string, levelByName map[string]string) string {
+	best, bestRank := "", -1
+	for _, h := range hits {
+		up := strings.ToUpper(h)
+		if r := dictLevelRank[levelByName[up]]; r > bestRank {
+			best, bestRank = h, r
 		}
 	}
 	return best
