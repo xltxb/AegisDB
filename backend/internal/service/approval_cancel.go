@@ -55,8 +55,14 @@ func (s *Services) CancelApproval(actor *model.User, id int64) error {
 	case ap.WindowID > 0:
 		// 窗口记成 cancelled 而不是 rejected:没有人驳回过它,是申请人自己收回的。
 		// 对判定层两者一样(都不是 approved),对读记录的人不一样。
-		if e := s.Repo.SetExecWindowDecision(ap.WindowID, model.WindowCancelled, now); e != nil {
+		ok, e := s.Repo.SetExecWindowDecision(ap.WindowID, ap.ID, model.WindowCancelled, now)
+		if e != nil {
 			slog.Error("撤回窗口申请时落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "err", e)
+		} else if !ok {
+			// 撤回的是这张单,而窗口此刻已经不指着它了(它被改过,另建了新单) ——
+			// 那扇门的去留归新单管,这次撤回只收掉这张单本身。
+			slog.Info("撤回的窗口单已不是该窗口当前那一张,窗口状态不动",
+				"window", ap.WindowID, "apNo", ap.ApNo)
 		}
 	case ap.ExportJobID > 0:
 		// 导出任务停在 awaiting 等这张单;撤回之后没有人会再放行它。

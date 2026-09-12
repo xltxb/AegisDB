@@ -43,15 +43,27 @@ func (r *Repo) LinkWindowApproval(id, approvalID int64, apNo string) error {
 		Updates(map[string]any{"approval_id": approvalID, "ap_no": apNo}).Error
 }
 
-// SetExecWindowDecision 写下审批结论。
+// SetExecWindowDecision 写下审批结论 —— 由**作出它的那张单**写下。
 //
-// 带上 status = pending 这个条件:一张已经被决定过的窗口不该被第二次决定覆盖
-// (外部回调与站内审批可能同时到达),而"谁先到算谁的"要由数据库来裁,不是由
-// 两段各自读一遍再写回去的代码来裁。
-func (r *Repo) SetExecWindowDecision(id int64, status string, at time.Time) error {
-	return r.db.Model(&model.ExecWindow{}).
-		Where("id = ? AND status = ?", id, model.WindowPending).
-		Updates(map[string]any{"status": status, "decided_at": at}).Error
+// 两个条件都在同一条 UPDATE 的 WHERE 里,缺一不可:
+//
+//   - `status = pending` —— 一张已经被决定过的窗口不该被第二次决定覆盖(外部回调
+//     与站内审批可能同时到达),而"谁先到算谁的"要由数据库来裁。
+//   - `approval_id = ?` —— 这张单必须是这个窗口**此刻**那一张。
+//
+// 第二个条件不是重复劳动。只在代码里先读一遍再比对,中间那道缝正好放得进一次改窗口:
+// 审批人认领了旧单 → 比对时窗口还指着旧单,通过 → 另一个人改窗口,窗口回到 pending
+// 并链上新单(旧单已 approved,作废不了)→ 第一条线程继续往下写,而它只认
+// `id + status=pending`,改后的窗口恰好是 pending —— **改后的定义就被旧单上的那个
+// 签字批准了**。读-then-写挡不住这个,只有把 approval_id 放进同一次更新才挡得住。
+//
+// 返回值说的是"这一次决策生没生效"。调用方必须看它:false 不是错误,是"这张单说了
+// 不算",而把它当成功会让审计里出现一条从未发生过的决策。
+func (r *Repo) SetExecWindowDecision(id, approvalID int64, status string, at time.Time) (bool, error) {
+	res := r.db.Model(&model.ExecWindow{}).
+		Where("id = ? AND status = ? AND approval_id = ?", id, model.WindowPending, approvalID).
+		Updates(map[string]any{"status": status, "decided_at": at})
+	return res.RowsAffected == 1, res.Error
 }
 
 func (r *Repo) GetExecWindow(id int64) (*model.ExecWindow, error) {

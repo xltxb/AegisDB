@@ -55,8 +55,8 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 	ap := &model.Approval{
 		ApNo: s.nextApNo(), ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode,
 		Instance: conn.Name, Database: w.Database,
-		Command:  windowApprovalCommand(w, conn.Name),
-		Keyword:  "EXEC-WINDOW",
+		Command: windowApprovalCommand(w, conn.Name),
+		Keyword: "EXEC-WINDOW",
 		// 申请人是发起人。审批链、超时策略、自审批开关全部复用既有那一套 ——
 		// 这里不该长出第二套"谁能批"的规则。
 		InitiatorID: u.ID, Initiator: u.Name,
@@ -98,24 +98,22 @@ func (s *Services) applyWindowDecision(ap *model.Approval, approve bool) {
 	if approve {
 		status = model.WindowApproved
 	}
+	// 决策与"这张单是不是这个窗口当前那一张"在**同一条 UPDATE** 里裁(见
+	// SetExecWindowDecision)。此前这里是先读窗口、比对 ApprovalID、再写状态 ——
+	// 中间那道缝正好放得进一次改窗口,于是改后的定义被旧单上的签字批准了。
+	applied, err := s.Repo.SetExecWindowDecision(ap.WindowID, ap.ID, status, time.Now())
+	if err != nil {
+		slog.Error("执行窗口审批结果落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "status", status, "err", err)
+		return
+	}
+	if !applied {
+		// 这张单已经不是这个窗口当前那一张(窗口被改过/删过),或者窗口已经被决定过了。
+		slog.Warn("窗口单已被新的定义取代或窗口已决定,这次决策不生效",
+			"window", ap.WindowID, "apNo", ap.ApNo)
+		return
+	}
 	w, err := s.Repo.GetExecWindow(ap.WindowID)
 	if err != nil {
-		slog.Warn("窗口单指向的窗口已不在,这次决定不生效", "window", ap.WindowID, "apNo", ap.ApNo)
-		return
-	}
-	// 这张单必须是这个窗口**当前**那张。
-	//
-	// 只校验窗口状态是不够的:改一次窗口会把它打回 pending 并另建一张单,而旧单还在
-	// 待办里 —— 批它同样能让窗口从 pending 变 approved,于是改后的时间段和库靠一张
-	// 签在改前定义上的字生效了。改窗口时旧单已经被作废(retireWindowTicket),这里是
-	// 第二道:那一步和这一步之间,审批人可能正好点了下去。
-	if w.ApprovalID != ap.ID {
-		slog.Warn("窗口单已被新的定义取代,这次决定不生效",
-			"window", w.ID, "apNo", ap.ApNo, "current", w.ApNo)
-		return
-	}
-	if err := s.Repo.SetExecWindowDecision(ap.WindowID, status, time.Now()); err != nil {
-		slog.Error("执行窗口审批结果落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "status", status, "err", err)
 		return
 	}
 	conn, _ := s.Repo.GetConnection(w.ConnectionID)
