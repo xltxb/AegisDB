@@ -4,6 +4,7 @@ import { exportConfigQueryOptions, exportJobsQueryOptions, terminalApi } from '@
 import { CODE_EXPORT_PATH_UNSET, CODE_OK } from '@/api/http'
 import { useUIStore } from '@/stores/ui'
 import type { ExportJob } from '@/types'
+import { downloadBlob } from '@/lib/download'
 
 export function useExportJobs() {
   return useQuery(exportJobsQueryOptions())
@@ -63,12 +64,7 @@ export function useDownloadExport() {
     mutationFn: async (j: ExportJob) => {
       for (const file of partsOf(j)) {
         const blob = await terminalApi.exportDownload(file)
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = file.split(/[\\/]/).pop() || 'export.zip'
-        a.click()
-        URL.revokeObjectURL(url)
+        downloadBlob(file.split(/[\\/]/).pop() || 'export.zip', blob)
         await new Promise((r) => setTimeout(r, 250))
       }
     },

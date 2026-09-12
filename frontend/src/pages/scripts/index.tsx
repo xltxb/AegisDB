@@ -15,6 +15,7 @@ import { Modal } from '@/components/common/Modal'
 import ScriptScanModal from '@/components/script/ScriptScanModal'
 import { Empty, ErrorState, Loading } from '@/components/common/States'
 import type { ScriptScanResp, ScriptUpload } from '@/types'
+import { confirmAction } from '@/lib/confirm'
 
 const at = (s: string) => (s ? s.slice(5, 16).replace('T', ' ') : '—')
 const size = (n: number) =>
@@ -110,7 +111,7 @@ export default function ScriptsPage() {
                   navigate('/terminal', { state: { scriptUploadId: u.id, filename: u.filename } })
                 }
                 onDelete={() => {
-                  if (window.confirm(t('scriptsDelConfirm', { name: u.filename }))) del.mutate(u.id)
+                  if (confirmAction(t('scriptsDelConfirm', { name: u.filename }))) del.mutate(u.id)
                 }}
               />
             ))}

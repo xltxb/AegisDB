@@ -17,6 +17,7 @@ import {
   batchableOf, highPendingCount, initialOf, keywordAt, stepDone, waitingOn,
 } from '@/lib/inbox'
 import type { Approval } from '@/types'
+import { confirmAction } from '@/lib/confirm'
 
 const STATUS_KEY: Record<string, string> = {
   pending: 'apPending', approved: 'apApproved', rejected: 'apRejected',
@@ -84,7 +85,7 @@ export default function InboxPage() {
       notify(t('ibBatchNone'), 'info')
       return
     }
-    if (!window.confirm(t('ibBatchConfirm', { n: batchable.length }))) return
+    if (!confirmAction(t('ibBatchConfirm', { n: batchable.length }))) return
     setBusy(true)
     let done = 0
     const failed: string[] = []
@@ -202,7 +203,7 @@ export default function InboxPage() {
               a={sel}
               busy={decide.isPending}
               onDecide={(approve) => {
-                if (!approve && !window.confirm(t('ibRejectConfirm', { no: sel.apNo }))) return
+                if (!approve && !confirmAction(t('ibRejectConfirm', { no: sel.apNo }))) return
                 decide.mutate({ id: sel.id, approve })
               }}
             />
