@@ -984,12 +984,17 @@ func (s *Services) stageNotify(rel *model.Release, conn *model.Connection) stage
 // terminal path tidies it the same way.
 func (s *Services) finishRelease(rel *model.Release, status, errMsg string) {
 	now := time.Now()
-	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
-		"status": status, "error": clip(errMsg, 400), "finished_at": now,
-	})
+	// 先收尾阶段,**再**落整体状态 —— 顺序反过来会留下一个可见的中间态:发布单已经
+	// 写着「失败」,而下面的阶段列表里后续阶段还是「待执行」,读的人会以为它们还会跑。
+	//
+	// 那个窗口不是理论上的:它让 TestBackupStageRefusesDestructiveVerbs 以大约十分之
+	// 一的概率读到 pending 而不是 skipped —— 测试只是比人快,看到的是同一个东西。
 	if status != model.RunSuccess {
 		s.skipUnrunStages(rel.ID, now)
 	}
+	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
+		"status": status, "error": clip(errMsg, 400), "finished_at": now,
+	})
 	if status == model.RunSuccess {
 		s.notify(rel.CreatorID, model.NotifReleaseDone, "发布完成",
 			fmt.Sprintf("%s「%s」已全部阶段通过", rel.RelNo, rel.Title), rel.RelNo)
