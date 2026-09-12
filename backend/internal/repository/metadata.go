@@ -105,8 +105,15 @@ func (r *Repo) SearchMetaTables(connIDs []int64, q string, limit int) ([]model.M
 		limit = 200
 	}
 	var rows []model.MetaTable
+	// 通配符按字面量搜 —— 与审批搜索同一套做法(escapeLike + 显式 ESCAPE)。
+	//
+	// 不转义的话:输入一个 `%` 命中全表(人以为自己在搜,拿回来的是整个库的清单),
+	// 而表名里到处都是下划线,搜 `t_order` 会连 `tXorder` 一起回来。
+	//
+	// ESCAPE 必须显式写出来:MySQL 默认拿反斜杠当转义,而 SQLite 默认一个转义字符都
+	// 没有 —— 只转义不写 ESCAPE,在 SQLite 上反而什么都搜不到。
 	err := r.db.Where("connection_id IN ?", connIDs).
-		Where("table_name LIKE ?", "%"+q+"%").
+		Where(`table_name LIKE ? ESCAPE '\'`, "%"+escapeLike(q)+"%").
 		Order("db_name, table_name").Limit(limit).Find(&rows).Error
 	return rows, err
 }
@@ -124,7 +131,7 @@ func (r *Repo) SearchMetaColumns(connIDs []int64, q string, limit int) ([]model.
 	}
 	var rows []model.MetaColumn
 	err := r.db.Where("connection_id IN ?", connIDs).
-		Where("column_name LIKE ?", "%"+q+"%").
+		Where(`column_name LIKE ? ESCAPE '\'`, "%"+escapeLike(q)+"%").
 		Order("db_name, table_name, ordinal").Limit(limit).Find(&rows).Error
 	return rows, err
 }
