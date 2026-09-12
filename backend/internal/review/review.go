@@ -55,17 +55,31 @@ var Dialects = []string{DialectMySQL, DialectTiDB, DialectDWS, DialectOracle}
 // checks only the universal rules.
 func DialectFor(engine string) string {
 	e := strings.ToLower(strings.TrimSpace(engine))
-	switch {
-	case e == "":
+	if e == "" {
 		return DialectGeneric
-	case strings.Contains(e, "tidb"):
-		return DialectTiDB
-	case strings.Contains(e, "oracle"):
+	}
+	// 大类由 gateway.EngineFamily 定 —— 和网关判定挑协议用的是同一张表。
+	//
+	// 这里原本抄了一遍子串级联,而且抄漏了 postgre 那一支:PolarDB for PostgreSQL 因为
+	// 标签里含 polardb 被套上了 **MySQL 规范**。那些「VARCHAR 长度」「表必须有主键
+	// 自增」的条目拿去审一份 PG 脚本,报出来的没有一条是真的 —— 而人对审查结果的信任
+	// 是一次性的:报过一次没道理的,下一次真的那条也不会有人看。
+	switch gateway.EngineFamily(e) {
+	case gateway.FamilyOracle:
 		return DialectOracle
-	case strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
-		return DialectDWS
-	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"), strings.Contains(e, "polardb"):
+	case gateway.FamilyMySQL:
+		// TiDB 有自己那份规范(docs/TIDB規範.md),从 MySQL 家族里单拎出来。
+		if strings.Contains(e, "tidb") {
+			return DialectTiDB
+		}
 		return DialectMySQL
+	case gateway.FamilyPostgres:
+		// DWS / GaussDB 同样有自己那份规范;剩下的 PG 走 Generic —— 我们没有为通用
+		// PostgreSQL 写过规范库,套别人的不如不套。
+		if strings.Contains(e, "dws") || strings.Contains(e, "gauss") {
+			return DialectDWS
+		}
+		return DialectGeneric
 	}
 	return DialectGeneric
 }

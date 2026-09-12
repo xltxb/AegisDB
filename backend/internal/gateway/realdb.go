@@ -65,6 +65,19 @@ const (
 // a family because it has its own judgement dialect (dialect.go) — but no driver
 // yet, so engineDriver still reports it as not executable rather than attaching
 // it to a protocol it cannot speak.
+// EngineFamily 是 engineFamily 的导出版本 —— 给包外的分发点用(规范审查挑规则库、
+// 前端那张引擎表的对照),这样「这台实例说的是哪种协议」始终只有一个答案。
+func EngineFamily(engine string) string { return engineFamily(engine) }
+
+// 家族常量的导出别名,供包外的 switch 使用。
+const (
+	FamilyMySQL    = familyMySQL
+	FamilyPostgres = familyPostgres
+	FamilyOracle   = familyOracle
+	FamilySQLite   = familySQLite
+	FamilyMongo    = familyMongo
+)
+
 func engineFamily(engine string) string {
 	e := strings.ToLower(strings.TrimSpace(engine))
 	switch {
