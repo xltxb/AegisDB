@@ -51,23 +51,7 @@ func (s *Services) CancelApproval(actor *model.User, id int64) error {
 	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
 
 	// 这张单挂着的东西也要跟着收场,否则它会停在一个永远等不到结果的中间态。
-	switch {
-	case ap.WindowID > 0:
-		// 窗口记成 cancelled 而不是 rejected:没有人驳回过它,是申请人自己收回的。
-		// 对判定层两者一样(都不是 approved),对读记录的人不一样。
-		ok, e := s.Repo.SetExecWindowDecision(ap.WindowID, ap.ID, model.WindowCancelled, now)
-		if e != nil {
-			slog.Error("撤回窗口申请时落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "err", e)
-		} else if !ok {
-			// 撤回的是这张单,而窗口此刻已经不指着它了(它被改过,另建了新单) ——
-			// 那扇门的去留归新单管,这次撤回只收掉这张单本身。
-			slog.Info("撤回的窗口单已不是该窗口当前那一张,窗口状态不动",
-				"window", ap.WindowID, "apNo", ap.ApNo)
-		}
-	case ap.ExportJobID > 0:
-		// 导出任务停在 awaiting 等这张单;撤回之后没有人会再放行它。
-		s.failExport(ap.ExportJobID, "发起人撤回了导出申请")
-	}
+	s.closeAttachments(ap, model.WindowCancelled, "发起人撤回了导出申请")
 
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	// 进审计链:一张工单消失了,事后要看得出是被人撤回的,而不是不知去向。
@@ -115,4 +99,33 @@ func (s *Services) canCancel(actor *model.User, ap *model.Approval) error {
 // CanCancelApproval 是给列表用的那一位:按钮亮不亮,和点下去放不放行,说的是同一件事。
 func (s *Services) CanCancelApproval(actor *model.User, ap *model.Approval) bool {
 	return actor != nil && s.canCancel(actor, ap) == nil
+}
+
+// closeAttachments 收掉一张单挂着的东西:执行窗口、导出任务。
+//
+// 一张单被决定之后(撤回、超时作废),它挂着的东西如果不跟着收场,就会停在一个永远等不到
+// 结果的中间态 —— 窗口停在 pending、导出停在 awaiting,而它们等的那张单已经不在了。
+//
+// windowStatus 由调用方给:撤回记 cancelled(没有人驳回过它,是申请人自己收回的),超时
+// 记 rejected(是这套系统替他做了决定)。对判定层两者一样,对读记录的人不一样。
+func (s *Services) closeAttachments(ap *model.Approval, windowStatus, exportReason string) {
+	switch {
+	case ap.WindowID > 0:
+		ok, e := s.Repo.SetExecWindowDecision(ap.WindowID, ap.ID, windowStatus, time.Now())
+		if e != nil {
+			slog.Error("收尾窗口单时落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "err", e)
+		} else if !ok {
+			// 这张单已经不是那个窗口当前的一张了(窗口被改过,另建了新单) ——
+			// 那扇门的去留归新单管,这次只收掉这张单本身。
+			slog.Info("窗口单已不是该窗口当前那一张,窗口状态不动",
+				"window", ap.WindowID, "apNo", ap.ApNo)
+		}
+	case ap.ExportJobID > 0:
+		s.failExport(ap.ExportJobID, exportReason)
+	}
+}
+
+// closeAttachmentsOf 是 closeAttachments 的超时版本(按值收单,清扫循环里用)。
+func (s *Services) closeAttachmentsOf(a model.Approval) {
+	s.closeAttachments(&a, model.WindowRejected, "审批超时未处理,导出申请已作废")
 }

@@ -477,8 +477,8 @@ func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection
 		slog.Error("create approval failed", "apNo", apNo, "err", err)
 		return nil, "", err
 	}
-	s.Webhook.SendLarkApproval(ap)     // push an interactive Lark card to the approvers
-	s.dispatchExternalApproval(u, ap)  // (审批魔方) best-effort external interactive approval
+	s.Webhook.SendLarkApproval(ap)    // push an interactive Lark card to the approvers
+	s.dispatchExternalApproval(u, ap) // (审批魔方) best-effort external interactive approval
 	return ap, auditID, nil
 }
 
@@ -958,10 +958,24 @@ func (s *Services) SweepApprovalTimeouts() {
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, "审批已超时作废",
 				fmt.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
 			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
+			// 这张单挂着的东西也要跟着收场 —— 撤回那一路(CancelApproval)早就这么做了。
+			//
+			// 少了这一步,窗口永远停在 pending、导出任务永远停在 awaiting:它们在等一张
+			// 已经作废、永远不会有人批的单。方向上是朝严的(门没开、包没生成),所以不会
+			// 有人因为出事而发现它 —— 只会有人反复去点那个永远不动的「待审批」。
+			s.closeAttachmentsOf(a)
 		case "auto-escalate":
-			// Keep pending for the final approver (owner) but raise an escalation
-			// alert ONCE — claim the escalation atomically so repeated sweeps don't
-			// re-audit/re-notify the same ticket every 60s (R13).
+			// 这个选项做的是**告警**,不是升级 —— 名字是历史遗留,界面上的文案已经改成
+			// 「超时告警(仍等待审批)」。
+			//
+			// 真正的"升级"在这套模型里没有对象:defaultChainSteps 给审批池里每个人各建
+			// 一个**并列**的步骤,不存在"下一级审批人"。要做真升级,得先有分级的审批链,
+			// 那是另一件事。
+			//
+			// 在那之前,让名字说实话比让它假装做了什么更重要:一个以为单子已经转给上级
+			// 的人,不会再去催。
+			//
+			// 认领是原子的,所以重复清扫不会每 60 秒再报一次(R13)。
 			if claimed, _ := s.Repo.ClaimEscalation(a.ID); !claimed {
 				continue
 			}

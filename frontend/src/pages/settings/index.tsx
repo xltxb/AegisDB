@@ -118,7 +118,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
 
     // ---- 审批 ----
     onTimeout: keyOf(parseSetting<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate'),
-    escalate: parseSetting(g['approval.escalate'], true),
     allowSelf: parseSetting(g['approval.allowSelfApprove'], false),
     extEnabled: parseSetting(g['approval.external.enabled'], false),
     extBaseURL: parseSetting<string>(g['approval.external.baseURL'], ''),
@@ -209,7 +208,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         // 0 = 永久保留,与 maxRows 的 0=不限一致
         'export.retentionDays': Math.max(0, Math.round(Number(f.exportRetention) || 0)),
         'approval.onTimeout': f.onTimeout,
-        'approval.escalate': f.escalate,
         'approval.allowSelfApprove': f.allowSelf,
         'approval.external.enabled': f.extEnabled,
         'approval.external.baseURL': f.extBaseURL.trim(),
@@ -333,9 +331,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
           <CardRow title={t('setDefApprovers')} hint={t('setDefApproversD')}>
             <ApprovalChain />
             <Link className="set-link" to="/permissions">{t('setApproversManage')}</Link>
-          </CardRow>
-          <CardRow title={t('setEscalate')} hint={t('setEscalateD')}>
-            <Switch checked={f.escalate} onChange={(v) => set({ escalate: v })} />
           </CardRow>
           <CardRow title={t('setSelfApprove')} hint={t('setSelfApproveD')}>
             <Switch checked={f.allowSelf} onChange={(v) => set({ allowSelf: v })} />
