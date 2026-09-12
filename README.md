@@ -488,7 +488,8 @@ Vue 版自带 218 个单元测试（`cd frontend-vue && npm run test:unit`，Pla
 - `docs/adr/`：架构决策记录。较关键的几条：
   0003 外部飞书审批 · 0004 按引擎判定方言 · 0005 发布流水线与规范审查 ·
   0006 开放接口提单 · 0009 敏感字段脱敏在服务端做 · 0010 审批通过不执行 ·
-  0013 无 WHERE 拦截按分层 · 0014 脚本扫描按目标分层判 · 0015 执行窗口。
+  0013 无 WHERE 拦截按分层 · 0014 脚本扫描按目标分层判 · 0015 执行窗口 ·
+  0017 JWT 存 localStorage（记在账上的取舍，附偿还条件）。
 - `docs/agents/`、`CLAUDE.md`：AI Agent 协作约定（PRD 与实现工单以 markdown 存在 `.scratch/`，
   审查发现的问题记在 GitHub Issues，远端为 https://github.com/xltxb/AegisDB ）。
 
