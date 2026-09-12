@@ -15,6 +15,7 @@ import { ObjectGroups } from './ObjectGroups'
 import { InvalidObjects } from './InvalidObjects'
 import type { SourceTarget } from './SourceViewer'
 import type { Connection, DbObjects } from '@/types'
+import { engineFamily } from '@/lib/engines'
 
 /** 平铺的搜索命中最多列这么多条。再多也不是"找"了,是在滚一份清单。 */
 const MAX_HITS = 80
@@ -98,7 +99,8 @@ export function DbTree({
   const q = search.trim().toLowerCase()
   const searching = q.length > 0
 
-  const isOracle = (cid: number) => /oracle/i.test(connections.find((x) => x.id === cid)?.engine || '')
+  const isOracle = (cid: number) =>
+    engineFamily(connections.find((x) => x.id === cid)?.engine || '') === 'oracle'
 
   // ---- 分组 ----
   const matching = !q

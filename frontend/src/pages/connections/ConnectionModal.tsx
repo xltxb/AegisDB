@@ -6,6 +6,7 @@ import type { ConnectionDraft } from '@/hooks/useConnections'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import type { Connection, Environment } from '@/types'
+import { engineFamily } from '@/lib/engines'
 
 export const POLICIES = ['strict', 'approve-1', 'audit-only']
 
@@ -139,7 +140,7 @@ export function ConnectionModal({
           <label>{t('connFDatabase')}</label>
           <input
             value={f.database}
-            placeholder={/oracle/i.test(f.engine) ? t('connDbHintOracle') : 'orders_db'}
+            placeholder={engineFamily(f.engine) === 'oracle' ? t('connDbHintOracle') : 'orders_db'}
             onChange={(e) => set({ database: e.target.value })}
           />
         </div>

@@ -33,6 +33,7 @@ import { PasteModal } from './PasteModal'
 import { Completion, META_COMMANDS, type AcItem } from './Completion'
 import type { Connection, ConnectionSchema, RuleRef, SchemaDB } from '@/types'
 import '@xterm/xterm/css/xterm.css'
+import { engineFamily } from '@/lib/engines'
 
 // ---- 面板宽度的边界 ----
 // 存像素而不是百分比:树和执行上下文装的是**定宽的东西**(实例名、字段标签),
@@ -326,8 +327,8 @@ export default function TerminalPage() {
 
   function printMetaHelp() {
     const engine = conn?.engine ?? ''
-    const isPG = /postgre|dws|gauss/i.test(engine)
-    const isOra = /oracle/i.test(engine)
+    const isPG = engineFamily(engine) === 'postgres'
+    const isOra = engineFamily(engine) === 'oracle'
     const pad = (s: string) => (s + '            ').slice(0, 12)
     const line = (token: string, descKey: string) => '  ' + c(ANSI.cyan, pad(token)) + c(ANSI.gray, tr(descKey))
     const lines = [c(ANSI.bold, t('termMetaTitle'))]

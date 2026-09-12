@@ -223,3 +223,18 @@ test('SQLite 分支不影响 MySQL 与 PG', () => {
   expect(translateMetaSql('\\dt', 'mysql')?.sql).toContain('SHOW FULL TABLES')
   expect(translateMetaSql('\\dt', 'postgres')?.sql).toContain('information_schema')
 })
+
+// 引擎家族只有一张表,就是 lib/engines 那张。
+//
+// 这个文件原先自己用正则又判了一遍(`/mysql|tidb|mariadb|polardb/`),而那份正则漏掉
+// 了那张表最要紧的一条:PolarDB 的两个版本标签里都带 polardb,得先看 PostgreSQL 标记。
+// 于是 PolarDB for PostgreSQL 在这里被当成 MySQL 家族,DESC 原样发过去 —— PG 不认
+// DESC,回来的是一句语法错误,而用户敲的是他每天都在敲的那条命令。
+test('PolarDB for PostgreSQL 的 DESC 按 PG 翻译,不当作 MySQL 放行', () => {
+  const pg = translateDescribe('desc orders', 'PolarDB for PostgreSQL')
+  expect(pg, 'PG 版应当翻译成目录查询,而不是原样放过去').not.toBeNull()
+  expect(pg!.sql.toLowerCase()).toContain('information_schema.columns')
+
+  // MySQL 版不翻译 —— 那里 DESC 本来就是合法语法。
+  expect(translateDescribe('desc orders', 'PolarDB for MySQL')).toBeNull()
+})
