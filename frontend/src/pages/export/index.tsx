@@ -66,9 +66,15 @@ export default function ExportPage() {
     setFormSeq((n) => n + 1)
   }
 
-  /** 失败/过期的出口是「重填」:凭旧参数再建一个,该由人确认一次。 */
+  /**
+   * 失败/过期的出口是「重填」:凭旧参数再建一个,该由人确认一次。
+   *
+   * 认 id,不认名字。`j.instance` 是**建单那一刻的名字快照**,实例改过名之后就再也
+   * 对不上了 —— 于是重填出来的表单目标实例是空的,而人看着它明明写着旧名字,不会
+   * 想到要重新选一次。connectionId 就在这张单上,它是主键,改名不影响它。
+   */
   function reuse(j: ExportJob) {
-    const c = ((conns ?? []) as Connection[]).find((x) => x.name === j.instance)
+    const c = ((conns ?? []) as Connection[]).find((x) => x.id === j.connectionId)
     openForm({
       connectionId: c?.id ?? 0,
       database: j.database,
