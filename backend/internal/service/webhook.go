@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,6 +20,7 @@ import (
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/pkg/crypto"
 	"velagateway/pkg/sqlutil"
 )
 
@@ -60,6 +62,34 @@ func isDisallowedIP(ip net.IP) bool {
 // (e.g. 127.0.0.1, 10/8, 169.254 the cloud metadata endpoint). This is a
 // fail-fast pre-check; the dial-time control (newOutboundClient) closes the
 // DNS-rebinding TOCTOU. See L2/R20.
+// ValidateOutboundURL 是 validateOutboundURL 的导出版本,给 handler 在保存设置时
+// 做前置校验用 —— 出站地址(厂商 API、飞书机器人)必须是我们真的敢连的地址。
+func ValidateOutboundURL(raw string) error { return validateOutboundURL(raw) }
+
+// ValidateCallbackBaseURL 校验**别人回调我们**的地址。
+//
+// 比 ValidateOutboundURL 松一处:不查私网。这个地址指向本网关自己,而网关常常就装在
+// 内网里,厂商走专线回调 —— 拿出站那把尺子去量它,会把一套合法部署判成非法。
+//
+// 但 https 这一条不松:回调 URL 里带着 callbackSecret(厂商不支持自定义头时走
+// `?secret=`),明文 http 等于把那枚密钥挂在链路上。
+func ValidateCallbackBaseURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("无效的 URL: %w", err)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("URL 缺少主机名")
+	}
+	if u.Scheme != "https" && !AllowPrivateWebhookTargets {
+		return fmt.Errorf("回调地址必须使用 https(ADR 0003)")
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("URL 必须使用 http/https")
+	}
+	return nil
+}
+
 func validateOutboundURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil {
@@ -71,6 +101,18 @@ func validateOutboundURL(raw string) error {
 	host := u.Hostname()
 	if host == "" {
 		return fmt.Errorf("URL 缺少主机名")
+	}
+	// ADR 0003:出站与回调地址一律 https。
+	//
+	// 明文 http 的代价在这一版尤其具体:每一次推送都带着 `Authorization: Bearer <密钥>`,
+	// http 意味着链路上任何一跳都能读到它 —— 拿到一次请求就拿到了密钥,此后可以随意
+	// 冒充这个网关往事件中心写数据。签名挡不住这一条:它保护的是**内容没被改过**,
+	// 不是**密钥没被看见**。
+	//
+	// 与私网放行共用一个开关,因为它们描述的是同一件事:这是不是一台生产网关。
+	// dev 放行的理由也一样 —— 本机联调的接收端就是 http://localhost。
+	if u.Scheme != "https" && !AllowPrivateWebhookTargets {
+		return fmt.Errorf("出站地址必须使用 https(ADR 0003)")
 	}
 	if AllowPrivateWebhookTargets {
 		return nil
@@ -147,10 +189,10 @@ func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, 
 	summary := fmt.Sprintf("%s/%s/%s 高危命令待审批:%s · 原因:%s · 风险:%s",
 		ap.Env, ap.Instance, ap.Database, clip(safeCommand, 200), ap.Reason, ap.RiskLevel)
 	body := map[string]any{
-		"user":             userAccount,   // 发起人网关账户
+		"user":             userAccount,     // 发起人网关账户
 		"message_id":       "gw-" + ap.ApNo, // 网关生成的确定性ID(幂等)
-		"external_task_id": ap.ApNo,        // 回调关联主键(原样带回)
-		"request_id":       ap.ApNo,        // 备用关联键
+		"external_task_id": ap.ApNo,         // 回调关联主键(原样带回)
+		"request_id":       ap.ApNo,         // 备用关联键
 		"ai_group":         aiGroup,
 		"callback_url":     callbackURL,
 		"messages":         []map[string]string{{"role": "user", "content": summary}},
@@ -301,7 +343,13 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 		return
 	}
 	body, _ := json.Marshal(buildPlatformEvent(eventType, data))
-	endpoint, secret, retryMax := cfg.Endpoint, cfg.Secret, cfg.RetryMax
+	// 密钥加密落库,发送前解开(存量明文由 DecryptSecret 原样返回)。
+	secret, derr := crypto.DecryptSecret(cfg.Secret)
+	if derr != nil {
+		slog.Error("webhook secret 解密失败,本次不推送", "err", derr)
+		return
+	}
+	endpoint, retryMax := cfg.Endpoint, cfg.RetryMax
 
 	if err := validateOutboundURL(endpoint); err != nil {
 		d.record(eventType, endpoint, false, "blocked: "+err.Error(), 0)
@@ -322,8 +370,10 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 			}
 			req.Header.Set("Content-Type", "application/json")
 			if secret != "" {
+				// Bearer 暂时保留:接收方迁到签名校验之前不能断。
 				req.Header.Set("Authorization", "Bearer "+secret)
 			}
+			signOutbound(req, secret, body)
 			req.Header.Set("X-Vela-Event", eventType)
 			resp, err := d.client.Do(req)
 			if err == nil && resp.StatusCode < 300 {
@@ -354,6 +404,26 @@ func (d *Dispatcher) Dispatch(eventType string, data any) {
 	}()
 }
 
+// signOutbound 给一次推送盖上 HMAC-SHA256 签名。
+//
+// 为什么光有 `Authorization: Bearer <secret>` 不够:那等于**每一次推送都把密钥本身
+// 发一遍**。任何一跳(反向代理、APM、被错配成 http 的入口)拿到一次请求就拿到了密钥,
+// 此后可以随意冒充这个网关往事件中心写数据。
+//
+// 签名每次都不同,截获一条也推不出密钥;而且它同时证明了**这个 body 没被改过** ——
+// Bearer 只能证明"发的人知道密钥",证明不了这段内容中途没被换掉。
+//
+// 格式 `sha256=<hex>`,与 README 和工单 09 的验收项一致。密钥为空时不盖章:那时
+// 接收方也没有东西可以用来验。
+func signOutbound(req *http.Request, secret string, body []byte) {
+	if secret == "" {
+		return
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	req.Header.Set("X-Vela-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+}
+
 // Test sends a single synchronous test event and reports the outcome.
 func (d *Dispatcher) Test() (bool, string) {
 	cfg, err := d.repo.GetWebhook()
@@ -377,8 +447,9 @@ func (d *Dispatcher) Test() (bool, string) {
 		return false, err.Error()
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if cfg.Secret != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.Secret)
+	if plain, derr := crypto.DecryptSecret(cfg.Secret); derr == nil && plain != "" {
+		req.Header.Set("Authorization", "Bearer "+plain)
+		signOutbound(req, plain, body)
 	}
 	start := time.Now()
 	resp, err := d.client.Do(req)

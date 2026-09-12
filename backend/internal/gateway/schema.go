@@ -184,21 +184,25 @@ func pgListTables(conn *model.Connection) ([]SchemaGroup, error) {
 // schemaIntrospectQuery returns the engine-appropriate introspection SQL and
 // whether it yields a single-column (table-only) result set.
 func schemaIntrospectQuery(conn *model.Connection) (query string, singleDB bool) {
-	e := strings.ToLower(conn.Engine)
-	switch {
-	case strings.Contains(e, "sqlite"):
+	// 按**引擎家族**分发,不再在这里重抄一遍子串级联。
+	//
+	// 抄一遍的代价这里出过一次:这张 switch 从来没有 polardb 那一支,于是一台标签就写
+	// 「PolarDB」的实例报「暂不支持库表加载」—— 而连接是通的、终端能跑 SQL,只有左边
+	// 那棵树是空的,最难往「引擎判错了」上想。
+	switch engineFamily(conn.Engine) {
+	case familySQLite:
 		return `SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`, true
-	case strings.Contains(e, "tidb") || strings.Contains(e, "mysql") || strings.Contains(e, "mariadb"):
+	case familyMySQL:
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
 			`WHERE table_type IN ('BASE TABLE','VIEW') ` +
 			`AND table_schema NOT IN ('mysql','information_schema','performance_schema','sys') ` +
 			`ORDER BY table_schema, table_name`, false
-	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
+	case familyPostgres:
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
 			`WHERE table_type IN ('BASE TABLE','VIEW') ` +
 			`AND table_schema NOT IN ('pg_catalog','information_schema') ` +
 			`ORDER BY table_schema, table_name`, false
-	case strings.Contains(e, "oracle"):
+	case familyOracle:
 		return `SELECT owner, table_name FROM all_tables ` +
 			`WHERE owner NOT IN ('SYS','SYSTEM','OUTLN','XDB','MDSYS','CTXSYS','DBSNMP','APPQOSSYS','ORDSYS','WMSYS','LBACSYS','DVSYS','GSMADMIN_INTERNAL') ` +
 			`ORDER BY owner, table_name`, false

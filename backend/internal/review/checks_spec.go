@@ -89,8 +89,12 @@ func chkTiDBPartition(st *stmt, _ params, _ string) []string {
 // ---------------------------------------------------------------- DWS 建表
 
 var (
-	partitionNameRe  = regexp.MustCompile(`(?i)PARTITIONs+([A-Za-z_][A-Za-z0-9_$#]*)`)
-	distributeByRe   = regexp.MustCompile(`(?is)\bDISTRIBUTE\s+BY\s+(HASH|REPLICATION|ROUNDROBIN)\s*(\(([^)]*)\))?`)
+	// `\s+`,不是 `s+`。少那一个反斜杠时它匹配的是「PARTITION 后跟若干个字母 s」,
+	// 真实的 `PARTITION p1 VALUES …` 一个都对不上 —— 于是分区数永远数成 0,
+	// dws.partition.max 从来没有触发过。这种错最难被发现:规则在列表里、状态是启用、
+	// 跑起来不报错,只是**从来不说话**,而「从来不报」和「一直合规」在界面上长得一样。
+	partitionNameRe = regexp.MustCompile(`(?i)\bPARTITION\s+([A-Za-z_][A-Za-z0-9_$#]*)`)
+	distributeByRe  = regexp.MustCompile(`(?is)\bDISTRIBUTE\s+BY\s+(HASH|REPLICATION|ROUNDROBIN)\s*(\(([^)]*)\))?`)
 )
 
 // distributeKeys returns the columns of a DISTRIBUTE BY HASH(...) clause.
@@ -185,9 +189,6 @@ func tableOrientation(st *stmt) string {
 	return ""
 }
 
-
-
-
 func chkDWSPartitionCount(st *stmt, p params, _ string) []string {
 	if !partitionByRe.MatchString(st.masked) {
 		return nil
@@ -204,7 +205,6 @@ func chkDWSPartitionCount(st *stmt, p params, _ string) []string {
 	}
 	return []string{fmt.Sprintf("单表定义了 %d 个分区,超过上限 %d —— 过多分区会带来小文件与锁竞争", n, max)}
 }
-
 
 // ---------------------------------------------------------------- DWS 视图
 
@@ -274,7 +274,6 @@ func chkWithRecursive(st *stmt, _ params, _ string) []string {
 	}
 	return []string{"WITH RECURSIVE 在分布式执行下无法下推,会退化为单点计算"}
 }
-
 
 // chkDeleteWholeTable flags an unconditional DELETE. It overlaps
 // dml.require.where deliberately: that rule says the statement is UNSCOPED, this
@@ -393,7 +392,6 @@ func chkVolatileInSubquery(st *stmt, p params, _ string) []string {
 	return out
 }
 
-
 // chkSchemaQualified requires schema.table in FROM / JOIN / INTO / UPDATE.
 func chkSchemaQualified(st *stmt, _ params, _ string) []string {
 	var out []string
@@ -421,8 +419,6 @@ var tableRefRe = regexp.MustCompile(`(?is)\b(FROM|JOIN|INTO|UPDATE)\s+([A-Za-z_"
 
 // ---------------------------------------------------------------- 命名 / 安全
 
-
-
 func chkSensitiveColumn(st *stmt, p params, _ string) []string {
 	pats := p.list("patterns", []string{`id_?card`, `identity_?no`, `passport_?no`, `bank_?card`, `card_?no`, `cvv`, `credit_?card`, `social_?security`, `ssn`})
 	res := make([]*regexp.Regexp, 0, len(pats))
@@ -442,7 +438,6 @@ func chkSensitiveColumn(st *stmt, p params, _ string) []string {
 	}
 	return out
 }
-
 
 // ---------------------------------------------------------------- DWS 精度
 

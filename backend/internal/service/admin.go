@@ -1031,6 +1031,30 @@ func (s *Services) AuditRoleChange(actor *model.User, roleID int64, what string,
 	s.auditAdminAction(actor, "admin.role."+what+" role="+name+" value="+clip(string(detail), 400))
 }
 
+// AuditConfigChange records a change to the RULES the gateway judges by — the
+// high-risk dictionary, the runtime settings, the webhook target.
+//
+// 和 AuditRoleChange 是同一类事,而且更直接。角色放宽了还要以它的名义去做一次动作,
+// 这三样是把闸门本身挪了:
+//
+//   · 把 DROP 从字典里删掉,生产上的 DROP 从此不再需要审批
+//   · 把 approval.timeoutMinutes 调到 1,所有待审工单一分钟后自动处置
+//   · 把 webhook 指向别处,审计事件从此推给另一个人
+//
+// 这三件事做完之后,链上原本一个字都没有。事后去查「为什么那天 DROP 没走审批」,看到
+// 的是一条合规的执行记录 —— 而让它合规的那次改动,不在任何地方。
+//
+// value 会被裁到 400 字符进正文。**秘钥类的键只记键名**:审计链是给人读的,把秘钥写
+// 进去等于多了一处泄露点,而要查的问题("谁什么时候换过它")记键名就够了。
+func (s *Services) AuditConfigChange(actor *model.User, what string, value any) {
+	detail := ""
+	if value != nil {
+		b, _ := json.Marshal(value)
+		detail = " value=" + clip(string(b), 400)
+	}
+	s.auditAdminAction(actor, "admin."+what+detail)
+}
+
 // UserTags returns the tags granted directly to a user (empty = the role scope
 // applies).
 func (s *Services) UserTags(id int64) ([]string, error) {

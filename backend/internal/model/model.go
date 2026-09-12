@@ -751,7 +751,15 @@ func (AuditLog) TableName() string { return "tbl_audit_log" }
 type WebhookConfig struct {
 	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Endpoint string `gorm:"size:255;not null" json:"endpoint"`
-	Secret   string `gorm:"size:128;not null" json:"secret"` // bearer token: sent as `Authorization: Bearer <secret>`
+	// Secret 是**加密**存的(crypto.EncryptSecret)。发送时解密,作为
+	// `Authorization: Bearer <secret>` 与 HMAC 签名的密钥。
+	//
+	// `json:"-"` 不是装饰:保存接口曾经 `resp.OK(c, wh)` 整行返回,于是"保存一次"
+	// 就等于把已存的密钥读出来一次。要让界面知道配没配,给布尔位,不给值。
+	//
+	// 255 而不是 128:密文比明文长六十多个字符,而超长在非 STRICT 的 MySQL 上是
+	// 静默截断 —— 存下一段解不开的密文,推送从此全部 401。
+	Secret   string `gorm:"size:255;not null" json:"-"`
 
 	Events   string `gorm:"size:255;not null" json:"events"` // intercept,approve,exec,login
 	RetryMax int    `gorm:"not null;default:5" json:"retryMax"`

@@ -116,23 +116,34 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 		slog.Warn("external callback: no approval for correlation key", "key", apNo)
 		return "", ErrNotFound
 	}
-	// Cross-check the vendor's task against the one this ticket was dispatched as.
-	// Correlation runs on our ApNo, which is a predictable counter the submitter
-	// can read off their own exec response, so the quoted task is the only part
-	// of the payload tying the callback to a real dispatch (EA2). Only checked
-	// once we actually hold a task id: it is written asynchronously after
-	// dispatch, and demanding it unconditionally would reject a legitimate
-	// callback that beats our own write (see EA10).
-	// 一旦我们手上有 task id,回调就**必须**带上并且对得上。
+	// 这张单**外发过吗**,以及回调说的那张卡片**是不是它**。
 	//
-	// 原先的条件是 `ap.ExternalTaskID != "" && cb.TaskID != ""` —— 两个都非空才比。
-	// 于是回调方只要**省掉 task_id**,整条交叉校验就被跳过:关联只剩下 ApNo,而
-	// ApNo 是一个可预测的计数器(提交人在自己的响应里就能看到)。持有 callbackSecret
-	// 的人因此可以终审任意一张待审工单,包括从未外发过的。
+	// 关联跑在我们自己的 ApNo 上,而 ApNo 是一个可预测的计数器 —— 提交人在自己的执行
+	// 响应里就看得到,往前往后数几个就是别人的单号。所以 ApNo 对得上只说明"确实有这么
+	// 一张单",完全不说明"这张单外发过"。把它和 callbackSecret 放在一起,持有密钥的人
+	// 就能终审站内任意一张待审工单。
 	//
-	// 现在:有 task id 就必须匹配(缺失同样拒绝)。EA10 说的那个竞态仍然照顾到了 ——
-	// task id 是异步写入的,还没写上时 ap.ExternalTaskID 为空,此时无从比对,照旧放行。
-	if ap.ExternalTaskID != "" && strings.TrimSpace(cb.TaskID) != ap.ExternalTaskID {
+	// 因此 fail closed:手上没有厂商任务号,就不认外部回调。
+	//
+	// 这里收紧过两次,两次都值得记下来:
+	//
+	//  1. 最早的条件是 `ap.ExternalTaskID != "" && cb.TaskID != ""` —— 两个都非空才比。
+	//     于是回调方只要**省掉 task_id**,整条交叉校验就被跳过。
+	//  2. 然后是 `ap.ExternalTaskID != ""`,留这个口子是为了照顾一个竞态:出站在
+	//     goroutine 里跑(见 dispatchExternalApproval),task id 是异步写回的,理论上
+	//     回调可能比我们自己的写入更快。
+	//
+	// 第 2 条的代价和它挡住的东西不成比例。ExternalTaskID 为空的真实来源不是那一瞬,
+	// 而是三种**永久**为空的情况:出站失败(厂商不可达)、厂商没回 task id、总开关打开
+	// 之前建的单。这三种单子在旧规则下一律可被外部终审。
+	//
+	// 现在那个竞态里的回调会被拒 —— 厂商重试即可,而站内审批这条路始终可用。用一个
+	// 会自愈的失败,换掉一个不会自愈的洞。
+	if ap.ExternalTaskID == "" {
+		slog.Warn("external callback: ticket was never dispatched externally", "apNo", ap.ApNo)
+		return "", ErrForbidden
+	}
+	if strings.TrimSpace(cb.TaskID) != ap.ExternalTaskID {
 		slog.Warn("external callback: vendor task mismatch or missing",
 			"apNo", ap.ApNo, "expected", ap.ExternalTaskID, "got", cb.TaskID)
 		return "", ErrForbidden
@@ -143,6 +154,19 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 		return ap.Status, nil
 	}
 	approved := cb.Approved
+	// 通过,但没说是谁批的 —— 不认。
+	//
+	// 禁自审那道网靠比对 approver 与发起人。approver 为空时那个比对什么也比不出来,
+	// 而旧代码把"比不出来"当成了"不是自审"直接放行:发起人在自己的卡片上点通过,厂商
+	// 回调不带 approver,这道网就整个落空,审计里留下的审批人是「审批魔方」四个字 ——
+	// 事后谁也说不出到底是谁签的字。
+	//
+	// 驳回不受这条约束:它是安全方向,而外部系统超时自动关单这类正当场景恰恰不带
+	// 审批人。
+	if approved && len(nonBlank(cb.Approver)) == 0 {
+		slog.Warn("external callback: approval carries no approver — refused", "apNo", ap.ApNo)
+		return "", ErrForbidden
+	}
 	// SoD net: if every approver is the initiator themselves, honour
 	// approval.allowSelfApprove (default off) → block the self-approval.
 	if approved && s.approversAreInitiator(cb.Approver, ap) && !s.settingBool("approval.allowSelfApprove", false) {
@@ -252,4 +276,15 @@ func ipAllowed(list, clientIP string) bool {
 		}
 	}
 	return false
+}
+
+// nonBlank 去掉列表里的空白项 —— 一个 [""] 和一个 [] 说的是同一件事:没人签字。
+func nonBlank(xs []string) []string {
+	out := make([]string, 0, len(xs))
+	for _, x := range xs {
+		if strings.TrimSpace(x) != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }

@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -333,6 +334,7 @@ func (h *Handler) UpsertRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.upsert command="+req.Command, req.Tiers)
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -347,6 +349,8 @@ func (h *Handler) PatchRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.level command="+name,
+		map[string]string{"tier": req.Tier, "level": req.Level})
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -355,6 +359,7 @@ func (h *Handler) DeleteRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "删除失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.delete command="+strings.ToUpper(c.Param("name")), nil)
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -791,6 +796,13 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
+	// 两段:先把每一条都**算成最终要写的样子**(该跳过的跳过、该校验的校验、该加密的
+	// 加密),这一段一个字都不写库;全算完了再一次性写。
+	//
+	// 分两段是因为保存是**一次动作**:界面上点的是一个「保存」。逐条边算边写的话,
+	// 第 3 条不合法时前 2 条已经生效了 —— 管理员看到一句报错,而他无从知道哪几条其实
+	// 已经写进去了,而这半套里可能正好有一条是把某道闸关掉。
+	prepared := make(map[string]string, len(body))
 	for k, v := range body {
 		// "无 WHERE 的 DELETE / UPDATE" 不再是这里的全局开关,它按分层存在 tbl_env_tier
 		// 上(迁移 0030)。旧客户端可能还在发这个键,静默丢弃 —— 若把它写进 tbl_setting,
@@ -806,17 +818,59 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				continue
 			}
 		}
-		// Encrypt high-impact secrets at rest (token / callback secret).
-		if encryptedSettingKeys[k] {
-			if sv, ok := v.(string); ok && sv != "" {
-				if enc, err := crypto.EncryptSecret(sv); err == nil {
-					v = enc
-				}
+		// URL 类设置在**保存这一刻**就要校验。
+		//
+		// 此前一个字都不查:一个 http 的回调地址、一个指向 169.254.169.254 的出站
+		// 地址,都能安安静静存进去,直到某次真的要推送时才在日志里冒出来 —— 而那时
+		// 配错它的人早就走了。两把尺子不同,见 service 里那两个函数的注释。
+		if sv, ok := v.(string); ok && strings.TrimSpace(sv) != "" {
+			var verr error
+			switch k {
+			case "approval.external.baseURL", "notify.larkWebhook":
+				verr = service.ValidateOutboundURL(sv)
+			case "approval.external.callbackBaseURL":
+				verr = service.ValidateCallbackBaseURL(sv)
+			}
+			if verr != nil {
+				resp.Fail(c, resp.CodeBadRequest, k+": "+verr.Error())
+				return
 			}
 		}
-		s := toJSON(v)
-		_ = h.Repo.SetSetting(k, s)
+		// Encrypt high-impact secrets at rest (token / callback secret).
+		//
+		// 加密失败就**不写** —— 原先这里是 `if err == nil { v = enc }`,于是加密一旦
+		// 出错(密钥没初始化),那条秘钥就以明文落进库里,而接口照样回 ok。一条本该
+		// 加密的秘钥变成明文,没有任何迹象,下一次看到它的人是拿到库备份的人。
+		if encryptedSettingKeys[k] {
+			if sv, ok := v.(string); ok && sv != "" {
+				enc, err := crypto.EncryptSecret(sv)
+				if err != nil {
+					slog.Error("设置项加密失败,整批拒绝保存", "key", k, "err", err)
+					resp.Fail(c, resp.CodeInternalError, k+": 加密失败,未保存")
+					return
+				}
+				v = enc
+			}
+		}
+		prepared[k] = toJSON(v)
 	}
+	// 写不进去就不能回 ok。原先这一行是 `_ = h.Repo.SetSetting(k, s)` —— 错误被丢掉,
+	// 接口照样回 {"ok":true},于是管理员在界面上看到「已保存」而库里什么都没变。
+	// 一次静默的写失败比一次响亮的报错糟得多:没有人会去复查一件他以为已经做完的事。
+	if err := h.Repo.SetSettings(prepared); err != nil {
+		slog.Error("保存设置失败", "err", err)
+		resp.Fail(c, resp.CodeInternalError, "保存失败")
+		return
+	}
+	// 进审计链:这些键决定放行结论(审批超时、MFA 强制、空闲锁定…),改它们和改角色
+	// 权限是同一类事。只记**键名**,不记值 —— 秘钥类的键尤其,把值写进审计等于多了
+	// 一处泄露点,而要查的问题("谁什么时候换过它")记键名就够了。
+	changed := make([]string, 0, len(prepared))
+	for k := range prepared {
+		changed = append(changed, k)
+	}
+	sort.Strings(changed) // 稳定的顺序:同一次改动在链上读起来才是同一行
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "settings", changed)
 	resp.OK(c, gin.H{"ok": true})
 }
 
@@ -856,7 +910,13 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		wh.Endpoint = req.Endpoint
 	}
 	if req.Secret != "" {
-		wh.Secret = req.Secret // empty = keep the existing secret (never returned to the client, R3)
+		// 加密落库 —— 同类的 approval.external.token 一直是这么存的。留空 = 保持原值。
+		enc, err := crypto.EncryptSecret(req.Secret)
+		if err != nil {
+			resp.Fail(c, resp.CodeInternalError, "密钥加密失败")
+			return
+		}
+		wh.Secret = enc
 	}
 	if req.Events != nil {
 		// Authoritative subscription list — honour it verbatim, including an empty
@@ -872,7 +932,18 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
-	resp.OK(c, wh)
+	// 进审计链:审计事件从此推给谁,本身就该是一条审计。密钥同样只记"换没换"。
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "webhook", map[string]any{
+		"endpoint": wh.Endpoint, "events": wh.Events, "enabled": wh.Enabled,
+		"retryMax": wh.RetryMax, "secretChanged": req.Secret != "",
+	})
+	// 密钥不回显。`WebhookConfig.Secret` 已经是 `json:"-"`,这里再给界面一个布尔位 ——
+	// 它要知道的只是"配没配",和 GetSettings 的 webhookHasSecret 同一套做法。
+	resp.OK(c, gin.H{
+		"id": wh.ID, "endpoint": wh.Endpoint, "events": wh.Events,
+		"retryMax": wh.RetryMax, "enabled": wh.Enabled,
+		"hasSecret": wh.Secret != "",
+	})
 }
 
 func (h *Handler) TestWebhook(c *gin.Context) {

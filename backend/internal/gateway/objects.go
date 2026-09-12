@@ -35,16 +35,16 @@ const objectQueryTimeout = 15 * time.Second
 // database (MySQL), schema (PostgreSQL family) or owner (Oracle). SQLite has a
 // single namespace, so scope is ignored there. Requires real credentials.
 func RealObjects(conn *model.Connection, scope string) (*DbObjects, error) {
-	e := strings.ToLower(conn.Engine)
-	switch {
-	case strings.Contains(e, "sqlite"):
+	// 家族只认 engineFamily 那一张表 —— 在这里重抄一遍级联,polardb 就会排在 postgre
+	// 前面,于是 PolarDB for PostgreSQL 被按 MySQL 的目录视图去查。
+	switch engineFamily(conn.Engine) {
+	case familySQLite:
 		return sqliteObjects(conn)
-	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"),
-		strings.Contains(e, "tidb"), strings.Contains(e, "polardb"):
+	case familyMySQL:
 		return mysqlObjects(conn, scope)
-	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
+	case familyPostgres:
 		return pgObjects(conn, scope)
-	case strings.Contains(e, "oracle"):
+	case familyOracle:
 		return oracleObjects(conn, scope)
 	}
 	return nil, fmt.Errorf("引擎 %q 暂不支持对象浏览", conn.Engine)
@@ -59,16 +59,14 @@ func RealObjectSource(conn *model.Connection, scope, typ, name string) (string, 
 	if !objectIdentRe.MatchString(name) || (scope != "" && !objectIdentRe.MatchString(scope)) {
 		return "", fmt.Errorf("非法的对象名")
 	}
-	e := strings.ToLower(conn.Engine)
-	switch {
-	case strings.Contains(e, "sqlite"):
+	switch engineFamily(conn.Engine) {
+	case familySQLite:
 		return sqliteObjectSource(conn, typ, name)
-	case strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"),
-		strings.Contains(e, "tidb"), strings.Contains(e, "polardb"):
+	case familyMySQL:
 		return mysqlObjectSource(conn, scope, typ, name)
-	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
+	case familyPostgres:
 		return pgObjectSource(conn, scope, typ, name)
-	case strings.Contains(e, "oracle"):
+	case familyOracle:
 		return oracleObjectSource(conn, scope, typ, name)
 	}
 	return "", fmt.Errorf("引擎 %q 暂不支持对象浏览", conn.Engine)
