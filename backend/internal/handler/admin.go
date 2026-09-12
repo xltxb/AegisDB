@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -333,6 +334,7 @@ func (h *Handler) UpsertRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.upsert command="+req.Command, req.Tiers)
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -347,6 +349,8 @@ func (h *Handler) PatchRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.level command="+name,
+		map[string]string{"tier": req.Tier, "level": req.Level})
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -355,6 +359,7 @@ func (h *Handler) DeleteRiskCommand(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "删除失败")
 		return
 	}
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "dict.delete command="+strings.ToUpper(c.Param("name")), nil)
 	resp.OK(c, h.Svc.RiskDictView())
 }
 
@@ -857,6 +862,15 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	// 进审计链:这些键决定放行结论(审批超时、MFA 强制、空闲锁定…),改它们和改角色
+	// 权限是同一类事。只记**键名**,不记值 —— 秘钥类的键尤其,把值写进审计等于多了
+	// 一处泄露点,而要查的问题("谁什么时候换过它")记键名就够了。
+	changed := make([]string, 0, len(prepared))
+	for k := range prepared {
+		changed = append(changed, k)
+	}
+	sort.Strings(changed) // 稳定的顺序:同一次改动在链上读起来才是同一行
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "settings", changed)
 	resp.OK(c, gin.H{"ok": true})
 }
 
@@ -918,6 +932,11 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	// 进审计链:审计事件从此推给谁,本身就该是一条审计。密钥同样只记"换没换"。
+	h.Svc.AuditConfigChange(middleware.CurrentUser(c), "webhook", map[string]any{
+		"endpoint": wh.Endpoint, "events": wh.Events, "enabled": wh.Enabled,
+		"retryMax": wh.RetryMax, "secretChanged": req.Secret != "",
+	})
 	// 密钥不回显。`WebhookConfig.Secret` 已经是 `json:"-"`,这里再给界面一个布尔位 ——
 	// 它要知道的只是"配没配",和 GetSettings 的 webhookHasSecret 同一套做法。
 	resp.OK(c, gin.H{
