@@ -806,6 +806,24 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				continue
 			}
 		}
+		// URL 类设置在**保存这一刻**就要校验。
+		//
+		// 此前一个字都不查:一个 http 的回调地址、一个指向 169.254.169.254 的出站
+		// 地址,都能安安静静存进去,直到某次真的要推送时才在日志里冒出来 —— 而那时
+		// 配错它的人早就走了。两把尺子不同,见 service 里那两个函数的注释。
+		if sv, ok := v.(string); ok && strings.TrimSpace(sv) != "" {
+			var verr error
+			switch k {
+			case "approval.external.baseURL", "notify.larkWebhook":
+				verr = service.ValidateOutboundURL(sv)
+			case "approval.external.callbackBaseURL":
+				verr = service.ValidateCallbackBaseURL(sv)
+			}
+			if verr != nil {
+				resp.Fail(c, resp.CodeBadRequest, k+": "+verr.Error())
+				return
+			}
+		}
 		// Encrypt high-impact secrets at rest (token / callback secret).
 		if encryptedSettingKeys[k] {
 			if sv, ok := v.(string); ok && sv != "" {
@@ -856,7 +874,13 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		wh.Endpoint = req.Endpoint
 	}
 	if req.Secret != "" {
-		wh.Secret = req.Secret // empty = keep the existing secret (never returned to the client, R3)
+		// 加密落库 —— 同类的 approval.external.token 一直是这么存的。留空 = 保持原值。
+		enc, err := crypto.EncryptSecret(req.Secret)
+		if err != nil {
+			resp.Fail(c, resp.CodeInternalError, "密钥加密失败")
+			return
+		}
+		wh.Secret = enc
 	}
 	if req.Events != nil {
 		// Authoritative subscription list — honour it verbatim, including an empty
@@ -872,7 +896,13 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
-	resp.OK(c, wh)
+	// 密钥不回显。`WebhookConfig.Secret` 已经是 `json:"-"`,这里再给界面一个布尔位 ——
+	// 它要知道的只是"配没配",和 GetSettings 的 webhookHasSecret 同一套做法。
+	resp.OK(c, gin.H{
+		"id": wh.ID, "endpoint": wh.Endpoint, "events": wh.Events,
+		"retryMax": wh.RetryMax, "enabled": wh.Enabled,
+		"hasSecret": wh.Secret != "",
+	})
 }
 
 func (h *Handler) TestWebhook(c *gin.Context) {
