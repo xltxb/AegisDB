@@ -12,6 +12,7 @@ export {
   CODE_MFA_REQUIRED, CODE_LOGIN_THROTTLED, CODE_FORBIDDEN, CODE_IP_NOT_ALLOWED,
 } from './codes'
 import { CODE_OK } from './codes'
+import i18n from '@/locales'
 
 export const TOKEN_KEY = 'aegis_token'
 
@@ -50,7 +51,7 @@ http.interceptors.response.use(
 /** ok 解开信封;业务失败时抛出带 code 的错误,交给 TanStack Query 的错误通道。 */
 export function ok<T>(env: Envelope<T>): T {
   if (env.code !== CODE_OK) {
-    throw Object.assign(new Error(env.msg || '请求失败'), { code: env.code, data: env.data })
+    throw Object.assign(new Error(env.msg || i18n.t('reqFailed')), { code: env.code, data: env.data })
   }
   return env.data
 }

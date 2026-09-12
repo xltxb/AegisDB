@@ -24,11 +24,14 @@ interface NavItem {
   to: string
   /** 菜单闸的键,与后端 `menus` 对应。 */
   key: string
-  /** rail 上那行 9px 的短标签。 */
-  short: string
-  /** hover 出来的全名。 */
-  title: string
-  /** 文案键 —— 命令面板按它显示与匹配,跟着语言走。 */
+  /** rail 上那行 9px 短标签的文案键。 */
+  shortKey: string
+  /**
+   * 全名的文案键 —— hover 的 tooltip 与命令面板都用它。
+   *
+   * 两个键而不是一个:rail 只有 9px 一行,放得下的是"待办",放不下"审批待办";
+   * 而 tooltip 和命令面板正是为了说清那是什么才存在的,短名在那里等于没说。
+   */
   labelKey: string
   icon: typeof Database
   /**
@@ -43,35 +46,35 @@ interface NavItem {
 
 /** 用户前台 —— 运维 DBA 的日常(原型 v2 八项)。 */
 const FRONT_NAV: NavItem[] = [
-  { to: '/dashboard', key: '*', short: '总览', title: '总览', labelKey: 'navDashboard', icon: LayoutDashboard },
-  { to: '/terminal', key: 'terminal', short: '终端', title: '终端', labelKey: 'navTerminal', icon: SquareTerminal },
-  { to: '/approvals', key: 'approve', short: '申请', title: '我的申请', labelKey: 'navApprovals', icon: ClipboardCheck, badge: 'sent' },
+  { to: '/dashboard', key: '*', shortKey: 'navDashboardShort', labelKey: 'navDashboard', icon: LayoutDashboard },
+  { to: '/terminal', key: 'terminal', shortKey: 'navTerminalShort', labelKey: 'navTerminal', icon: SquareTerminal },
+  { to: '/approvals', key: 'approve', shortKey: 'navApprovalsShort', labelKey: 'navApprovals', icon: ClipboardCheck, badge: 'sent' },
   // 审批待办也挂在前台。原型 v3 只把它画在管理后台,但 owner / l2 两个角色有
   // approve 菜单却不是平台管理员 —— React 的门户切换器只对管理员渲染,只放后台
   // 等于让真正的审批人永远够不到自己的待办。菜单闸仍是 approve,谁有谁见。
-  { to: '/inbox', key: 'approve', short: '待办', title: '审批待办', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
-  { to: '/changes', key: 'pipeline', short: '变更', title: '变更工单', labelKey: 'navChanges', icon: GitPullRequestArrow },
-  { to: '/scripts', key: 'terminal', short: '脚本', title: '脚本库', labelKey: 'navScripts', icon: FileCode2 },
-  { to: '/export', key: 'terminal', short: '导出', title: '数据导出', labelKey: 'navExport', icon: FileDown },
-  { to: '/async-jobs', key: 'terminal', short: '调度', title: '后台执行调度', labelKey: 'navAsyncJobs', icon: ListChecks },
-  { to: '/exec-windows', key: 'execwindow', short: '班车', title: '执行窗口(班车)', labelKey: 'navExecWindows', icon: BusFront },
-  { to: '/catalog', key: 'terminal', short: '资产', title: '数据资产', labelKey: 'navCatalog', icon: BookOpen },
+  { to: '/inbox', key: 'approve', shortKey: 'navInboxShort', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
+  { to: '/changes', key: 'pipeline', shortKey: 'navChangesShort', labelKey: 'navChanges', icon: GitPullRequestArrow },
+  { to: '/scripts', key: 'terminal', shortKey: 'navScriptsShort', labelKey: 'navScripts', icon: FileCode2 },
+  { to: '/export', key: 'terminal', shortKey: 'navExportShort', labelKey: 'navExport', icon: FileDown },
+  { to: '/async-jobs', key: 'terminal', shortKey: 'navAsyncJobsShort', labelKey: 'navAsyncJobs', icon: ListChecks },
+  { to: '/exec-windows', key: 'execwindow', shortKey: 'navExecWindowsShort', labelKey: 'navExecWindows', icon: BusFront },
+  { to: '/catalog', key: 'terminal', shortKey: 'navCatalogShort', labelKey: 'navCatalog', icon: BookOpen },
 ]
 
 /** 管理后台 —— 平台管理员的配置面(原型 v2 九项)。 */
 const BACK_NAV: NavItem[] = [
-  { to: '/dashboard', key: '*', short: '总览', title: '总览', labelKey: 'navDashboard', icon: LayoutDashboard },
-  { to: '/connections', key: 'db', short: '配置', title: '数据库配置', labelKey: 'navConnections', icon: Database },
-  { to: '/risk-rules', key: 'rules', short: '规则', title: '高危规则', labelKey: 'navRiskRules', icon: ShieldAlert },
-  { to: '/sql-review', key: 'rules', short: '审查', title: 'SQL 审查规范', labelKey: 'navSqlReview', icon: ScanLine },
-  { to: '/gov', key: 'settings', short: '治理', title: '数据治理', labelKey: 'navGov', icon: VenetianMask },
+  { to: '/dashboard', key: '*', shortKey: 'navDashboardShort', labelKey: 'navDashboard', icon: LayoutDashboard },
+  { to: '/connections', key: 'db', shortKey: 'navConnectionsShort', labelKey: 'navConnections', icon: Database },
+  { to: '/risk-rules', key: 'rules', shortKey: 'navRiskRulesShort', labelKey: 'navRiskRules', icon: ShieldAlert },
+  { to: '/sql-review', key: 'rules', shortKey: 'navSqlReviewShort', labelKey: 'navSqlReview', icon: ScanLine },
+  { to: '/gov', key: 'settings', shortKey: 'navGovShort', labelKey: 'navGov', icon: VenetianMask },
   // 原型 v3 的位置:数据治理与角色权限之间。
-  { to: '/inbox', key: 'approve', short: '待办', title: '审批待办', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
-  { to: '/permissions', key: 'perms', short: '权限', title: '角色与权限', labelKey: 'navPermissions', icon: ShieldCheck },
-  { to: '/pipelines', key: 'pipeline', short: '流程', title: '变更流程配置', labelKey: 'navPipelines', icon: Workflow },
-  { to: '/users', key: 'perms', short: '用户', title: '用户管理', labelKey: 'navUsers', icon: UsersRound },
-  { to: '/audit', key: 'audit', short: '审计', title: '审计日志', labelKey: 'navAudit', icon: ScrollText },
-  { to: '/settings', key: 'settings', short: '设置', title: '系统设置', labelKey: 'navSettings', icon: Settings },
+  { to: '/inbox', key: 'approve', shortKey: 'navInboxShort', labelKey: 'navInbox', icon: Stamp, badge: 'inbox' },
+  { to: '/permissions', key: 'perms', shortKey: 'navPermissionsShort', labelKey: 'navPermissions', icon: ShieldCheck },
+  { to: '/pipelines', key: 'pipeline', shortKey: 'navPipelinesShort', labelKey: 'navPipelines', icon: Workflow },
+  { to: '/users', key: 'perms', shortKey: 'navUsersShort', labelKey: 'navUsers', icon: UsersRound },
+  { to: '/audit', key: 'audit', shortKey: 'navAuditShort', labelKey: 'navAudit', icon: ScrollText },
+  { to: '/settings', key: 'settings', shortKey: 'navSettingsShort', labelKey: 'navSettings', icon: Settings },
 ]
 
 export default function AppShell() {
@@ -202,11 +205,11 @@ export default function AppShell() {
             <NavLink
               key={i.to}
               to={i.to}
-              title={i.title}
+              title={t(i.labelKey)}
               className={({ isActive }) => clsx('rail-item', isActive && 'on')}
             >
               <i.icon size={21} />
-              <span>{i.short}</span>
+              <span>{t(i.shortKey)}</span>
               {i.badge && (() => {
                 const n = i.badge === 'inbox' ? inboxN : pendingN
                 return n > 0 ? <span className="rail-dot">{n > 99 ? '99+' : n}</span> : null
