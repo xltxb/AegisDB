@@ -50,6 +50,16 @@ func innerStatements(block string) []string {
 		// 一条都不触发。块体从第一个 BEGIN 之后开始:它前面是声明区(变量、游标),里面
 		// 没有要审的语句。
 		body = afterFirstBegin(trimmed)
+	case sqlutil.DollarQuotedBody(trimmed) != "":
+		// PostgreSQL 的块体裹在**美元引用**里,块头也不一样:
+		//
+		//	DO $$ BEGIN DELETE FROM t_orders; END $$;
+		//
+		// 首词是 DO,规则锚在语句开头,于是一条都不触发 —— 同一条 DELETE 裸着写被拦,
+		// 包进 `$$ … $$` 就通过了。这是 ADR 0008 那件事的 PG 版本。
+		//
+		// 取到的是引号之间的正文;里面的 BEGIN / END 由 stripScaffolding 照常剥掉。
+		body = sqlutil.DollarQuotedBody(trimmed)
 	case strings.Contains(trimmed, ";"):
 		// 分句器交回来的一条语句里居然还带分号,只有一种来路:MySQL 的 DELIMITER
 		// 把分号让给了语句体。那么这一条里可能并着好几条真语句,审查同样要看进去

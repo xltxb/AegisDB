@@ -202,6 +202,14 @@ func parseVerbExplain(sql string) (verb string, planOnly bool) {
 	if strings.EqualFold(verb, "WITH") {
 		return cteEffectiveVerb(s), false
 	}
+	// PostgreSQL 的 `DO $$ … $$` 和 WITH 是同一件事:动词说的不是它做的事。
+	//
+	// DO 不在能力映射表里,落进默认的 write —— 于是一个只有 write 的角色靠
+	// `DO $$ BEGIN DROP TABLE t; END $$` 就能做 DDL,而那条 DROP 裸着写要 ddl。
+	// 无 WHERE 拦截同样看不见:verb 是 do,整层直接跳过。
+	if strings.EqualFold(verb, "DO") {
+		return doBlockEffectiveVerb(s), false
+	}
 	if !strings.EqualFold(verb, "EXPLAIN") {
 		return strings.ToUpper(verb), false
 	}
@@ -894,4 +902,30 @@ func stricterLevel(a, b string) string {
 		return b
 	}
 	return a
+}
+
+// capabilityRank orders the capability dimensions by how much they can do.
+// Used to pick the most dangerous verb inside a block.
+var capabilityRank = map[string]int{"select": 0, "write": 1, "ddl": 2, "grant": 3}
+
+// doBlockEffectiveVerb resolves what a `DO $$ … $$` block actually does.
+//
+// 块体里有好几条时取**最危险**的那条:一个 DO 块是一次提交,里面最狠的那条决定了它的
+// 后果。`DO $$ BEGIN UPDATE …; DROP TABLE t; END $$` 要的是 ddl,不是 write —— 取第一条
+// 会把它判成 write,而那正是这个洞本来的样子。
+//
+// 体里没有任何改动动词时保持 DO:没有东西可藏,不必替它改名。
+func doBlockEffectiveVerb(s string) string {
+	body := sqlutil.DollarQuotedBody(s)
+	if body == "" {
+		return "DO"
+	}
+	best, bestRank := "DO", -1
+	for _, m := range mutatingRe.FindAllString(blankQuoted(body), -1) {
+		up := strings.ToUpper(m)
+		if r := capabilityRank[MapVerbToCapability(up)]; r > bestRank {
+			best, bestRank = up, r
+		}
+	}
+	return best
 }
