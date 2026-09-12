@@ -1109,6 +1109,21 @@ func (r *Repo) ClaimApprovalCancel(id int64) (bool, error) {
 	return res.RowsAffected == 1, res.Error
 }
 
+// CancelPendingApproval 作废一张**还没被决定**的单。
+//
+// 与 ClaimApprovalCancel 的区别是它只动 pending:那一条还收 approved(发起人撤回
+// 待执行的单),而这一条用在"这张单要批的东西已经不存在了"的场合 —— 窗口被改过或
+// 删掉。一张已经批准过的旧单是**发生过的事实**,不该被后来的改动抹成撤回。
+//
+// 条件写在 WHERE 里而不是先读后判:审批人可能正在同一瞬间点通过,谁先谁赢要由
+// 数据库裁。
+func (r *Repo) CancelPendingApproval(id int64) (bool, error) {
+	res := r.db.Model(&model.Approval{}).
+		Where("id = ? AND status = ?", id, model.StatusPending).
+		Update("status", model.StatusCancelled)
+	return res.RowsAffected == 1, res.Error
+}
+
 // ClaimEscalation atomically marks an approval as escalated, but only if it was
 // not already. Returns true iff this caller flipped it (RowsAffected == 1), so a
 // timeout sweep escalates each overdue ticket exactly once (R13).

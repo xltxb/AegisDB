@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -85,11 +86,15 @@ func (s *Services) UpdateExecWindow(actor *model.User, id int64, req dto.ExecWin
 		return nil, ErrNotFound
 	}
 	// 回到待审批:从这一刻起它不再放行任何东西,直到新的单子被批准。
+	prevApproval := w.ApprovalID
 	w.Status = model.WindowPending
 	w.ApprovalID, w.ApNo, w.DecidedAt = 0, "", nil
 	if err := s.Repo.UpdateExecWindow(w); err != nil {
 		return nil, err
 	}
+	// 旧单要批的是**改前那一版**,把它作废。留着它等于把这次改动的审批变成可选项:
+	// 审批人翻到那张旧单点通过,他看到的是 02:00-04:00,打开的却是改后的窗口。
+	s.retireWindowTicket(prevApproval, w, "定义已被修改")
 	if err := s.raiseWindowApproval(actor, w); err != nil {
 		return nil, err
 	}
@@ -128,6 +133,8 @@ func (s *Services) DeleteExecWindow(actor *model.User, id int64) error {
 	if err := s.Repo.DeleteExecWindow(id); err != nil {
 		return err
 	}
+	// 门都拆了,那张申请开门的单不能还挂在待办里 —— 批下去连要开的那扇门都不在了。
+	s.retireWindowTicket(w.ApprovalID, w, "窗口已删除")
 	s.auditWindowChange(actor, w, "删除")
 	return nil
 }
@@ -251,4 +258,18 @@ func validWeekdays(spec string) error {
 		}
 	}
 	return nil
+}
+
+// retireWindowTicket 作废一张指向旧定义的窗口单。
+//
+// 只动还没被决定的单:一张已经批准过的旧单是发生过的事实,不该被后来的改动抹掉。
+// 失败只记日志 —— 窗口那一边已经改完了,而判定层认的是窗口的 status,一张作废
+// 失败的孤儿单顶多是待办里多出一行,它自己也已经批不动了(见 applyWindowDecision)。
+func (s *Services) retireWindowTicket(approvalID int64, w *model.ExecWindow, why string) {
+	if approvalID <= 0 {
+		return
+	}
+	if _, err := s.Repo.CancelPendingApproval(approvalID); err != nil {
+		slog.Error("作废执行窗口旧单失败", "window", w.ID, "approval", approvalID, "why", why, "err", err)
+	}
 }
