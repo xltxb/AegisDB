@@ -11,6 +11,7 @@ import { useTierOf } from '@/hooks/useTier'
 import { connectionsQueryOptions } from '@/api/modules/connections'
 import { isExportJobActive } from '@/api/modules/terminal'
 import { CODE_OK } from '@/api/http'
+import { copyText } from '@/lib/clipboard'
 import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
@@ -136,12 +137,13 @@ function JobCard({
   const [shown, setShown] = useState(false)
   const [copied, setCopied] = useState(false)
 
+  // 口令只回显这一次,所以这里尤其不能静默失败:走 lib/clipboard 才有非安全上下文
+  // (局域网 IP 打开)下的 execCommand 兜底,而且它如实返回成没成 —— 没成就不给
+  // "已复制"的绿勾,口令还显示在旁边,人至少知道要自己选中。
   async function copyPw() {
-    try {
-      await navigator.clipboard.writeText(job.password)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch { /* 剪贴板被浏览器拦了就算了,密码本身还显示在旁边 */ }
+    if (!(await copyText(job.password))) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1600)
   }
 
   return (
