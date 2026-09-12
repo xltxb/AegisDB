@@ -78,18 +78,20 @@ func TestExternalApproval_CallbackSecretViaQueryParam(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	url := app.srv.URL + "/api/v1/approvals/lark/callback?secret=s3cr3t"
 	env, _ := app.postLarkCallbackAt(url, "", map[string]any{ // no header, secret in URL
-		"external_task_id": ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
 	})
 	eq(t, env.Code, 0, "query-param secret accepted")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "approved via URL secret")
 
 	// A wrong URL secret is still rejected.
 	ap2 := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap2.ApNo, "vt-"+ap2.ApNo)
 	badEnv, _ := app.postLarkCallbackAt(app.srv.URL+"/api/v1/approvals/lark/callback?secret=nope", "",
-		map[string]any{"external_task_id": ap2.ApNo, "approved": true})
+		map[string]any{"external_task_id": ap2.ApNo, "task_id": "vt-" + ap2.ApNo, "approved": true})
 	eq(t, badEnv.Code, resp.CodeForbidden, "wrong URL secret rejected")
 	eq(t, app.approvalRow(token, ap2.ApNo).Status, "pending", "wrong secret leaves ticket pending")
 }
@@ -109,8 +111,9 @@ func TestExternalApproval_CallbackApproveAndReject(t *testing.T) {
 
 	// approve path
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 	env, code := app.postLarkCallback("s3cr3t", map[string]any{
-		"external_task_id": ap.ApNo, "approved": true, "reason": "同意",
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "reason": "同意",
 		"approver": []string{"herbert@tbu.net"}, "message_id": "om_abc",
 	})
 	eq(t, code, 200, "callback http status")
@@ -119,8 +122,9 @@ func TestExternalApproval_CallbackApproveAndReject(t *testing.T) {
 
 	// reject path (a fresh ticket)
 	ap2 := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap2.ApNo, "vt-"+ap2.ApNo)
 	app.postLarkCallback("s3cr3t", map[string]any{
-		"external_task_id": ap2.ApNo, "approved": false, "reason": "不同意",
+		"external_task_id": ap2.ApNo, "task_id": "vt-" + ap2.ApNo, "approved": false, "reason": "不同意",
 		"approver": []string{"herbert@tbu.net"},
 	})
 	eq(t, app.approvalRow(token, ap2.ApNo).Status, "rejected", "reject → status rejected")
@@ -133,11 +137,12 @@ func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	// wrong / missing secret → forbidden, ticket untouched
-	envBad, _ := app.postLarkCallback("wrong", map[string]any{"external_task_id": ap.ApNo, "approved": true})
+	envBad, _ := app.postLarkCallback("wrong", map[string]any{"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true})
 	eq(t, envBad.Code, resp.CodeForbidden, "wrong secret forbidden")
-	envNone, _ := app.postLarkCallback("", map[string]any{"external_task_id": ap.ApNo, "approved": true})
+	envNone, _ := app.postLarkCallback("", map[string]any{"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true})
 	eq(t, envNone.Code, resp.CodeForbidden, "missing secret forbidden")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "pending", "ticket still pending after bad auth")
 
@@ -146,9 +151,9 @@ func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 	eq(t, env.Code, resp.CodeBadRequest, "unknown ticket rejected")
 
 	// approve once, then a repeat callback is idempotent (still approved)
-	app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": ap.ApNo, "approved": true, "approver": []string{"x@vela.io"}})
+	app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "approver": []string{"x@vela.io"}})
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "first approve")
-	env2, code2 := app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": ap.ApNo, "approved": false, "approver": []string{"x@vela.io"}})
+	env2, code2 := app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": false, "approver": []string{"x@vela.io"}})
 	eq(t, code2, 200, "repeat callback ok")
 	eq(t, env2.Code, 0, "repeat callback envelope ok")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "repeat does not flip a decided ticket")
@@ -161,9 +166,10 @@ func TestExternalApproval_SelfApproveBlocked(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token) // initiator = linwei@vela.io
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	app.postLarkCallback("s3cr3t", map[string]any{
-		"external_task_id": ap.ApNo, "approved": true,
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true,
 		"approver": []string{"linwei@vela.io"}, // self-approval
 	})
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "rejected", "self-approval blocked → rejected")
@@ -294,9 +300,10 @@ func TestExternalApproval_CallbackRefusedWhenFeatureDisabled(t *testing.T) {
 		"approval.external.callbackSecret": "s3cr3t",
 	})
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	env, _ := app.postLarkCallback("s3cr3t", map[string]any{
-		"external_task_id": ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
 	})
 	eq(t, env.Code, resp.CodeForbidden, "callback refused while the feature is disabled")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "pending", "ticket untouched")
@@ -313,7 +320,6 @@ func TestExternalApproval_CallbackRejectsMismatchedVendorTask(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token)
-
 	// Record the vendor task this ticket was dispatched as.
 	if err := app.repo.SetApprovalExternalTask(app.approvalIDByNo(ap.ApNo), "vendor-task-1"); err != nil {
 		t.Fatalf("set external task: %v", err)
@@ -362,10 +368,11 @@ func TestExternalApproval_CallbackSecretIsNotWrittenToAccessLog(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	url := app.srv.URL + "/api/v1/approvals/lark/callback?secret=s3cr3t"
 	env, _ := app.postLarkCallbackAt(url, "", map[string]any{
-		"external_task_id": ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"},
 	})
 	eq(t, env.Code, 0, "URL-secret callback still accepted")
 
@@ -390,9 +397,10 @@ func TestExternalApproval_AuditIdentifiesTheExternalApprover(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t"})
 	ap := app.submitProdHighRisk(token)
+	app.markExternallyDispatched(ap.ApNo, "vt-"+ap.ApNo)
 
 	env, _ := app.postLarkCallback("s3cr3t", map[string]any{
-		"external_task_id": ap.ApNo, "approved": true, "reason": "同意",
+		"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "reason": "同意",
 		"approver": []string{"herbert@tbu.net"},
 	})
 	eq(t, env.Code, 0, "callback accepted")
