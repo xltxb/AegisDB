@@ -70,14 +70,14 @@ func (s *Services) readUploadedScript(uploadID int64) (content, filename string,
 	if err != nil {
 		return "", "", ErrNotFound
 	}
-	fi, err := os.Stat(up.Path)
+	fi, err := os.Stat(localScriptPath(up.Path))
 	if err != nil || fi.IsDir() {
 		return "", "", ErrNotFound
 	}
 	if fi.Size() > maxScriptBytes {
 		return "", "", ErrScriptTooLarge
 	}
-	b, err := os.ReadFile(up.Path)
+	b, err := os.ReadFile(localScriptPath(up.Path))
 	if err != nil {
 		return "", "", ErrNotFound
 	}

@@ -139,8 +139,14 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 	// the unknown verb fell into the read dimension, and the write ran under a
 	// read-only role (ER3). Splitting normalises the separator away.
 	stmts := sqlutil.SplitStatements(sql)
-	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
-		return s.execJudged(ctx, u, conn, sql, reason)
+	if len(stmts) == 0 {
+		// 空输入或纯注释:没有语句可判,也没有什么可执行的 —— 异步那条通道一直是这么
+		// 答的(ErrBadRequest),而这里却把原串直接下发了。
+		//
+		// 下发它本身不危险(数据库会拒一条空语句),危险的是**两个入口对同一段输入给
+		// 不同的答案**:判定的前提是"判的和跑的是同一段文本",而这一支恰恰绕过了拆句
+		// 归一化那一步 —— 它是 ER3 那类洞的栖身之地。
+		return nil, ErrBadRequest
 	}
 	v, win := s.judge(u, conn, stmts)
 	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
@@ -549,7 +555,8 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		// 不在链上要去找管理员,自己发起的要去找同事,两件事完全不同。
 		return nil, &DecideRefusal{Block: block}
 	}
-	return s.finalizeApproval(ap, approve, actor.Name)
+	// 站内驳回目前没有理由输入框 —— 有了之后从这里传进去,不必再动下面那一层。
+	return s.finalizeApproval(ap, approve, actor.Name, "")
 }
 
 // finalizeApproval is the shared decision core: atomically claim pending →
@@ -560,7 +567,12 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // function assumes the decision is already authorized. operatorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.
-func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string) (*dto.ExecResp, error) {
+// reason 是**驳回的理由**。它落在 Result 上 —— 那个字段回答的正是「这张单最后怎么样
+// 了」,通过时装执行输出,驳回时就该装这句话。
+//
+// 不写它的后果不是少一行字:发起人在列表上看到「已驳回」,没有下文,于是他去问,而
+// 审批人已经在飞书那边写过一遍了。
+func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName, reason string) (*dto.ExecResp, error) {
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	// 走 applyTargetDatabase,不要裸赋值:Oracle 上 conn.Database 是服务名,直接写
 	// 进去等于把连接指向一个不存在的服务(TNS-12514),而工单里那个值本来是 schema。
@@ -655,7 +667,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
-	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
+	_ = s.Repo.SetApprovalResult(ap.ID, clip(strings.TrimSpace(reason), 400), 0, now)
 	if ap.WindowID > 0 {
 		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
 		s.applyWindowDecision(ap, false)
@@ -769,7 +781,10 @@ func (s *Services) storeScript(u *model.User, filename, content, source string) 
 	if err := os.WriteFile(saved, []byte(content), 0o644); err != nil {
 		return nil, err
 	}
-	up := &model.ScriptUpload{UserID: u.ID, Filename: name, Path: saved, Size: int64(len(content)), Source: source}
+	// 落库用 `/` —— 库里存的东西要能跨机器读,不该带任何一台机器的分隔符习惯(见
+	// script_path.go)。
+	up := &model.ScriptUpload{UserID: u.ID, Filename: name, Path: storedScriptPath(saved),
+		Size: int64(len(content)), Source: source}
 	if err := s.Repo.CreateScriptUpload(up); err != nil {
 		return nil, err
 	}
@@ -794,7 +809,7 @@ func (s *Services) DeleteScriptUpload(u *model.User, id int64) error {
 	if err != nil || up.UserID != u.ID {
 		return ErrForbidden
 	}
-	_ = os.Remove(up.Path)
+	_ = os.Remove(localScriptPath(up.Path))
 	return s.Repo.DeleteScriptUpload(id)
 }
 
@@ -804,10 +819,10 @@ func (s *Services) ScriptUploadFile(u *model.User, id int64) (string, string, er
 	if err != nil || up.UserID != u.ID {
 		return "", "", ErrForbidden
 	}
-	if fi, err := os.Stat(up.Path); err != nil || fi.IsDir() {
+	if fi, err := os.Stat(localScriptPath(up.Path)); err != nil || fi.IsDir() {
 		return "", "", ErrNotFound
 	}
-	return up.Path, up.Filename, nil
+	return localScriptPath(up.Path), up.Filename, nil
 }
 
 // ScriptUploadContent loads a user's own uploaded-script content so it can be
@@ -817,7 +832,7 @@ func (s *Services) ScriptUploadContent(u *model.User, id int64) (string, string,
 	if err != nil || up.UserID != u.ID {
 		return "", "", ErrForbidden
 	}
-	data, err := os.ReadFile(up.Path)
+	data, err := os.ReadFile(localScriptPath(up.Path))
 	if err != nil {
 		return "", "", ErrNotFound
 	}
