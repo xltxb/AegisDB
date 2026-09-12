@@ -79,6 +79,13 @@ func TestMigrate_BackfillsGliEnvironmentRules(t *testing.T) {
 	// Simulate a database installed before GLI existed.
 	db.Where("tier_code = ?", model.EnvGli).Delete(&model.RoleCapability{})
 	db.Where("tier_code = ?", model.EnvGli).Delete(&model.RiskCommand{})
+	// 那个年代也没有「一次性修正已做过」这个标记 —— 它是随修正一起加进来的。
+	//
+	// 这一行是这个用例与 TestBuiltinTiers_ADeletedTierStaysDeleted 的**分界**:同一段
+	// 代码的两面 —— 「缺失的东西要补上」和「删掉的东西不许复活」—— 靠的正是这个标记
+	// 来区分。不清它,这里模拟的就不是前 GLI 时代的库,而是一个管理员刚把 gli 规则
+	// 删掉的当代库,那种情况下它们**不该**回来。
+	db.Where("k = ?", builtinTierCorrectionKey).Delete(&model.Setting{})
 
 	if err := Migrate(app.cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)

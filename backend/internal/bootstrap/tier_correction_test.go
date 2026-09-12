@@ -82,6 +82,10 @@ func TestBuiltinTiers_UpgradeRelabelsAndAddsUat(t *testing.T) {
 	db.Where("code = ?", "uat").Delete(&model.Environment{})
 	db.Where("tier_code = ?", "uat").Delete(&model.RoleCapability{})
 	db.Where("tier_code = ?", "uat").Delete(&model.RiskCommand{})
+	// 前修正时代的库里没有「修正已做过」这个标记 —— 它是随修正一起加进来的。
+	// 不清掉它,这里模拟的就不是那个年代的库,而是一个被管理员删过 uat 的当代库
+	// (那种情况下 uat **不该**回来,见 TestBuiltinTiers_ADeletedTierStaysDeleted)。
+	db.Where("k = ?", builtinTierCorrectionKey).Delete(&model.Setting{})
 
 	if err := Migrate(app.cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)
