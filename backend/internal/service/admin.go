@@ -54,7 +54,7 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 	}
 	c := &model.Connection{
 		Name: strings.TrimSpace(req.Name), Engine: req.Engine, Host: host, Port: port,
-		Env: env, Policy: req.Policy, DefaultRole: role, Layer: layer, Status: "online",
+		Env: env, Policy: req.Policy, DefaultRole: role, Layer: layer, Status: model.ConnOnline,
 		Username: strings.TrimSpace(req.Username), Password: encPw, Database: strings.TrimSpace(req.Database),
 	}
 	if err := s.Repo.CreateConnection(c); err != nil {

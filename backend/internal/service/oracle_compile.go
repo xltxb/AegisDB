@@ -30,7 +30,7 @@ func (s *Services) CompileObject(u *model.User, connID int64, scope, kind, name,
 		return nil, ErrForbidden
 	}
 	applyTargetDatabase(conn, database)
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return nil, fmt.Errorf("目标实例处于维护态,暂不能编译")
 	}
 	// 先把请求本身判清楚,再谈基础设施:引擎对不对、名字合不合法、这个类型有没有

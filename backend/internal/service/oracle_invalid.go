@@ -62,7 +62,7 @@ func (s *Services) RecompileInvalid(u *model.User, connID int64, scope, database
 	if err != nil {
 		return nil, err
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return nil, fmt.Errorf("目标实例处于维护态,暂不能编译")
 	}
 

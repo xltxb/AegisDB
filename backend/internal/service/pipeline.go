@@ -251,7 +251,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return nil, fmt.Errorf("目标实例处于维护态,暂不能发起发布")
 	}
 	// PROD step-up, same as every other channel that ends in an execution.
@@ -763,7 +763,7 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 	if creator == nil {
 		return failStage("· 发布人不存在,未执行")
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return failStage("· 目标实例处于维护态,未执行")
 	}
 	// An instance whose tier no longer resolves is never judged as allowed —
