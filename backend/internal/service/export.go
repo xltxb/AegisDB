@@ -203,7 +203,7 @@ func (s *Services) enqueueExport(u *model.User, connID int64, sql, name, databas
 	}
 	// FR-CONN-04: maintenance-state instances restrict operations. The worker
 	// opens a real connection, so the export channel has to honour this too.
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return nil, ErrForbidden
 	}
 	// The worker runs this SQL against the target DB, so an export is an

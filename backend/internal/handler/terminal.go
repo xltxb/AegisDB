@@ -460,6 +460,11 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
+	if err == service.ErrConnMaintenance {
+		// 维护态不是「执行失败」,照实说是哪一种 —— 笼统一句会让人去查脚本本身的毛病。
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "执行失败")
 		return

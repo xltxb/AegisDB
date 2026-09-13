@@ -68,7 +68,7 @@ func (s *Services) ExecuteApproved(actor *model.User, id int64, mfaCode string) 
 	if !s.canAccessConn(actor, conn) {
 		return nil, ErrForbidden
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		return nil, fmt.Errorf("目标实例处于维护态,暂不能执行")
 	}
 	if err := s.checkMFA(actor, conn, mfaCode); err != nil {

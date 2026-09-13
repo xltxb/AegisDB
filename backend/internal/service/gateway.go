@@ -26,6 +26,13 @@ import (
 // 由 model.OutMaintenance 渲染。
 const maintNotice = "· 目标实例处于维护态，操作受限"
 
+// ErrConnMaintenance 是「目标实例在维护态」这件事的错误形态。
+//
+// 维护态不是错误,是一种状态 —— 所以终端与异步执行那两条路把它软返回成一句提示。但
+// **脚本执行**这条路没有承载提示的地方(它的返回值是「跑了几条」),软返回一个 0 会让
+// 调用方以为脚本跑完了而里面恰好没有语句。这里如实报出来,handler 再决定怎么讲给人听。
+var ErrConnMaintenance = fmt.Errorf("%s", maintNotice)
+
 // BuildMe assembles the /auth/me payload (user + menus + capabilities).
 func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
 	// 主角色可能压根不存在,而这不是错误。
@@ -116,7 +123,7 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 		return nil, ErrForbidden
 	}
 	// FR-CONN-04: maintenance-state instances restrict operations.
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
 		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
 			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
@@ -380,7 +387,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		s.recordAudit(u, conn, "\\i "+filename, model.RiskLow, model.ResultWarn, "", "")
 		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
 			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
@@ -921,8 +928,15 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	if !s.canAccessConn(u, conn) {
 		return 0, ErrForbidden
 	}
-	if conn.Status == "maint" {
-		return 0, nil // maintenance: nothing executed (mirrors Exec's soft no-op)
+	if conn.Status == model.ConnMaint {
+		// 软返回是对的(维护态不是错误,是一种状态),**不留痕**不对。
+		//
+		// 这里原先是裸 `return 0, nil`,注释说它 "mirrors Exec's soft no-op" —— 可 Exec
+		// 记了一条 warn 审计、还回了一句「实例维护中」的提示。这一条什么都没有:接口回
+		// 「执行了 0 条语句」,审计里一个字都没有。人看到一次没报错的返回,而他要的那些
+		// 语句一条也没跑;事后想查「那天到底跑没跑」,唯一能查的地方是空的。
+		s.recordAudit(u, conn, content, model.RiskLow, model.ResultWarn, "", "")
+		return 0, ErrConnMaintenance
 	}
 	// Validate the PROD step-up ONCE for the whole script — a single TOTP code
 	// covers the batch; per-statement checks would demand (and consume) a code on

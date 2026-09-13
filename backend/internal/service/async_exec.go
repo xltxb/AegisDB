@@ -38,7 +38,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	// against the same instance through the same executor, so skipping the check
 	// meant anyone blocked in the terminal could resubmit the identical statement
 	// as a background job and have it run (ER6).
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
 		return &dto.AsyncSubmitResp{Output: "· 目标实例处于维护态，操作受限"}, nil
 	}
