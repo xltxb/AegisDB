@@ -753,7 +753,10 @@ func (s *Services) ScriptSavePath() string {
 // the id away here was why a pasted 100KB script still died with "Data too long
 // for column 'command'" while the upload-picker path had long moved to
 // references. Errors with ErrScriptPathUnset when no path is configured.
-func (s *Services) SaveUploadedScript(u *model.User, _ int64, filename, content string) (*model.ScriptUpload, error) {
+//
+// 刻意不收连接 ID:脚本归档在**上传者**名下,与它将来在哪台实例上跑无关。从前这里
+// 收一个 int64 又丢掉它,调用点读起来像是"归进这台实例",而那是假的。
+func (s *Services) SaveUploadedScript(u *model.User, filename, content string) (*model.ScriptUpload, error) {
 	return s.storeScript(u, filename, content, "terminal")
 }
 

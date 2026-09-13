@@ -297,19 +297,33 @@ func currentSensitiveRules() []SensitiveRule {
 // 返回列名是为了让界面能标"该列已脱敏" —— 数据本身早已是打码后的,前端不做任何
 // 脱敏工作,这一点是这个设计的全部意义。
 func maskResultSet(sql string, cols []string, data [][]string) []string {
-	rules := currentSensitiveRules()
-	targets := SensitiveMaskTargets(sql, cols, rules)
+	targets, styleOf, names := maskPlan(sql, cols)
 	if len(targets) == 0 {
 		return nil
 	}
-	styleOf := make(map[int]string, len(targets))
-	names := make([]string, 0, len(targets))
+	MaskRows(data, targets, styleOf)
+	return names
+}
+
+// maskPlan 定下这条查询要打码哪几列、各按什么样式,以及报给界面的列名。
+//
+// 控制台的结果集与导出的数据流从这里拿到**同一份**答案。从前两边各算一遍,八行逐字
+// 相同 —— 而它们一旦分叉,就意味着导出下来的文件和界面上看到的不一样。先看见的那
+// 一份是界面,人以为自己看到的就是会导出的东西,于是把一份没打码的手机号带出了网关。
+// 这种分叉不报错,也不会有人发现,除非正好两边对着看。
+func maskPlan(sql string, cols []string) (targets []int, styleOf map[int]string, names []string) {
+	rules := currentSensitiveRules()
+	targets = SensitiveMaskTargets(sql, cols, rules)
+	if len(targets) == 0 {
+		return nil, nil, nil
+	}
+	styleOf = make(map[int]string, len(targets))
+	names = make([]string, 0, len(targets))
 	for _, i := range targets {
 		styleOf[i] = styleFor(cols[i], rules)
 		names = append(names, cols[i])
 	}
-	MaskRows(data, targets, styleOf)
-	return names
+	return targets, styleOf, names
 }
 
 // styleFor picks the masking style configured for a column; the first rule whose
@@ -328,16 +342,9 @@ func styleFor(col string, rules []SensitiveRule) string {
 // column set is known once, at header time, so the targets are computed once and
 // every row goes through the same rewrite.
 func maskStream(sql string, cols []string) (apply func([]string), masked []string) {
-	rules := currentSensitiveRules()
-	targets := SensitiveMaskTargets(sql, cols, rules)
+	targets, styleOf, names := maskPlan(sql, cols)
 	if len(targets) == 0 {
 		return func([]string) {}, nil
-	}
-	styleOf := make(map[int]string, len(targets))
-	names := make([]string, 0, len(targets))
-	for _, i := range targets {
-		styleOf[i] = styleFor(cols[i], rules)
-		names = append(names, cols[i])
 	}
 	return func(row []string) {
 		for _, i := range targets {

@@ -499,15 +499,16 @@ func IsRead(sql string) bool {
 	if PlanOnly(sql) {
 		return true
 	}
-	verb := ParseVerb(sql)
-	// A CTE may carry the mutation: `WITH d AS (DELETE ... RETURNING *) SELECT ...`
-	// really deletes rows on PostgreSQL. WITH leads, so keying on the first verb
-	// alone routed it down the query path and recorded it as a read (ER9). What
-	// matters is whether the statement mutates, not which keyword comes first.
-	if verb == "WITH" && mutatingRe.MatchString(blankQuoted(StripComments(sql))) {
-		return false
-	}
-	return readVerbs[verb]
+	// 带改动的 CTE(`WITH d AS (DELETE … RETURNING *) SELECT …` 在 PostgreSQL 上
+	// 真的会删,ER9)由 ParseVerb 解成它的改动动词,所以这里按动词查表就够了 ——
+	// 要紧的是这条语句改不改数据,不是哪个关键词排在最前面。
+	//
+	// 这里从前另有一条 `verb == "WITH" && mutatingRe.MatchString(…)` 的分支。它不可能
+	// 为真:verb 还是 WITH,就说明 cteEffectiveVerb 已经拿同一个 mutatingRe 扫过同一份
+	// 输入且没命中(只差一次 TrimSpace,而 \b 正则不受首尾空白影响)。一条**看起来**
+	// 在把关、实际永远不执行的分支比没有更糟:下一个来改"CTE 算不算写"的人会改它,
+	// 然后以为自己改动了行为。
+	return readVerbs[ParseVerb(sql)]
 }
 
 // mutatingRe finds a data-modifying verb anywhere in a statement's structure
