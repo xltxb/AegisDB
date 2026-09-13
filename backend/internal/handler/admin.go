@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"errors"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -996,7 +995,7 @@ func (h *Handler) CompileObject(c *gin.Context) {
 	rep, err := h.Svc.CompileObject(middleware.CurrentUser(c), pathID(c),
 		req.Scope, req.Type, req.Name, req.Database)
 	if err != nil {
-		resp.Fail(c, compileErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": rep.OK(), "report": rep})
@@ -1008,7 +1007,7 @@ func (h *Handler) InvalidObjects(c *gin.Context) {
 	items, err := h.Svc.InvalidObjects(middleware.CurrentUser(c), pathID(c),
 		c.Query("scope"), c.Query("database"))
 	if err != nil {
-		resp.Fail(c, compileErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"items": items, "total": len(items)})
@@ -1026,23 +1025,12 @@ func (h *Handler) RecompileInvalid(c *gin.Context) {
 	rep, err := h.Svc.RecompileInvalid(middleware.CurrentUser(c), pathID(c),
 		req.Scope, req.Database, req.Names)
 	if err != nil {
-		resp.Fail(c, compileErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	// ok 的定义是"这次没有留下编不过的对象",而不是"请求成功返回了" —— 与单个编译
 	// 同一个口径:失败的编译也会正常返回,只是对象还是 INVALID。
 	resp.OK(c, gin.H{"ok": rep.Failed == 0, "report": rep})
-}
-
-func compileErrCode(err error) int {
-	switch {
-	case errors.Is(err, service.ErrForbidden):
-		return resp.CodeForbidden
-	case errors.Is(err, service.ErrNotFound):
-		return resp.CodeBadRequest
-	default:
-		return resp.CodeBadRequest
-	}
 }
 
 // ---------------------------------------------------------------- 项目(Project)
@@ -1076,7 +1064,7 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 	}
 	p, err := h.Svc.UpdateProject(middleware.CurrentUser(c), pathID(c), req)
 	if err != nil {
-		resp.Fail(c, projectErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, p)
@@ -1084,15 +1072,8 @@ func (h *Handler) UpdateProject(c *gin.Context) {
 
 func (h *Handler) DeleteProject(c *gin.Context) {
 	if err := h.Svc.DeleteProject(middleware.CurrentUser(c), pathID(c)); err != nil {
-		resp.Fail(c, projectErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
-}
-
-func projectErrCode(err error) int {
-	if errors.Is(err, service.ErrNotFound) {
-		return resp.CodeBadRequest
-	}
-	return resp.CodeBadRequest
 }

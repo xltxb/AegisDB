@@ -241,7 +241,7 @@ func (h *Handler) ScriptUpload(c *gin.Context) {
 		content, filename = req.Content, req.Filename
 	}
 	up, err := h.Svc.UploadScript(middleware.CurrentUser(c), filename, content)
-	if err == service.ErrScriptPathUnset {
+	if errors.Is(err, service.ErrScriptPathUnset) {
 		resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 		return
 	}
@@ -383,7 +383,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		return
 	} else {
 		up, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
-		if err == service.ErrScriptPathUnset {
+		if errors.Is(err, service.ErrScriptPathUnset) {
 			resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 			return
 		}

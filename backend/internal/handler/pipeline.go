@@ -44,7 +44,7 @@ func (h *Handler) SavePipeline(c *gin.Context) {
 	}
 	p, err := h.Svc.SavePipeline(middleware.CurrentUser(c), pathID(c), req)
 	if err != nil {
-		resp.Fail(c, releaseErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, p)
@@ -53,7 +53,7 @@ func (h *Handler) SavePipeline(c *gin.Context) {
 // DeletePipeline removes a template (running releases keep their snapshot).
 func (h *Handler) DeletePipeline(c *gin.Context) {
 	if err := h.Svc.DeletePipeline(pathID(c)); err != nil {
-		resp.Fail(c, releaseErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -73,7 +73,7 @@ func (h *Handler) ListReleases(c *gin.Context) {
 func (h *Handler) GetRelease(c *gin.Context) {
 	v, err := h.Svc.GetReleaseDetail(middleware.CurrentUser(c), pathID(c))
 	if err != nil {
-		resp.Fail(c, releaseErrCode(err), "发布单不存在或无权查看")
+		resp.Fail(c, errCode(err), "发布单不存在或无权查看")
 		return
 	}
 	resp.OK(c, v)
@@ -94,7 +94,7 @@ func (h *Handler) CreateRelease(c *gin.Context) {
 			resp.Fail(c, resp.CodeMFARequired, "该实例需要二次验证")
 			return
 		}
-		resp.Fail(c, releaseErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, rel)
@@ -103,7 +103,7 @@ func (h *Handler) CreateRelease(c *gin.Context) {
 // AbortRelease stops a run that has not begun executing.
 func (h *Handler) AbortRelease(c *gin.Context) {
 	if err := h.Svc.AbortRelease(middleware.CurrentUser(c), pathID(c)); err != nil {
-		resp.Fail(c, releaseErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -126,19 +126,8 @@ func (h *Handler) ContinueStage(c *gin.Context) {
 		cerr = h.Svc.ContinueManualStage(middleware.CurrentUser(c), pathID(c), stageID)
 	}
 	if cerr != nil {
-		resp.Fail(c, releaseErrCode(cerr), cerr.Error())
+		resp.Fail(c, errCode(cerr), cerr.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
-}
-
-func releaseErrCode(err error) int {
-	switch {
-	case errors.Is(err, service.ErrForbidden):
-		return resp.CodeForbidden
-	case errors.Is(err, service.ErrNotFound):
-		return resp.CodeBadRequest
-	default:
-		return resp.CodeBadRequest
-	}
 }

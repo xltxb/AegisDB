@@ -57,7 +57,7 @@ func (h *Handler) OpenCreateRelease(c *gin.Context) {
 	if err != nil {
 		slog.Warn("open api: create release rejected",
 			"client", clientName(cl), "externalRef", req.ExternalRef, "err", err)
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	slog.Info("open api: release created",
@@ -71,7 +71,7 @@ func (h *Handler) OpenGetRelease(c *gin.Context) {
 	v, err := h.Svc.ReleaseStatusForClient(
 		middleware.CurrentUser(c), middleware.CurrentAPIClient(c), c.Param("relNo"))
 	if err != nil {
-		resp.Fail(c, openErrCode(err), "升级单不存在或无权查看")
+		resp.Fail(c, errCode(err), "升级单不存在或无权查看")
 		return
 	}
 	resp.OK(c, h.Svc.OpenReleaseResp(&v.Release, true))
@@ -82,7 +82,7 @@ func (h *Handler) OpenAbortRelease(c *gin.Context) {
 	err := h.Svc.AbortReleaseForClient(
 		middleware.CurrentUser(c), middleware.CurrentAPIClient(c), c.Param("relNo"))
 	if err != nil {
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -110,7 +110,7 @@ func (h *Handler) OpenReviewCheck(c *gin.Context) {
 	}
 	res, err := h.Svc.CheckSQLForClient(middleware.CurrentUser(c), req)
 	if err != nil {
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	resp.OK(c, res)
@@ -211,7 +211,7 @@ func (h *Handler) UpdateAPIClient(c *gin.Context) {
 	}
 	cl, err := h.Svc.UpdateAPIClient(pathID(c), req)
 	if err != nil {
-		resp.Fail(c, openErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, cl)
@@ -220,7 +220,7 @@ func (h *Handler) UpdateAPIClient(c *gin.Context) {
 // DeleteAPIClient revokes a credential outright.
 func (h *Handler) DeleteAPIClient(c *gin.Context) {
 	if err := h.Svc.DeleteAPIClient(pathID(c)); err != nil {
-		resp.Fail(c, openErrCode(err), "删除失败")
+		resp.Fail(c, errCode(err), "删除失败")
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -250,21 +250,6 @@ func clientName(cl *model.APIClient) string {
 		return "?"
 	}
 	return cl.Name
-}
-
-func openErrCode(err error) int {
-	switch {
-	case errors.Is(err, service.ErrForbidden):
-		return resp.CodeForbidden
-	case errors.Is(err, service.ErrMFARequired), errors.Is(err, service.ErrMFAInvalid):
-		return resp.CodeMFARequired
-	case errors.Is(err, service.ErrScriptPathUnset):
-		return resp.CodeScriptPathUnset
-	case errors.Is(err, service.ErrNotFound):
-		return resp.CodeBadRequest
-	default:
-		return resp.CodeBadRequest
-	}
 }
 
 // openErrMsg passes the service's own wording through: these messages name the
