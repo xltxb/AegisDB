@@ -280,7 +280,7 @@ func chkDeleteWholeTable(st *stmt, _ params, _ string) []string {
 }
 
 func chkJoinCount(st *stmt, p params, _ string) []string {
-	max := p.num("max", 16)
+	max := p.num("max", defaultMaxJoinTables)
 	n := len(joinRe.FindAllString(st.masked, -1))
 	if n == 0 {
 		return nil
@@ -367,7 +367,7 @@ func chkVolatileInSubquery(st *stmt, p params, _ string) []string {
 	if len(spans) == 0 {
 		return nil
 	}
-	fns := p.list("functions", []string{"nextval", "uuid_generate_v1", "uuid_generate_v4", "random", "currval", "lastval"})
+	fns := p.list("functions", defaultVolatileFns)
 	var out []string
 	for _, fn := range fns {
 		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(fn) + `\s*\(`)
