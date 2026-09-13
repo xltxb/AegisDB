@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -60,7 +61,7 @@ func (h *Handler) UpdateConnection(c *gin.Context) {
 		return
 	}
 	conn, err := h.Svc.UpdateConnection(pathID(c), req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
@@ -151,11 +152,11 @@ func (h *Handler) GetConnectionObjectSource(c *gin.Context) {
 		return
 	}
 	r, err := h.Svc.ConnectionObjectSource(middleware.CurrentUser(c), pathID(c), c.Query("scope"), typ, name, c.Query("database"))
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权访问该连接")
 		return
 	}
@@ -306,7 +307,7 @@ func (h *Handler) AddRoleMember(c *gin.Context) {
 func (h *Handler) RemoveRoleMember(c *gin.Context) {
 	userID, _ := strconv.ParseInt(c.Param("userId"), 10, 64)
 	err := h.Svc.RemoveRoleMember(pathID(c), userID)
-	if err == service.ErrBadRequest {
+	if errors.Is(err, service.ErrBadRequest) {
 		resp.Fail(c, resp.CodeBadRequest, "该用户仅剩此一个角色,请先分配其他角色再移除")
 		return
 	}
@@ -462,11 +463,11 @@ func (h *Handler) CancelApproval(c *gin.Context) {
 	switch {
 	case err == nil:
 		resp.OK(c, gin.H{"ok": true})
-	case err == service.ErrNotFound:
+	case errors.Is(err, service.ErrNotFound):
 		resp.Fail(c, resp.CodeBadRequest, "工单不存在")
-	case err == service.ErrAlreadyDecided:
+	case errors.Is(err, service.ErrAlreadyDecided):
 		resp.Fail(c, resp.CodeBadRequest, "该工单已被处理,请刷新")
-	case err == service.ErrForbidden:
+	case errors.Is(err, service.ErrForbidden):
 		resp.Fail(c, resp.CodeForbidden, "无权撤回")
 	default:
 		// canCancel 的拒绝理由是要给人看的:三种情况要人去做的事完全不同。
@@ -480,11 +481,11 @@ func (h *Handler) ApproveApproval(c *gin.Context) {
 		resp.Fail(c, resp.CodeForbidden, r.Error())
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "仅审批链成员可审批")
 		return
 	}
-	if err == service.ErrAlreadyDecided {
+	if errors.Is(err, service.ErrAlreadyDecided) {
 		resp.Fail(c, resp.CodeBadRequest, "该工单已被处理,请刷新")
 		return
 	}
@@ -501,11 +502,11 @@ func (h *Handler) RejectApproval(c *gin.Context) {
 		resp.Fail(c, resp.CodeForbidden, r.Error())
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "仅审批链成员可驳回")
 		return
 	}
-	if err == service.ErrAlreadyDecided {
+	if errors.Is(err, service.ErrAlreadyDecided) {
 		resp.Fail(c, resp.CodeBadRequest, "该工单已被处理,请刷新")
 		return
 	}
@@ -565,13 +566,13 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 		return
 	}
 	status, err := h.Svc.DecideApprovalExternal(req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		slog.Warn("lark callback: approval not found",
 			"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID)
 		resp.FailStatus(c, http.StatusNotFound, resp.CodeNotFound, "审批单不存在")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		// The payload authenticated but does not describe this ticket (e.g. it
 		// quotes a different vendor task) — see DecideApprovalExternal.
 		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
@@ -615,7 +616,7 @@ func (h *Handler) MarkNotificationsRead(c *gin.Context) {
 
 func (h *Handler) MFASetup(c *gin.Context) {
 	out, err := h.Svc.MFASetup(middleware.CurrentUser(c))
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "已启用二次验证,如需重新绑定请先关闭,或联系管理员重置")
 		return
 	}

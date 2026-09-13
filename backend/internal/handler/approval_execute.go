@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/middleware"
@@ -19,11 +20,11 @@ func (h *Handler) ExecuteApproval(c *gin.Context) {
 	}
 	_ = c.ShouldBindJSON(&req) // 无 body 是正常的:只有要求 MFA 的分层才需要它
 	res, err := h.Svc.ExecuteApproved(middleware.CurrentUser(c), pathID(c), req.MFACode)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "工单不存在")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权执行该工单")
 		return
 	}

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/dto"
@@ -49,7 +50,7 @@ func (h *Handler) UpdateEnvTier(c *gin.Context) {
 		return
 	}
 	t, err := h.Svc.UpdateEnvTier(c.Param("code"), req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "分层标签不存在")
 		return
 	}
@@ -62,7 +63,7 @@ func (h *Handler) UpdateEnvTier(c *gin.Context) {
 
 func (h *Handler) DeleteEnvTier(c *gin.Context) {
 	err := h.Svc.DeleteEnvTier(c.Param("code"))
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "分层标签不存在")
 		return
 	}
@@ -114,7 +115,7 @@ func (h *Handler) UpdateEnvironment(c *gin.Context) {
 		return
 	}
 	e, err := h.Svc.UpdateEnvironment(c.Param("code"), req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "环境不存在")
 		return
 	}
@@ -134,7 +135,7 @@ func (h *Handler) DeleteEnvironment(c *gin.Context) {
 		return
 	}
 	err := h.Svc.DeleteEnvironment(c.Param("code"), req.MoveTo)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "环境不存在")
 		return
 	}

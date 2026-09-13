@@ -38,12 +38,12 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 	token, exp, u, err := h.Svc.Login(req.Email, req.Password, req.MfaCode)
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		// Password verified; prompt for the second factor without counting a fail.
 		resp.Fail(c, resp.CodeMFARequired, "请输入 MFA 验证码")
 		return
 	}
-	if err == service.ErrMFAInvalid {
+	if errors.Is(err, service.ErrMFAInvalid) {
 		h.loginLim.fail(ip, time.Now())
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
 		return
@@ -108,11 +108,11 @@ func (h *Handler) Exec(c *gin.Context) {
 		return
 	}
 	r, err := h.Svc.Exec(c.Request.Context(), middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
 		return
 	}
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
@@ -143,15 +143,15 @@ func (h *Handler) ExecAsync(c *gin.Context) {
 		return
 	}
 	r, err := h.Svc.ExecAsync(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
 		return
 	}
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
-	if err == service.ErrMFAInvalid {
+	if errors.Is(err, service.ErrMFAInvalid) {
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
 		return
 	}
@@ -175,7 +175,7 @@ func (h *Handler) ListAsyncJobs(c *gin.Context) {
 // GetAsyncJob returns one background job with its streamed log (poll for progress).
 func (h *Handler) GetAsyncJob(c *gin.Context) {
 	j, err := h.Svc.GetAsyncJob(middleware.CurrentUser(c), pathID(c))
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权查看该任务")
 		return
 	}
@@ -407,7 +407,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		// whole script must be submitted for approval (created from the scan
 		// result, since the `\i file` wrapper isn't itself risk-matched)
 		r, err := h.Svc.SubmitScriptForApproval(middleware.CurrentUser(c), req.ConnectionID, scan.Filename, req.Content, "脚本含高危语句,整脚本提交审批", req.MfaCode, req.Database, req.UploadID)
-		if err == service.ErrMFARequired {
+		if errors.Is(err, service.ErrMFARequired) {
 			resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 			return
 		}
@@ -423,11 +423,11 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		return
 	}
 	executed, err := h.Svc.ExecuteSafeScript(middleware.CurrentUser(c), req.ConnectionID, req.Content, req.MfaCode, req.Database)
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
-	if err == service.ErrConnMaintenance {
+	if errors.Is(err, service.ErrConnMaintenance) {
 		// 维护态不是「执行失败」,照实说是哪一种 —— 笼统一句会让人去查脚本本身的毛病。
 		resp.Fail(c, resp.CodeBadRequest, err.Error())
 		return
@@ -461,23 +461,23 @@ func (h *Handler) ExportData(c *gin.Context) {
 		return
 	}
 	job, err := h.Svc.EnqueueExportWithSensitive(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Name, req.Database, req.IncludeSensitive)
-	if err == service.ErrExportPathUnset {
+	if errors.Is(err, service.ErrExportPathUnset) {
 		resp.Fail(c, resp.CodeExportPathUnset, "请先在【系统设置 · 网关】配置数据导出保存路径")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权访问该数据库")
 		return
 	}
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
-	if err == service.ErrNoDatabase {
+	if errors.Is(err, service.ErrNoDatabase) {
 		resp.Fail(c, resp.CodeBadRequest, "请选择目标数据库(该连接未配置默认库)")
 		return
 	}
-	if err == service.ErrExportNotReadOnly {
+	if errors.Is(err, service.ErrExportNotReadOnly) {
 		resp.Fail(c, resp.CodeForbidden, "数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流")
 		return
 	}
@@ -685,11 +685,11 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		r, err := h.Svc.Exec(ctx, u, msg.ConnectionID, msg.SQL, msg.Reason, msg.MfaCode, msg.Database)
 		setCancel(nil)
 		cancel()
-		if err == service.ErrForbidden {
+		if errors.Is(err, service.ErrForbidden) {
 			send(gin.H{"type": "error", "message": "命令被拒绝:能力矩阵禁止"})
 			continue
 		}
-		if err == service.ErrMFARequired {
+		if errors.Is(err, service.ErrMFARequired) {
 			send(gin.H{"type": "mfa_required", "message": "生产操作需要 MFA 二次验证"})
 			continue
 		}
@@ -723,11 +723,11 @@ func (h *Handler) TranscriptExport(c *gin.Context) {
 		return
 	}
 	err := h.Svc.RecordTranscriptExport(middleware.CurrentUser(c), req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权访问该实例")
 		return
 	}

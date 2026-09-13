@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/dto"
@@ -79,10 +80,10 @@ func (h *Handler) DeleteExecWindow(c *gin.Context) {
 // respondWindowErr 把"定义写不通"和"东西不存在"分开报 —— 前者要人改表单,后者要人
 // 换目标,笼统一句"操作失败"两种都救不了。
 func respondWindowErr(c *gin.Context, err error) {
-	switch err {
-	case service.ErrWindowInvalid:
+	switch {
+	case errors.Is(err, service.ErrWindowInvalid):
 		resp.Fail(c, resp.CodeBadRequest, "窗口定义无效:检查实例/库名、时间段与时区")
-	case service.ErrNotFound:
+	case errors.Is(err, service.ErrNotFound):
 		resp.Fail(c, resp.CodeNotFound, "窗口或目标实例不存在")
 	default:
 		resp.Fail(c, resp.CodeInternalError, "操作失败")
