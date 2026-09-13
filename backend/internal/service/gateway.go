@@ -537,8 +537,13 @@ func (s *Services) approverPool() []model.User {
 	return nil
 }
 
-// Approve / Reject act on an approval; on approval the gateway executes the
-// command and returns the execution result (output + rows).
+// Approve / Reject act on an approval.
+//
+// 通过**不执行**(ADR 0010):批准授权的是「这条命令可以跑」,不是「现在就跑」。命令由
+// 发起人(或任何够得到那台实例的同事)之后自己执行,走 ExecuteApproved。
+//
+// 返回值仍是 *dto.ExecResp,因为升级单那一路的执行归流水线所有、会带回结果 —— 普通
+// 工单这条路返回的是一个空壳。
 func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*dto.ExecResp, error) {
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
@@ -922,6 +927,9 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	// Validate the PROD step-up ONCE for the whole script — a single TOTP code
 	// covers the batch; per-statement checks would demand (and consume) a code on
 	// every line and always fail for MFA users (R18).
+	//
+	// 扫描按**目标实例的分层**判,不是按某个固定的基准镜头(ADR 0014)。执行这一路同样 ——
+	// 每条语句由 execJudged 按目标分层重判。
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return 0, err
 	}

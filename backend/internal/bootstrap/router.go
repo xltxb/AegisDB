@@ -162,7 +162,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/projects", h.ListProjects)
 		a.POST("/projects", menu("project"), admin, h.CreateProject)
 		a.PATCH("/projects/:id", menu("project"), admin, h.UpdateProject)
-		a.DELETE("/projects/:id", menu("project"), admin, h.DeleteProject)               // distinct connection tags (for pickers)
+		a.DELETE("/projects/:id", menu("project"), admin, h.DeleteProject)
 		a.POST("/connections", menu("db"), admin, h.CreateConnection)
 		a.PUT("/connections/:id", menu("db"), admin, h.UpdateConnection)
 		a.POST("/connections/:id/test", menu("db"), admin, h.TestConnection)
