@@ -190,7 +190,7 @@ func (s *Services) failAsync(id int64, msg string) {
 // asyncExecTimeout is the per-job execution ceiling (default 90 min — covers the
 // 30–60min procedures this feature targets, with margin).
 func (s *Services) asyncExecTimeout() time.Duration {
-	sec := s.settingInt("gateway.asyncExecTimeout", 5400)
+	sec := s.Repo.SettingInt("gateway.asyncExecTimeout", 5400)
 	if sec < 1 {
 		sec = 5400
 	}

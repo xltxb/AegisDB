@@ -2,7 +2,6 @@
 package middleware
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net"
 	"net/http"
@@ -143,7 +142,7 @@ func MenuGuard(repo *repository.Repo, key string) gin.HandlerFunc {
 // themselves out locally. Disabled (default) → pass-through.
 func IPAllowlist(repo *repository.Repo) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if !settingBool(repo, "security.ipAllowEnabled", false) {
+		if !repo.SettingBool("security.ipAllowEnabled", false) {
 			c.Next()
 			return
 		}
@@ -157,7 +156,7 @@ func IPAllowlist(repo *repository.Repo) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		list := settingStr(repo, "security.ipAllowlist", "")
+		list := repo.SettingString("security.ipAllowlist", "")
 		for _, entry := range splitCIDRs(list) {
 			if ipMatches(entry, ip) {
 				c.Next()
@@ -186,32 +185,6 @@ func splitCIDRs(s string) []string {
 		}
 	}
 	return out
-}
-
-// settingStr / settingBool read a JSON-encoded setting straight from the repo
-// (middleware has no service dependency).
-func settingStr(repo *repository.Repo, key, def string) string {
-	v, err := repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var s string
-	if json.Unmarshal([]byte(v), &s) == nil {
-		return s
-	}
-	return strings.Trim(v, "\"")
-}
-
-func settingBool(repo *repository.Repo, key string, def bool) bool {
-	v, err := repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var b bool
-	if json.Unmarshal([]byte(v), &b) == nil {
-		return b
-	}
-	return def
 }
 
 // Recovery converts panics into a 500 envelope.

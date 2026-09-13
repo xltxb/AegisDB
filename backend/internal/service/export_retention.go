@@ -45,7 +45,7 @@ var exportPartRe = regexp.MustCompile(`-part\d{2,}\.zip$`)
 
 // ExportRetentionDays is the configured retention in days (0 = keep forever).
 func (s *Services) ExportRetentionDays() int {
-	d := s.settingInt("export.retentionDays", defaultExportRetentionDays)
+	d := s.Repo.SettingInt("export.retentionDays", defaultExportRetentionDays)
 	if d < 0 {
 		return 0 // a negative retention is not "delete everything"; it is a typo
 	}

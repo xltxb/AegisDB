@@ -24,19 +24,19 @@ type extApprovalConfig struct {
 }
 
 func (s *Services) extApprovalConfig() extApprovalConfig {
-	base := strings.TrimRight(strings.TrimSpace(s.settingString("approval.external.callbackBaseURL", "")), "/")
+	base := strings.TrimRight(strings.TrimSpace(s.Repo.SettingString("approval.external.callbackBaseURL", "")), "/")
 	cb := ""
 	if base != "" {
 		cb = base + "/api/v1/approvals/lark/callback"
 	}
 	return extApprovalConfig{
-		enabled:        s.settingBool("approval.external.enabled", false),
-		baseURL:        strings.TrimRight(strings.TrimSpace(s.settingString("approval.external.baseURL", "")), "/"),
+		enabled:        s.Repo.SettingBool("approval.external.enabled", false),
+		baseURL:        strings.TrimRight(strings.TrimSpace(s.Repo.SettingString("approval.external.baseURL", "")), "/"),
 		token:          s.decryptSetting("approval.external.token"),
-		aiGroup:        s.settingString("approval.external.aiGroup", ""),
+		aiGroup:        s.Repo.SettingString("approval.external.aiGroup", ""),
 		callbackURL:    cb,
 		callbackSecret: s.decryptSetting("approval.external.callbackSecret"),
-		allowIPs:       s.settingString("approval.external.callbackAllowIPs", ""),
+		allowIPs:       s.Repo.SettingString("approval.external.callbackAllowIPs", ""),
 	}
 }
 
@@ -44,7 +44,7 @@ func (s *Services) extApprovalConfig() extApprovalConfig {
 // encrypted at rest via crypto.EncryptSecret on save). DecryptSecret returns
 // empty/legacy-plaintext values unchanged, so a blank setting is safe.
 func (s *Services) decryptSetting(key string) string {
-	raw := s.settingString(key, "")
+	raw := s.Repo.SettingString(key, "")
 	if raw == "" {
 		return ""
 	}
@@ -169,7 +169,7 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	}
 	// SoD net: if every approver is the initiator themselves, honour
 	// approval.allowSelfApprove (default off) → block the self-approval.
-	if approved && s.approversAreInitiator(cb.Approver, ap) && !s.settingBool("approval.allowSelfApprove", false) {
+	if approved && s.approversAreInitiator(cb.Approver, ap) && !s.Repo.SettingBool("approval.allowSelfApprove", false) {
 		slog.Warn("external self-approval blocked", "apNo", ap.ApNo, "approver", cb.Approver)
 		approved = false
 	}
