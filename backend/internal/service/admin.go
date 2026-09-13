@@ -456,8 +456,14 @@ var validPolicies = map[string]bool{"strict": true, "approve-1": true, "audit-on
 //
 // What changed is only where the accepted set comes from. It is now tbl_environment,
 // and the check is s.connEnvMeta: an environment resolves to its tier or the
-// write is refused. A typo like "uat" still cannot be stored, and an environment
-// can only be created by binding it to a tier that already owns rules.
+// write is refused. 一个解析不到分层的标签(打错的名字、早已删掉的环境)照样存不进去,
+// 而新环境只能通过绑到一个**已经拥有规则**的分层来创建。
+//
+// 这里原先拿 "uat" 当打错名字的例子 —— 那句话写在 uat 成为内置分层之前。它现在是
+// 出厂就有的五个分层之一(seed.go 的 builtinTiers),而且所有安装路径下都有同名环境:
+// 全新库由 backfillEnvTiers 建,老库由 correctBuiltinTiers 补(「Create it, give it an
+// environment, and clone its rules」)。举一个其实合法的值当反例,只会让下一个读它的
+// 人以为 uat 存不进去。
 
 // SetConnectionPolicy updates a connection's gateway policy (strict | approve-1 |
 // audit-only), rejecting an unknown value.
