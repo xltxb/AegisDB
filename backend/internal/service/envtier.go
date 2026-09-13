@@ -28,10 +28,10 @@ import (
 // the message because the console shows it verbatim to the operator.
 var (
 	ErrTierInUse         = fmt.Errorf("仍有环境绑定该分层标签,请先迁移或删除这些环境")
-	ErrTierIsScanBase    = fmt.Errorf("该分层标签是脚本扫描基准,请先把基准转移到其他标签")
+	ErrTierIsScanBase    = fmt.Errorf("该分层标签是基准分层,请先把基准转移到其他标签")
 	ErrLastTier          = fmt.Errorf("至少保留一个分层标签")
 	ErrLastEnvironment   = fmt.Errorf("至少保留一个环境")
-	ErrNoScanBaseline    = fmt.Errorf("必须有且仅有一个分层标签作为脚本扫描基准")
+	ErrNoScanBaseline    = fmt.Errorf("必须有且仅有一个分层标签作为基准分层")
 	ErrEnvMoveTargetSame = fmt.Errorf("迁移目标不能是被删除的环境本身")
 )
 
