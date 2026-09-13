@@ -181,8 +181,14 @@ func (s *Services) CheckSQL(u *model.User, connID int64, dialect, sql string) (*
 		dialect = review.DialectFor(conn.Engine)
 		instance = conn.Name
 	}
-	if dialect == "" || dialect == review.DialectAll {
-		dialect = review.DialectGeneric
+	// 方言名认不出就明说,别静默按 generic 审完回个"通过"。
+	//
+	// 不指定实例时这个值直接来自调用方(开放接口表单里那一格)。审查在这里降级是最坏
+	// 的一种:少跑的正是**针对那个引擎**的规则,而报告回的还是他给的那个方言名 ——
+	// 他以为自己按 MySQL 审过了。大小写与空白由 NormalizeDialect 收住,不算错。
+	if !review.KnownDialect(dialect) {
+		return nil, fmt.Errorf("%w:认不出方言 %q,可用:%s", ErrBadRequest, dialect,
+			strings.Join(review.Dialects, " / "))
 	}
 	res := review.Check(dialect, sql, s.Repo.ReviewRules())
 	return &dto.ReviewCheckResp{Instance: instance, Result: res}, nil
