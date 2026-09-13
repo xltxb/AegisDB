@@ -285,13 +285,8 @@ func (s *Services) Login(email, password, mfaCode string) (string, time.Time, *m
 			return "", time.Time{}, nil, ErrMFAInvalid
 		}
 	}
-	role, _ := s.Repo.GetRole(u.RoleID)
-	roleCode := ""
-	if role != nil {
-		roleCode = role.Code
-	}
 	// Session & Security · Session TTL: issue the token with the configured lifetime.
-	token, exp, err := s.JWT.IssueTTL(u.ID, u.RoleID, roleCode, u.Name, u.TokenVersion, s.SessionTTL())
+	token, exp, err := s.JWT.IssueTTL(u.ID, u.Name, u.TokenVersion, s.SessionTTL())
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}

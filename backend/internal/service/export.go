@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -339,8 +338,6 @@ func (s *Services) runExportJob(id int64) {
 			return
 		}
 	}
-	// simulate real export latency so parallel jobs are observable in the UI
-	time.Sleep(time.Duration(700+rand.Intn(1600)) * time.Millisecond)
 	files, password, rows, size, err := s.produceExport(u, conn, job.SQL, job.Name, job.IncludeSensitive)
 	if err != nil {
 		s.failExport(id, err.Error())
