@@ -2,8 +2,8 @@ package bootstrap
 
 import (
 	"encoding/json"
-	"strings"
 	"net/http"
+	"strings"
 	"testing"
 
 	"velagateway/pkg/resp"
@@ -28,7 +28,7 @@ func TestExport_RejectsNonReadOnlySQL(t *testing.T) {
 		"DROP TABLE orders",
 		"TRUNCATE TABLE sessions",
 		"GRANT ALL ON *.* TO 'x'@'%'",
-		"SELECT 1; DROP TABLE orders",                       // stacked
+		"SELECT 1; DROP TABLE orders",                           // stacked
 		"WITH d AS (DELETE FROM y RETURNING *) SELECT * FROM d", // data-modifying CTE
 	}
 	for _, sql := range blocked {

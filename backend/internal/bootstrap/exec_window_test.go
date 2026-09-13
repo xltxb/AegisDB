@@ -144,9 +144,9 @@ func TestExecWindow_RejectsUnsoundDefinitions(t *testing.T) {
 	base := map[string]any{"name": "x", "enabled": true, "connectionId": prod, "database": "d"}
 
 	bad := []map[string]any{
-		{"kind": "recurring", "timezone": "Mars/Olympus", "startMin": 0, "endMin": 60}, // 认不出的时区
-		{"kind": "recurring", "timezone": "Asia/Shanghai", "startMin": 120, "endMin": 120}, // 起止相同
-		{"kind": "recurring", "timezone": "Asia/Shanghai", "startMin": 0, "endMin": 2000},  // 超出一天
+		{"kind": "recurring", "timezone": "Mars/Olympus", "startMin": 0, "endMin": 60},                   // 认不出的时区
+		{"kind": "recurring", "timezone": "Asia/Shanghai", "startMin": 120, "endMin": 120},               // 起止相同
+		{"kind": "recurring", "timezone": "Asia/Shanghai", "startMin": 0, "endMin": 2000},                // 超出一天
 		{"kind": "recurring", "timezone": "Asia/Shanghai", "startMin": 0, "endMin": 60, "weekdays": "8"}, // 没有第八天
 		{"kind": "once"}, // 一次性但没给起止
 		{"kind": "whenever", "timezone": "Asia/Shanghai"}, // 不认识的模型

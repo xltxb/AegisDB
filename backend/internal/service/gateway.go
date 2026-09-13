@@ -537,7 +537,7 @@ func (s *Services) approverPool() []model.User {
 			return decidableApprovers(members)
 		}
 	}
-	if admin, err := s.Repo.GetRoleByCode("admin"); err == nil {
+	if admin, err := s.Repo.GetRoleByCode(model.RoleAdmin); err == nil {
 		members, _ := s.Repo.MembersOfRole(admin.ID)
 		return decidableApprovers(members)
 	}

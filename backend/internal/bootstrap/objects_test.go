@@ -2,8 +2,8 @@ package bootstrap
 
 import (
 	"database/sql"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"path/filepath"

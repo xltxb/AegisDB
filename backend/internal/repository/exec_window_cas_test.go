@@ -33,11 +33,11 @@ func newWindowDB(t *testing.T) *Repo {
 // 「先读窗口、比对 ApprovalID、再写决策」这个顺序里有一道缝,而它正好能放进一次
 // 改窗口:
 //
-//	 ① 审批人认领了旧单 → 旧单 approved
-//	 ② applyWindowDecision 读窗口,此刻窗口还指着旧单 → 比对通过
-//	 ③ 另一个人改窗口 → 窗口回到 pending 并链上新单;作废旧单失败(它已经 approved)
-//	 ④ ② 那条线程继续往下写:只按 `id + status=pending` 更新 —— 而改后的窗口正是
-//	    pending,于是**改后的定义被旧单上的那个签字批准了**
+//	① 审批人认领了旧单 → 旧单 approved
+//	② applyWindowDecision 读窗口,此刻窗口还指着旧单 → 比对通过
+//	③ 另一个人改窗口 → 窗口回到 pending 并链上新单;作废旧单失败(它已经 approved)
+//	④ ② 那条线程继续往下写:只按 `id + status=pending` 更新 —— 而改后的窗口正是
+//	   pending,于是**改后的定义被旧单上的那个签字批准了**
 //
 // 这正是 #2 要堵的那件事从另一条路钻回来。读-then-写挡不住它,只有把 approval_id
 // 放进同一条 UPDATE 的 WHERE 里才挡得住:谁的 RowsAffected 是 1 谁赢,由数据库裁。

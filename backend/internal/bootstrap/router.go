@@ -95,7 +95,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	{
 		a.POST("/auth/logout", h.Logout)
 		a.GET("/auth/me", h.Me)
-		a.GET("/gateway/stats", h.GatewayStats) // live gateway latency (no menu gate)
+		a.GET("/gateway/stats", h.GatewayStats)   // live gateway latency (no menu gate)
 		a.GET("/approval-chain", h.ApprovalChain) // default chain for terminal/inspector
 
 		// MFA (TOTP) enrollment for the current user
@@ -106,8 +106,6 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// notifications — every authenticated user has an inbox (no menu gate)
 		a.GET("/notifications", h.ListNotifications)
 		a.POST("/notifications/read", h.MarkNotificationsRead)
-
-
 
 		// terminal
 		a.POST("/risk/check", menu("terminal"), h.RiskCheck)
@@ -226,9 +224,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)
 		a.POST("/users/:id/mfa/reset", menu("perms"), admin, h.ResetUserMFA)
 		a.POST("/users/:id/mfa/bind", menu("perms"), admin, h.BindUserMFA)
-			// Per-user data-access scope (overrides the role scope; see model.UserTag)
-			a.GET("/users/:id/tags", menu("perms"), h.UserTags)
-			a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)
+		// Per-user data-access scope (overrides the role scope; see model.UserTag)
+		a.GET("/users/:id/tags", menu("perms"), h.UserTags)
+		a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)
 
 		// risk command dictionary — read is available to terminal operators (risk
 		// inspector needs it); edits are rules-menu + admin-only

@@ -130,7 +130,6 @@ func (r *Repo) SeedSQLReviewRules() (int, error) {
 	return n, nil
 }
 
-
 // pruneOrphanBuiltins removes builtin rows whose code no longer ships — a rule
 // the standard dropped. Custom rules are never touched: those belong to the
 // operator, not to the shipped catalog.

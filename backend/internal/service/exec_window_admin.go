@@ -114,12 +114,7 @@ func (s *Services) canManageWindow(actor *model.User, w *model.ExecWindow) bool 
 	if w.CreatedBy == actor.ID {
 		return true
 	}
-	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(actor)) {
-		if code == "admin" {
-			return true
-		}
-	}
-	return false
+	return s.Repo.IsPlatformAdmin(actor)
 }
 
 func (s *Services) DeleteExecWindow(actor *model.User, id int64) error {

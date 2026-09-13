@@ -285,9 +285,9 @@ var wrongBuiltinLayers = map[string][]string{
 //
 // correctBuiltinTiers 做两件事,而它们的性质完全不同:
 //
-//   · **纠正我们自己写错的显示名** —— 幂等,每次都可以跑,它只改仍然叫着错名字的那几行
-//   · **补上一个从未存在过的内置分层** —— **一次性**的数据修正(2026-08-06 的五分层
-//     修正给 uat 补位),做过就不该再做
+//	· **纠正我们自己写错的显示名** —— 幂等,每次都可以跑,它只改仍然叫着错名字的那几行
+//	· **补上一个从未存在过的内置分层** —— **一次性**的数据修正(2026-08-06 的五分层
+//	  修正给 uat 补位),做过就不该再做
 //
 // 逐行去补的后果是:管理员删掉 uat(因为这套系统里根本没有演练环境),运维执行一次
 // `server migrate`,它连同环境和一整套规则行原样回来。他会以为是自己没删干净,再删一次,
@@ -533,7 +533,7 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 
 	// ---- Roles ----
 	roles := []model.Role{
-		{Code: "admin", Name: "平台管理员", Layer: "L0 · 全局", Icon: "crown", CanApprove: true, DefaultConnRole: "dba_l2", Description: "管理连接配置、规则、用户与系统设置;可审批高危命令。"},
+		{Code: model.RoleAdmin, Name: "平台管理员", Layer: "L0 · 全局", Icon: "crown", CanApprove: true, DefaultConnRole: "dba_l2", Description: "管理连接配置、规则、用户与系统设置;可审批高危命令。"},
 		{Code: "owner", Name: "DBA 负责人", Layer: "L1 · 终审", Icon: "shield", CanApprove: true, DefaultConnRole: "dba_l2", Description: "高危命令审批链终审节点。"},
 		{Code: "l2", Name: "DBA L2", Layer: "L2 · 执行(需审批)", Icon: "user-cog", CanApprove: false, DefaultConnRole: "dba_l2", Description: "可在 PROD 执行常规操作,高危命令需走审批。"},
 		{Code: "ro", Name: "研发只读", Layer: "L3 · 只读", Icon: "code", CanApprove: false, DefaultConnRole: "readonly", Description: "仅 Web 命令行查询与审计日志。"},
@@ -655,8 +655,8 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		Events: "exec", RetryMax: cfg.Webhook.RetryMax, Enabled: cfg.Webhook.Enabled,
 	})
 	settings := map[string]any{
-		"gateway.defaultPolicy":   cfg.Gateway.DefaultPolicy,
-		"gateway.execTimeout":     cfg.Gateway.ExecTimeoutSeconds,
+		"gateway.defaultPolicy":    cfg.Gateway.DefaultPolicy,
+		"gateway.execTimeout":      cfg.Gateway.ExecTimeoutSeconds,
 		"gateway.asyncExecTimeout": 5400, // 后台异步执行上限(秒),默认 90min
 
 		// 单个导出任务的行数/原始字节上限(0=不限;缺省时代码内置同样的默认值,
@@ -678,19 +678,19 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.requireMFA":     true,
 		// Off by default: turning it on blocks every PROD operation for anyone not
 		// yet enrolled, so it is an explicit rollout decision.
-		"security.mfaMandatory":   false,
+		"security.mfaMandatory": false,
 		// One PROD step-up vouches for a session on that instance for this long.
 		"security.mfaGraceMinutes": 30,
-		"security.ipAllowlist":    "",
-		"notify.larkChannel":      "",
+		"security.ipAllowlist":     "",
+		"notify.larkChannel":       "",
 		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/uat 小范围验证。
 		// token / callbackSecret 为敏感值:保存时加密落库、GetSettings 不回传明文。
-		"approval.external.enabled":         false,
-		"approval.external.baseURL":         "",
-		"approval.external.token":           "",
-		"approval.external.aiGroup":         "",
-		"approval.external.callbackBaseURL": "",
-		"approval.external.callbackSecret":  "",
+		"approval.external.enabled":          false,
+		"approval.external.baseURL":          "",
+		"approval.external.token":            "",
+		"approval.external.aiGroup":          "",
+		"approval.external.callbackBaseURL":  "",
+		"approval.external.callbackSecret":   "",
 		"approval.external.callbackAllowIPs": "",
 	}
 	for k, v := range settings {
@@ -769,4 +769,3 @@ func seedSchema(repo *repository.Repo) error {
 	}
 	return nil
 }
-

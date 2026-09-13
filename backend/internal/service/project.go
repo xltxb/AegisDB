@@ -34,9 +34,9 @@ func (s *Services) ListProjects() []dto.ProjectView {
 	for _, p := range ps {
 		out = append(out, dto.ProjectView{
 			ID: p.ID, Name: p.Name, Owner: p.Owner, Description: p.Description,
-			Databases:   s.Repo.CountDatabasesInProject(p.ID),
-			Releases:    s.Repo.CountReleasesInProject(p.ID),
-			CreatedAt:   p.CreatedAt,
+			Databases: s.Repo.CountDatabasesInProject(p.ID),
+			Releases:  s.Repo.CountReleasesInProject(p.ID),
+			CreatedAt: p.CreatedAt,
 		})
 	}
 	return out

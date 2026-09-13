@@ -3,9 +3,9 @@ package bootstrap
 import (
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"bytes"
 	"encoding/json"
+	"github.com/gin-gonic/gin"
 	"io"
 	"net/http"
 	"net/http/httptest"

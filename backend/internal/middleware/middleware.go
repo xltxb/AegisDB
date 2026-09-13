@@ -111,16 +111,8 @@ func AdminOnly(repo *repository.Repo) gin.HandlerFunc {
 			resp.Abort(c, resp.CodeUnauthorized, "未登录")
 			return
 		}
-		// Any role the user holds granting the admin code satisfies the guard
-		// (union semantics — a user may be admin via a secondary role).
-		isAdmin := false
-		for _, code := range repo.RoleCodesForIDs(repo.EffectiveRoleIDs(u)) {
-			if code == "admin" {
-				isAdmin = true
-				break
-			}
-		}
-		if !isAdmin {
+		// 并集语义(次要角色是 admin 也算)在 Repo.IsPlatformAdmin 里,一处说了算。
+		if !repo.IsPlatformAdmin(u) {
 			resp.Abort(c, resp.CodeForbidden, "仅平台管理员可执行此操作")
 			return
 		}

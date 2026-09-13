@@ -66,7 +66,7 @@ func TestSeedBackfillsProvenanceOntoRulesThatPredateIt(t *testing.T) {
 		Code: withSpec.Code, Name: withSpec.Name, Dialect: withSpec.Dialect,
 		Category: withSpec.Category, Level: model.ReviewWarn, // 运维把它降过级
 		Kind: model.ReviewKindBuiltin, Enabled: false, // 而且停用了
-		Params: `{"max":99}`, // 还改过参数
+		Params:    `{"max":99}`, // 还改过参数
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}).Error; err != nil {
 		t.Fatalf("插入旧行: %v", err)

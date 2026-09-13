@@ -87,10 +87,8 @@ func (s *Services) canCancel(actor *model.User, ap *model.Approval) error {
 	if ap.InitiatorID == actor.ID {
 		return nil
 	}
-	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(actor)) {
-		if code == "admin" {
-			return nil
-		}
+	if s.Repo.IsPlatformAdmin(actor) {
+		return nil
 	}
 	// 审批人走到这里是对的:他手里的动作是驳回,不是让这张单无声消失。
 	return fmt.Errorf("只有发起人自己可以撤回;你可以驳回它")

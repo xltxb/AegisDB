@@ -820,7 +820,7 @@ func (s *Services) canSeeAllActivity(u *model.User) bool {
 	// Any of the user's roles granting oversight is enough (union semantics).
 	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(u)) {
 		switch code {
-		case "admin", "owner", "audit":
+		case model.RoleAdmin, "owner", "audit":
 			return true
 		}
 	}
@@ -1080,9 +1080,9 @@ func (s *Services) AuditRoleChange(actor *model.User, roleID int64, what string,
 // 和 AuditRoleChange 是同一类事,而且更直接。角色放宽了还要以它的名义去做一次动作,
 // 这三样是把闸门本身挪了:
 //
-//   · 把 DROP 从字典里删掉,生产上的 DROP 从此不再需要审批
-//   · 把 approval.timeoutMinutes 调到 1,所有待审工单一分钟后自动处置
-//   · 把 webhook 指向别处,审计事件从此推给另一个人
+//	· 把 DROP 从字典里删掉,生产上的 DROP 从此不再需要审批
+//	· 把 approval.timeoutMinutes 调到 1,所有待审工单一分钟后自动处置
+//	· 把 webhook 指向别处,审计事件从此推给另一个人
 //
 // 这三件事做完之后,链上原本一个字都没有。事后去查「为什么那天 DROP 没走审批」,看到
 // 的是一条合规的执行记录 —— 而让它合规的那次改动,不在任何地方。
