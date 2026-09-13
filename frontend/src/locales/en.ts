@@ -534,6 +534,7 @@ export const en: Dict = {
   srName: 'Name',
   srCategory: 'Category',
   srLevel: 'Level',
+  srParamsHint: 'pattern regex · mode: forbid (a match violates, default) / require (its ABSENCE does) · scope: raw matches the original text, comments included',
   srParams: 'Params (JSON)',
   srPattern: 'Pattern',
   srMessage: 'Message',

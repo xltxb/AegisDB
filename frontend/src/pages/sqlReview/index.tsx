@@ -467,6 +467,8 @@ function RuleModal({
         <div className="fld">
           <label>{t('srParams')}</label>
           <textarea value={f.params} spellCheck={false} onChange={(e) => set({ params: e.target.value })} />
+          {/* 这是个自由 JSON 文本域,不写清楚有哪些键,旋钮就等于不存在。 */}
+          <div className="hint">{t('srParamsHint')}</div>
         </div>
       ) : (
         <div className="fld">

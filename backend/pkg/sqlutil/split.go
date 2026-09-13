@@ -92,13 +92,60 @@ func (p *pending) Blank() bool {
 }
 
 func SplitStatements(sql string) []string {
-	var out []string
+	sts := SplitStatementsWithSpans(sql)
+	if len(sts) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(sts))
+	for _, st := range sts {
+		out = append(out, st.Text)
+	}
+	return out
+}
+
+// Statement 是拆出来的一条语句,外加它在原文里的位置。
+//
+// Text 与 SplitStatements 交回的那一项逐字相同 —— 注释已抹、首尾已裁。区间给的是
+// **原文**:判定读 Text(注释不是语法,把它们留在里面只会让关键词启发式读到数据),
+// 而审查规则有时要读原文 —— 「每条 DDL 必须带 -- ticket: 注释」约束的不是 SQL 本身,
+// 是提交它的人有没有交代来由,那句话只存在于原文里。
+//
+// 前导注释算在它**下面**那条语句上:`-- ticket:1234` 写在 DROP 上面,说的就是这条
+// DROP。所以 Start 往回含到上一条语句结束之后的第一个字节。
+type Statement struct {
+	Text  string
+	Start int // 原文中的起点(含归属于它的前导注释)
+	End   int // 原文中的终点,不含
+}
+
+// Raw 交回这条语句在原文里的样子。
+func (st Statement) Raw(sql string) string {
+	if st.Start < 0 || st.End > len(sql) || st.Start > st.End {
+		return st.Text
+	}
+	return strings.TrimSpace(sql[st.Start:st.End])
+}
+
+// SplitStatementsWithSpans 是 SplitStatements,外加每条语句在原文里的位置。
+//
+// 拆分本身一个字节都没变 —— 上面那条"绝不合并"的铁律说的是**怎么拆**,这里只是把
+// 拆到哪儿也记下来。SplitStatements 现在从它派生,两者因此不可能对不上。
+func SplitStatementsWithSpans(sql string) []Statement {
+	var out []Statement
 	var b pending
 	execDepth := 0 // >0 while inside /*!ver ... */: keep the body, drop the markers
 	delim := ";"   // 当前语句分隔符;DELIMITER 指令会改它
-	flush := func() {
+	// segStart 是当前这条语句在原文里的起点。它只在真的产出一条语句时才前移 ——
+	// 一次空的 flush(只有注释或空白)不该把那几个字节丢掉,它们属于下一条语句。
+	segStart := 0
+	emit := func(text string, end int) {
+		end = absorbTrailingLineComment(sql, end)
+		out = append(out, Statement{Text: text, Start: segStart, End: end})
+		segStart = end
+	}
+	flush := func(end int) {
 		if s := strings.TrimSpace(b.String()); s != "" {
-			out = append(out, s)
+			emit(s, end)
 		}
 		b.Reset()
 	}
@@ -111,7 +158,7 @@ func SplitStatements(sql string) []string {
 		if b.Blank() && plsqlBlockKind(sql[i:]) != "" {
 			atStart := len(out) == 0 && strings.TrimSpace(sql[:i]) == ""
 			if body, next, ok := takePLSQLBlock(sql, i, atStart); ok {
-				out = append(out, body)
+				emit(body, next)
 				b.Reset()
 				i = next - 1 // the loop's i++ lands on the next byte
 				continue
@@ -123,14 +170,15 @@ func SplitStatements(sql string) []string {
 		if b.Blank() && atLineStart(sql, i) {
 			if d, next, ok := takeDelimiterDirective(sql, i); ok {
 				delim = d
-				b.Reset() // 指令本身不下发给服务器
+				b.Reset()       // 指令本身不下发给服务器
+				segStart = next // 也不算作下一条语句的原文
 				i = next - 1
 				continue
 			}
 		}
 		// 非默认分隔符时,分号不再是分隔符 —— 那正是 DELIMITER 存在的理由。
 		if delim != ";" && strings.HasPrefix(sql[i:], delim) {
-			flush()
+			flush(i + len(delim))
 			i += len(delim) - 1
 			continue
 		}
@@ -244,13 +292,36 @@ func SplitStatements(sql string) []string {
 				b.put(c) // 自定义分隔符生效时,分号属于语句体
 				break
 			}
-			flush()
+			flush(i + 1)
 		default:
 			b.put(c)
 		}
 	}
-	flush()
+	flush(len(sql))
 	return out
+}
+
+// absorbTrailingLineComment 把分号之后、同一行上的 `--` 注释并进这条语句的区间。
+//
+// 人就是这么写的:`DROP TABLE tbl_legacy; -- ticket:1234` 里那个工单号说的是刚写完
+// 的这条,不是下一条。行注释到行尾为止,所以它不可能跨到下一条语句上,这个归属是
+// 确定的。
+//
+// 块注释 `/* … */` 刻意不并:`DROP TABLE a; /* t */ DROP TABLE b;` 里那段注释夹在
+// 两条语句中间,归谁都说得通。含混的那一半留给下面那条 —— 与前导注释的归属一致,
+// 一条规则而不是两条。
+func absorbTrailingLineComment(sql string, end int) int {
+	i := end
+	for i < len(sql) && (sql[i] == ' ' || sql[i] == '\t' || sql[i] == '\r') {
+		i++
+	}
+	if i+1 >= len(sql) || sql[i] != '-' || sql[i+1] != '-' {
+		return end
+	}
+	for i < len(sql) && sql[i] != '\n' {
+		i++
+	}
+	return i
 }
 
 // atLineStart reports whether i sits at the beginning of a line (only blanks

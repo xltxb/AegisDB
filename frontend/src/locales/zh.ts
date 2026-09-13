@@ -548,6 +548,7 @@ export const zh = {
   srName: '名称',
   srCategory: '分类',
   srLevel: '级别',
+  srParamsHint: 'pattern 正则 · mode: forbid(命中即违规,默认)/ require(缺席才违规)· scope: raw 表示匹配含注释的原文',
   srParams: '参数(JSON)',
   srPattern: '正则',
   srMessage: '提示语',
