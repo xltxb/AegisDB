@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -23,11 +22,6 @@ import (
 // flow templates, same review rules, same approval chain, same execute-time
 // re-judgement, same audit chain — which is the only way this door can exist
 // without becoming the way people get around the console.
-
-// maxOpenUploadBytes bounds a multipart script. It matches the inline bound the
-// service layer enforces (15MB), so the two channels refuse at the same size
-// rather than one of them dying inside the metadata database.
-const maxOpenUploadBytes = 15 << 20
 
 // OpenCreateRelease raises a release ticket from SQL or a script file.
 //
@@ -232,32 +226,21 @@ func (h *Handler) DeleteAPIClient(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true})
 }
 
-// readOpenScriptFile reads the optional multipart `file` part under the shared
-// 15MB bound. ok=false means a refusal was already written to the response; a
-// missing file part is ("", "", true) — the part is optional on both callers.
+// readOpenScriptFile reads the optional multipart `file` part.
+//
+// 缺少 file 部分不是错误:两个调用方都允许改用内联的 sql/script 字段,所以
+// ("", "", true) 表示"没带文件,继续往下看"。真正的拒绝(超限、读不出来)由
+// readScriptUpload 写进响应,这里只把 ok=false 传出去。
 func readOpenScriptFile(c *gin.Context) (script, filename string, ok bool) {
 	fh, err := c.FormFile("file")
 	if err != nil {
 		return "", "", true // no file part — inline sql/script may still be present
 	}
-	if fh.Size > maxOpenUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
+	body, ok := readScriptUpload(c, fh)
+	if !ok {
 		return "", "", false
 	}
-	f, oerr := fh.Open()
-	if oerr != nil {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
-		return "", "", false
-	}
-	defer f.Close()
-	// io.ReadAll under an explicit cap — trusting fh.Size and sizing a buffer
-	// from it lets a lying Content-Length allocate what it likes.
-	body, rerr := io.ReadAll(io.LimitReader(f, maxOpenUploadBytes+1))
-	if rerr != nil || len(body) > maxOpenUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
-		return "", "", false
-	}
-	return string(body), fh.Filename, true
+	return body, fh.Filename, true
 }
 
 // clientName is the log label for a credential (nil-safe: an unauthenticated
