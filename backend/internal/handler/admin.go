@@ -424,9 +424,23 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		// 审批人手里的动作是驳回(见 service.canCancel 的注释)。
 		CanCancel bool `json:"canCancel"`
 	}
+	// 审批链一次取完,不在循环里逐张查:这一页最多 500 张单,而 pageSize 由调用方给 ——
+	// 逐张查就是一次翻页最多 501 次查询。这条路径是登录后第一屏(待办与我的申请都读它),
+	// 在 MySQL 上那是实打实的几百次网络往返,而且随数据量增长、不报任何错,页面只是
+	// 越来越慢。
+	ids := make([]int64, 0, len(aps))
+	for _, a := range aps {
+		ids = append(ids, a.ID)
+	}
+	stepsByAp, serr := h.Repo.StepsOfMany(ids)
+	if serr != nil {
+		slog.Error("load approval steps failed", "err", serr)
+		stepsByAp = map[int64][]model.ApprovalStep{}
+	}
+
 	out := []apView{}
 	for _, a := range aps {
-		steps, _ := h.Repo.StepsOf(a.ID)
+		steps := stepsByAp[a.ID]
 		// Mask credentials for display; the real command stays in the DB for
 		// execution after approval (a is a copy, so this doesn't touch storage).
 		a.Command = sqlutil.RedactSecrets(a.Command)
