@@ -62,21 +62,27 @@ func main() {
 	}
 
 	repo := repository.New(db)
-	if cfg.Database.Seed {
-		if err := bootstrap.Seed(repo, cfg); err != nil {
-			slog.Error("seed failed", "err", err)
-		}
-	}
 
 	// Initialize the at-rest secret key (encrypts stored DB-connection passwords)
 	// before any connection is created/opened. Prefer a dedicated VELA_SECRET_KEY;
 	// falling back to the JWT secret couples the two, so rotating VELA_JWT_SECRET
 	// would make every stored ciphertext undecryptable (A2).
+	//
+	// **在 Seed 之前**。注释一直写着「在任何连接被创建或打开之前」,而 Seed 排在它前面 ——
+	// 今天没炸只是因为种子不建带口令的连接。哪天有人往种子里加一台带凭据的实例,
+	// EncryptSecret 会返回 "secret key not initialized",而那台实例会以**明文口令**
+	// 或者干脆建不出来的形式出现,取决于调用方怎么处理那个 error。
 	secretKey, fellBack := cfg.SecretKeyResolved()
 	if fellBack {
 		slog.Warn("VELA_SECRET_KEY 未设置，回落使用 JWT 密钥派生连接口令加密密钥；轮换 VELA_JWT_SECRET 将导致已存储的连接口令无法解密。建议设置独立的 VELA_SECRET_KEY。")
 	}
 	crypto.SetSecretKey(secretKey)
+
+	if cfg.Database.Seed {
+		if err := bootstrap.Seed(repo, cfg); err != nil {
+			slog.Error("seed failed", "err", err)
+		}
+	}
 	// The webhook SSRF guard blocks private/loopback targets. Dev relaxes it by
 	// default (on-host receivers); prod keeps it on unless webhook.allow_private
 	// (or VELA_WEBHOOK_ALLOW_PRIVATE) explicitly opts in for a trusted internal target.
