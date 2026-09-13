@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query'
 import { http, ok, type Envelope } from '@/api/shared'
 import { auditQS } from '@/api/shared'
-import type { AuditPage, AuditQuery } from '@/types'
+import type { AuditPage, AuditQuery, ChainReport } from '@/types'
 
 export const auditApi = {
   audit: (q: AuditQuery) => http.get<any, Envelope<AuditPage>>(`/audit?${auditQS(q)}`).then(ok),
@@ -19,6 +19,14 @@ export const auditApi = {
    */
   exportCsv: (q: AuditQuery) =>
     http.get<any, Blob>(`/audit/export?${auditQS(q)}`, { responseType: 'blob' }),
+
+  /**
+   * 从创世行重算整条链。
+   *
+   * 不带过滤条件 —— 链是整条的,只校验"当前这一页"毫无意义:断裂恰恰最可能落在
+   * 你没看的那一段。
+   */
+  verifyChain: () => http.get<any, Envelope<ChainReport>>('/audit/verify').then(ok),
 }
 
 /**

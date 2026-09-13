@@ -1279,6 +1279,22 @@ func (r *Repo) LastAuditHash() string {
 	return a.Hash
 }
 
+// AuditChainRows 按 id 顺序取出整条审计链,供读侧校验重算。
+//
+// 顺序是 id,不是 occurred_at:链是按写入顺序串起来的,而 occurred_at 可以有并列
+// (同一毫秒两条),按它排会把顺序弄乱,校验就会在没人动过的链上报断裂。
+//
+// 刻意不分页。校验的意义在于"从创世行一路算到链尾",少算任何一段,接口对不上的那行
+// 就成了假警报;而链断在哪里,恰恰是分页边界最可能被误判的地方。审计表会很大,所以这
+// 是一次显式的整表扫描——它由人按下"校验"才发生,不在任何请求的主路上。
+func (r *Repo) AuditChainRows() ([]model.AuditLog, error) {
+	var rows []model.AuditLog
+	if err := r.db.Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *Repo) InsertAudit(a *model.AuditLog) error { return r.db.Create(a).Error }
 
 // ListAudit lists audit rows; actorID > 0 restricts to that actor's own commands.

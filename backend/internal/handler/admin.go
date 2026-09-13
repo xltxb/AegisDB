@@ -781,6 +781,20 @@ func (h *Handler) ExportAudit(c *gin.Context) {
 	c.Data(200, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, []byte(csv)...))
 }
 
+// VerifyAuditChain godoc
+// @Summary 从创世行重算整条审计链,报告第一处对不上的行
+// @Router  /audit/verify [get]
+func (h *Handler) VerifyAuditChain(c *gin.Context) {
+	rep, err := h.Svc.VerifyAuditChain(middleware.CurrentUser(c))
+	if err != nil {
+		resp.Fail(c, errCode(err), err.Error())
+		return
+	}
+	// 链断了不是**这次请求**失败 —— 请求成功地得到了一个坏消息。把它报成错误码,
+	// 界面就只能显示"操作失败",而真正要说的那句话("第 8231 行被改过")丢了。
+	resp.OK(c, rep)
+}
+
 // ---------------------------------------------------------------- Settings / Webhook
 
 // isSecretKey reports whether a setting key holds a sensitive value that must

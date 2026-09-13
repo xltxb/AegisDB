@@ -39,3 +39,21 @@ export function useAuditExport() {
     onError: (e: Error) => notify(e.message || t('exportFailed'), 'error'),
   })
 }
+
+/**
+ * 校验审计链。
+ *
+ * 是 mutation 不是 query:它要从创世行一路重算到链尾,一次显式的整表扫描,只该在人
+ * 按下按钮时发生,不该跟着进页面就跑一遍。
+ *
+ * 结果不走 toast 而是交回给页面渲染:一条"第 8231 行被改过"要能停在屏幕上让人抄下来,
+ * 而 toast 几秒就没了。
+ */
+export function useAuditVerify() {
+  const notify = useUIStore((s) => s.notify)
+  const { t } = useTranslation()
+  return useMutation({
+    mutationFn: () => auditApi.verifyChain(),
+    onError: (e: Error) => notify(e.message || t('audVerifyFailed'), 'error'),
+  })
+}

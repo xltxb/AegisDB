@@ -1,7 +1,6 @@
 package service
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -214,16 +213,12 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 			a.Database = effectiveDatabase(conn)
 			a.Env = conn.Env
 		}
-		payload, _ := json.Marshal(map[string]any{
-			"time": now.Format(time.RFC3339), "actor": actor.Name, "instance": a.Instance,
-			"database": a.Database, "command": command, "risk": risk, "result": result, "ap": apNo, "operator": operator,
-			// Part of the hash from here on: a snapshot that could be edited without
-			// breaking the chain would not be evidence of anything. Rows written
-			// before this change hashed a payload without these keys and keep their
-			// original hashes — nothing recomputes historical rows.
-			"env": a.Env, "tier": tierCode,
-		})
-		a.Hash = crypto.ChainHash(prev, payload)
+		// 进哈希的那段字节由 auditPayload 构造 —— 读侧校验用的是**同一个函数**。
+		//
+		// 双快照(env / tier)是从某次改动起进哈希的:一个改了不会破链的快照,证明不了
+		// 任何事。那次刻意没有重算历史行(重算等于把证据重新签一遍),所以老行按
+		// auditPayloadLegacy 那一版算,校验时两版都试。
+		a.Hash = crypto.ChainHash(prev, auditPayload(a))
 		if err = s.Repo.InsertAudit(a); err == nil {
 			return a
 		}
