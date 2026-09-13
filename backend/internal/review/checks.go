@@ -1,6 +1,8 @@
 package review
 
 import (
+	"velagateway/internal/gateway"
+
 	"fmt"
 	"regexp"
 	"strconv"
@@ -60,32 +62,32 @@ var registry = map[string]checker{
 	"perf.forbid.func.on.column":     chkFunctionOnColumn,
 
 	// ---- 由公司规范派生(实现见 checks_spec.go)----
-	"mysql.alter.require.algorithm":    chkAlterAlgorithm,
-	"oracle.index.require.online":      chkOracleIndexOnline,
-	"tidb.require.col.not.null":        chkColumnNotNull,
-	"tidb.forbid.timestamp":            chkTiDBTimestamp,
-	"tidb.avoid.partition":             chkTiDBPartition,
-	"tidb.table.prefix":                chkTableNaming,
-	"tidb.table.max.length":            chkIdentifierLength,
-	"dws.require.col.not.null":         chkColumnNotNull,
-	"dws.forbid.select.star":           chkSelectStar,
-	"dws.delete.use.truncate":          chkDeleteWholeTable,
-	"dws.avoid.column.type":            chkForbidColumnType,
-	"dws.require.precision":            chkDWSPrecision,
-	"dws.distribute.key.max":           chkDWSDistributeKeyCount,
-	"dws.distribute.key.type":          chkDWSDistributeKeyType,
-	"dws.replication.confirm":          chkDWSReplication,
-	"dws.partition.max":                chkDWSPartitionCount,
-	"dws.view.forbid.orderby":          chkViewOrderBy,
-	"dws.view.max.nesting":             chkViewNesting,
-	"dws.forbid.not.in.subquery":       chkNotInSubquery,
-	"dws.forbid.scalar.subquery":       chkScalarSubquery,
-	"dws.subquery.forbid.orderby":      chkSubqueryOrderBy,
-	"dws.forbid.volatile.in.subquery":  chkVolatileInSubquery,
-	"dws.forbid.with.recursive":        chkWithRecursive,
-	"dws.require.schema.qualified":     chkSchemaQualified,
-	"dws.max.join.tables":              chkJoinCount,
-	codeSQLTag:                         nil,
+	"mysql.alter.require.algorithm":   chkAlterAlgorithm,
+	"oracle.index.require.online":     chkOracleIndexOnline,
+	"tidb.require.col.not.null":       chkColumnNotNull,
+	"tidb.forbid.timestamp":           chkTiDBTimestamp,
+	"tidb.avoid.partition":            chkTiDBPartition,
+	"tidb.table.prefix":               chkTableNaming,
+	"tidb.table.max.length":           chkIdentifierLength,
+	"dws.require.col.not.null":        chkColumnNotNull,
+	"dws.forbid.select.star":          chkSelectStar,
+	"dws.delete.use.truncate":         chkDeleteWholeTable,
+	"dws.avoid.column.type":           chkForbidColumnType,
+	"dws.require.precision":           chkDWSPrecision,
+	"dws.distribute.key.max":          chkDWSDistributeKeyCount,
+	"dws.distribute.key.type":         chkDWSDistributeKeyType,
+	"dws.replication.confirm":         chkDWSReplication,
+	"dws.partition.max":               chkDWSPartitionCount,
+	"dws.view.forbid.orderby":         chkViewOrderBy,
+	"dws.view.max.nesting":            chkViewNesting,
+	"dws.forbid.not.in.subquery":      chkNotInSubquery,
+	"dws.forbid.scalar.subquery":      chkScalarSubquery,
+	"dws.subquery.forbid.orderby":     chkSubqueryOrderBy,
+	"dws.forbid.volatile.in.subquery": chkVolatileInSubquery,
+	"dws.forbid.with.recursive":       chkWithRecursive,
+	"dws.require.schema.qualified":    chkSchemaQualified,
+	"dws.max.join.tables":             chkJoinCount,
+	codeSQLTag:                        nil,
 	"dws.forbid.func.on.column":       chkFunctionOnColumn,
 
 	// ---- 新版 DWS 规范 RULE 1..62(实现见 checks_dws.go)----
@@ -114,8 +116,8 @@ var registry = map[string]checker{
 	"dws.forbid.orderby.in.aggregate":    chkDWSAggregateOrderBy,
 	"dws.forbid.query.dop":               chkDWSQueryDop,
 	"dws.prefer.join.over.exists":        chkDWSPreferJoin,
-	"naming.index.max.length":          chkIndexNameLength,
-	"security.forbid.sensitive.column": chkSensitiveColumn,
+	"naming.index.max.length":            chkIndexNameLength,
+	"security.forbid.sensitive.column":   chkSensitiveColumn,
 	// ddl.alter.merge is a SCRIPT-level rule (it compares statements to each
 	// other), handled by scriptFindings rather than by a per-statement checker.
 	codeAlterMerge: nil,
@@ -136,21 +138,39 @@ var (
 // 而 dev 出厂就是关着的 —— 那里清空一张草稿表是日常。发布不一样:它最终要落到某个
 // 受管分层上,所以无论目标那一层的开关是什么,一条无 WHERE 的变更都不该被这条流水线
 // 带过去。
-func chkRequireWhere(st *stmt, _ params, _ string) []string {
+func chkRequireWhere(st *stmt, _ params, dialect string) []string {
 	if st.verb != "UPDATE" && st.verb != "DELETE" {
 		return nil
 	}
-	if whereRe.MatchString(st.masked) {
+	if !unscoped(st, dialect) {
 		return nil
 	}
 	return []string{st.verb + " 未带 WHERE 条件,将作用于全表"}
 }
 
-func chkRequireLimit(st *stmt, _ params, _ string) []string {
+// unscoped 问的是判定引擎:这条语句作用于全表吗。
+//
+// 不在这里另写一个"找 WHERE"的正则,是因为两层给出不同答案的代价很具体。审查是人在
+// **提交之前**看的那份报告:报告说这条 UPDATE 合规,人就照着提了;真到执行时严格模式
+// 把它拦下 —— 或者更糟,目标那一层的严格模式是关着的(ADR 0013:严格模式按分层开关,
+// dev 出厂就关着),于是它就这么跑了,而报告替它背了书。
+//
+// 这不是假想的。两边抹字面量的方式本来就不一样:判定连反引号标识符的内容也抹,审查
+// 不抹(它的 masked 还要留给那些从里面取表名列名的检查用)。于是 `UPDATE `where` SET
+// a=1` —— 一条不折不扣的全表更新 —— 在审查这边被当成"带了条件"放行了,而放行它的
+// 正是那条叫「UPDATE/DELETE 必须带 WHERE」的规则。
+//
+// 这条规则刻意**不**看分层的严格模式开关,只看语句本身(见 chkRequireWhere 的说明);
+// UnscopedMutation 也正是纯文本判断,不碰分层。
+func unscoped(st *stmt, dialect string) bool {
+	return gateway.DialectFor(dialect).UnscopedMutation(st.raw)
+}
+
+func chkRequireLimit(st *stmt, _ params, dialect string) []string {
 	if st.verb != "UPDATE" && st.verb != "DELETE" {
 		return nil
 	}
-	if !whereRe.MatchString(st.masked) || limitRe.MatchString(st.masked) {
+	if unscoped(st, dialect) || limitRe.MatchString(st.masked) {
 		return nil // no WHERE at all is the require.where rule's finding, not this one
 	}
 	return []string{st.verb + " 未带 LIMIT,建议分批执行以免长事务锁表"}
@@ -831,7 +851,6 @@ func chkDWSDistributeBy(st *stmt, _ params, _ string) []string {
 	return []string{"表 " + identName(m[1]) + " 未指定 DISTRIBUTE BY,DWS 将按默认策略分布,易造成数据倾斜"}
 }
 
-
 // ---------------------------------------------------------------- Oracle
 
 var (
@@ -905,6 +924,8 @@ func chkLeadingWildcard(st *stmt, _ params, _ string) []string {
 var funcOnColRe = regexp.MustCompile(`(?i)\b(DATE|SUBSTR|SUBSTRING|LEFT|RIGHT|UPPER|LOWER|TO_CHAR|TRUNC|CAST|CONVERT|IFNULL|NVL|YEAR|MONTH|DATE_FORMAT)\s*\(\s*[A-Za-z_][A-Za-z0-9_.]*[^()]*\)\s*(=|>|<|>=|<=|<>|!=|\bLIKE\b|\bIN\b)`)
 
 func chkFunctionOnColumn(st *stmt, _ params, _ string) []string {
+	// 这里要的是 WHERE 的**位置**,好只扫它后面那一段 —— 和 unscoped 问的"这条语句
+	// 作用于全表吗"不是同一个问题,所以它留着自己的正则。
 	idx := whereRe.FindStringIndex(st.masked)
 	if idx == nil {
 		return nil

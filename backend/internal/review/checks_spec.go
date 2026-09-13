@@ -271,9 +271,11 @@ func chkWithRecursive(st *stmt, _ params, _ string) []string {
 // dml.require.where deliberately: that rule says the statement is UNSCOPED, this
 // one says what to write instead on DWS, where a full-table DELETE leaves dead
 // tuples the cluster then has to vacuum.
-func chkDeleteWholeTable(st *stmt, _ params, _ string) []string {
+func chkDeleteWholeTable(st *stmt, _ params, dialect string) []string {
 	m := deleteFromRe.FindStringSubmatch(st.upper)
-	if m == nil || whereRe.MatchString(st.upper) {
+	// "有没有条件"这个问题和 dml.require.where 问的是同一个,所以答案也要同一个 ——
+	// 见 checks.go 的 unscoped。两条规则对同一条语句给出相反的前提,报告就自相矛盾了。
+	if m == nil || !unscoped(st, dialect) {
 		return nil
 	}
 	return []string{"无条件 DELETE " + identName(m[1]) + " 会留下大量死元组,全表删除应使用 TRUNCATE"}
