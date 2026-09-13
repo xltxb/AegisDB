@@ -35,11 +35,15 @@ test('column order does not matter', () => {
 // env decides which capability levels and dictionary rules apply. An unknown one
 // is not a label — the backend refuses it, and a row that would be rejected must
 // be caught here rather than after half the sheet has been created.
+//
+// 例子刻意不用 `uat`:它曾经是这里的反例,而它早就是出厂的五个内置环境之一了。拿一个
+// 其实合法的值当「未知环境」,这条用例就既守不住它要守的东西,又会在有人给兜底白名单
+// 补上 uat 时莫名其妙地变红。
 test('an unknown environment is rejected with its line number', () => {
   const { rows, errors } = parseConnectionImport(
     [HEADER,
      'good,mysql,prod,h:3306,strict,d,u,p',
-     'bad,mysql,uat,h:3306,strict,d,u,p',
+     'bad,mysql,nosuchenv,h:3306,strict,d,u,p',
     ].join('\n'))
   expect(rows).toHaveLength(1)
   expect(errors).toHaveLength(1)
