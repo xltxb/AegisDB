@@ -146,9 +146,11 @@ func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 	eq(t, envNone.Code, resp.CodeForbidden, "missing secret forbidden")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "pending", "ticket still pending after bad auth")
 
-	// unknown ticket → business error (400)
-	env, _ := app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": "AP-doesnotexist", "approved": true})
-	eq(t, env.Code, resp.CodeBadRequest, "unknown ticket rejected")
+	// 找不到那张单 → 404(工单 02 要的就是这个;它曾经报 40001「参数错误」,而单号不存在
+	// 不是参数格式的问题,厂商按 400 去查自己的报文会一无所获)。
+	env, status := app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": "AP-doesnotexist", "approved": true})
+	eq(t, env.Code, resp.CodeNotFound, "unknown ticket rejected")
+	eq(t, status, 404, "厂商要按状态码看得出这次回调没落地")
 
 	// approve once, then a repeat callback is idempotent (still approved)
 	app.postLarkCallback("s3cr3t", map[string]any{"external_task_id": ap.ApNo, "task_id": "vt-" + ap.ApNo, "approved": true, "approver": []string{"x@vela.io"}})
