@@ -154,9 +154,11 @@ func Check(dialect, sql string, rules []Rule) Result {
 	}
 	res := Result{Dialect: dialect, Findings: []Finding{}}
 	active := make([]Rule, 0, len(rules))
+	prepared := make([]preparedRule, 0, len(rules))
 	for _, r := range rules {
 		if r.Enabled && r.AppliesTo(dialect) {
 			active = append(active, r)
+			prepared = append(prepared, prepare(r))
 		}
 	}
 	stmts := splitWithLines(sql)
@@ -166,8 +168,9 @@ func Check(dialect, sql string, rules []Rule) Result {
 		}
 	}
 	for _, st := range stmts {
-		for _, r := range active {
-			for _, msg := range fire(r, st, dialect) {
+		for _, pr := range prepared {
+			r := pr.rule
+			for _, msg := range fire(pr, st, dialect) {
 				res.Findings = append(res.Findings, Finding{
 					Code: r.Code, Name: r.Name, Level: r.Level, Category: r.Category,
 					Stmt: st.index, Line: st.line, SQL: excerpt(st.raw), Message: msg,
@@ -197,21 +200,51 @@ const (
 	LevelInfo  = "info"
 )
 
-// fire runs one rule against one statement and returns its messages (usually
-// none or one). A regex rule matches its pattern; a builtin rule runs the
-// checker registered under its code.
-func fire(r Rule, st *stmt, dialect string) []string {
-	p := parseParams(r.Params)
+// preparedRule is a rule with its per-rule work already done.
+//
+// 解参数、编译运维写的正则,这两件事只跟规则有关,跟当前扫到第几条语句无关。它们
+// 从前在 (语句 × 规则) 的双重循环里各做一遍 —— 一份 200 条语句、30 条规则的迁移
+// 脚本就是 6000 次 JSON 解析加 6000 次正则编译。
+//
+// 编译错误随身带着,而不是在准备阶段就报掉:一条正则写错的规则要**每条语句报一次**,
+// 和从前一样。写规则的人只有从报告里看见它,才会知道它是错的 —— 一条永不触发的
+// 规则和一条永远通过的规则,从外面看一模一样。
+type preparedRule struct {
+	rule   Rule
+	params params
+	re     *regexp.Regexp
+	reErr  error
+	check  checker
+}
+
+func prepare(r Rule) preparedRule {
+	pr := preparedRule{rule: r, params: parseParams(r.Params)}
 	if r.Kind == "regex" {
-		return regexRule(r, p, st)
+		if pat := pr.params.str("pattern", ""); pat != "" {
+			pr.re, pr.reErr = regexp.Compile("(?is)" + pat)
+		}
+		return pr
 	}
 	// A nil checker is a SCRIPT-level rule (scriptFindings owns it), not a
 	// missing implementation — see the registry.
-	c, ok := builtinChecker(r.Code)
-	if !ok || c == nil {
+	if c, ok := builtinChecker(r.Code); ok {
+		pr.check = c
+	}
+	return pr
+}
+
+// fire runs one rule against one statement and returns its messages (usually
+// none or one). A regex rule matches its pattern; a builtin rule runs the
+// checker registered under its code.
+func fire(pr preparedRule, st *stmt, dialect string) []string {
+	r := pr.rule
+	if r.Kind == "regex" {
+		return regexRule(pr, st)
+	}
+	if pr.check == nil {
 		return nil
 	}
-	msgs := c(st, p, dialect)
+	msgs := pr.check(st, pr.params, dialect)
 	// A rule's configured Message overrides the checker's wording so an operator
 	// can phrase the standard in their own terms; the checker's detail is appended
 	// because it names the actual column/table, which the phrasing cannot.
@@ -233,20 +266,24 @@ func fire(r Rule, st *stmt, dialect string) []string {
 // pattern reports ITSELF as a finding rather than being skipped: a rule that
 // silently never fires is indistinguishable from one that always passes, and the
 // person who wrote it would never learn it is dead.
-func regexRule(r Rule, p params, st *stmt) []string {
+func regexRule(pr preparedRule, st *stmt) []string {
+	p := pr.params
 	pat := p.str("pattern", "")
 	if pat == "" {
 		return nil
 	}
-	re, err := regexp.Compile("(?is)" + pat)
-	if err != nil {
-		return []string{fmt.Sprintf("规则 %s 的正则无效: %v", r.Code, err)}
+	if pr.reErr != nil {
+		return []string{fmt.Sprintf("规则 %s 的正则无效: %v", pr.rule.Code, pr.reErr)}
 	}
-	target := st.sql
-	if p.str("scope", "") == "raw" {
-		target = st.raw
-	}
-	hit := re.MatchString(target)
+	// 匹配的是拆分器交回来的语句文本。
+	//
+	// 这里从前还有个 `scope: "raw"` 的开关,说是拿"原文"来匹配 —— 而它什么都不做:
+	// SplitStatements 在拆的时候就把注释全抹了(连语句中间的也抹),st.raw 与 st.sql
+	// 只差首尾空白。于是一条"每条 DDL 必须带 -- ticket: 注释"的 require 规则永远
+	// 匹配不上,运维怎么写都让它一直报,而看不出是旋钮坏了。没有种子规则、文档或
+	// 界面用过它,所以拆掉这个假承诺 —— 留着只是个陷阱。真要按注释审查,那是另一件
+	// 事:得让拆分器交回原文区间,而那条拆分规则是判定的地基,不能顺手改。
+	hit := pr.re.MatchString(st.sql)
 	// forbid (default): a match is a violation. require: the ABSENCE is.
 	if p.str("mode", "forbid") == "require" {
 		if !hit {
@@ -285,7 +322,7 @@ type stmt struct {
 	verb   string // SELECT / INSERT / CREATE / …
 	// inner:这条是从 PL/SQL 块体里拆出来的,不是脚本里独立的一条。
 	// 规则照跑,但不计入"这段脚本有几条语句" —— 那个数字是给人看的。
-	inner  bool
+	inner bool
 }
 
 func splitWithLines(sql string) []*stmt {
