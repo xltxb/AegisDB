@@ -13,16 +13,16 @@ import (
 // weakJWTSecrets are placeholder/dev secrets that must never protect a prod
 // deployment (a shipped default key lets anyone forge admin tokens).
 var weakJWTSecrets = map[string]bool{
-	"":                                 true,
-	"CHANGE-ME":                        true,
-	"change-me":                        true,
-	"changeme":                         true,
-	"dev-secret":                       true,
-	"vela-dev-secret":                  true,
-	"vela-gateway-secret":              true,
-	"secret":                           true,
+	"":                                  true,
+	"CHANGE-ME":                         true,
+	"change-me":                         true,
+	"changeme":                          true,
+	"dev-secret":                        true,
+	"vela-dev-secret":                   true,
+	"vela-gateway-secret":               true,
+	"secret":                            true,
 	"change-me-vela-gateway-dev-secret": true, // the value shipped in configs/config.yaml (public → compromised)
-	"CHANGE-ME-set-VELA_JWT_SECRET":    true, // former config.prod.yaml placeholder
+	"CHANGE-ME-set-VELA_JWT_SECRET":     true, // former config.prod.yaml placeholder
 }
 
 // Config is the full backend configuration loaded from configs/config.yaml.
@@ -64,7 +64,7 @@ type Config struct {
 	// JWT secret. Keeping it separate lets the JWT signing secret be rotated
 	// without making previously encrypted ciphertext undecryptable (A2).
 	SecretKey string `yaml:"secret_key"`
-	Gateway struct {
+	Gateway   struct {
 		DefaultPolicy      string `yaml:"default_policy"`
 		StrictMode         bool   `yaml:"strict_mode"`
 		ExecTimeoutSeconds int    `yaml:"exec_timeout_seconds"`

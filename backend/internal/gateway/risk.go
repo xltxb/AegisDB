@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 
 	"velagateway/internal/model"
 	"velagateway/pkg/sqlutil"
@@ -60,10 +61,43 @@ type Store interface {
 // RiskEngine evaluates commands against the three layers.
 type RiskEngine struct {
 	store Store
+
+	// 字典正则的编译结果。键**就是**编译的输入(那个 pattern 串),所以不存在
+	// "字典改了缓存没跟上":字典一改,拼出来的 pattern 就变了,那是另一个键。
+	//
+	// 这里只缓存纯计算,不缓存字典本身 —— 字典每次都向 store 现读。原因见
+	// service.tierOf:规则读直通、属性检查走缓存,会让同一条命令在两套分层下各判
+	// 一次。判定要么整个直通,要么整个缓存,不能一半一半。
+	reMu    sync.RWMutex
+	reCache map[string]*regexp.Regexp
 }
 
+// 一个进程能见到的不同字典是有限的(分层数 × 字典被改过的次数),但进程活得够久、
+// 字典改得够勤时仍会无界增长。到顶就整个丢掉重来 —— 代价是接下来每个分层重编一次。
+const maxDictRegexCache = 64
+
 func NewRiskEngine(store Store) *RiskEngine {
-	return &RiskEngine{store: store}
+	return &RiskEngine{store: store, reCache: map[string]*regexp.Regexp{}}
+}
+
+// dictRegex 返回 pattern 编译后的正则,尽量复用上一次的结果。
+func (e *RiskEngine) dictRegex(pattern string) *regexp.Regexp {
+	e.reMu.RLock()
+	re := e.reCache[pattern]
+	e.reMu.RUnlock()
+	if re != nil {
+		return re
+	}
+	// 编译放在锁外:两个请求同时错过缓存时宁可各编一次,也不要让后来的那个等着。
+	// 同一个 pattern 编出来的正则彼此等价,谁存进去都一样。
+	re = regexp.MustCompile(pattern)
+	e.reMu.Lock()
+	if len(e.reCache) >= maxDictRegexCache {
+		e.reCache = map[string]*regexp.Regexp{}
+	}
+	e.reCache[pattern] = re
+	e.reMu.Unlock()
+	return re
 }
 
 var verbRe = regexp.MustCompile(`(?i)^\s*([a-z_]+)`)
@@ -627,7 +661,7 @@ func (e *RiskEngine) matchCommand(sql, tier string) (string, string, error) {
 	if len(names) == 0 {
 		return "", model.RiskOff, nil
 	}
-	re := regexp.MustCompile(`(?i)\b(` + strings.Join(names, "|") + `)\b`)
+	re := e.dictRegex(`(?i)\b(` + strings.Join(names, "|") + `)\b`)
 	// 扫的是**抹掉字面量之后**的结构,不是原文。
 	//
 	// 这曾是全项目唯一一处还在读字符串内容的关键词启发式:无 WHERE 判断、CTE 里的

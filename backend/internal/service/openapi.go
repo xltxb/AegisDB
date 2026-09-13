@@ -184,7 +184,7 @@ func (s *Services) CreateAPIClient(actor *model.User, req dto.APIClientReq) (*mo
 		UserID: svcUser.ID, UserName: svcUser.Name,
 		AllowIPs: allowIPs, Scopes: strings.Join(scopes, ","),
 		PipelineID: pipelineID,
-		Enabled: true, CreatedBy: actor.ID,
+		Enabled:    true, CreatedBy: actor.ID,
 	}
 	if err := s.Repo.CreateAPIClient(cl); err != nil {
 		return nil, "", err
@@ -501,7 +501,7 @@ func (s *Services) OpenReleaseResp(rel *model.Release, withLog bool) dto.OpenRel
 	out := dto.OpenReleaseResp{
 		RelNo: v.RelNo, Title: v.Title, Status: v.Status, Risk: v.Risk,
 		ChangeType: v.ChangeType,
-		Instance: v.Instance, Database: v.Database, Env: v.Env, Pipeline: v.PipelineName,
+		Instance:   v.Instance, Database: v.Database, Env: v.Env, Pipeline: v.PipelineName,
 		ExternalRef: v.ExternalRef, Error: v.Error,
 		CreatedAt: v.CreatedAt.Format(time.RFC3339),
 		Stages:    make([]dto.OpenStage, 0, len(v.Stages)),
@@ -584,10 +584,8 @@ func (s *Services) requireBindableAccount(u *model.User) error {
 	if u.Status != "active" {
 		return fmt.Errorf("账号 %s 未启用", u.Name)
 	}
-	for _, code := range s.Repo.RoleCodesForIDs(s.Repo.EffectiveRoleIDs(u)) {
-		if code == "admin" {
-			return fmt.Errorf("不能把 API 凭据绑到平台管理员 %s:那会让一串密钥拥有管理员权限,且不经登录与 MFA。请改用服务账号或权限更小的成员", u.Name)
-		}
+	if s.Repo.IsPlatformAdmin(u) {
+		return fmt.Errorf("不能把 API 凭据绑到平台管理员 %s:那会让一串密钥拥有管理员权限,且不经登录与 MFA。请改用服务账号或权限更小的成员", u.Name)
 	}
 	return nil
 }

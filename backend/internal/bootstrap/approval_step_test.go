@@ -12,7 +12,7 @@ type apWithSteps struct {
 	ApNo  string `json:"apNo"`
 	Steps []struct {
 		StepOrder int     `json:"stepOrder"`
-		Status    string `json:"status"`
+		Status    string  `json:"status"`
 		ActedAt   *string `json:"actedAt"`
 	} `json:"steps"`
 }

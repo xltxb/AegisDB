@@ -173,6 +173,17 @@ const (
 	ResultExported = "exported"
 )
 
+// RoleAdmin 是内置平台管理员角色的 code。
+//
+// 它是**唯一**按 code 硬编码的角色:其余角色的权限全由能力矩阵、审批链与菜单授权
+// 数据驱动,唯独"平台管理员"这一身份决定谁能改这些数据本身,所以它必须在代码里
+// 认得出来。写成常量是为了让这件事只有一处可改 —— 而不是散在各处的字符串 "admin",
+// 拼错了没有任何东西会报错,只会静默地把某个守卫变成永远不通过。
+//
+// 判断一个人是不是管理员,用 Repo.IsPlatformAdmin:身份走**并集**,次要角色是 admin
+// 也算数,而那条规则不写在这个常量里。
+const RoleAdmin = "admin"
+
 // Role — a tiered RBAC role (L0..L3).
 type Role struct {
 	ID              int64     `gorm:"primaryKey;autoIncrement" json:"id"`

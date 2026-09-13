@@ -458,7 +458,7 @@ func (r *Repo) SetUserRoles(userID int64, roleIDs []int64) error {
 // "最后一个管理员被停用"的场面。把它算进去,等于用一个永远打不开的门证明屋子有出口。
 func (r *Repo) ActiveAdminIDs() []int64 {
 	var role model.Role
-	if err := r.db.Where("code = ?", "admin").First(&role).Error; err != nil {
+	if err := r.db.Where("code = ?", model.RoleAdmin).First(&role).Error; err != nil {
 		return nil
 	}
 	var us []model.User
@@ -486,6 +486,27 @@ func (r *Repo) RoleCodesForIDs(ids []int64) []string {
 	var codes []string
 	r.db.Model(&model.Role{}).Where("id IN ?", ids).Pluck("code", &codes)
 	return codes
+}
+
+// IsPlatformAdmin 报告这个人是不是平台管理员。
+//
+// 身份走**并集**:一个人的次要角色是 admin 也算数。这条规则不显然,而从前它被抄了
+// 四遍 —— 中间件的管理员守卫、执行窗口的改删授权、API 凭据不许绑管理员的校验、
+// 审批单的撤回授权,每处都是同一个循环配同一个裸字符串。四遍今天都是对的;下一个
+// 在别处写 `u.Role.Code == "admin"` 的人不会记得并集,而那一处只会在靠次要角色当
+// 管理员的人身上出错。
+//
+// nil 不是管理员:未登录的调用方不该因为参数缺席而通过守卫。
+func (r *Repo) IsPlatformAdmin(u *model.User) bool {
+	if u == nil {
+		return false
+	}
+	for _, code := range r.RoleCodesForIDs(r.EffectiveRoleIDs(u)) {
+		if code == model.RoleAdmin {
+			return true
+		}
+	}
+	return false
 }
 
 // MenusForRoles returns the union of menu access across several roles: a menu is

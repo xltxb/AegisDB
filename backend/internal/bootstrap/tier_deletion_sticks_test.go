@@ -47,7 +47,7 @@ func TestBuiltinTiers_ADeletedTierStaysDeleted(t *testing.T) {
 	}
 
 	if err := db.First(&uat, "code = ?", "uat").Error; err == nil {
-		t.Error("管理员删掉的分层在 migrate 之后又回来了 —— 他会以为是自己没删干净,"+
+		t.Error("管理员删掉的分层在 migrate 之后又回来了 —— 他会以为是自己没删干净," +
 			"再删一次,下一次升级再回来")
 	}
 	var env model.Environment

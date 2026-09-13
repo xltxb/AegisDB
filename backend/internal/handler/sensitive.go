@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/dto"
@@ -26,7 +27,7 @@ func (h *Handler) SaveSensitiveColumn(c *gin.Context) {
 		id = pathID(c)
 	}
 	row, err := h.Svc.SaveSensitiveColumn(middleware.CurrentUser(c), id, req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "规则不存在")
 		return
 	}

@@ -1,13 +1,10 @@
 package handler
 
 import (
-	"errors"
-
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/dto"
 	"velagateway/internal/middleware"
-	"velagateway/internal/service"
 	"velagateway/pkg/resp"
 )
 
@@ -41,7 +38,7 @@ func (h *Handler) SaveReviewRule(c *gin.Context) {
 		// The validation messages name exactly what is wrong (bad level, malformed
 		// params JSON, duplicate code) and the operator can act on every one, so
 		// they are passed through rather than flattened into "保存失败".
-		resp.Fail(c, reviewErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, row)
@@ -50,7 +47,7 @@ func (h *Handler) SaveReviewRule(c *gin.Context) {
 // DeleteReviewRule removes a custom rule (builtins can only be disabled).
 func (h *Handler) DeleteReviewRule(c *gin.Context) {
 	if err := h.Svc.DeleteReviewRule(pathID(c)); err != nil {
-		resp.Fail(c, reviewErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -65,19 +62,8 @@ func (h *Handler) ReviewCheck(c *gin.Context) {
 	}
 	res, err := h.Svc.CheckSQL(middleware.CurrentUser(c), req.ConnectionID, req.Dialect, req.SQL)
 	if err != nil {
-		resp.Fail(c, reviewErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, res)
-}
-
-func reviewErrCode(err error) int {
-	switch {
-	case errors.Is(err, service.ErrForbidden):
-		return resp.CodeForbidden
-	case errors.Is(err, service.ErrNotFound):
-		return resp.CodeBadRequest
-	default:
-		return resp.CodeBadRequest
-	}
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/middleware"
-	"velagateway/internal/service"
 	"velagateway/pkg/resp"
 )
 
@@ -34,7 +33,7 @@ func (h *Handler) SearchMetadata(c *gin.Context) {
 func (h *Handler) ConnectionMetadata(c *gin.Context) {
 	tables, state, err := h.Svc.ConnectionMetadata(middleware.CurrentUser(c), pathID(c), c.Query("database"))
 	if err != nil {
-		resp.Fail(c, metaErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	// sync 为空表示这台实例还没同步过 —— 与"同步过但一张表都没有"不是一回事,
@@ -47,19 +46,9 @@ func (h *Handler) ConnectionMetadata(c *gin.Context) {
 // @Router  /connections/{id}/metadata/sync [post]
 func (h *Handler) SyncConnectionMetadata(c *gin.Context) {
 	if err := h.Svc.SyncConnectionMetadata(middleware.CurrentUser(c), pathID(c)); err != nil {
-		resp.Fail(c, metaErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	tables, state, _ := h.Svc.ConnectionMetadata(middleware.CurrentUser(c), pathID(c), "")
 	resp.OK(c, gin.H{"tables": len(tables), "sync": state})
-}
-
-func metaErrCode(err error) int {
-	switch err {
-	case service.ErrForbidden:
-		return resp.CodeForbidden
-	case service.ErrNotFound:
-		return resp.CodeBadRequest
-	}
-	return resp.CodeBadRequest
 }

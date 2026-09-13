@@ -1202,7 +1202,7 @@ func (s *Services) canApproveReleases(u *model.User) bool {
 		return false
 	}
 	for _, id := range s.Repo.EffectiveRoleIDs(u) {
-		if r, err := s.Repo.GetRole(id); err == nil && (r.CanApprove || r.Code == "admin") {
+		if r, err := s.Repo.GetRole(id); err == nil && (r.CanApprove || r.Code == model.RoleAdmin) {
 			return true
 		}
 	}

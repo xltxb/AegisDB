@@ -30,9 +30,9 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 	ap := &model.Approval{
 		ApNo: s.nextApNo(), ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode,
 		Instance: conn.Name, Database: job.Database,
-		Command:  "EXPORT [含敏感字段(原值)] " + job.SQL,
-		Keyword:  "EXPORT", InitiatorID: u.ID, Initiator: u.Name,
-		Reason:   "导出包含敏感字段的原始值",
+		Command: "EXPORT [含敏感字段(原值)] " + job.SQL,
+		Keyword: "EXPORT", InitiatorID: u.ID, Initiator: u.Name,
+		Reason: "导出包含敏感字段的原始值",
 		// 敏感数据出库按高危记。它不改任何数据,但风险等级衡量的是后果,而这条的
 		// 后果是明文 PII 落到一个网关管不到的地方。
 		RiskLevel:   model.RiskHigh,

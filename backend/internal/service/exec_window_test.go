@@ -37,7 +37,7 @@ func TestWindowCovers_RecurringPlainRange(t *testing.T) {
 		want bool
 	}{
 		{"2026-09-08 01:59", false},
-		{"2026-09-08 02:00", true},  // 左闭
+		{"2026-09-08 02:00", true}, // 左闭
 		{"2026-09-08 03:30", true},
 		{"2026-09-08 04:00", false}, // 右开
 		{"2026-09-08 12:00", false},

@@ -54,7 +54,7 @@ func UpsertAdmin(repo *repository.Repo, email, password, name string) (*model.Us
 	if err := validateAdminPassword(password); err != nil {
 		return nil, err
 	}
-	role, err := repo.GetRoleByCode("admin")
+	role, err := repo.GetRoleByCode(model.RoleAdmin)
 	if err != nil || role == nil {
 		return nil, fmt.Errorf("admin role not found — run reference seeding first")
 	}

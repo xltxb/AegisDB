@@ -113,7 +113,7 @@ func TestApprovals_LookupByTicketNumberIgnoresPaging(t *testing.T) {
 
 type approvalPageResp struct {
 	Pending int64 `json:"pending"`
-	Items []struct {
+	Items   []struct {
 		ID     int64  `json:"id"`
 		ApNo   string `json:"apNo"`
 		Status string `json:"status"`

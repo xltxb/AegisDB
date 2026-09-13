@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -23,11 +22,6 @@ import (
 // flow templates, same review rules, same approval chain, same execute-time
 // re-judgement, same audit chain — which is the only way this door can exist
 // without becoming the way people get around the console.
-
-// maxOpenUploadBytes bounds a multipart script. It matches the inline bound the
-// service layer enforces (15MB), so the two channels refuse at the same size
-// rather than one of them dying inside the metadata database.
-const maxOpenUploadBytes = 15 << 20
 
 // OpenCreateRelease raises a release ticket from SQL or a script file.
 //
@@ -63,7 +57,7 @@ func (h *Handler) OpenCreateRelease(c *gin.Context) {
 	if err != nil {
 		slog.Warn("open api: create release rejected",
 			"client", clientName(cl), "externalRef", req.ExternalRef, "err", err)
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	slog.Info("open api: release created",
@@ -77,7 +71,7 @@ func (h *Handler) OpenGetRelease(c *gin.Context) {
 	v, err := h.Svc.ReleaseStatusForClient(
 		middleware.CurrentUser(c), middleware.CurrentAPIClient(c), c.Param("relNo"))
 	if err != nil {
-		resp.Fail(c, openErrCode(err), "升级单不存在或无权查看")
+		resp.Fail(c, errCode(err), "升级单不存在或无权查看")
 		return
 	}
 	resp.OK(c, h.Svc.OpenReleaseResp(&v.Release, true))
@@ -88,7 +82,7 @@ func (h *Handler) OpenAbortRelease(c *gin.Context) {
 	err := h.Svc.AbortReleaseForClient(
 		middleware.CurrentUser(c), middleware.CurrentAPIClient(c), c.Param("relNo"))
 	if err != nil {
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
@@ -116,7 +110,7 @@ func (h *Handler) OpenReviewCheck(c *gin.Context) {
 	}
 	res, err := h.Svc.CheckSQLForClient(middleware.CurrentUser(c), req)
 	if err != nil {
-		resp.Fail(c, openErrCode(err), openErrMsg(err))
+		resp.Fail(c, errCode(err), openErrMsg(err))
 		return
 	}
 	resp.OK(c, res)
@@ -217,7 +211,7 @@ func (h *Handler) UpdateAPIClient(c *gin.Context) {
 	}
 	cl, err := h.Svc.UpdateAPIClient(pathID(c), req)
 	if err != nil {
-		resp.Fail(c, openErrCode(err), err.Error())
+		resp.Fail(c, errCode(err), err.Error())
 		return
 	}
 	resp.OK(c, cl)
@@ -226,38 +220,27 @@ func (h *Handler) UpdateAPIClient(c *gin.Context) {
 // DeleteAPIClient revokes a credential outright.
 func (h *Handler) DeleteAPIClient(c *gin.Context) {
 	if err := h.Svc.DeleteAPIClient(pathID(c)); err != nil {
-		resp.Fail(c, openErrCode(err), "删除失败")
+		resp.Fail(c, errCode(err), "删除失败")
 		return
 	}
 	resp.OK(c, gin.H{"ok": true})
 }
 
-// readOpenScriptFile reads the optional multipart `file` part under the shared
-// 15MB bound. ok=false means a refusal was already written to the response; a
-// missing file part is ("", "", true) — the part is optional on both callers.
+// readOpenScriptFile reads the optional multipart `file` part.
+//
+// 缺少 file 部分不是错误:两个调用方都允许改用内联的 sql/script 字段,所以
+// ("", "", true) 表示"没带文件,继续往下看"。真正的拒绝(超限、读不出来)由
+// readScriptUpload 写进响应,这里只把 ok=false 传出去。
 func readOpenScriptFile(c *gin.Context) (script, filename string, ok bool) {
 	fh, err := c.FormFile("file")
 	if err != nil {
 		return "", "", true // no file part — inline sql/script may still be present
 	}
-	if fh.Size > maxOpenUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
+	body, ok := readScriptUpload(c, fh)
+	if !ok {
 		return "", "", false
 	}
-	f, oerr := fh.Open()
-	if oerr != nil {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
-		return "", "", false
-	}
-	defer f.Close()
-	// io.ReadAll under an explicit cap — trusting fh.Size and sizing a buffer
-	// from it lets a lying Content-Length allocate what it likes.
-	body, rerr := io.ReadAll(io.LimitReader(f, maxOpenUploadBytes+1))
-	if rerr != nil || len(body) > maxOpenUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
-		return "", "", false
-	}
-	return string(body), fh.Filename, true
+	return body, fh.Filename, true
 }
 
 // clientName is the log label for a credential (nil-safe: an unauthenticated
@@ -267,21 +250,6 @@ func clientName(cl *model.APIClient) string {
 		return "?"
 	}
 	return cl.Name
-}
-
-func openErrCode(err error) int {
-	switch {
-	case errors.Is(err, service.ErrForbidden):
-		return resp.CodeForbidden
-	case errors.Is(err, service.ErrMFARequired), errors.Is(err, service.ErrMFAInvalid):
-		return resp.CodeMFARequired
-	case errors.Is(err, service.ErrScriptPathUnset):
-		return resp.CodeScriptPathUnset
-	case errors.Is(err, service.ErrNotFound):
-		return resp.CodeBadRequest
-	default:
-		return resp.CodeBadRequest
-	}
 }
 
 // openErrMsg passes the service's own wording through: these messages name the

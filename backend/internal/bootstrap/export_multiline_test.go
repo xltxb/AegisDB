@@ -45,11 +45,11 @@ func TestExport_MultilineAndTrailingSemicolonExecute(t *testing.T) {
 		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")
 
 	cases := map[string]string{
-		"multiline":       "SELECT id,\n       status,\n       amount\nFROM orders\nWHERE amount > 5\nORDER BY id",
-		"crlf":            "SELECT id, status\r\nFROM orders\r\nWHERE amount > 5",
-		"trailing-semi":   "SELECT id\nFROM orders;\n",
-		"semi-then-cmt":   "SELECT id FROM orders;\n-- 完",
-		"comment-inline":  "SELECT id, -- 主键\n  status\nFROM orders",
+		"multiline":      "SELECT id,\n       status,\n       amount\nFROM orders\nWHERE amount > 5\nORDER BY id",
+		"crlf":           "SELECT id, status\r\nFROM orders\r\nWHERE amount > 5",
+		"trailing-semi":  "SELECT id\nFROM orders;\n",
+		"semi-then-cmt":  "SELECT id FROM orders;\n-- 完",
+		"comment-inline": "SELECT id, -- 主键\n  status\nFROM orders",
 	}
 	for name, q := range cases {
 		id := app.submitExport(token, conn.ID, q, name)

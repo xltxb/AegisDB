@@ -1,9 +1,9 @@
 package bootstrap
 
 import (
-	"strings"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 )
 

@@ -130,4 +130,3 @@ func TestUserTags_AdminOnlyAndAudited(t *testing.T) {
 	}
 	t.Error("no audit row for the user-scope change")
 }
-

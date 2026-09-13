@@ -89,7 +89,7 @@ func (s *Services) ApprovalStaffingReport() []StaffingIssue {
 	// ---- 默认审批链:owner,没有可批的人则回落 admin ----
 	if issue := s.roleChainIssue(defaultChainWhere(), "owner", selfApprove); issue != nil {
 		// owner 不可用时系统会回落到 admin,所以要看回落之后到底行不行。
-		if fb := s.roleChainIssue("默认审批链(回落到平台管理员)", "admin", selfApprove); fb != nil {
+		if fb := s.roleChainIssue("默认审批链(回落到平台管理员)", model.RoleAdmin, selfApprove); fb != nil {
 			out = append(out, *fb)
 		} else if issue.Severity == StaffingDeadlock {
 			// owner 只有一个人,但 admin 那边是健康的 —— 回落救不了这种情况:

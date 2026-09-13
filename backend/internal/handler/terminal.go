@@ -2,11 +2,9 @@ package handler
 
 import (
 	"context"
-	"log/slog"
 	"errors"
-	"io"
+	"log/slog"
 	"math"
-	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -40,12 +38,12 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 	token, exp, u, err := h.Svc.Login(req.Email, req.Password, req.MfaCode)
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		// Password verified; prompt for the second factor without counting a fail.
 		resp.Fail(c, resp.CodeMFARequired, "请输入 MFA 验证码")
 		return
 	}
-	if err == service.ErrMFAInvalid {
+	if errors.Is(err, service.ErrMFAInvalid) {
 		h.loginLim.fail(ip, time.Now())
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
 		return
@@ -110,11 +108,11 @@ func (h *Handler) Exec(c *gin.Context) {
 		return
 	}
 	r, err := h.Svc.Exec(c.Request.Context(), middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
 		return
 	}
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
@@ -145,15 +143,15 @@ func (h *Handler) ExecAsync(c *gin.Context) {
 		return
 	}
 	r, err := h.Svc.ExecAsync(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Reason, req.MfaCode, req.Database)
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "能力矩阵禁止:命令被拒绝")
 		return
 	}
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
-	if err == service.ErrMFAInvalid {
+	if errors.Is(err, service.ErrMFAInvalid) {
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
 		return
 	}
@@ -177,7 +175,7 @@ func (h *Handler) ListAsyncJobs(c *gin.Context) {
 // GetAsyncJob returns one background job with its streamed log (poll for progress).
 func (h *Handler) GetAsyncJob(c *gin.Context) {
 	j, err := h.Svc.GetAsyncJob(middleware.CurrentUser(c), pathID(c))
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权查看该任务")
 		return
 	}
@@ -224,43 +222,12 @@ func (h *Handler) GatewayStats(c *gin.Context) {
 	})
 }
 
-// maxConsoleUploadBytes 与开放接口 (handler/openapi.go) 用同一个上限。
-//
-// 原先控制台这条路**没有任何上限**:`make([]byte, file.Size)` 直接按客户端声明的
-// 大小分配,一个数 GB 的上传就能把进程撑爆。讽刺的是开放接口那条路早就有 15MB 上限
-// 和正确的读法 —— 面向外部的入口守住了,面向内部控制台的入口反而敞着。
-const maxConsoleUploadBytes = 15 << 20
-
-// readConsoleScriptFile reads an uploaded script under an explicit cap.
-//
-// 不信 fh.Size:那是客户端说的。用 LimitReader 读,读满上限+1 就说明超了 ——
-// 这与 handler/openapi.go 的 readOpenScriptFile 是同一套做法,两条通道在同一个
-// 尺寸上拒绝。
-func readConsoleScriptFile(c *gin.Context, fh *multipart.FileHeader) (string, bool) {
-	if fh.Size > maxConsoleUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本超过 15MB 上限")
-		return "", false
-	}
-	f, err := fh.Open()
-	if err != nil {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败")
-		return "", false
-	}
-	defer f.Close()
-	body, rerr := io.ReadAll(io.LimitReader(f, maxConsoleUploadBytes+1))
-	if rerr != nil || len(body) > maxConsoleUploadBytes {
-		resp.Fail(c, resp.CodeBadRequest, "脚本读取失败或超过 15MB 上限")
-		return "", false
-	}
-	return string(body), true
-}
-
 // ScriptUpload stores a script file (upload page) under the current user.
 func (h *Handler) ScriptUpload(c *gin.Context) {
 	filename := "script.sql"
 	var content string
 	if file, err := c.FormFile("file"); err == nil {
-		body, ok := readConsoleScriptFile(c, file)
+		body, ok := readScriptUpload(c, file)
 		if !ok {
 			return // 拒绝已经写进响应了
 		}
@@ -274,7 +241,7 @@ func (h *Handler) ScriptUpload(c *gin.Context) {
 		content, filename = req.Content, req.Filename
 	}
 	up, err := h.Svc.UploadScript(middleware.CurrentUser(c), filename, content)
-	if err == service.ErrScriptPathUnset {
+	if errors.Is(err, service.ErrScriptPathUnset) {
 		resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 		return
 	}
@@ -334,7 +301,7 @@ func (h *Handler) ScriptScan(c *gin.Context) {
 	// 也不要退回到某个固定分层去判,那会让报告说的和将要发生的事对不上。
 	var connID int64
 	if file, err := c.FormFile("file"); err == nil {
-		body, ok := readConsoleScriptFile(c, file)
+		body, ok := readScriptUpload(c, file)
 		if !ok {
 			return // 拒绝已经写进响应了
 		}
@@ -416,7 +383,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		return
 	} else {
 		up, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
-		if err == service.ErrScriptPathUnset {
+		if errors.Is(err, service.ErrScriptPathUnset) {
 			resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 			return
 		}
@@ -440,7 +407,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		// whole script must be submitted for approval (created from the scan
 		// result, since the `\i file` wrapper isn't itself risk-matched)
 		r, err := h.Svc.SubmitScriptForApproval(middleware.CurrentUser(c), req.ConnectionID, scan.Filename, req.Content, "脚本含高危语句,整脚本提交审批", req.MfaCode, req.Database, req.UploadID)
-		if err == service.ErrMFARequired {
+		if errors.Is(err, service.ErrMFARequired) {
 			resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 			return
 		}
@@ -456,11 +423,11 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		return
 	}
 	executed, err := h.Svc.ExecuteSafeScript(middleware.CurrentUser(c), req.ConnectionID, req.Content, req.MfaCode, req.Database)
-	if err == service.ErrMFARequired {
+	if errors.Is(err, service.ErrMFARequired) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
-	if err == service.ErrConnMaintenance {
+	if errors.Is(err, service.ErrConnMaintenance) {
 		// 维护态不是「执行失败」,照实说是哪一种 —— 笼统一句会让人去查脚本本身的毛病。
 		resp.Fail(c, resp.CodeBadRequest, err.Error())
 		return
@@ -494,23 +461,23 @@ func (h *Handler) ExportData(c *gin.Context) {
 		return
 	}
 	job, err := h.Svc.EnqueueExportWithSensitive(middleware.CurrentUser(c), req.ConnectionID, req.SQL, req.Name, req.Database, req.IncludeSensitive)
-	if err == service.ErrExportPathUnset {
+	if errors.Is(err, service.ErrExportPathUnset) {
 		resp.Fail(c, resp.CodeExportPathUnset, "请先在【系统设置 · 网关】配置数据导出保存路径")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权访问该数据库")
 		return
 	}
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
-	if err == service.ErrNoDatabase {
+	if errors.Is(err, service.ErrNoDatabase) {
 		resp.Fail(c, resp.CodeBadRequest, "请选择目标数据库(该连接未配置默认库)")
 		return
 	}
-	if err == service.ErrExportNotReadOnly {
+	if errors.Is(err, service.ErrExportNotReadOnly) {
 		resp.Fail(c, resp.CodeForbidden, "数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流")
 		return
 	}
@@ -718,11 +685,11 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 		r, err := h.Svc.Exec(ctx, u, msg.ConnectionID, msg.SQL, msg.Reason, msg.MfaCode, msg.Database)
 		setCancel(nil)
 		cancel()
-		if err == service.ErrForbidden {
+		if errors.Is(err, service.ErrForbidden) {
 			send(gin.H{"type": "error", "message": "命令被拒绝:能力矩阵禁止"})
 			continue
 		}
-		if err == service.ErrMFARequired {
+		if errors.Is(err, service.ErrMFARequired) {
 			send(gin.H{"type": "mfa_required", "message": "生产操作需要 MFA 二次验证"})
 			continue
 		}
@@ -756,11 +723,11 @@ func (h *Handler) TranscriptExport(c *gin.Context) {
 		return
 	}
 	err := h.Svc.RecordTranscriptExport(middleware.CurrentUser(c), req)
-	if err == service.ErrNotFound {
+	if errors.Is(err, service.ErrNotFound) {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
 	}
-	if err == service.ErrForbidden {
+	if errors.Is(err, service.ErrForbidden) {
 		resp.Fail(c, resp.CodeForbidden, "无权访问该实例")
 		return
 	}
