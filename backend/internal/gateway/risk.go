@@ -767,7 +767,6 @@ func (e *RiskEngine) ScanStatement(engine, tier, sql string) (string, string, bo
 // FROM a role; with none there is nothing to derive it from.
 func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (string, error) {
 	best := model.LevelDeny
-	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 	if len(roleIDs) == 0 {
 		return model.LevelDeny, nil
 	}
@@ -776,8 +775,10 @@ func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (st
 		if err != nil {
 			return "", err // unknown level — the caller must not guess (ED3)
 		}
-		if rank[lvl] < rank[best] {
-			best = lvl
+		// model.LooserLevel 顺带把档位读成已知的那三个值之一 —— 读不懂的读成 deny,
+		// 所以它压不过任何东西(从前它排 0,反而是最宽松的那个,见 model/level.go)。
+		if looser := model.LooserLevel(lvl, best); looser != best {
+			best = looser
 		}
 	}
 	return best, nil
@@ -968,13 +969,9 @@ var deleteOrUpdateRe = regexp.MustCompile(`(?i)\b(delete|update)\b`)
 // stricterLevel returns whichever capability level gates more (allow ≺ approve ≺
 // deny). Used where two dimensions both apply and neither may be talked over by
 // the other — see the plan-only branch of EvaluateFor.
-func stricterLevel(a, b string) string {
-	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
-	if rank[b] > rank[a] {
-		return b
-	}
-	return a
-}
+//
+// 顺序与"读不懂算哪一档"都在 model.StricterLevel 里,一处说了算。
+func stricterLevel(a, b string) string { return model.StricterLevel(a, b) }
 
 // capabilityRank orders the capability dimensions by how much they can do.
 // Used to pick the most dangerous verb inside a block.

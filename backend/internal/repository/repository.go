@@ -266,7 +266,9 @@ func (r *Repo) CapabilityLevel(roleID int64, capability, tier string) (string, e
 		// capability matrix during any transient database fault (ED3).
 		return "", err
 	}
-	return row.Level, nil
+	// 读成已知的那三个值之一:大小写与首尾空白不算差别,读不懂的读成 deny。
+	// 这一格从前原样返回,而判定对认不出的值兜底是**放行** —— 见 model.LevelOf。
+	return model.LevelOf(row.Level), nil
 }
 
 // MatrixForRole returns capability -> tier -> level.
@@ -285,11 +287,27 @@ func (r *Repo) MatrixForRole(roleID int64) (map[string]map[string]string, error)
 	return out, nil
 }
 
+// ErrInvalidLevel 标记"档位值读不懂",好让 handler 把它报成参数错误而不是网关故障。
+// 调用方写错了一格,和数据库出了问题,不是同一件事,也不该看到同一句话。
+var ErrInvalidLevel = errors.New("档位无法识别")
+
+// SetMatrix 保存一个角色的能力矩阵。
+//
+// 档位值在门口就要认得出来。LevelOf 在读的那一侧兜底是对的,但把 "Deny" 收下来、
+// 存进去、再在读的时候悄悄变成 deny,等于让人以为自己写对了 —— 而他下次照着改,
+// 改的是一个从来没生效过的值。
 func (r *Repo) SetMatrix(roleID int64, matrix map[string]map[string]string) error {
+	for cap, tiers := range matrix {
+		for tier, level := range tiers {
+			if !model.KnownLevel(level) {
+				return fmt.Errorf("%w:能力 %s 在分层 %s 上写的是 %q,只接受 allow/approve/deny", ErrInvalidLevel, cap, tier, level)
+			}
+		}
+	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		for cap, tiers := range matrix {
 			for tier, level := range tiers {
-				row := model.RoleCapability{RoleID: roleID, Capability: cap, TierCode: tier, Level: level}
+				row := model.RoleCapability{RoleID: roleID, Capability: cap, TierCode: tier, Level: model.LevelOf(level)}
 				if err := tx.Save(&row).Error; err != nil {
 					return err
 				}
@@ -527,9 +545,6 @@ func (r *Repo) MenusForRoles(ids []int64) (map[string]bool, error) {
 	return out, nil
 }
 
-// levelRank orders capability levels from most to least permissive.
-var levelRank = map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
-
 // MatrixForRoles merges several roles' capability matrices, keeping the MOST
 // permissive level per capability×tier cell (union semantics for the /me view).
 func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error) {
@@ -544,8 +559,12 @@ func (r *Repo) MatrixForRoles(ids []int64) (map[string]map[string]string, error)
 				out[cap] = map[string]string{}
 			}
 			for tier, level := range tiers {
-				if cur, ok := out[cap][tier]; !ok || levelRank[level] < levelRank[cur] {
-					out[cap][tier] = level
+				// 这张表要和判定给出同一个答案,所以并集也走同一个 LooserLevel ——
+				// 它顺带把读不懂的档位读成 deny,而不是让它排 0 压过别人。
+				if cur, ok := out[cap][tier]; !ok {
+					out[cap][tier] = model.LevelOf(level)
+				} else {
+					out[cap][tier] = model.LooserLevel(level, cur)
 				}
 			}
 		}

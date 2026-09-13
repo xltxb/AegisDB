@@ -13,6 +13,7 @@ import (
 	"velagateway/internal/dto"
 	"velagateway/internal/middleware"
 	"velagateway/internal/model"
+	"velagateway/internal/repository"
 	"velagateway/internal/service"
 	"velagateway/pkg/crypto"
 	"velagateway/pkg/resp"
@@ -235,6 +236,13 @@ func (h *Handler) SetRoleCapabilities(c *gin.Context) {
 		return
 	}
 	if err := h.Repo.SetMatrix(pathID(c), req.Matrix); err != nil {
+		// 档位写错是**调用方**的问题,不是网关坏了 —— 一句 500「保存失败」不告诉他
+		// 哪一格写错了、写错成什么,他只会原样再试一次。数据库真出了问题仍报 500,
+		// 而且不把库的错误原文抛出去。
+		if errors.Is(err, repository.ErrInvalidLevel) {
+			resp.Fail(c, resp.CodeBadRequest, err.Error())
+			return
+		}
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
