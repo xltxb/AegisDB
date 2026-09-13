@@ -38,11 +38,64 @@ import "strings"
 //     statement, and every layer that matters reads the whole text of one —
 //     the high-risk dictionary scans it, and the review looks inside anything
 //     still carrying semicolons (see review.innerStatements).
+
+// pending 是正在攒的那条语句,外加"它目前还是空的吗"这个答案。
+//
+// 这个问题循环里每个字节都要问一次:PL/SQL 整块识别与 DELIMITER 指令都只在语句
+// **边界**上生效,而"边界"的定义就是前面还没攒下任何东西。
+//
+// 从前的答法是 strings.TrimSpace(b.String()) —— 重扫一遍已经攒下的全部内容。一般
+// 脚本上看不出来,因为每遇到一个分号缓冲区就清空,它一直很短。但注释是被跳过的,
+// 跳过时只留下空白:一份注释占绝大多数、迟迟等不到分号的文件,缓冲区一路涨到整个
+// 文件那么大,而每个字节都把它重扫一遍 —— O(n²)。实测 800KB 全注释要 8.9 秒,外推
+// 到上传通道明确接受的 15MB 是五十多分钟,而结论是"0 条语句"。
+//
+// 现在只扫**上次问过之后新写进来的**那几个字节,累计起来就是线性的。见过非空白之后
+// 答案不会再变回去,直到 Reset。
+type pending struct {
+	b       strings.Builder
+	scanned int  // 已确认为空白的前缀长度
+	content bool // 已经见过非空白
+}
+
+// put/puts 而不是 WriteByte/WriteString:同名会被当成 io.ByteWriter/io.StringWriter
+// 的实现,而那两个接口要求返回 error。这里不是通用的 writer,只是一个内部缓冲。
+func (p *pending) put(c byte)     { p.b.WriteByte(c) }
+func (p *pending) puts(s string)  { p.b.WriteString(s) }
+func (p *pending) String() string { return p.b.String() }
+
+func (p *pending) Reset() {
+	p.b.Reset()
+	p.scanned, p.content = 0, false
+}
+
+// Blank 与 strings.TrimSpace(String()) == "" 同义。
+//
+// 起点回退到 UTF-8 的字符边界:多字节的空白(NBSP、NEL)会被逐字节写进来,从中间
+// 切开看就成了两个非空白字节,答案会和 TrimSpace 分道扬镳。
+func (p *pending) Blank() bool {
+	if p.content {
+		return false
+	}
+	s := p.b.String()
+	if len(s) > p.scanned {
+		start := p.scanned
+		for start > 0 && s[start]&0xC0 == 0x80 {
+			start--
+		}
+		if strings.TrimSpace(s[start:]) != "" {
+			p.content = true
+		}
+		p.scanned = len(s)
+	}
+	return !p.content
+}
+
 func SplitStatements(sql string) []string {
 	var out []string
-	var b strings.Builder
+	var b pending
 	execDepth := 0 // >0 while inside /*!ver ... */: keep the body, drop the markers
-	delim := ";"  // 当前语句分隔符;DELIMITER 指令会改它
+	delim := ";"   // 当前语句分隔符;DELIMITER 指令会改它
 	flush := func() {
 		if s := strings.TrimSpace(b.String()); s != "" {
 			out = append(out, s)
@@ -55,7 +108,7 @@ func SplitStatements(sql string) []string {
 		// the one merge this function performs — see plsql.go for why it does not
 		// violate the rule above (the merged unit is exactly the unit the server
 		// executes, and the dictionary still scans all of it).
-		if strings.TrimSpace(b.String()) == "" && plsqlBlockKind(sql[i:]) != "" {
+		if b.Blank() && plsqlBlockKind(sql[i:]) != "" {
 			atStart := len(out) == 0 && strings.TrimSpace(sql[:i]) == ""
 			if body, next, ok := takePLSQLBlock(sql, i, atStart); ok {
 				out = append(out, body)
@@ -67,7 +120,7 @@ func SplitStatements(sql string) []string {
 		// DELIMITER 只在语句边界、且位于行首时生效 —— 它是一行指令,不是表达式。
 		// 这两个条件一起,保证 SQL 文本里出现 "delimiter" 这个词(列名、字符串)
 		// 不会被误当成指令。
-		if strings.TrimSpace(b.String()) == "" && atLineStart(sql, i) {
+		if b.Blank() && atLineStart(sql, i) {
 			if d, next, ok := takeDelimiterDirective(sql, i); ok {
 				delim = d
 				b.Reset() // 指令本身不下发给服务器
@@ -86,42 +139,42 @@ func SplitStatements(sql string) []string {
 		case '$': // PostgreSQL dollar-quoted string $tag$ ... $tag$ — copy verbatim
 			tag, ok := dollarTag(sql, i)
 			if !ok { // ordinary '$' (identifier char, $1 placeholder, …)
-				b.WriteByte(c)
+				b.put(c)
 				break
 			}
-			b.WriteString(tag)
+			b.puts(tag)
 			i += len(tag)
 			for i < len(sql) && !strings.HasPrefix(sql[i:], tag) {
-				b.WriteByte(sql[i])
+				b.put(sql[i])
 				i++
 			}
 			if i < len(sql) { // closing tag
-				b.WriteString(tag)
+				b.puts(tag)
 				i += len(tag)
 			}
 			i-- // the loop's i++ lands on the next byte
 		case 'E', 'e': // PostgreSQL escape string E'...' — backslash escapes the next byte
 			if i+1 >= len(sql) || sql[i+1] != '\'' || (i > 0 && identByte(sql[i-1])) {
-				b.WriteByte(c) // ordinary identifier byte
+				b.put(c) // ordinary identifier byte
 				break
 			}
-			b.WriteByte(c)
+			b.put(c)
 			i++
-			b.WriteByte(sql[i]) // opening quote
+			b.put(sql[i]) // opening quote
 			i++
 			for i < len(sql) {
 				d := sql[i]
-				b.WriteByte(d)
+				b.put(d)
 				if d == '\\' && i+1 < len(sql) { // escaped byte — cannot close the literal
 					i++
-					b.WriteByte(sql[i])
+					b.put(sql[i])
 					i++
 					continue
 				}
 				if d == '\'' {
 					if i+1 < len(sql) && sql[i+1] == '\'' { // doubled quote
 						i++
-						b.WriteByte(sql[i])
+						b.put(sql[i])
 					} else {
 						break // closing quote
 					}
@@ -130,15 +183,15 @@ func SplitStatements(sql string) []string {
 			}
 		case '\'', '"', '`': // quoted literal / identifier — copy verbatim
 			q := c
-			b.WriteByte(c)
+			b.put(c)
 			i++
 			for i < len(sql) {
 				d := sql[i]
-				b.WriteByte(d)
+				b.put(d)
 				if d == q {
 					if i+1 < len(sql) && sql[i+1] == q { // doubled quote = escaped quote
 						i++
-						b.WriteByte(sql[i])
+						b.put(sql[i])
 					} else {
 						break // closing quote
 					}
@@ -150,9 +203,9 @@ func SplitStatements(sql string) []string {
 				for i < len(sql) && sql[i] != '\n' {
 					i++
 				}
-				b.WriteByte(' ')
+				b.put(' ')
 			} else {
-				b.WriteByte(c)
+				b.put(c)
 			}
 		case '/':
 			if i+1 < len(sql) && sql[i+1] == '*' {
@@ -166,7 +219,7 @@ func SplitStatements(sql string) []string {
 					}
 					execDepth++
 					i-- // the loop's i++ lands on the first body byte
-					b.WriteByte(' ')
+					b.put(' ')
 					break
 				}
 				i += 2 // plain block comment: remove up to the matching "*/"
@@ -174,26 +227,26 @@ func SplitStatements(sql string) []string {
 					i++
 				}
 				i++ // skip the closing '/'
-				b.WriteByte(' ')
+				b.put(' ')
 			} else {
-				b.WriteByte(c)
+				b.put(c)
 			}
 		case '*': // closer of an executable comment whose body we kept
 			if execDepth > 0 && i+1 < len(sql) && sql[i+1] == '/' {
 				execDepth--
 				i++
-				b.WriteByte(' ')
+				b.put(' ')
 			} else {
-				b.WriteByte(c)
+				b.put(c)
 			}
 		case ';':
 			if delim != ";" {
-				b.WriteByte(c) // 自定义分隔符生效时,分号属于语句体
+				b.put(c) // 自定义分隔符生效时,分号属于语句体
 				break
 			}
 			flush()
 		default:
-			b.WriteByte(c)
+			b.put(c)
 		}
 	}
 	flush()
