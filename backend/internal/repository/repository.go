@@ -1119,6 +1119,30 @@ func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {
 	return ss, err
 }
 
+// StepsOfMany 一次取回多张单的审批链,按单号分组。
+//
+// 审批列表一页最多 500 张,而原先每张单再查一次 —— 一次翻页最多 501 次查询。这条路径是
+// **登录后第一屏**(待办与我的申请都读它),在 MySQL 上那是实打实的几百次网络往返;更糟
+// 的是它随数据量增长,而没有任何地方会报错,页面只是越来越慢。
+//
+// 排序与逐张查一致(step_order 升序):界面按它画审批链,乱序等于把流程画反了。
+// 没有步骤的单不出现在结果里 —— 调用方从 map 取到 nil 切片,与 StepsOf 返回空切片等价。
+func (r *Repo) StepsOfMany(approvalIDs []int64) (map[int64][]model.ApprovalStep, error) {
+	out := map[int64][]model.ApprovalStep{}
+	if len(approvalIDs) == 0 {
+		return out, nil
+	}
+	var ss []model.ApprovalStep
+	if err := r.db.Where("approval_id IN ?", approvalIDs).
+		Order("approval_id asc, step_order asc").Find(&ss).Error; err != nil {
+		return nil, err
+	}
+	for _, s := range ss {
+		out[s.ApprovalID] = append(out[s.ApprovalID], s)
+	}
+	return out, nil
+}
+
 func (r *Repo) UpdateApprovalStatus(id int64, status string) error {
 	return r.db.Model(&model.Approval{}).Where("id = ?", id).Update("status", status).Error
 }
