@@ -472,42 +472,18 @@ func (d *Dispatcher) record(event, endpoint string, success bool, status string,
 
 // ---------------------------------------------------------------- Lark (飞书) cards
 
-func (d *Dispatcher) setStr(key string) string {
-	v, err := d.repo.GetSetting(key)
-	if err != nil || v == "" {
-		return ""
-	}
-	var s string
-	if json.Unmarshal([]byte(v), &s) == nil {
-		return s
-	}
-	return strings.Trim(v, "\"")
-}
-
-func (d *Dispatcher) setBool(key string, def bool) bool {
-	v, err := d.repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var b bool
-	if json.Unmarshal([]byte(v), &b) == nil {
-		return b
-	}
-	return def
-}
-
 // SendLarkApproval pushes an interactive Lark card for a newly created approval
 // to the configured bot webhook (async, best-effort). No-op unless Lark is
 // enabled and a webhook URL is set.
 func (d *Dispatcher) SendLarkApproval(ap *model.Approval) {
-	if ap == nil || !d.setBool("notify.lark", true) {
+	if ap == nil || !d.repo.SettingBool("notify.lark", true) {
 		return
 	}
-	webhook := d.setStr("notify.larkWebhook")
+	webhook := d.repo.SettingString("notify.larkWebhook", "")
 	if webhook == "" {
 		return
 	}
-	secret, consoleURL := d.setStr("notify.larkSecret"), d.setStr("notify.consoleURL")
+	secret, consoleURL := d.repo.SettingString("notify.larkSecret", ""), d.repo.SettingString("notify.consoleURL", "")
 	card := larkApprovalCard(ap, consoleURL)
 	go func() {
 		ok, msg := d.postLark(webhook, secret, card)
@@ -520,11 +496,11 @@ func (d *Dispatcher) SendLarkApproval(ap *model.Approval) {
 
 // TestLark sends a sample approval card synchronously and reports the outcome.
 func (d *Dispatcher) TestLark() (bool, string) {
-	webhook := d.setStr("notify.larkWebhook")
+	webhook := d.repo.SettingString("notify.larkWebhook", "")
 	if webhook == "" {
 		return false, "未配置飞书 Webhook 地址"
 	}
-	secret, consoleURL := d.setStr("notify.larkSecret"), d.setStr("notify.consoleURL")
+	secret, consoleURL := d.repo.SettingString("notify.larkSecret", ""), d.repo.SettingString("notify.consoleURL", "")
 	sample := &model.Approval{
 		ApNo: "AP-TEST", Instance: "order-cluster", Env: "prod", TierCode: "prod", RiskLevel: "high",
 		Initiator: "Vela", Command: "DROP TABLE orders_2024_q3;", Reason: "测试飞书审批卡片推送",

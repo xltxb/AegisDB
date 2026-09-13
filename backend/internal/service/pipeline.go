@@ -1112,7 +1112,7 @@ func (s *Services) ContinueManualStage(u *model.User, releaseID, stageID int64) 
 	// Two-person control: whoever raised the release may not also wave it through
 	// its manual gate, unless self-approval is deliberately enabled (same setting
 	// the approval chain honours). This holds whichever way the gate is staffed.
-	if u.ID == rel.CreatorID && !s.settingBool("approval.allowSelfApprove", false) {
+	if u.ID == rel.CreatorID && !s.Repo.SettingBool("approval.allowSelfApprove", false) {
 		return ErrForbidden
 	}
 	// 配了角色就以角色为准 —— 有审批能力但不在这个角色里的人也不能推动本流程。

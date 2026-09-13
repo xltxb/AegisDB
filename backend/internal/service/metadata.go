@@ -34,14 +34,14 @@ const (
 )
 
 // metaSyncEnabled 说明这台网关要不要主动去抓远端结构。默认 false —— 见文件注释。
-func (s *Services) metaSyncEnabled() bool { return s.settingBool(setMetaSyncEnabled, false) }
+func (s *Services) metaSyncEnabled() bool { return s.Repo.SettingBool(setMetaSyncEnabled, false) }
 
 // MetaSyncInterval 让 main.go 的定时器每轮读一次当前设置 —— 间隔是运行时可改的,
 // 按启动时那个值把 ticker 钉死,改了设置要重启才生效。
 func (s *Services) MetaSyncInterval() time.Duration { return s.metaSyncInterval() }
 
 func (s *Services) metaSyncInterval() time.Duration {
-	h := s.settingInt(setMetaSyncIntervalHrs, 24)
+	h := s.Repo.SettingInt(setMetaSyncIntervalHrs, 24)
 	if h < 1 {
 		h = 1 // 比一小时更频繁的全量扫描,已经不是"缓存"而是"压测"
 	}
@@ -52,7 +52,7 @@ func (s *Services) metaSyncInterval() time.Duration {
 }
 
 func (s *Services) metaSyncConcurrency() int {
-	n := s.settingInt(setMetaSyncConcurrency, 2)
+	n := s.Repo.SettingInt(setMetaSyncConcurrency, 2)
 	if n < 1 {
 		n = 1
 	}

@@ -49,7 +49,7 @@ func (s *Services) DecideBlockFor(u *model.User, ap *model.Approval) DecideBlock
 	}
 	// 两人控制(R16):发起人不能决定自己的工单,除非管理员显式开了自审批开关
 	// (小团队 / 单人运维)。默认关闭,保住职责分离。
-	if u.ID == ap.InitiatorID && !s.settingBool("approval.allowSelfApprove", false) {
+	if u.ID == ap.InitiatorID && !s.Repo.SettingBool("approval.allowSelfApprove", false) {
 		return BlockSelf
 	}
 	if !s.isChainMember(ap.ID, u) {

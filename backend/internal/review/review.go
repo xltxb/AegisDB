@@ -173,7 +173,7 @@ func Check(dialect, sql string, rules []Rule) Result {
 			for _, msg := range fire(pr, st, dialect) {
 				res.Findings = append(res.Findings, Finding{
 					Code: r.Code, Name: r.Name, Level: r.Level, Category: r.Category,
-					Stmt: st.index, Line: st.line, SQL: excerpt(st.raw), Message: msg,
+					Stmt: st.index, Line: st.line, SQL: excerpt(st.sql), Message: msg,
 				})
 			}
 		}
@@ -275,15 +275,17 @@ func regexRule(pr preparedRule, st *stmt) []string {
 	if pr.reErr != nil {
 		return []string{fmt.Sprintf("规则 %s 的正则无效: %v", pr.rule.Code, pr.reErr)}
 	}
-	// 匹配的是拆分器交回来的语句文本。
+	// 默认匹配抹掉注释之后的语句文本 —— 注释不是语法,拿它去撞关键词只会把数据
+	// 当成命令。`scope: "raw"` 改为匹配**原文**:「每条 DDL 必须带 -- ticket: 注释」
+	// 约束的不是 SQL 本身,是提交它的人有没有交代来由,而那句话只存在于原文里。
 	//
-	// 这里从前还有个 `scope: "raw"` 的开关,说是拿"原文"来匹配 —— 而它什么都不做:
-	// SplitStatements 在拆的时候就把注释全抹了(连语句中间的也抹),st.raw 与 st.sql
-	// 只差首尾空白。于是一条"每条 DDL 必须带 -- ticket: 注释"的 require 规则永远
-	// 匹配不上,运维怎么写都让它一直报,而看不出是旋钮坏了。没有种子规则、文档或
-	// 界面用过它,所以拆掉这个假承诺 —— 留着只是个陷阱。真要按注释审查,那是另一件
-	// 事:得让拆分器交回原文区间,而那条拆分规则是判定的地基,不能顺手改。
-	hit := pr.re.MatchString(st.sql)
+	// (这个开关曾经是假的:拆分器在拆的时候就把注释全抹了,raw 与 sql 只差首尾空白,
+	// 于是这类规则永远匹配不上、运维怎么写都让它一直报。现在拆分器会交回原文区间。)
+	target := st.sql
+	if p.str("scope", "") == "raw" {
+		target = st.raw
+	}
+	hit := pr.re.MatchString(target)
 	// forbid (default): a match is a violation. require: the ABSENCE is.
 	if p.str("mode", "forbid") == "require" {
 		if !hit {
@@ -313,9 +315,11 @@ func excerpt(s string) string {
 // re-parsing: comments stripped, string literals blanked (so a WHERE inside a
 // quoted value is never mistaken for a clause) and the leading verb resolved.
 type stmt struct {
-	index  int    // 1-based position in the script
-	line   int    // 1-based line the statement starts on
-	raw    string // as written, for the excerpt
+	index int    // 1-based position in the script
+	line  int    // 1-based line the statement starts on
+	raw   string // 原文:含归属于这条语句的注释,给 scope:"raw" 的规则用
+	//             PL/SQL 块里再拆出来的内部语句拿不到原文(它们是从抹过注释的块体
+	//             里拆的),raw 就是那段已清理的文本。
 	sql    string // comments stripped
 	masked string // sql with the CONTENT of quoted literals replaced by spaces
 	upper  string // upper-cased masked
@@ -326,10 +330,11 @@ type stmt struct {
 }
 
 func splitWithLines(sql string) []*stmt {
-	parts := sqlutil.SplitStatements(sql)
-	out := make([]*stmt, 0, len(parts))
+	spans := sqlutil.SplitStatementsWithSpans(sql)
+	out := make([]*stmt, 0, len(spans))
 	search := 0
-	for i, p := range parts {
+	for i, span := range spans {
+		p := span.Text
 		line := 1
 		// Locate the statement in the original text to number its line. The
 		// splitter normalises whitespace, so match on the first token rather than
@@ -343,7 +348,7 @@ func splitWithLines(sql string) []*stmt {
 		clean := gateway.StripComments(p)
 		masked := maskLiterals(clean)
 		out = append(out, &stmt{
-			index: i + 1, line: line, raw: p, sql: strings.TrimSpace(clean),
+			index: i + 1, line: line, raw: span.Raw(sql), sql: strings.TrimSpace(clean),
 			masked: masked, upper: strings.ToUpper(masked), verb: gateway.ParseVerb(clean),
 		})
 		// PL/SQL 块要再看进去一层:块整体交回来是给执行用的,而审查的检查器都锚在

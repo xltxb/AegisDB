@@ -382,7 +382,7 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "请提供脚本内容或已上传脚本的 uploadId")
 		return
 	} else {
-		up, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.ConnectionID, req.Filename, req.Content)
+		up, err := h.Svc.SaveUploadedScript(middleware.CurrentUser(c), req.Filename, req.Content)
 		if errors.Is(err, service.ErrScriptPathUnset) {
 			resp.Fail(c, resp.CodeScriptPathUnset, "请先在【系统设置 · 网关】配置上传脚本保存路径")
 			return

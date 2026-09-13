@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -740,7 +739,7 @@ const DefaultUploadDir = "uploads"
 // ScriptSavePath returns the upload-script save directory: the configured
 // script.savePath, or the default "uploads" dir under the backend run dir.
 func (s *Services) ScriptSavePath() string {
-	if p := strings.TrimSpace(s.settingString("script.savePath", "")); p != "" {
+	if p := strings.TrimSpace(s.Repo.SettingString("script.savePath", "")); p != "" {
 		return p
 	}
 	return DefaultUploadDir
@@ -753,7 +752,10 @@ func (s *Services) ScriptSavePath() string {
 // the id away here was why a pasted 100KB script still died with "Data too long
 // for column 'command'" while the upload-picker path had long moved to
 // references. Errors with ErrScriptPathUnset when no path is configured.
-func (s *Services) SaveUploadedScript(u *model.User, _ int64, filename, content string) (*model.ScriptUpload, error) {
+//
+// 刻意不收连接 ID:脚本归档在**上传者**名下,与它将来在哪台实例上跑无关。从前这里
+// 收一个 int64 又丢掉它,调用点读起来像是"归进这台实例",而那是假的。
+func (s *Services) SaveUploadedScript(u *model.User, filename, content string) (*model.ScriptUpload, error) {
 	return s.storeScript(u, filename, content, "terminal")
 }
 
@@ -968,11 +970,11 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 // SweepApprovalTimeouts applies the configured timeout policy to overdue pending
 // approvals (FR-APPR-05 / backend doc §7). Called periodically from a goroutine.
 func (s *Services) SweepApprovalTimeouts() {
-	action := s.settingString("approval.onTimeout", "keep-waiting")
+	action := s.Repo.SettingString("approval.onTimeout", "keep-waiting")
 	if action == "" || action == "keep-waiting" {
 		return
 	}
-	minutes := s.settingInt("approval.timeoutMinutes", 720)
+	minutes := s.Repo.SettingInt("approval.timeoutMinutes", 720)
 	cutoff := time.Now().Add(-time.Duration(minutes) * time.Minute)
 	aps, err := s.Repo.ListPendingApprovalsOlderThan(cutoff)
 	if err != nil {
@@ -1021,32 +1023,6 @@ func (s *Services) SweepApprovalTimeouts() {
 	}
 }
 
-// settingString reads a string setting (JSON-encoded), falling back to def.
-func (s *Services) settingString(key, def string) string {
-	v, err := s.Repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var str string
-	if json.Unmarshal([]byte(v), &str) == nil {
-		return str
-	}
-	return strings.Trim(v, "\"")
-}
-
-// settingBool reads a bool setting (JSON-encoded), falling back to def.
-func (s *Services) settingBool(key string, def bool) bool {
-	v, err := s.Repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var b bool
-	if json.Unmarshal([]byte(v), &b) == nil {
-		return b
-	}
-	return def
-}
-
 // checkMFA enforces the TOTP step-up policy for an operation on a tier that
 // demands it. It returns ErrMFARequired when the caller must present a valid
 // code (or, under the mandatory policy, must first enroll). nil means the op may
@@ -1059,7 +1035,7 @@ func (s *Services) settingBool(key string, def bool) bool {
 // flows). Turning on security.mfaMandatory closes that gap (M4) by blocking any
 // step-up op from a user who has not enrolled MFA.
 func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) error {
-	if u == nil || conn == nil || !s.settingBool("security.requireMFA", true) {
+	if u == nil || conn == nil || !s.Repo.SettingBool("security.requireMFA", true) {
 		return nil // policy inactive for this operation
 	}
 	// An unresolvable tier is treated as demanding the step-up. The op is about
@@ -1071,7 +1047,7 @@ func (s *Services) checkMFA(u *model.User, conn *model.Connection, code string) 
 	}
 	enrolled := u.MFAEnabled && u.MFASecret != "" // seed flags enabled w/o secret; that isn't enrolled
 	if !enrolled {
-		if s.settingBool("security.mfaMandatory", false) {
+		if s.Repo.SettingBool("security.mfaMandatory", false) {
 			// The mandate binds PEOPLE. A service account cannot enroll TOTP, and
 			// forcing it would end with a shared TOTP secret in a CI vault — worse
 			// than the exemption. Its second factor is the API credential's bcrypt
@@ -1117,7 +1093,7 @@ func (s *Services) validateTOTP(u *model.User, code string) bool {
 
 // SessionTTL maps the security.sessionTTL setting ("4h"/"8h"/"24h") to a duration.
 func (s *Services) SessionTTL() time.Duration {
-	switch s.settingString("security.sessionTTL", "8h") {
+	switch s.Repo.SettingString("security.sessionTTL", "8h") {
 	case "4h":
 		return 4 * time.Hour
 	case "24h":
@@ -1249,23 +1225,10 @@ func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp,
 	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, "AegisDB")}, nil
 }
 
-// settingInt reads an int setting (JSON-encoded), falling back to def.
-func (s *Services) settingInt(key string, def int) int {
-	v, err := s.Repo.GetSetting(key)
-	if err != nil || v == "" {
-		return def
-	}
-	var n int
-	if json.Unmarshal([]byte(v), &n) == nil {
-		return n
-	}
-	return def
-}
-
 // execTimeout is the per-command execution timeout, configurable at runtime via
 // the gateway.execTimeout setting (seconds). Bounded to [1s, 3600s]; default 30s.
 func (s *Services) execTimeout() time.Duration {
-	sec := s.settingInt("gateway.execTimeout", 30)
+	sec := s.Repo.SettingInt("gateway.execTimeout", 30)
 	if sec < 1 {
 		sec = 1
 	}

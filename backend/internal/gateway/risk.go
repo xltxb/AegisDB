@@ -499,15 +499,16 @@ func IsRead(sql string) bool {
 	if PlanOnly(sql) {
 		return true
 	}
-	verb := ParseVerb(sql)
-	// A CTE may carry the mutation: `WITH d AS (DELETE ... RETURNING *) SELECT ...`
-	// really deletes rows on PostgreSQL. WITH leads, so keying on the first verb
-	// alone routed it down the query path and recorded it as a read (ER9). What
-	// matters is whether the statement mutates, not which keyword comes first.
-	if verb == "WITH" && mutatingRe.MatchString(blankQuoted(StripComments(sql))) {
-		return false
-	}
-	return readVerbs[verb]
+	// 带改动的 CTE(`WITH d AS (DELETE … RETURNING *) SELECT …` 在 PostgreSQL 上
+	// 真的会删,ER9)由 ParseVerb 解成它的改动动词,所以这里按动词查表就够了 ——
+	// 要紧的是这条语句改不改数据,不是哪个关键词排在最前面。
+	//
+	// 这里从前另有一条 `verb == "WITH" && mutatingRe.MatchString(…)` 的分支。它不可能
+	// 为真:verb 还是 WITH,就说明 cteEffectiveVerb 已经拿同一个 mutatingRe 扫过同一份
+	// 输入且没命中(只差一次 TrimSpace,而 \b 正则不受首尾空白影响)。一条**看起来**
+	// 在把关、实际永远不执行的分支比没有更糟:下一个来改"CTE 算不算写"的人会改它,
+	// 然后以为自己改动了行为。
+	return readVerbs[ParseVerb(sql)]
 }
 
 // mutatingRe finds a data-modifying verb anywhere in a statement's structure
@@ -767,7 +768,6 @@ func (e *RiskEngine) ScanStatement(engine, tier, sql string) (string, string, bo
 // FROM a role; with none there is nothing to derive it from.
 func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (string, error) {
 	best := model.LevelDeny
-	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
 	if len(roleIDs) == 0 {
 		return model.LevelDeny, nil
 	}
@@ -776,8 +776,10 @@ func (e *RiskEngine) capabilityLevelUnion(roleIDs []int64, cap, tier string) (st
 		if err != nil {
 			return "", err // unknown level — the caller must not guess (ED3)
 		}
-		if rank[lvl] < rank[best] {
-			best = lvl
+		// model.LooserLevel 顺带把档位读成已知的那三个值之一 —— 读不懂的读成 deny,
+		// 所以它压不过任何东西(从前它排 0,反而是最宽松的那个,见 model/level.go)。
+		if looser := model.LooserLevel(lvl, best); looser != best {
+			best = looser
 		}
 	}
 	return best, nil
@@ -968,13 +970,9 @@ var deleteOrUpdateRe = regexp.MustCompile(`(?i)\b(delete|update)\b`)
 // stricterLevel returns whichever capability level gates more (allow ≺ approve ≺
 // deny). Used where two dimensions both apply and neither may be talked over by
 // the other — see the plan-only branch of EvaluateFor.
-func stricterLevel(a, b string) string {
-	rank := map[string]int{model.LevelAllow: 0, model.LevelApprove: 1, model.LevelDeny: 2}
-	if rank[b] > rank[a] {
-		return b
-	}
-	return a
-}
+//
+// 顺序与"读不懂算哪一档"都在 model.StricterLevel 里,一处说了算。
+func stricterLevel(a, b string) string { return model.StricterLevel(a, b) }
 
 // capabilityRank orders the capability dimensions by how much they can do.
 // Used to pick the most dangerous verb inside a block.

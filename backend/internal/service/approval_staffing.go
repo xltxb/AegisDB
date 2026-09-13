@@ -83,7 +83,7 @@ func chainStaffingIssue(where string, all []model.User, selfApprove bool) *Staff
 // 顺序是有意的:先默认链(影响面最大),再各流程的审批/确认角色,最后是已经卡住的
 // 存量工单 —— 从"以后会出事"到"现在已经出事"。
 func (s *Services) ApprovalStaffingReport() []StaffingIssue {
-	selfApprove := s.settingBool("approval.allowSelfApprove", false)
+	selfApprove := s.Repo.SettingBool("approval.allowSelfApprove", false)
 	out := []StaffingIssue{}
 
 	// ---- 默认审批链:owner,没有可批的人则回落 admin ----

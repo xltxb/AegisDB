@@ -375,7 +375,7 @@ func mfaGraceKey(u *model.User, conn *model.Connection) string {
 // 0 disables the grace (step up on every command). Held in memory only, so a
 // gateway restart also forces a fresh step-up — the safe direction.
 func (s *Services) mfaGraceWindow() time.Duration {
-	m := s.settingInt("security.mfaGraceMinutes", 30)
+	m := s.Repo.SettingInt("security.mfaGraceMinutes", 30)
 	if m <= 0 {
 		return 0
 	}

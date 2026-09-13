@@ -78,11 +78,11 @@ func SetExportMaxBytes(n int64) { exportMaxBytes = n }
 // export.maxBytes settings when set, else the built-in defaults. Negative
 // values are nonsense and fall back to the default; 0 disables the cap.
 func (s *Services) exportLimits() (maxRows, maxBytes int64) {
-	maxRows = int64(s.settingInt("export.maxRows", int(exportMaxRows)))
+	maxRows = int64(s.Repo.SettingInt("export.maxRows", int(exportMaxRows)))
 	if maxRows < 0 {
 		maxRows = exportMaxRows
 	}
-	maxBytes = int64(s.settingInt("export.maxBytes", int(exportMaxBytes)))
+	maxBytes = int64(s.Repo.SettingInt("export.maxBytes", int(exportMaxBytes)))
 	if maxBytes < 0 {
 		maxBytes = exportMaxBytes
 	}
@@ -93,7 +93,7 @@ func (s *Services) exportLimits() (maxRows, maxBytes int64) {
 // configurable via the export.execTimeout setting (seconds). Default 30min —
 // bounded below at 1s so a typo can't make every export fail instantly.
 func (s *Services) exportExecTimeout() time.Duration {
-	sec := s.settingInt("export.execTimeout", 1800)
+	sec := s.Repo.SettingInt("export.execTimeout", 1800)
 	if sec < 1 {
 		sec = 1800
 	}
@@ -155,7 +155,7 @@ func storedSQLTooLong(n int) error {
 // ExportSavePath returns the data-export directory: the configured
 // export.savePath, or the default "export" dir under the backend run dir.
 func (s *Services) ExportSavePath() string {
-	if p := strings.TrimSpace(s.settingString("export.savePath", "")); p != "" {
+	if p := strings.TrimSpace(s.Repo.SettingString("export.savePath", "")); p != "" {
 		return p
 	}
 	return DefaultExportDir
