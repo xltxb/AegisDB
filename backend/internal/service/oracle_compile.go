@@ -48,7 +48,7 @@ func (s *Services) CompileObject(u *model.User, connID int64, scope, kind, name,
 		// DBA 会以为线上那个 INVALID 的包已经修好了。
 		return nil, fmt.Errorf("该实例未配置真实执行凭据,无法编译(编译必须发生在真实库上)")
 	}
-	v := s.strictestVerdict(u, conn, stmts)
+	v := s.effectiveVerdict(u, conn, stmts)
 	label := fmt.Sprintf("COMPILE %s %s", strings.ToUpper(kind), strings.TrimSpace(name))
 	switch {
 	case v.Action == gateway.ActionDeny:

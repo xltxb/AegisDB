@@ -98,6 +98,44 @@ type Rule struct {
 	Enabled  bool   `json:"enabled"`
 }
 
+// NormalizeDialect 把一个方言名读成引擎认得的那几个之一。
+//
+// 大小写与首尾空白不算差别。空串、"all" 与任何**认不出**的名字都读成 generic ——
+// 也就是"只跑与方言无关的那些规则"。认不出时不擅自挑一个方言:挑错了,报出来的条目
+// 没有一条是真的,而人对审查结果的信任是一次性的(见 DialectFor 上的说明)。
+//
+// 调用方给了一个认不出的方言,这件事本身由 KnownDialect 交给上层去说 —— 静默降级
+// 成 generic 也是一种谎:他以为自己按 MySQL 审过了。
+func NormalizeDialect(d string) string {
+	n := strings.ToLower(strings.TrimSpace(d))
+	if n == "" || n == DialectAll {
+		return DialectGeneric
+	}
+	for _, k := range Dialects {
+		if n == k {
+			return n
+		}
+	}
+	if n == DialectGeneric {
+		return DialectGeneric
+	}
+	return DialectGeneric
+}
+
+// KnownDialect 报告 d 是不是引擎认得的方言名(generic 与 all 也算)。
+func KnownDialect(d string) bool {
+	n := strings.ToLower(strings.TrimSpace(d))
+	if n == "" || n == DialectAll || n == DialectGeneric {
+		return true
+	}
+	for _, k := range Dialects {
+		if n == k {
+			return true
+		}
+	}
+	return false
+}
+
 // AppliesTo reports whether the rule is in scope for a dialect.
 func (r Rule) AppliesTo(dialect string) bool {
 	d := strings.TrimSpace(strings.ToLower(r.Dialect))
@@ -149,9 +187,13 @@ const maxExcerpt = 240
 // judges is what the executor would run. Reviewing the raw text instead would
 // miss a rule in the tail of a batch and report positions nobody can map back.
 func Check(dialect, sql string, rules []Rule) Result {
-	if dialect == "" {
-		dialect = DialectGeneric
-	}
+	// 归一化方言名。
+	//
+	// 这个值可以直接来自调用方(开放接口的 /open/sql-review 不指定实例时就是表单里
+	// 那一格),而 AppliesTo 拿它去和规则上**已经小写过**的方言比。不归一,
+	// dialect=MySQL 就是"一条 MySQL 规则都不跑",报告照样回通过,还把 MySQL 这个名字
+	// 回显给他。这类失败最坏的地方在于它看起来完全正常。
+	dialect = NormalizeDialect(dialect)
 	res := Result{Dialect: dialect, Findings: []Finding{}}
 	active := make([]Rule, 0, len(rules))
 	prepared := make([]preparedRule, 0, len(rules))

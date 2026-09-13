@@ -299,7 +299,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		return nil, ErrForbidden
 	}
 
-	v := s.strictestVerdict(u, conn, stmts)
+	v := s.effectiveVerdict(u, conn, stmts)
 	if v.Action == gateway.ActionDeny {
 		s.recordAuditBy(u, origin.operator(), conn, releaseAuditLabel(req.Title, body), model.RiskHigh, model.ResultRejected, "", "intercept")
 		return nil, ErrForbidden
@@ -767,7 +767,7 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 		return failStage("· 目标实例处于维护态,未执行")
 	}
 	// An instance whose tier no longer resolves is never judged as allowed —
-	// strictestVerdict returns Unavailable for it, but failing here says why.
+	// effectiveVerdict returns Unavailable for it, but failing here says why.
 	if _, terr := s.tierCodeOf(conn); terr != nil {
 		return failStage("· 实例的分层标签解析失败,未执行")
 	}
@@ -775,7 +775,7 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 	if len(stmts) == 0 {
 		return failStage("· 发布内容中没有可执行的语句")
 	}
-	v := s.strictestVerdict(creator, conn, stmts)
+	v := s.effectiveVerdict(creator, conn, stmts)
 	switch {
 	case v.Action == gateway.ActionDeny:
 		s.recordAuditBy(creator, releaseOperator(rel), conn, releaseAuditLabel(rel.Title, body), model.RiskHigh, model.ResultRejected, rel.RelNo, "intercept")

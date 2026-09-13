@@ -46,7 +46,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 		return nil, err
 	}
 	// Judge (a multi-statement batch is governed by its strictest sub-statement).
-	// tier 由 strictestVerdict 自己解析,解析不出时它返回 Unavailable(拒绝),
+	// tier 由 effectiveVerdict 自己解析,解析不出时它返回 Unavailable(拒绝),
 	// 与这里原先的 ErrBadRequest 同为 fail-closed —— 不重复解析一次。
 	// **无条件**拆分后再判,和同步 Exec 一模一样。
 	//
@@ -62,7 +62,7 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 		// 空输入或纯注释:没有语句可判,也没有什么可执行的。
 		return nil, ErrBadRequest
 	}
-	v := s.strictestVerdict(u, conn, stmts)
+	v := s.effectiveVerdict(u, conn, stmts)
 	switch v.Action {
 	case gateway.ActionDeny:
 		s.recordAudit(u, conn, sql, model.RiskHigh, model.ResultRejected, "", "intercept")

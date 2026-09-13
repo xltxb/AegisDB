@@ -89,7 +89,7 @@ func (s *Services) RiskCheck(u *model.User, connID int64, sql, database string) 
 	// operator the batch was safe, while Exec then intercepted it anyway.
 	v := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
 	if stmts := sqlutil.SplitStatements(sql); len(stmts) > 0 {
-		v = s.strictestVerdict(u, conn, stmts)
+		v = s.effectiveVerdict(u, conn, stmts)
 	}
 	return &dto.RiskCheckResp{
 		Risk:             v.Risk,
@@ -158,26 +158,20 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
 }
 
-// strictestVerdict evaluates every statement and returns the one demanding the
-// most gating (deny > approve > allow; within the same action, the higher risk),
-// so a mixed command is governed by its most dangerous part rather than its
-// leading verb. Ranking by action alone let the FIRST approve-ranked statement
-// freeze the verdict: `UPDATE …(mid); DELETE …(high)` produced a ticket graded
-// mid with the DELETE's dictionary rule dropped, so the approver reviewed a
-// high-risk batch under a mid-risk label.
+// effectiveVerdict 是真正管着这条命令的那个裁决 —— judge 的结论,丢掉它同时交回的
+// 那扇窗口。
 //
-// For a batch the rule names EVERY gated statement — position and verb — not
-// just the winner's. Collapsing identical rule texts hid the count: three DROPs
-// pasted as one command produced the single line "高危命令字典 · PROD 禁止直接执行"
-// with Command = "DROP", which read as "only the first statement was caught"
-// while the other two were in fact judged and gated too. The judgement was
-// never the gap; the report was.
-func (s *Services) strictestVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
+// 它从前叫 effectiveVerdict,而那个名字是假的:取最严发生在 rawVerdict 里(下面),
+// 这个函数交回的是**窗口放宽之后**的结论。执行窗口能把"需审批"放宽成"直接执行",
+// 所以这不是措辞问题 —— 在 pipeline、异步执行、Oracle 编译那几处读到 effectiveVerdict
+// 的人,会以为自己看的是没放宽过的判定。名字挂错了函数,连同那段讲"取最严"的文档
+// 一起,而那段文档说的是 rawVerdict 干的事。
+func (s *Services) effectiveVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	v, _ := s.judge(u, conn, stmts)
 	return v
 }
 
-// judge is strictestVerdict plus the execution window that relaxed it, if any.
+// judge 是 effectiveVerdict 外加"是哪扇窗口放宽了它"(没有就是 nil)。
 //
 // 放宽发生在**这里**,而不是各个执行入口:终端、异步执行、发布流水线、Oracle 编译,
 // 每一条都经过这个函数。放在入口上就意味着"新加一条路时要记得也放宽" —— 而这类
@@ -189,7 +183,18 @@ func (s *Services) judge(u *model.User, conn *model.Connection, stmts []string) 
 	return s.relaxByWindow(conn, v, time.Now())
 }
 
-// rawVerdict 是三层判定本身的结论,不含任何窗口放宽。
+// rawVerdict 是三层判定本身的结论,不含任何窗口放宽 —— 取最严就发生在这里。
+//
+// 它逐条判定,交回要求把关最多的那一条(deny > approve > allow;同一动作里取风险更高
+// 的那条),所以一批混合命令由它**最危险**的那部分说了算,而不是由排在最前面的动词。
+// 只按动作排序时,第一条判成 approve 的语句就把裁决冻住了:`UPDATE …(mid); DELETE …
+// (high)` 出的工单标着 mid,而 DELETE 的字典规则被丢掉了 —— 审批人在一个 mid 的标签
+// 下审了一批 high 的命令。
+//
+// 一批命令里,规则要点名**每一条**被拦下的语句(位置和动词),不只是胜出的那条。把
+// 重复的规则文案合并会把数量藏起来:三条 DROP 粘成一条命令,只出一行「高危命令字典 ·
+// PROD 禁止直接执行」、Command 写着 "DROP",读起来像是"只逮到第一条",而另外两条其实
+// 也判了、也拦了。判定从来不是缺口,报告才是。
 func (s *Services) rawVerdict(u *model.User, conn *model.Connection, stmts []string) gateway.Verdict {
 	tier, err := s.tierCodeOf(conn)
 	if err != nil {
@@ -279,7 +284,7 @@ func (s *Services) execJudged(ctx context.Context, u *model.User, conn *model.Co
 		// 分层解析不出来是 deny,窗口放宽不作用于 deny,所以这里没有窗口可言。
 		return s.applyVerdict(ctx, u, conn, sql, gateway.Unavailable(conn.Engine, sql, err), reason, nil)
 	}
-	// 这条路不经过 strictestVerdict(它按单条语句判),所以放宽要在这里显式接上 ——
+	// 这条路不经过 effectiveVerdict(它按单条语句判),所以放宽要在这里显式接上 ——
 	// 否则同一条语句在终端里免审批、走脚本执行却要审批。
 	v, win := s.relaxByWindow(conn, s.Engine.EvaluateFor(s.Repo.EffectiveRoleIDs(u), conn.Engine, tier, sql), time.Now())
 	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
