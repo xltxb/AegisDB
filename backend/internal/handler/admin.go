@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -532,7 +533,7 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 	var req dto.LarkApprovalCallbackReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("lark callback: bad body", "ip", ip, "err", err)
-		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		resp.FailStatus(c, http.StatusBadRequest, resp.CodeBadRequest, "参数错误")
 		return
 	}
 	slog.Info("lark callback received",
@@ -547,26 +548,26 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 		// how you spot a silently-rejected callback.
 		slog.Warn("lark callback: auth rejected (fail-closed)",
 			"ip", ip, "secretPresent", secret != "", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调鉴权失败")
+		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调鉴权失败")
 		return
 	}
 	status, err := h.Svc.DecideApprovalExternal(req)
 	if err == service.ErrNotFound {
 		slog.Warn("lark callback: approval not found",
 			"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID)
-		resp.Fail(c, resp.CodeBadRequest, "审批单不存在")
+		resp.FailStatus(c, http.StatusNotFound, resp.CodeNotFound, "审批单不存在")
 		return
 	}
 	if err == service.ErrForbidden {
 		// The payload authenticated but does not describe this ticket (e.g. it
 		// quotes a different vendor task) — see DecideApprovalExternal.
 		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调与该审批单不匹配")
+		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调与该审批单不匹配")
 		return
 	}
 	if err != nil {
 		slog.Error("lark callback: process failed", "externalTaskId", req.ExternalTaskID, "err", err)
-		resp.Fail(c, resp.CodeInternalError, "回调处理失败")
+		resp.FailStatus(c, http.StatusInternalServerError, resp.CodeInternalError, "回调处理失败")
 		return
 	}
 	slog.Info("lark callback processed",
