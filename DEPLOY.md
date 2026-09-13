@@ -161,8 +161,40 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 - 迁移文件里的 `CREATE DATABASE` / `USE` 会被跳过;已应用版本记录在 `schema_migrations`。
 - `migrate` 同时回填引用数据:`gli` / `uat` 环境、五个内置分层、流程模板与规则库、`executed_at`、`strict_nowhere`。
 - `init` 重复执行会**重置**该管理员的密码,并强制其 active + admin 角色。
-- 迁移文件 `0013 / 0019 / 0020 / 0025 / 0026 / 0029 / 0033` 各含多条非幂等 `ALTER`;若在其中一条之后失败,
-  重跑会在已成功的那条上报 `1060`,需要手工把已应用的语句注释掉再跑(见 ADR 0016)。
+### 含多条非幂等 `ALTER` 的历史迁移
+
+迁移**没有事务**:一条一条执行,失败即返回,而重跑是从**文件的第一条**开始。所以一个含
+多条 `ADD COLUMN` 的文件在中途失败之后,重跑必然在第一条报 `1060 Duplicate column name`
+—— 运维看到的是一个和真正原因完全无关的错误。
+
+以下文件有这个性质(括号内为条数,与 `TestMigrations_AltersAreIdempotentOrAlone` 里的
+豁免表逐条对应):
+
+| 文件 | 条数 |
+| --- | --- |
+| `0013_dual_snapshot.sql` | 3 |
+| `0015_approval_script_ref.sql` | 2 |
+| `0019_pipeline_sqlreview.sql` | 2 |
+| `0020_api_client.sql` | 7 |
+| `0025_project.sql` | 3 |
+| `0026_review_spec_provenance.sql` | 2 |
+| `0029_sensitive_export_approval.sql` | 4 |
+| `0033_exec_window_approval.sql` | 5 |
+
+**中途失败了怎么办**(以 `0020` 为例):
+
+1. 先看清失败在第几条 —— 错误信息里就有:`migration 0020_api_client.sql statement 5 failed: …`。
+2. 修掉那一条失败的根因(通常是锁等待、磁盘、或目标表被别的会话占着)。
+3. 把**第 1 到 4 条**(已经成功的那几条)在文件里临时注释掉,只留第 5 条起。
+4. 重跑 `vela-gateway migrate`。
+5. 跑通之后把注释恢复 —— 文件必须与仓库里的那份一致,否则下一台机器拿到的是另一个东西。
+
+第 3 步也可以换成手工 `ALTER TABLE … DROP COLUMN` 把前 4 条撤掉再整文件重跑,但那是在
+生产上做减法,只在确认那几列还没有数据时才可行。
+
+**新文件不会再有这个问题**:`TestMigrations_AltersAreIdempotentOrAlone` 拦着 —— 新迁移
+里的 `ALTER` 要么每一条都幂等(`MODIFY` / `CREATE TABLE IF NOT EXISTS` 这类重复执行无害
+的写法),要么一个文件只放一条(见 ADR 0016 §三)。上面那张豁免表只许变短。
 
 ## 启动时的自动动作
 

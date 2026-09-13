@@ -85,7 +85,7 @@ func (s *Services) SweepMetadata() {
 	for i := range conns {
 		c := conns[i]
 		// 维护态的实例是被人为标成"别碰"的。定时任务不该是那个例外。
-		if c.Status == "maint" {
+		if c.Status == model.ConnMaint {
 			mu.Lock()
 			skipped++
 			mu.Unlock()

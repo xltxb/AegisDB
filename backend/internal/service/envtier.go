@@ -28,10 +28,10 @@ import (
 // the message because the console shows it verbatim to the operator.
 var (
 	ErrTierInUse         = fmt.Errorf("仍有环境绑定该分层标签,请先迁移或删除这些环境")
-	ErrTierIsScanBase    = fmt.Errorf("该分层标签是脚本扫描基准,请先把基准转移到其他标签")
+	ErrTierIsScanBase    = fmt.Errorf("该分层标签是基准分层,请先把基准转移到其他标签")
 	ErrLastTier          = fmt.Errorf("至少保留一个分层标签")
 	ErrLastEnvironment   = fmt.Errorf("至少保留一个环境")
-	ErrNoScanBaseline    = fmt.Errorf("必须有且仅有一个分层标签作为脚本扫描基准")
+	ErrNoScanBaseline    = fmt.Errorf("必须有且仅有一个分层标签作为基准分层")
 	ErrEnvMoveTargetSame = fmt.Errorf("迁移目标不能是被删除的环境本身")
 )
 
@@ -142,7 +142,26 @@ func (s *Services) DeleteEnvTier(code string) error {
 	if len(tiers) <= 1 {
 		return ErrLastTier
 	}
-	return s.Repo.DeleteEnvTier(code)
+	// 流程模板也按分层绑。分层删掉之后那个模板永远匹配不上任何东西 —— 不会再有实例
+	// 属于一个不存在的分层。它躺在列表里看起来好好的,用的时候才报「仅适用于 XXX 分层」,
+	// 而那个分层已经不在了。
+	if n, cerr := s.Repo.CountPipelinesOfTier(code); cerr != nil {
+		return cerr
+	} else if n > 0 {
+		return ErrTierInUse
+	}
+	// 上面这些检查是为了给人**一句说得清的话**(是扫描基准?还有环境?还是最后一个?)。
+	// 真正决定删不删得成的是下面这一次条件删除:检查与删除在同一次操作里,中间那一瞬
+	// 有人把环境绑上来时,删除会落空而不是照做。
+	deleted, err := s.Repo.DeleteEnvTierIfUnused(code)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		// 走到这里说明检查通过、删除却没成 —— 只可能是这中间有人动了它。
+		return ErrTierInUse
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------- Environments

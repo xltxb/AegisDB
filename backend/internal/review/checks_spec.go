@@ -230,20 +230,12 @@ func chkViewNesting(st *stmt, p params, _ string) []string {
 		return nil
 	}
 	max := p.num("max", 4)
-	depth, cur := 0, 0
-	for i := 0; i < len(st.masked); i++ {
-		switch st.masked[i] {
-		case '(':
-			cur++
-			if cur > depth {
-				depth = cur
-			}
-		case ')':
-			if cur > 0 {
-				cur--
-			}
-		}
-	}
+	// 嵌套层数按 SELECT 的**出现次数**算。
+	//
+	// 这里原先还扫了一遍括号深度(depth),算完之后从未参与结论 —— 一个写了一半的另一种
+	// 度量。两者不是一回事:`WHERE id IN (1,2,3)` 括号深度是 1 却没有嵌套,而
+	// `SELECT … FROM (SELECT … FROM (SELECT …))` 两者都算得出来。规则要说的是「这张视图
+	// 套了几层查询」,SELECT 的个数是更直接的答案。
 	levels := len(selectWordRe.FindAllString(st.masked, -1))
 	if levels <= max {
 		return nil
@@ -288,7 +280,7 @@ func chkDeleteWholeTable(st *stmt, _ params, _ string) []string {
 }
 
 func chkJoinCount(st *stmt, p params, _ string) []string {
-	max := p.num("max", 16)
+	max := p.num("max", defaultMaxJoinTables)
 	n := len(joinRe.FindAllString(st.masked, -1))
 	if n == 0 {
 		return nil
@@ -375,7 +367,7 @@ func chkVolatileInSubquery(st *stmt, p params, _ string) []string {
 	if len(spans) == 0 {
 		return nil
 	}
-	fns := p.list("functions", []string{"nextval", "uuid_generate_v1", "uuid_generate_v4", "random", "currval", "lastval"})
+	fns := p.list("functions", defaultVolatileFns)
 	var out []string
 	for _, fn := range fns {
 		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(fn) + `\s*\(`)

@@ -703,6 +703,51 @@ func clearOtherBaselines(tx *gorm.DB, keep string) error {
 
 // DeleteEnvTier removes a tier and every rule row keyed by it. Callers must have
 // verified that no environment still binds it (service layer).
+// DeleteEnvTierIfUnused 删一个分层 —— **检查和删除在同一次操作里**。
+//
+// 原先三项检查跑在事务外、删除是第四步。中间那一瞬里,另一个人可以把一个环境绑到这个
+// 分层上:检查说「没有环境」,删除照做,而那个环境从此指向一个不存在的分层。后果是
+// fail-closed(解析不到分层 → 拒绝每一条命令),所以不是安全洞,是一台谁也说不清为什么
+// 用不了的实例。
+//
+// 条件写在 WHERE 里,谁先谁赢由数据库裁 —— 与 ClaimApproval 是同一个手法。返回值说的是
+// 「这一次删掉了没有」:false 不是错误,是「删的时候条件已经不成立了」,调用方据此去查明
+// 到底是哪一条挡住的,给人一句说得清的话。
+//
+// 绑着**流程模板**的分层同样不能删:模板按分层绑(Pipeline.TierCode),分层没了它就永远
+// 匹配不上任何东西 —— 躺在列表里看起来好好的,用的时候才报「仅适用于一个不存在的分层」。
+func (r *Repo) DeleteEnvTierIfUnused(code string) (bool, error) {
+	deleted := false
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		res := tx.Where(`code = ? AND scan_baseline = ?
+			AND NOT EXISTS (SELECT 1 FROM tbl_environment WHERE tier_code = ?)
+			AND NOT EXISTS (SELECT 1 FROM tbl_pipeline WHERE tier_code = ?)
+			AND (SELECT COUNT(*) FROM tbl_env_tier) > 1`,
+			code, false, code, code).Delete(&model.EnvTier{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return nil // 条件已经不成立 —— 规则行一行都不动
+		}
+		deleted = true
+		// 分层没了,挂在它上面的规则行就该一起走:留着的话,重新建一个同名分层会把
+		// 上一次的规则原样继承过来,而那不是任何人的意图。
+		if err := tx.Where("tier_code = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("tier_code = ?", code).Delete(&model.RiskCommand{}).Error
+	})
+	return deleted, err
+}
+
+// CountPipelinesOfTier 报告有几个流程模板绑在这个分层上。
+func (r *Repo) CountPipelinesOfTier(code string) (int64, error) {
+	var n int64
+	err := r.db.Model(&model.Pipeline{}).Where("tier_code = ?", code).Count(&n).Error
+	return n, err
+}
+
 func (r *Repo) DeleteEnvTier(code string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("tier_code = ?", code).Delete(&model.RoleCapability{}).Error; err != nil {
@@ -1072,6 +1117,30 @@ func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {
 	var ss []model.ApprovalStep
 	err := r.db.Where("approval_id = ?", approvalID).Order("step_order asc").Find(&ss).Error
 	return ss, err
+}
+
+// StepsOfMany 一次取回多张单的审批链,按单号分组。
+//
+// 审批列表一页最多 500 张,而原先每张单再查一次 —— 一次翻页最多 501 次查询。这条路径是
+// **登录后第一屏**(待办与我的申请都读它),在 MySQL 上那是实打实的几百次网络往返;更糟
+// 的是它随数据量增长,而没有任何地方会报错,页面只是越来越慢。
+//
+// 排序与逐张查一致(step_order 升序):界面按它画审批链,乱序等于把流程画反了。
+// 没有步骤的单不出现在结果里 —— 调用方从 map 取到 nil 切片,与 StepsOf 返回空切片等价。
+func (r *Repo) StepsOfMany(approvalIDs []int64) (map[int64][]model.ApprovalStep, error) {
+	out := map[int64][]model.ApprovalStep{}
+	if len(approvalIDs) == 0 {
+		return out, nil
+	}
+	var ss []model.ApprovalStep
+	if err := r.db.Where("approval_id IN ?", approvalIDs).
+		Order("approval_id asc, step_order asc").Find(&ss).Error; err != nil {
+		return nil, err
+	}
+	for _, s := range ss {
+		out[s.ApprovalID] = append(out[s.ApprovalID], s)
+	}
+	return out, nil
 }
 
 func (r *Repo) UpdateApprovalStatus(id int64, status string) error {
@@ -1615,10 +1684,24 @@ func (r *Repo) Count(m any) int64 {
 // literal counted only the one that happens to be named after its tier.
 func (r *Repo) CountProdInterceptions() (int64, error) {
 	var n int64
+	// 按**这一行自己的快照**算,不按实例此刻绑在哪一层算。
+	//
+	// 双快照(issue 03)存在的全部意义就是这个:这一行说「一条命令当时被判成 high」,
+	// 而只有当时那一层能解释为什么。拿当前绑定去 join 有两个后果 ——
+	//
+	//   · 把一台实例从 prod 改绑到 dev,**历史拦截数当场变少**:上个月发生过的事,
+	//     不会因为今天改了配置就没发生
+	//   · 连接被删之后,它名下的审计行**一条都不算**,而删掉一台实例恰恰是那段历史
+	//     更值得留着的时候
+	//
+	// 拆分之前的老行没有 tier_code,只能回退到当前绑定 —— 尽力而为,而不是一概不算。
+	// 两个 LEFT JOIN 就是为这条回退留的路:新行根本用不到它们。
 	err := r.db.Model(&model.AuditLog{}).
-		Joins("JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
-		Joins("JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
-		Joins("JOIN tbl_env_tier ON tbl_env_tier.code = tbl_environment.tier_code").
+		Joins("LEFT JOIN tbl_connection ON tbl_connection.id = tbl_audit_log.connection_id").
+		Joins("LEFT JOIN tbl_environment ON tbl_environment.code = tbl_connection.env").
+		Joins(`JOIN tbl_env_tier ON tbl_env_tier.code = CASE
+		         WHEN tbl_audit_log.tier_code IS NOT NULL AND tbl_audit_log.tier_code <> ''
+		         THEN tbl_audit_log.tier_code ELSE tbl_environment.tier_code END`).
 		Where("tbl_env_tier.counts_in_pending = ? AND tbl_audit_log.result IN ?", true, []string{"rejected", "pending"}).
 		Count(&n).Error
 	return n, err

@@ -182,7 +182,9 @@ func (s *Services) DecideApprovalExternal(cb dto.LarkApprovalCallbackReq) (strin
 	// 于是哈希链上缺一行。**由外部输入决定审计写不写得进去**,这件事本身就是问题。
 	operator = clip(operator, 128)
 	slog.Info("external callback: finalizing ticket", "apNo", ap.ApNo, "approved", approved, "operator", operator)
-	if _, ferr := s.finalizeApproval(ap, approved, operator); ferr != nil {
+	// 厂商回调里那句 reason 一直被丢掉。它是审批人在飞书卡片上写下的字,而发起人
+	// 在这边看到的只有「已驳回」三个字。
+	if _, ferr := s.finalizeApproval(ap, approved, operator, cb.Reason); ferr != nil {
 		if ferr == ErrAlreadyDecided {
 			// Lost the race with the in-app path / another callback — return current.
 			if cur, e := s.Repo.GetApproval(ap.ID); e == nil {

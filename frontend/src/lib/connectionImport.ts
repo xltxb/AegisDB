@@ -20,7 +20,13 @@
  * deliberately narrow: accepting anything would move the first real check to the
  * server, after some rows of the sheet had already been created.
  */
-export const IMPORT_ENVS = ['prod', 'gli', 'staging', 'dev'] as const
+// 五个,不是四个 —— 内置环境是按内置分层同名建出来的,uat 也在其中(后端
+// backfillEnvTiers 在全新库上建,correctBuiltinTiers 在老库上补,所以**所有**安装路径
+// 下它都在)。
+//
+// 这只是拉取失败时的兜底(正常走调用方传进来的实时列表),但兜底也得说真话:少一个,
+// 那一刻一张指向 uat 实例的表会被整行判成非法环境,而服务端本来会接受它。
+export const IMPORT_ENVS = ['prod', 'gli', 'staging', 'uat', 'dev'] as const
 /** Gateway policies an instance may carry; mirrors the backend's validPolicies. */
 export const IMPORT_POLICIES = ['strict', 'approve-1', 'audit-only'] as const
 

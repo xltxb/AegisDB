@@ -281,7 +281,27 @@ var wrongBuiltinLayers = map[string][]string{
 // Only a label this code wrote itself is replaced (see wrongBuiltinNames). An
 // operator who has renamed a tier keeps their name — overwriting a deliberate
 // edit to fix our own mistake would be its own kind of wrong.
+// builtinTierCorrectionKey 记着「补内置分层」这件事已经做过了。
+//
+// correctBuiltinTiers 做两件事,而它们的性质完全不同:
+//
+//   · **纠正我们自己写错的显示名** —— 幂等,每次都可以跑,它只改仍然叫着错名字的那几行
+//   · **补上一个从未存在过的内置分层** —— **一次性**的数据修正(2026-08-06 的五分层
+//     修正给 uat 补位),做过就不该再做
+//
+// 逐行去补的后果是:管理员删掉 uat(因为这套系统里根本没有演练环境),运维执行一次
+// `server migrate`,它连同环境和一整套规则行原样回来。他会以为是自己没删干净,再删一次,
+// 下一次升级再回来 —— 而工单 01 承诺的正是「删掉的 tier 不会在重启时复活」。
+const builtinTierCorrectionKey = "seed.builtinTiersCorrected"
+
+// builtinTierCorrectionDone 报告那次一次性修正做没做过。
+func builtinTierCorrectionDone(db *gorm.DB) bool {
+	var s model.Setting
+	return db.First(&s, "k = ?", builtinTierCorrectionKey).Error == nil
+}
+
 func correctBuiltinTiers(db *gorm.DB) error {
+	corrected := builtinTierCorrectionDone(db)
 	for _, want := range builtinTiers {
 		var cur model.EnvTier
 		err := db.First(&cur, "code = ?", want.Code).Error
@@ -289,13 +309,34 @@ func correctBuiltinTiers(db *gorm.DB) error {
 			// A built-in that does not exist yet — uat on any pre-correction
 			// database. Create it, give it an environment, and clone its rules;
 			// a tier without rule rows is an environment nothing governs.
+			//
+			// 但只在**这次修正还没做过**的时候。做过之后再看到一个内置分层缺席,那说明
+			// 是管理员删的 —— 把它补回来就是在推翻一个人的决定(工单 01)。
+			if corrected {
+				continue
+			}
+			// StrictNoWhere 要在 Create **之后**再写一次,理由同 backfillEnvTiers:
+			// 那个字段带 default 标签,Create 既会把显式的 false 当零值丢掉、让数据库
+			// 默认值顶上,又会把应用后的默认值写回 struct —— 于是补回来的 dev 带着
+			// strict_nowhere=true 出现,开发环境上每一条无 WHERE 的 DELETE 从此都要
+			// 审批,而没有人改过那个开关(ADR 0013)。
+			strict := want.StrictNoWhere
 			if err := db.Create(&want).Error; err != nil {
 				return err
 			}
-			if err := db.Create(&model.Environment{
-				Code: want.Code, DisplayName: want.DisplayName, TierCode: want.Code, SortOrder: want.SortOrder,
-			}).Error; err != nil {
+			if err := db.Model(&model.EnvTier{}).Where("code = ?", want.Code).
+				Update("strict_nowhere", strict).Error; err != nil {
 				return err
+			}
+			// 环境可能还在(管理员只删了分层,或上一轮补到一半失败) —— 已经有就不重建,
+			// 否则唯一索引会让整个迁移停在这里。
+			var existing model.Environment
+			if db.First(&existing, "code = ?", want.Code).Error != nil {
+				if err := db.Create(&model.Environment{
+					Code: want.Code, DisplayName: want.DisplayName, TierCode: want.Code, SortOrder: want.SortOrder,
+				}).Error; err != nil {
+					return err
+				}
 			}
 			continue
 		}
@@ -329,7 +370,19 @@ func correctBuiltinTiers(db *gorm.DB) error {
 		}
 	}
 	// uat's rule rows, whether it was just created here or on a fresh seed.
-	return mirrorTierRules(db, model.EnvStaging, model.EnvUat)
+	//
+	// 同样只在修正那一轮做:做过之后再补规则行,等于把管理员删掉的规则又克隆回来。
+	if !corrected {
+		if err := mirrorTierRules(db, model.EnvStaging, model.EnvUat); err != nil {
+			return err
+		}
+		// 记下这件事做过了。放在最后:中途失败就当没做过,下次重来 —— 补分层与克隆
+		// 规则都只补缺失的行,重来是安全的。
+		if err := db.Save(&model.Setting{K: builtinTierCorrectionKey, V: "true"}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // backfillEnvTierMenu grants the new "envtier" menu to whoever already holds
@@ -415,6 +468,11 @@ func seedGliEnv(repo *repository.Repo) error { return backfillGliEnv(repo.DB()) 
 // backfillGliEnv is seedGliEnv against a raw handle, so the migration path can
 // run it too (see Migrate).
 func backfillGliEnv(db *gorm.DB) error {
+	// 同 correctBuiltinTiers:这是一次性的数据补齐,做过之后再跑就是把管理员删掉的
+	// 规则行克隆回来。工单 01 要的正是「删掉的东西不会自己回来」。
+	if builtinTierCorrectionDone(db) {
+		return nil
+	}
 	if err := mirrorTierRules(db, model.EnvStaging, model.EnvGli); err != nil {
 		return err
 	}

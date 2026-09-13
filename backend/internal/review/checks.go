@@ -132,9 +132,10 @@ var (
 )
 
 // chkRequireWhere is the one review rule that overlaps the risk engine's
-// strict mode, and deliberately so: strict mode is a global switch an operator
-// may have turned off for the terminal, while a release must never carry an
-// unscoped mutation regardless of that setting.
+// strict mode, and deliberately so: 严格模式**按分层**开关(ADR 0013,迁移 0030),
+// 而 dev 出厂就是关着的 —— 那里清空一张草稿表是日常。发布不一样:它最终要落到某个
+// 受管分层上,所以无论目标那一层的开关是什么,一条无 WHERE 的变更都不该被这条流水线
+// 带过去。
 func chkRequireWhere(st *stmt, _ params, _ string) []string {
 	if st.verb != "UPDATE" && st.verb != "DELETE" {
 		return nil

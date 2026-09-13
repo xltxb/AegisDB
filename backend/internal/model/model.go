@@ -34,7 +34,7 @@ const (
 // NOT to be confused with Connection.Tags, which is the data-access scope
 // (which databases a role/user may reach). Nothing here is called a "tag".
 type EnvTier struct {
-	Code        string `gorm:"primaryKey;size:16" json:"code"`
+	Code        string `gorm:"primaryKey;size:32" json:"code"`
 	DisplayName string `gorm:"size:64;not null" json:"displayName"`
 	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
 
@@ -82,7 +82,7 @@ func (EnvTier) TableName() string { return "tbl_env_tier" }
 type Environment struct {
 	Code        string `gorm:"primaryKey;size:32" json:"code"`
 	DisplayName string `gorm:"size:64;not null" json:"displayName"`
-	TierCode    string `gorm:"size:16;index:idx_environment_tier;not null" json:"tierCode"`
+	TierCode    string `gorm:"size:32;index:idx_environment_tier;not null" json:"tierCode"`
 	SortOrder   int    `gorm:"not null;default:0" json:"sortOrder"`
 }
 
@@ -162,10 +162,10 @@ const (
 	// 生产环境不会出现这个值(模拟一律被拒),它只可能来自开发/演示环境。
 	ResultSimulated = "simulated"
 	ResultPending   = "pending"
-	ResultRejected = "rejected"
+	ResultRejected  = "rejected"
 	// 工单被发起人撤回。与 rejected 分开,理由同 StatusCancelled。
 	ResultCancelled = "cancelled"
-	ResultWarn     = "warn"
+	ResultWarn      = "warn"
 	// ResultExported records data leaving the console as a file. The rows were
 	// already shown to this user, so nothing new was read — but a copy now exists
 	// outside the gateway, and /export already records that. A terminal that wrote
@@ -208,9 +208,9 @@ type User struct {
 	Status       string    `gorm:"size:16;not null;default:active" json:"status"` // active|disabled|invited
 	Kind         string    `gorm:"size:16;not null;default:human" json:"kind"`    // human|service — see UserKind*
 	MFAEnabled   bool      `gorm:"not null;default:false" json:"mfaEnabled"`
-	MFASecret    string    `gorm:"size:64" json:"-"`                                // base32 TOTP secret (never serialized)
-	MFALastCtr   int64     `gorm:"not null;default:0" json:"-"`                     // last consumed TOTP counter (anti-replay, M3)
-	TokenVersion int64     `gorm:"not null;default:0" json:"-"`                     // session generation; bumped to revoke tokens (M1)
+	MFASecret    string    `gorm:"size:64" json:"-"`            // base32 TOTP secret (never serialized)
+	MFALastCtr   int64     `gorm:"not null;default:0" json:"-"` // last consumed TOTP counter (anti-replay, M3)
+	TokenVersion int64     `gorm:"not null;default:0" json:"-"` // session generation; bumped to revoke tokens (M1)
 	PasswordHash string    `gorm:"size:255" json:"-"`
 	Dept         string    `gorm:"size:64" json:"dept"`
 	Initials     string    `gorm:"size:8" json:"initials"`
@@ -250,17 +250,25 @@ func (RoleMember) TableName() string { return "tbl_role_member" }
 type RoleCapability struct {
 	RoleID     int64  `gorm:"primaryKey" json:"roleId"`
 	Capability string `gorm:"primaryKey;size:32" json:"capability"` // select|write|ddl|grant|conn|approve|explain
-	TierCode   string `gorm:"primaryKey;size:16;column:tier_code" json:"tierCode"`
+	TierCode   string `gorm:"primaryKey;size:32;column:tier_code" json:"tierCode"`
 	Level      string `gorm:"size:16;not null" json:"level"` // allow|approve|deny
 }
 
 func (RoleCapability) TableName() string { return "tbl_role_capability" }
 
 // Connection — a managed database instance proxied by the gateway.
+// 实例的两种状态。判定层认的是 ConnMaint,**别的一律当在线** —— 所以这里只有两个值,
+// 而写入口必须挡住第三种:一个打错的 "maintenance" 存进去之后,界面上显示「维护中」,
+// 而网关照常放行。
+const (
+	ConnOnline = "online"
+	ConnMaint  = "maint"
+)
+
 type Connection struct {
-	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"size:64;uniqueIndex:idx_connection_name;not null" json:"name"`
-	Engine      string    `gorm:"size:32;not null" json:"engine"`
+	ID     int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name   string `gorm:"size:64;uniqueIndex:idx_connection_name;not null" json:"name"`
+	Engine string `gorm:"size:32;not null" json:"engine"`
 	// TargetSchema 是本次请求选中的 schema,只活在内存里(gorm:"-",不入库、不出 JSON)。
 	//
 	// 它为 Oracle 而存在。别的引擎里"切库"就是换 Database 字段,而 Oracle 的 Database
@@ -269,19 +277,19 @@ type Connection struct {
 	//
 	// 见 service.applyTargetDatabase(写入)与 gateway.RealRun(生效)。
 	TargetSchema string `gorm:"-" json:"-"`
-	Host        string    `gorm:"size:128;not null" json:"host"`
-	Port        int       `gorm:"not null" json:"port"`
+	Host         string `gorm:"size:128;not null" json:"host"`
+	Port         int    `gorm:"not null" json:"port"`
 	// Env holds an Environment.Code, so it must be as wide as one (32). It was
 	// sized 16 back when the only legal values were the four built-in strings.
 	Env         string    `gorm:"size:32;index:idx_connection_env;not null" json:"env"`
 	Policy      string    `gorm:"size:32;not null" json:"policy"` // strict|approve-1|audit-only
 	DefaultRole string    `gorm:"size:64" json:"defaultRole"`
 	Layer       string    `gorm:"size:64" json:"layer"`
-	Username    string    `gorm:"size:64" json:"username"`             // real-execution credentials
-	Password    string    `gorm:"size:255" json:"-"`                   // never serialized
-	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema / sqlite file
-	Tags        string    `gorm:"size:255" json:"tags"` // comma-separated labels for group access
-	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // online|maint
+	Username    string    `gorm:"size:64" json:"username"`                       // real-execution credentials
+	Password    string    `gorm:"size:255" json:"-"`                             // never serialized
+	Database    string    `gorm:"column:db_name;size:128" json:"database"`       // default schema / sqlite file
+	Tags        string    `gorm:"size:255" json:"tags"`                          // comma-separated labels for group access
+	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // ConnOnline | ConnMaint
 	CreatedAt   time.Time `json:"createdAt"`
 }
 
@@ -338,8 +346,9 @@ func (DatabaseProject) TableName() string { return "tbl_database_project" }
 // 只动其中一两个。放开面越小,窗口开着的那几个小时里能出的事就越少。
 //
 // 两种时间模型:
-//   once      —— 一次性,起止时刻,用完即废(本周六 22:00 到周日 02:00)
-//   recurring —— 周期班车,固定时段反复生效(每天 02:00-04:00),可设整体失效时间
+//
+//	once      —— 一次性,起止时刻,用完即废(本周六 22:00 到周日 02:00)
+//	recurring —— 周期班车,固定时段反复生效(每天 02:00-04:00),可设整体失效时间
 //
 // 时区是窗口自己的属性,不是服务器的。运维说的"凌晨两点"是他所在时区的两点,而网关
 // 可能跑在 UTC 上 —— 存 IANA 名字,判定时按它换算。
@@ -427,9 +436,9 @@ const (
 	// ExportAwaiting:含敏感字段的导出在批准之前停在这里,不进队列。
 	ExportAwaiting = "awaiting"
 	ExportPending  = "pending"
-	ExportRunning = "running"
-	ExportDone    = "done"
-	ExportFailed  = "failed"
+	ExportRunning  = "running"
+	ExportDone     = "done"
+	ExportFailed   = "failed"
 	// ExportExpired — the archive was deleted by the retention sweep. The row
 	// STAYS: what was exported, by whom, how many rows and when is the part an
 	// auditor asks about, and it outlives the file by design. Only the pointer to
@@ -442,30 +451,30 @@ const (
 // result (encrypted archive + password) is recorded here so the user can list
 // finished jobs and download them later.
 type ExportJob struct {
-	ID           int64      `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID       int64      `gorm:"index:idx_export_user;not null" json:"userId"`
-	ConnectionID int64      `json:"connectionId"`
-	Instance     string     `gorm:"size:96" json:"instance"`
-	Database     string     `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
-	SQL          string     `gorm:"type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
-	Name         string     `gorm:"size:128" json:"name"`
-	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID       int64  `gorm:"index:idx_export_user;not null" json:"userId"`
+	ConnectionID int64  `json:"connectionId"`
+	Instance     string `gorm:"size:96" json:"instance"`
+	Database     string `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
+	SQL          string `gorm:"type:mediumtext" json:"sql"`              // 64KB TEXT rejected long IN-list exports (migration 0018)
+	Name         string `gorm:"size:128" json:"name"`
+	Status       string `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
 	// IncludeSensitive:这份导出要不要**原值**。默认(false)敏感字段照常打码。
 	//
 	// 它不是一个可以自己勾了就生效的开关:带着它的任务不会直接进队列,而是停在
 	// awaiting 等审批。一份带原值的 CSV 落到磁盘、发进聊天工具,比在终端上看一眼
 	// 跑得远得多 —— 这正是脱敏在导出这一路最要紧的原因,所以放开它要有人签字。
-	IncludeSensitive bool  `gorm:"not null;default:false" json:"includeSensitive"`
-	ApprovalID       int64 `gorm:"index:idx_export_approval;not null;default:0" json:"approvalId"`
-	ApNo             string `gorm:"size:32" json:"apNo"`
-	Rows         int        `json:"rows"`
-	Bytes        int64      `json:"bytes"`                              // total encrypted size across parts
-	Parts        int        `json:"parts"`                             // number of ~100MB CSV files
-	Files        string     `gorm:"type:text" json:"files"`            // newline-joined part paths
-	Password     string     `gorm:"size:128" json:"password"`          // holds the AES-encrypted archive password (~68 chars)
-	Error        string     `gorm:"size:255" json:"error"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	FinishedAt   *time.Time `json:"finishedAt"`
+	IncludeSensitive bool       `gorm:"not null;default:false" json:"includeSensitive"`
+	ApprovalID       int64      `gorm:"index:idx_export_approval;not null;default:0" json:"approvalId"`
+	ApNo             string     `gorm:"size:32" json:"apNo"`
+	Rows             int        `json:"rows"`
+	Bytes            int64      `json:"bytes"`                    // total encrypted size across parts
+	Parts            int        `json:"parts"`                    // number of ~100MB CSV files
+	Files            string     `gorm:"type:text" json:"files"`   // newline-joined part paths
+	Password         string     `gorm:"size:128" json:"password"` // holds the AES-encrypted archive password (~68 chars)
+	Error            string     `gorm:"size:255" json:"error"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	FinishedAt       *time.Time `json:"finishedAt"`
 }
 
 func (ExportJob) TableName() string { return "tbl_export_job" }
@@ -474,26 +483,26 @@ func (ExportJob) TableName() string { return "tbl_export_job" }
 // decoupled from the HTTP request so it can't time out. Server progress messages
 // (PostgreSQL/DWS RAISE NOTICE) stream into Log as they arrive; submit → poll.
 type AsyncJob struct {
-	ID           int64      `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID       int64      `gorm:"index:idx_async_user;not null" json:"userId"`
-	ConnectionID int64      `json:"connectionId"`
-	Instance     string     `gorm:"size:96" json:"instance"`
-	Database     string     `gorm:"column:db_name;size:128" json:"database"`
-	SQL          string     `gorm:"type:mediumtext" json:"sql"` // see migration 0018
-	Reason       string     `gorm:"size:512" json:"reason"`
-	Status       string     `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID       int64  `gorm:"index:idx_async_user;not null" json:"userId"`
+	ConnectionID int64  `json:"connectionId"`
+	Instance     string `gorm:"size:96" json:"instance"`
+	Database     string `gorm:"column:db_name;size:128" json:"database"`
+	SQL          string `gorm:"type:mediumtext" json:"sql"` // see migration 0018
+	Reason       string `gorm:"size:512" json:"reason"`
+	Status       string `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	// Risk is the verdict that authorised this job, captured at submit time. The
 	// worker audits when the job finishes — possibly an hour later — and the
 	// dictionary may have changed by then, so the level that actually permitted
 	// the run is the one worth recording. It used to be hardcoded to "mid" at
 	// audit time, which made the field meaningless for filtering (ER7).
-	Risk string `gorm:"size:16" json:"risk"` // high|mid|low
-	Log  string `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
-	Rows         int        `json:"rows"`
-	Error        string     `gorm:"size:512" json:"error"`
-	CreatedAt    time.Time  `json:"createdAt"`
-	StartedAt    *time.Time `json:"startedAt"`
-	FinishedAt   *time.Time `json:"finishedAt"`
+	Risk       string     `gorm:"size:16" json:"risk"`        // high|mid|low
+	Log        string     `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
+	Rows       int        `json:"rows"`
+	Error      string     `gorm:"size:512" json:"error"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	StartedAt  *time.Time `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
 }
 
 func (AsyncJob) TableName() string { return "tbl_async_job" }
@@ -512,7 +521,7 @@ type ScriptUpload struct {
 	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	UserID    int64     `gorm:"index:idx_upload_user;not null" json:"userId"`
 	Filename  string    `gorm:"size:255;not null" json:"filename"`
-	Path      string    `gorm:"size:512" json:"path"`  // server path, shown to the owner
+	Path      string    `gorm:"size:512" json:"path"` // server path, shown to the owner
 	Size      int64     `json:"size"`
 	Source    string    `gorm:"size:16" json:"source"` // upload|terminal
 	CreatedAt time.Time `json:"createdAt"`
@@ -592,7 +601,7 @@ func (RoleTag) TableName() string { return "tbl_role_tag" }
 // permitted.
 type RiskCommand struct {
 	Command  string `gorm:"primaryKey;size:32" json:"command"`
-	TierCode string `gorm:"primaryKey;size:16;column:tier_code" json:"tierCode"`
+	TierCode string `gorm:"primaryKey;size:32;column:tier_code" json:"tierCode"`
 	Level    string `gorm:"size:16;not null;default:high" json:"level"` // high|mid|off
 }
 
@@ -600,9 +609,9 @@ func (RiskCommand) TableName() string { return "tbl_risk_command" }
 
 // Approval — a high-risk approval ticket.
 type Approval struct {
-	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	ApNo         string    `gorm:"size:32;uniqueIndex:idx_approval_apno;not null" json:"apNo"`
-	ConnectionID int64     `gorm:"not null" json:"connectionId"`
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	ApNo         string `gorm:"size:32;uniqueIndex:idx_approval_apno;not null" json:"apNo"`
+	ConnectionID int64  `gorm:"not null" json:"connectionId"`
 	// Env and TierCode are a DUAL SNAPSHOT taken when the ticket was raised: where
 	// it ran (environment) and what it was judged under (control tier). Both are
 	// plain strings with no foreign key, and neither is ever rewritten.
@@ -615,10 +624,10 @@ type Approval struct {
 	//
 	// TierCode is empty on rows written before this split. Callers show it as
 	// unknown rather than inferring one.
-	Env          string    `gorm:"size:32;not null" json:"env"`
-	TierCode     string    `gorm:"size:16" json:"tierCode"`
-	Instance     string    `gorm:"size:64;not null" json:"instance"`
-	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // see migration 0018
+	Env      string `gorm:"size:32;not null" json:"env"`
+	TierCode string `gorm:"size:32" json:"tierCode"`
+	Instance string `gorm:"size:64;not null" json:"instance"`
+	Command  string `gorm:"type:mediumtext;not null" json:"command"` // see migration 0018
 	// A script approval keeps the script in the file the initiator uploaded and
 	// records a REFERENCE to it, not its body: Command then holds a bounded,
 	// readable excerpt. The body of a real migration runs to megabytes, and
@@ -631,18 +640,18 @@ type Approval struct {
 	// nothing else would notice.
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
-	Keyword      string    `gorm:"size:32" json:"keyword"`
-	Database     string    `gorm:"column:db_name;size:128" json:"database"` // selected target database
-	InitiatorID  int64     `gorm:"index:idx_approval_initiator;not null" json:"initiatorId"`
-	Initiator    string    `gorm:"size:64" json:"initiator"`
-	Reason       string    `gorm:"size:512" json:"reason"`
-	RiskLevel    string    `gorm:"size:16;not null" json:"riskLevel"` // high|mid|low
-	Status       string     `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
-	AuditID      string     `gorm:"size:32" json:"auditId"`
+	Keyword        string `gorm:"size:32" json:"keyword"`
+	Database       string `gorm:"column:db_name;size:128" json:"database"` // selected target database
+	InitiatorID    int64  `gorm:"index:idx_approval_initiator;not null" json:"initiatorId"`
+	Initiator      string `gorm:"size:64" json:"initiator"`
+	Reason         string `gorm:"size:512" json:"reason"`
+	RiskLevel      string `gorm:"size:16;not null" json:"riskLevel"` // high|mid|low
+	Status         string `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
+	AuditID        string `gorm:"size:32" json:"auditId"`
 	// External (审批魔方) integration: ExternalTaskID is the vendor's task_id, used
 	// by the timeout PATCH write-back. Callback correlation uses our ApNo (echoed
 	// back as external_task_id), not this.
-	ExternalTaskID string   `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
+	ExternalTaskID string `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
 	// ReleaseID links a ticket raised by a release pipeline's approve stage back
 	// to its release. It also keeps the ticket OUT of the manual execute path
 	// (ExecuteApproved): the pipeline owns the execute stage, and letting someone
@@ -662,9 +671,9 @@ type Approval struct {
 	//   1. 通过之后要做的事是"让那个窗口开始生效",不是执行一条命令;
 	//   2. 把这张单挡在**手动执行**那条路之外 —— 窗口单的 Command 是一句描述
 	//      ("开启执行窗口「…」"),发起人若能点"执行",网关会把那句话当 SQL 发出去。
-	WindowID int64 `gorm:"not null;default:0;index:idx_approval_window" json:"windowId,omitempty"`
-	Result       string     `gorm:"type:text" json:"result"`     // execution output once approved
-	ResultRows   int        `json:"resultRows"`
+	WindowID   int64  `gorm:"not null;default:0;index:idx_approval_window" json:"windowId,omitempty"`
+	Result     string `gorm:"type:text" json:"result"` // execution output once approved
+	ResultRows int    `json:"resultRows"`
 	// ExecStatus 是命令在**目标库上真的跑成了没有**,和 Status 是两件事。
 	//
 	// Status 记的是审批的结论:批了就是批了,跑挂了并不会把它变回没批准 —— 能不能
@@ -674,8 +683,8 @@ type Approval struct {
 	//
 	// 空 = 还没执行,或者是这一列存在之前就跑过的历史工单 —— 后者的成败无从得知,
 	// 界面照旧只说"已执行",不替它编一个结果。
-	ExecStatus   string     `gorm:"size:16" json:"execStatus"`
-	Escalated    bool       `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)
+	ExecStatus string `gorm:"size:16" json:"execStatus"`
+	Escalated  bool   `gorm:"not null;default:false" json:"-"` // timeout escalation fired once (R13)
 	// ExecutedAt 把"批准了"和"跑过了"分成两件事。
 	//
 	// 审批通过不再顺带执行:命令在审批人点下去的那一刻跑,意味着发起人可能不在
@@ -683,9 +692,9 @@ type Approval struct {
 	// 通过之后工单停在这里等发起人来执行,这个字段就是"等"与"跑过了"的分界。
 	//
 	// 它也是一次性的闸:占住它才允许执行,所以一次批准只换一次执行。
-	ExecutedAt   *time.Time `json:"executedAt"`
-	DecidedAt    *time.Time `json:"decidedAt"`                   // when approved/rejected
-	CreatedAt    time.Time  `json:"createdAt"`
+	ExecutedAt *time.Time `json:"executedAt"`
+	DecidedAt  *time.Time `json:"decidedAt"` // when approved/rejected
+	CreatedAt  time.Time  `json:"createdAt"`
 }
 
 func (Approval) TableName() string { return "tbl_approval" }
@@ -724,13 +733,13 @@ type AuditLog struct {
 	// and only the tier in force at that moment explains why. Both are covered by
 	// the chain hash, so neither can be edited after the fact without breaking it.
 	// Empty on rows predating the split.
-	Env          string    `gorm:"size:32" json:"env"`
-	TierCode     string    `gorm:"size:16" json:"tierCode"`
-	Database     string    `gorm:"column:db_name;size:128" json:"database"` // target database the command ran against
-	Command      string    `gorm:"type:mediumtext;not null" json:"command"` // full query on purpose (EX5) — see migration 0018
-	Risk         string    `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"`   // high|mid|low
-	Result       string    `gorm:"size:16;not null" json:"result"`                       // executed|pending|rejected|warn
-	ApprovalNo   string    `gorm:"size:32" json:"approvalNo"`
+	Env        string `gorm:"size:32" json:"env"`
+	TierCode   string `gorm:"size:32" json:"tierCode"`
+	Database   string `gorm:"column:db_name;size:128" json:"database"`           // target database the command ran against
+	Command    string `gorm:"type:mediumtext;not null" json:"command"`           // full query on purpose (EX5) — see migration 0018
+	Risk       string `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"` // high|mid|low
+	Result     string `gorm:"size:16;not null" json:"result"`                    // executed|pending|rejected|warn
+	ApprovalNo string `gorm:"size:32" json:"approvalNo"`
 	// Operator is who actually authorised/performed the action when that is not
 	// the actor — an external 飞书 approver, or an administrator acting on another
 	// user's account. Empty means actor and operator are the same person. Without
@@ -759,7 +768,7 @@ type WebhookConfig struct {
 	//
 	// 255 而不是 128:密文比明文长六十多个字符,而超长在非 STRICT 的 MySQL 上是
 	// 静默截断 —— 存下一段解不开的密文,推送从此全部 401。
-	Secret   string `gorm:"size:255;not null" json:"-"`
+	Secret string `gorm:"size:255;not null" json:"-"`
 
 	Events   string `gorm:"size:255;not null" json:"events"` // intercept,approve,exec,login
 	RetryMax int    `gorm:"not null;default:5" json:"retryMax"`
@@ -809,13 +818,13 @@ func (SchemaObject) TableName() string { return "tbl_schema_object" }
 // Schema 为空表示扁平引擎(MySQL / SQLite / Oracle 按 owner 归组时 owner 落在
 // DBName 上),PostgreSQL 家族才有 schema 这一层 —— 与 gateway.SchemaGroup 的形状一致。
 type MetaTable struct {
-	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConnectionID int64  `gorm:"index:idx_meta_table_scope,priority:1;not null" json:"connectionId"`
-	DBName       string `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;size:128;not null" json:"database"`
-	SchemaName   string `gorm:"column:schema_name;size:128;not null" json:"schema"`
-	Name         string `gorm:"column:table_name;index:idx_meta_table_name;size:128;not null" json:"name"`
-	Kind         string `gorm:"size:16;not null" json:"kind"` // table | view
-	Comment      string `gorm:"size:512" json:"comment"`
+	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64     `gorm:"index:idx_meta_table_scope,priority:1;not null" json:"connectionId"`
+	DBName       string    `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;size:128;not null" json:"database"`
+	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
+	Name         string    `gorm:"column:table_name;index:idx_meta_table_name;size:128;not null" json:"name"`
+	Kind         string    `gorm:"size:16;not null" json:"kind"` // table | view
+	Comment      string    `gorm:"size:512" json:"comment"`
 	SyncedAt     time.Time `json:"syncedAt"`
 }
 
@@ -827,18 +836,18 @@ func (MetaTable) TableName() string { return "tbl_meta_table" }
 // 风暴,而这份数据本来就没有引用完整性可言 —— 它是一张照片。定位靠与 MetaTable 相同
 // 的四元组(连接 / 库 / schema / 表名)。
 type MetaColumn struct {
-	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConnectionID int64  `gorm:"index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
-	DBName       string `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;size:128;not null" json:"database"`
-	SchemaName   string `gorm:"column:schema_name;size:128;not null" json:"schema"`
-	TableName_   string `gorm:"column:table_name;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
-	Ordinal      int    `gorm:"not null" json:"ordinal"`
-	Name         string `gorm:"column:column_name;index:idx_meta_col_name;size:128;not null" json:"name"`
-	DataType     string `gorm:"size:128;not null" json:"dataType"`
-	Nullable     bool   `gorm:"not null;default:true" json:"nullable"`
-	ColDefault   string `gorm:"column:col_default;size:512" json:"default"`
-	Comment      string `gorm:"size:512" json:"comment"`
-	IsPK         bool   `gorm:"column:is_pk;not null;default:false" json:"isPk"`
+	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64     `gorm:"index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
+	DBName       string    `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;size:128;not null" json:"database"`
+	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
+	TableName_   string    `gorm:"column:table_name;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
+	Ordinal      int       `gorm:"not null" json:"ordinal"`
+	Name         string    `gorm:"column:column_name;index:idx_meta_col_name;size:128;not null" json:"name"`
+	DataType     string    `gorm:"size:128;not null" json:"dataType"`
+	Nullable     bool      `gorm:"not null;default:true" json:"nullable"`
+	ColDefault   string    `gorm:"column:col_default;size:512" json:"default"`
+	Comment      string    `gorm:"size:512" json:"comment"`
+	IsPK         bool      `gorm:"column:is_pk;not null;default:false" json:"isPk"`
 	SyncedAt     time.Time `json:"syncedAt"`
 }
 
@@ -919,20 +928,20 @@ const (
 // list of forbidden types). Builtin rules ship defaults; an empty Params means
 // "use the built-in default", never "no constraint".
 type SQLReviewRule struct {
-	ID        int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Code      string    `gorm:"size:64;uniqueIndex:idx_review_code;not null" json:"code"`
-	Name      string    `gorm:"size:128;not null" json:"name"`
-	Dialect   string    `gorm:"size:64;not null;default:all" json:"dialect"`  // all|mysql|tidb|dws|oracle (comma-separated)
-	Category  string    `gorm:"size:32;not null" json:"category"`             // naming|structure|index|dml|ddl|security|perf
-	Level     string    `gorm:"size:16;not null;default:warn" json:"level"`   // error|warn|info
+	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Code     string `gorm:"size:64;uniqueIndex:idx_review_code;not null" json:"code"`
+	Name     string `gorm:"size:128;not null" json:"name"`
+	Dialect  string `gorm:"size:64;not null;default:all" json:"dialect"` // all|mysql|tidb|dws|oracle (comma-separated)
+	Category string `gorm:"size:32;not null" json:"category"`            // naming|structure|index|dml|ddl|security|perf
+	Level    string `gorm:"size:16;not null;default:warn" json:"level"`  // error|warn|info
 	// Spec / SpecRef 是**引文**:这条规则出自公司规范的哪一级、哪一节。
 	// 空 = 规范未覆盖,是平台自带的防护 —— 标出来,免得有人把它当成规范原文去引用。
-	Spec    string `gorm:"size:16;not null;default:''" json:"spec"`     // critical|mandatory|recommended|''
-	SpecRef string `gorm:"size:128;not null;default:''" json:"specRef"` // 如 "Huawei DWS 規範 §5.3 分布鍵"
+	Spec      string    `gorm:"size:16;not null;default:''" json:"spec"`      // critical|mandatory|recommended|''
+	SpecRef   string    `gorm:"size:128;not null;default:''" json:"specRef"`  // 如 "Huawei DWS 規範 §5.3 分布鍵"
 	Kind      string    `gorm:"size:16;not null;default:builtin" json:"kind"` // builtin|regex
 	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
-	Params    string    `gorm:"type:text" json:"params"`  // JSON knobs; empty = builtin defaults
-	Message   string    `gorm:"size:512" json:"message"`  // what the operator is told when it fires
+	Params    string    `gorm:"type:text" json:"params"` // JSON knobs; empty = builtin defaults
+	Message   string    `gorm:"size:512" json:"message"` // what the operator is told when it fires
 	SortOrder int       `gorm:"not null;default:0" json:"sortOrder"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
@@ -947,7 +956,7 @@ func (SQLReviewRule) TableName() string { return "tbl_sql_review_rule" }
 //
 // TableName 为 "*" 表示所有表:口令、密钥这类字段在哪张表上都不该被看到。
 type SensitiveColumn struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	ID int64 `gorm:"primaryKey;autoIncrement" json:"id"`
 	// 字段不能叫 TableName —— 那是 GORM 用来问"这个模型对应哪张表"的方法名。
 	Tbl        string    `gorm:"column:table_name;size:128;uniqueIndex:uk_sensitive_col,priority:1;not null" json:"tableName"`
 	ColumnName string    `gorm:"size:128;uniqueIndex:uk_sensitive_col,priority:2;not null" json:"columnName"`
@@ -991,7 +1000,7 @@ type APIClient struct {
 	// Scopes limits what the credential can do: release:create, release:read,
 	// review:check. A read-only integration (a dashboard polling ticket status)
 	// should not hold a credential that can raise a production change.
-	Scopes     string     `gorm:"size:255;not null" json:"scopes"`
+	Scopes string `gorm:"size:255;not null" json:"scopes"`
 	// PipelineID 绑定这把凭据建单要走的发布流程(网关侧策略,外部请求不可指定;
 	// 见 migrations/0023)。0 = 未绑定,走目标分层的默认流程。
 	PipelineID int64      `gorm:"not null;default:0" json:"pipelineId"`
@@ -1058,12 +1067,12 @@ const (
 // flow can govern several tiers; TierCode narrows a template to one control tier
 // when a stricter flow is wanted for production.
 type Pipeline struct {
-	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string    `gorm:"size:128;not null" json:"name"`
-	Description string    `gorm:"size:512" json:"description"`
+	ID          int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string `gorm:"size:128;not null" json:"name"`
+	Description string `gorm:"size:512" json:"description"`
 	// TierCode empty = applies to every control tier. Holds an EnvTier.Code, never
 	// an Environment.Code (see RoleCapability for why that distinction matters).
-	TierCode  string    `gorm:"size:16;index:idx_pipeline_tier" json:"tierCode"`
+	TierCode  string    `gorm:"size:32;index:idx_pipeline_tier" json:"tierCode"`
 	Enabled   bool      `gorm:"not null;default:true" json:"enabled"`
 	IsDefault bool      `gorm:"not null;default:false" json:"isDefault"`
 	CreatedBy int64     `json:"createdBy"`
@@ -1100,30 +1109,30 @@ func (PipelineStage) TableName() string { return "tbl_pipeline_stage" }
 // carries ScriptUploadID + ScriptSHA256 instead and re-reads the file at execute
 // time, exactly like a script approval.
 type Release struct {
-	ID       int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	RelNo    string `gorm:"size:32;uniqueIndex:idx_release_relno;not null" json:"relNo"`
-	Title    string `gorm:"size:128;not null" json:"title"`
+	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	RelNo        string `gorm:"size:32;uniqueIndex:idx_release_relno;not null" json:"relNo"`
+	Title        string `gorm:"size:128;not null" json:"title"`
 	PipelineID   int64  `gorm:"not null" json:"pipelineId"`
 	PipelineName string `gorm:"size:128" json:"pipelineName"` // snapshot
 	ConnectionID int64  `gorm:"not null" json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
 	Database     string `gorm:"column:db_name;size:128" json:"database"`
 	Env          string `gorm:"size:32" json:"env"`
-	TierCode     string `gorm:"size:16" json:"tierCode"`
+	TierCode     string `gorm:"size:32" json:"tierCode"`
 	Engine       string `gorm:"size:32" json:"engine"` // snapshot: which dialect it was reviewed as
 	// ChangeType 是变更类型:dml(数据订正)或 ddl(结构变更)。提交时声明或由
 	// 内容推断,两类语句不得同单 —— 审批人按类型评估风险(DDL 锁表、DML 影响
 	// 行数),混装让两种评估都失效。见 service.releaseChangeType 的分类口径。
-	ChangeType   string `gorm:"size:8" json:"changeType"`
+	ChangeType string `gorm:"size:8" json:"changeType"`
 	// 归属项目,提交时从目标库快照 —— 库以后改挂别的项目,历史单据不跟着改账。
-	ProjectID    int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
-	ProjectName  string `gorm:"size:64" json:"projectName"`
-	SQL          string `gorm:"type:mediumtext" json:"sql"`
+	ProjectID      int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
+	ProjectName    string `gorm:"size:64" json:"projectName"`
+	SQL            string `gorm:"type:mediumtext" json:"sql"`
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
-	Reason       string `gorm:"size:512" json:"reason"`
-	CreatorID    int64  `gorm:"index:idx_release_creator;not null" json:"creatorId"`
-	Creator      string `gorm:"size:64" json:"creator"`
+	Reason         string `gorm:"size:512" json:"reason"`
+	CreatorID      int64  `gorm:"index:idx_release_creator;not null" json:"creatorId"`
+	Creator        string `gorm:"size:64" json:"creator"`
 	// Source says which door the ticket came in by, and ClientName snapshots WHICH
 	// external system raised it. The creator is the service account the client
 	// acts as — true, but not the whole truth, and the audit rows say
@@ -1143,7 +1152,7 @@ type Release struct {
 	// first one. Uniqueness is enforced by the database, not by a check-then-insert
 	// that two concurrent retries can both pass.
 	IdemKey *string `gorm:"size:160;uniqueIndex:uk_release_idem" json:"-"`
-	Status       string `gorm:"size:16;index:idx_release_status;not null;default:pending" json:"status"`
+	Status  string  `gorm:"size:16;index:idx_release_status;not null;default:pending" json:"status"`
 	// Risk is the gateway verdict captured when the release was submitted — the
 	// same field AsyncJob carries, and for the same reason: the dictionary may
 	// change between submit and execute, and the level that authorised the run is
@@ -1178,12 +1187,12 @@ type ReleaseStage struct {
 	// why the link lives on the stage and not only in the log.
 	// ConfirmedBy 是 execute 阶段人工闸的放行人(空 = 未确认,阶段到达即停)。
 	// 审批回答"可不可以做",这里回答"现在做" —— 见 migrations/0024。
-	ConfirmedBy string `gorm:"size:64;not null;default:''" json:"confirmedBy"`
-	ApprovalID int64      `gorm:"index:idx_rstage_approval" json:"approvalId"`
-	ApprovalNo string     `gorm:"size:32" json:"approvalNo"`
-	Rows       int        `json:"rows"`
-	StartedAt  *time.Time `json:"startedAt"`
-	FinishedAt *time.Time `json:"finishedAt"`
+	ConfirmedBy string     `gorm:"size:64;not null;default:''" json:"confirmedBy"`
+	ApprovalID  int64      `gorm:"index:idx_rstage_approval" json:"approvalId"`
+	ApprovalNo  string     `gorm:"size:32" json:"approvalNo"`
+	Rows        int        `json:"rows"`
+	StartedAt   *time.Time `json:"startedAt"`
+	FinishedAt  *time.Time `json:"finishedAt"`
 }
 
 func (ReleaseStage) TableName() string { return "tbl_release_stage" }

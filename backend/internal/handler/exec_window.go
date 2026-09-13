@@ -1,8 +1,6 @@
 package handler
 
 import (
-	"net/http"
-
 	"github.com/gin-gonic/gin"
 
 	"velagateway/internal/dto"
@@ -14,7 +12,12 @@ import (
 // 执行窗口(「班车」)的管理接口。
 //
 // 读是所有能进这个菜单的人都能看的 —— 一扇免审批的门开在哪、什么时候开,不该是只有
-// 管理员才知道的事。写(建/改/删)限管理员,并且每一次都进审计链。
+// 管理员才知道的事。
+//
+// 写(建/改/删)**不限管理员**:拿到 execwindow 菜单的人都能提,因为开窗口本来就要走
+// 审批,而能不能改某一扇门由 canManageWindow 判(申请人自己或平台管理员)—— 把写死
+// 在管理员上,等于让真正需要窗口的那批人连申请都提不了(ADR 0015 修订)。
+// 每一次变动都进审计链。
 
 // ListExecWindows godoc
 // @Summary 执行窗口列表
@@ -80,7 +83,7 @@ func respondWindowErr(c *gin.Context, err error) {
 	case service.ErrWindowInvalid:
 		resp.Fail(c, resp.CodeBadRequest, "窗口定义无效:检查实例/库名、时间段与时区")
 	case service.ErrNotFound:
-		resp.Fail(c, http.StatusNotFound, "窗口或目标实例不存在")
+		resp.Fail(c, resp.CodeNotFound, "窗口或目标实例不存在")
 	default:
 		resp.Fail(c, resp.CodeInternalError, "操作失败")
 	}

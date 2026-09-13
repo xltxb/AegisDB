@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"log/slog"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -423,9 +424,23 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 		// 审批人手里的动作是驳回(见 service.canCancel 的注释)。
 		CanCancel bool `json:"canCancel"`
 	}
+	// 审批链一次取完,不在循环里逐张查:这一页最多 500 张单,而 pageSize 由调用方给 ——
+	// 逐张查就是一次翻页最多 501 次查询。这条路径是登录后第一屏(待办与我的申请都读它),
+	// 在 MySQL 上那是实打实的几百次网络往返,而且随数据量增长、不报任何错,页面只是
+	// 越来越慢。
+	ids := make([]int64, 0, len(aps))
+	for _, a := range aps {
+		ids = append(ids, a.ID)
+	}
+	stepsByAp, serr := h.Repo.StepsOfMany(ids)
+	if serr != nil {
+		slog.Error("load approval steps failed", "err", serr)
+		stepsByAp = map[int64][]model.ApprovalStep{}
+	}
+
 	out := []apView{}
 	for _, a := range aps {
-		steps, _ := h.Repo.StepsOf(a.ID)
+		steps := stepsByAp[a.ID]
 		// Mask credentials for display; the real command stays in the DB for
 		// execution after approval (a is a copy, so this doesn't touch storage).
 		a.Command = sqlutil.RedactSecrets(a.Command)
@@ -532,7 +547,7 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 	var req dto.LarkApprovalCallbackReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("lark callback: bad body", "ip", ip, "err", err)
-		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		resp.FailStatus(c, http.StatusBadRequest, resp.CodeBadRequest, "参数错误")
 		return
 	}
 	slog.Info("lark callback received",
@@ -547,26 +562,26 @@ func (h *Handler) LarkApprovalCallback(c *gin.Context) {
 		// how you spot a silently-rejected callback.
 		slog.Warn("lark callback: auth rejected (fail-closed)",
 			"ip", ip, "secretPresent", secret != "", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调鉴权失败")
+		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调鉴权失败")
 		return
 	}
 	status, err := h.Svc.DecideApprovalExternal(req)
 	if err == service.ErrNotFound {
 		slog.Warn("lark callback: approval not found",
 			"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID)
-		resp.Fail(c, resp.CodeBadRequest, "审批单不存在")
+		resp.FailStatus(c, http.StatusNotFound, resp.CodeNotFound, "审批单不存在")
 		return
 	}
 	if err == service.ErrForbidden {
 		// The payload authenticated but does not describe this ticket (e.g. it
 		// quotes a different vendor task) — see DecideApprovalExternal.
 		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调与该审批单不匹配")
+		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调与该审批单不匹配")
 		return
 	}
 	if err != nil {
 		slog.Error("lark callback: process failed", "externalTaskId", req.ExternalTaskID, "err", err)
-		resp.Fail(c, resp.CodeInternalError, "回调处理失败")
+		resp.FailStatus(c, http.StatusInternalServerError, resp.CodeInternalError, "回调处理失败")
 		return
 	}
 	slog.Info("lark callback processed",
@@ -830,6 +845,11 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateOutboundURL(sv)
 			case "approval.external.callbackBaseURL":
 				verr = service.ValidateCallbackBaseURL(sv)
+			case "security.ipAllowlist", "approval.external.callbackAllowIPs":
+				// 判定层遇到认不出的条目是**静默跳过**的,所以校验必须在这一刻 ——
+				// 否则一个手滑多打一位的地址存进去,人以为那台机器被放行了,直到它
+				// 被挡在门外。前端早就在标红,但校验不能只长在界面上。
+				verr = service.ValidateIPAllowlist(sv)
 			}
 			if verr != nil {
 				resp.Fail(c, resp.CodeBadRequest, k+": "+verr.Error())

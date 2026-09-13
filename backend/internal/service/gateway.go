@@ -26,6 +26,13 @@ import (
 // 由 model.OutMaintenance 渲染。
 const maintNotice = "· 目标实例处于维护态，操作受限"
 
+// ErrConnMaintenance 是「目标实例在维护态」这件事的错误形态。
+//
+// 维护态不是错误,是一种状态 —— 所以终端与异步执行那两条路把它软返回成一句提示。但
+// **脚本执行**这条路没有承载提示的地方(它的返回值是「跑了几条」),软返回一个 0 会让
+// 调用方以为脚本跑完了而里面恰好没有语句。这里如实报出来,handler 再决定怎么讲给人听。
+var ErrConnMaintenance = fmt.Errorf("%s", maintNotice)
+
 // BuildMe assembles the /auth/me payload (user + menus + capabilities).
 func (s *Services) BuildMe(u *model.User) (*dto.MeResp, error) {
 	// 主角色可能压根不存在,而这不是错误。
@@ -116,7 +123,7 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 		return nil, ErrForbidden
 	}
 	// FR-CONN-04: maintenance-state instances restrict operations.
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
 		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
 			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
@@ -139,8 +146,14 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 	// the unknown verb fell into the read dimension, and the write ran under a
 	// read-only role (ER3). Splitting normalises the separator away.
 	stmts := sqlutil.SplitStatements(sql)
-	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
-		return s.execJudged(ctx, u, conn, sql, reason)
+	if len(stmts) == 0 {
+		// 空输入或纯注释:没有语句可判,也没有什么可执行的 —— 异步那条通道一直是这么
+		// 答的(ErrBadRequest),而这里却把原串直接下发了。
+		//
+		// 下发它本身不危险(数据库会拒一条空语句),危险的是**两个入口对同一段输入给
+		// 不同的答案**:判定的前提是"判的和跑的是同一段文本",而这一支恰恰绕过了拆句
+		// 归一化那一步 —— 它是 ER3 那类洞的栖身之地。
+		return nil, ErrBadRequest
 	}
 	v, win := s.judge(u, conn, stmts)
 	return s.applyVerdict(ctx, u, conn, sql, v, reason, win)
@@ -374,7 +387,7 @@ func (s *Services) SubmitScriptForApproval(u *model.User, connID int64, filename
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
-	if conn.Status == "maint" {
+	if conn.Status == model.ConnMaint {
 		s.recordAudit(u, conn, "\\i "+filename, model.RiskLow, model.ResultWarn, "", "")
 		return &dto.ExecResp{Risk: model.RiskLow, Output: maintNotice,
 			OutputRef: model.NewRuleRef(model.OutMaintenance)}, nil
@@ -531,8 +544,13 @@ func (s *Services) approverPool() []model.User {
 	return nil
 }
 
-// Approve / Reject act on an approval; on approval the gateway executes the
-// command and returns the execution result (output + rows).
+// Approve / Reject act on an approval.
+//
+// 通过**不执行**(ADR 0010):批准授权的是「这条命令可以跑」,不是「现在就跑」。命令由
+// 发起人(或任何够得到那台实例的同事)之后自己执行,走 ExecuteApproved。
+//
+// 返回值仍是 *dto.ExecResp,因为升级单那一路的执行归流水线所有、会带回结果 —— 普通
+// 工单这条路返回的是一个空壳。
 func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*dto.ExecResp, error) {
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
@@ -549,7 +567,8 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		// 不在链上要去找管理员,自己发起的要去找同事,两件事完全不同。
 		return nil, &DecideRefusal{Block: block}
 	}
-	return s.finalizeApproval(ap, approve, actor.Name)
+	// 站内驳回目前没有理由输入框 —— 有了之后从这里传进去,不必再动下面那一层。
+	return s.finalizeApproval(ap, approve, actor.Name, "")
 }
 
 // finalizeApproval is the shared decision core: atomically claim pending →
@@ -560,7 +579,12 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // function assumes the decision is already authorized. operatorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.
-func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string) (*dto.ExecResp, error) {
+// reason 是**驳回的理由**。它落在 Result 上 —— 那个字段回答的正是「这张单最后怎么样
+// 了」,通过时装执行输出,驳回时就该装这句话。
+//
+// 不写它的后果不是少一行字:发起人在列表上看到「已驳回」,没有下文,于是他去问,而
+// 审批人已经在飞书那边写过一遍了。
+func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName, reason string) (*dto.ExecResp, error) {
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	// 走 applyTargetDatabase,不要裸赋值:Oracle 上 conn.Database 是服务名,直接写
 	// 进去等于把连接指向一个不存在的服务(TNS-12514),而工单里那个值本来是 schema。
@@ -655,7 +679,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
-	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
+	_ = s.Repo.SetApprovalResult(ap.ID, clip(strings.TrimSpace(reason), 400), 0, now)
 	if ap.WindowID > 0 {
 		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
 		s.applyWindowDecision(ap, false)
@@ -769,7 +793,10 @@ func (s *Services) storeScript(u *model.User, filename, content, source string) 
 	if err := os.WriteFile(saved, []byte(content), 0o644); err != nil {
 		return nil, err
 	}
-	up := &model.ScriptUpload{UserID: u.ID, Filename: name, Path: saved, Size: int64(len(content)), Source: source}
+	// 落库用 `/` —— 库里存的东西要能跨机器读,不该带任何一台机器的分隔符习惯(见
+	// script_path.go)。
+	up := &model.ScriptUpload{UserID: u.ID, Filename: name, Path: storedScriptPath(saved),
+		Size: int64(len(content)), Source: source}
 	if err := s.Repo.CreateScriptUpload(up); err != nil {
 		return nil, err
 	}
@@ -794,7 +821,7 @@ func (s *Services) DeleteScriptUpload(u *model.User, id int64) error {
 	if err != nil || up.UserID != u.ID {
 		return ErrForbidden
 	}
-	_ = os.Remove(up.Path)
+	_ = os.Remove(localScriptPath(up.Path))
 	return s.Repo.DeleteScriptUpload(id)
 }
 
@@ -804,10 +831,10 @@ func (s *Services) ScriptUploadFile(u *model.User, id int64) (string, string, er
 	if err != nil || up.UserID != u.ID {
 		return "", "", ErrForbidden
 	}
-	if fi, err := os.Stat(up.Path); err != nil || fi.IsDir() {
+	if fi, err := os.Stat(localScriptPath(up.Path)); err != nil || fi.IsDir() {
 		return "", "", ErrNotFound
 	}
-	return up.Path, up.Filename, nil
+	return localScriptPath(up.Path), up.Filename, nil
 }
 
 // ScriptUploadContent loads a user's own uploaded-script content so it can be
@@ -817,7 +844,7 @@ func (s *Services) ScriptUploadContent(u *model.User, id int64) (string, string,
 	if err != nil || up.UserID != u.ID {
 		return "", "", ErrForbidden
 	}
-	data, err := os.ReadFile(up.Path)
+	data, err := os.ReadFile(localScriptPath(up.Path))
 	if err != nil {
 		return "", "", ErrNotFound
 	}
@@ -901,12 +928,22 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 	if !s.canAccessConn(u, conn) {
 		return 0, ErrForbidden
 	}
-	if conn.Status == "maint" {
-		return 0, nil // maintenance: nothing executed (mirrors Exec's soft no-op)
+	if conn.Status == model.ConnMaint {
+		// 软返回是对的(维护态不是错误,是一种状态),**不留痕**不对。
+		//
+		// 这里原先是裸 `return 0, nil`,注释说它 "mirrors Exec's soft no-op" —— 可 Exec
+		// 记了一条 warn 审计、还回了一句「实例维护中」的提示。这一条什么都没有:接口回
+		// 「执行了 0 条语句」,审计里一个字都没有。人看到一次没报错的返回,而他要的那些
+		// 语句一条也没跑;事后想查「那天到底跑没跑」,唯一能查的地方是空的。
+		s.recordAudit(u, conn, content, model.RiskLow, model.ResultWarn, "", "")
+		return 0, ErrConnMaintenance
 	}
 	// Validate the PROD step-up ONCE for the whole script — a single TOTP code
 	// covers the batch; per-statement checks would demand (and consume) a code on
 	// every line and always fail for MFA users (R18).
+	//
+	// 扫描按**目标实例的分层**判,不是按某个固定的基准镜头(ADR 0014)。执行这一路同样 ——
+	// 每条语句由 execJudged 按目标分层重判。
 	if err := s.checkMFA(u, conn, mfaCode); err != nil {
 		return 0, err
 	}

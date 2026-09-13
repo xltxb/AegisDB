@@ -460,6 +460,11 @@ func (h *Handler) ScriptExecute(c *gin.Context) {
 		resp.Fail(c, resp.CodeMFARequired, "生产操作需要 MFA 二次验证")
 		return
 	}
+	if err == service.ErrConnMaintenance {
+		// 维护态不是「执行失败」,照实说是哪一种 —— 笼统一句会让人去查脚本本身的毛病。
+		resp.Fail(c, resp.CodeBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "执行失败")
 		return
@@ -571,8 +576,15 @@ type wsMsg struct {
 }
 
 // TerminalWS godoc
-// @Summary 终端流式执行 (token via ?token=)
+// @Summary 终端流式执行 (token 走 Sec-WebSocket-Protocol)
 // @Router  /terminal/ws [get]
+//
+// 令牌走子协议头,**不走** `?token=`:query 会落进访问日志与 Referer(R17 去掉了那条
+// 回退)。这行注释此前还写着 query 的写法,而 openapi.yaml 早就改对了。
+//
+// 握手失败用**真实 HTTP 状态码**而不是「一律 200 + 信封」,这是那条约定的另一个例外:
+// 客户端此刻等的是 101 Switching Protocols,它还没有一个能读 JSON 信封的 WebSocket ——
+// 浏览器的 WebSocket API 在握手失败时只交给你一个 error 事件和状态码。
 func (h *Handler) TerminalWS(c *gin.Context) {
 	tokenStr := wsToken(c)
 	claims, err := h.Svc.JWT.Parse(tokenStr)

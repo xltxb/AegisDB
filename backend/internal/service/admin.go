@@ -34,6 +34,12 @@ func (s *Services) connEnvMeta(envCode string) (layer, role string, err error) {
 }
 
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
+	// policy 决定这台实例走哪条闸(strict / approve-1 / audit-only)。改连接那一路一直
+	// 校验它,建连接这一路没有 —— 于是打错一个字就建出一台带着谁也不认得的 policy 的
+	// 实例,而判定层读一个认不出的值等于"不是 strict",也就是最松的那一档。
+	if !validPolicies[req.Policy] {
+		return nil, ErrBadRequest
+	}
 	host, port := splitHostPort(req.Host)
 	env := strings.ToLower(strings.TrimSpace(req.Env))
 	layer, role, err := s.connEnvMeta(env)
@@ -48,7 +54,7 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 	}
 	c := &model.Connection{
 		Name: strings.TrimSpace(req.Name), Engine: req.Engine, Host: host, Port: port,
-		Env: env, Policy: req.Policy, DefaultRole: role, Layer: layer, Status: "online",
+		Env: env, Policy: req.Policy, DefaultRole: role, Layer: layer, Status: model.ConnOnline,
 		Username: strings.TrimSpace(req.Username), Password: encPw, Database: strings.TrimSpace(req.Database),
 	}
 	if err := s.Repo.CreateConnection(c); err != nil {
@@ -450,8 +456,14 @@ var validPolicies = map[string]bool{"strict": true, "approve-1": true, "audit-on
 //
 // What changed is only where the accepted set comes from. It is now tbl_environment,
 // and the check is s.connEnvMeta: an environment resolves to its tier or the
-// write is refused. A typo like "uat" still cannot be stored, and an environment
-// can only be created by binding it to a tier that already owns rules.
+// write is refused. 一个解析不到分层的标签(打错的名字、早已删掉的环境)照样存不进去,
+// 而新环境只能通过绑到一个**已经拥有规则**的分层来创建。
+//
+// 这里原先拿 "uat" 当打错名字的例子 —— 那句话写在 uat 成为内置分层之前。它现在是
+// 出厂就有的五个分层之一(seed.go 的 builtinTiers),而且所有安装路径下都有同名环境:
+// 全新库由 backfillEnvTiers 建,老库由 correctBuiltinTiers 补(「Create it, give it an
+// environment, and clone its rules」)。举一个其实合法的值当反例,只会让下一个读它的
+// 人以为 uat 存不进去。
 
 // SetConnectionPolicy updates a connection's gateway policy (strict | approve-1 |
 // audit-only), rejecting an unknown value.
@@ -473,11 +485,16 @@ func (s *Services) ToggleConnection(id int64, status string) error {
 		return ErrNotFound
 	}
 	if status == "" {
-		if c.Status == "online" {
-			status = "maint"
+		if c.Status == model.ConnOnline {
+			status = model.ConnMaint
 		} else {
-			status = "online"
+			status = model.ConnOnline
 		}
+	}
+	// 只认这两种。判定层认的是 "maint",别的一律当在线 —— 于是一个打错的
+	// "maintenance" 存进去之后,界面上显示「维护中」,而网关照常放行。
+	if status != model.ConnOnline && status != model.ConnMaint {
+		return ErrBadRequest
 	}
 	c.Status = status
 	return s.Repo.UpdateConnection(c)
@@ -621,7 +638,26 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 		if err := s.validateRoleIDs(req.RoleIDs); err != nil {
 			return err
 		}
-		return s.Repo.SetUserRoles(id, req.RoleIDs)
+		if err := s.Repo.SetUserRoles(id, req.RoleIDs); err != nil {
+			return err
+		}
+		// 这一支原先直接 return 就走了,跳过了下面两件事 —— 而它们正是这个函数存在的
+		// 一半理由:
+		//
+		//   · **进审计链**:同一个函数里停用那一支写、单角色那一支写,唯独这一支不写。
+		//     于是有人可以把账户换成高权角色、以它的名义做事、再换回来,链上只看得到
+		//     那次动作,看不到允许它的那次授权(EU4)。
+		//   · **作废 MFA 宽限**:mfaGraceKey 的注释声称「角色变更会使宽限失效」,而这一支
+		//     什么也没做,那句话一直是空的。宽限的意思是「这个会话刚刚证明过自己」,
+		//     而它证明的是**那时那个角色** —— 一个刚被提到能写生产库的人,不该靠十分钟前
+		//     为只读操作做的那次验证就直接下发。
+		//
+		// 刻意**不** bump token version(那样也能作废宽限):那会把人踢下线,而权限本身是
+		// 每个请求实时查库的,降权不靠踢下线生效;「改完角色同一个会话立刻用上新权限」
+		// 是这套东西明确要的行为(TestMultiRole_UnionGrantsAndRevokesAdmin 钉着它)。
+		s.voidMFAGraceFor(id)
+		s.auditPatchUser(actor, target, req)
+		return nil
 	}
 	// Keep membership in sync when only the single primary role changed, so the
 	// role view and union permissions reflect the new role.
@@ -740,6 +776,13 @@ func (s *Services) CreateUser(req dto.UserCreateReq) (*model.User, error) {
 }
 
 func (s *Services) Invite(req dto.InviteReq) (*model.User, error) {
+	// 别的入口(AddRoleMember、PatchUser、CreateUser)都校验角色存在,唯独这一条漏了。
+	// 建出来的账户挂着一个不存在的角色,在能力矩阵里一条规则都对不上 —— 而空角色集的
+	// 处理是「处处被拒」,所以它不是一个安全洞,是一个**建出来就用不了、也看不出为什么**
+	// 的账户。
+	if err := s.validateRoleIDs([]int64{req.RoleID}); err != nil {
+		return nil, err
+	}
 	name := req.Email
 	if at := strings.Index(req.Email, "@"); at > 0 {
 		name = req.Email[:at]
