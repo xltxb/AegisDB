@@ -211,6 +211,13 @@ func (h *Handler) UpdateRole(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	// 进审计链 —— 隔壁改矩阵、改菜单都记,唯独改角色本身不记,而这个接口能动
+	// canApprove:**这个角色能不能审批高危命令**。"谁有权放行 PROD 上的 DROP"被改掉
+	// 而链上没有一行提到它,哈希链就白建了(ADR 0006)。
+	//
+	// 只记这次请求真正带来的字段。全量转储会把没改的字段也写进去,查的人分不出
+	// 哪一项是这次动的。
+	h.Svc.AuditRoleChange(middleware.CurrentUser(c), role.ID, "update", req)
 	r, _ := h.Svc.RoleDetail(role.ID)
 	resp.OK(c, r)
 }

@@ -7,7 +7,7 @@ package service
 //   - 执行走 gateway.RecompileTargets,而它内部逐个调 RealCompileObject —— 批量**不是**
 //     一条新的下发通道。新开一条,就等于给自己留一个不回读 all_objects.status 的后门。
 //   - **判定一次,判的是全部语句。** 把这一批要执行的 ALTER 全部拼出来交给同一个
-//     strictestVerdict:只要其中任何一条在这台实例上是 deny 或需审批,整批都不执行。
+//     effectiveVerdict:只要其中任何一条在这台实例上是 deny 或需审批,整批都不执行。
 //     逐个判、能编的先编,是最糟的形态 —— 它会在一个需要审批的库上留下"编了一半"。
 //   - **逐个记审计**,不是记一行"批量编译了 12 个"。审计要回答的是"三个月后:那天
 //     凌晨到底动了哪些对象、结果如何",一行汇总答不了。每个对象记一行,记的是它这次
@@ -98,7 +98,7 @@ func (s *Services) RecompileInvalid(u *model.User, connID int64, scope, database
 		return nil, fmt.Errorf("这批无效对象的名字都无法安全拼入编译语句,已全部拒绝")
 	}
 
-	v := s.strictestVerdict(u, conn, stmts)
+	v := s.effectiveVerdict(u, conn, stmts)
 	label := fmt.Sprintf("RECOMPILE INVALID %s (%d 个对象)",
 		strings.ToUpper(strings.TrimSpace(targets[0].Owner)), len(targets))
 	switch {
