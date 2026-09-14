@@ -510,7 +510,8 @@ func (s *Services) driveRelease(id int64) {
 
 		out := s.runStage(rel, conn, &st)
 
-		fields := map[string]any{"status": out.status, "log": clip(out.log, 20000), "rows": out.rows}
+		// row_count:见迁移 0044。map 形式的 Updates 绕过模型的 column 标注。
+		fields := map[string]any{"status": out.status, "log": clip(out.log, 20000), "row_count": out.rows}
 		if out.findings != "" {
 			fields["findings"] = out.findings
 		}

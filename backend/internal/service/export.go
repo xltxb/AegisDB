@@ -356,7 +356,8 @@ func (s *Services) runExportJob(id int64) {
 	// failed job with the reason instead.
 	if uerr := s.Repo.UpdateExportJob(id, map[string]any{
 		"status": model.ExportDone, "files": strings.Join(files, "\n"), "parts": len(files),
-		"password": encPw, "rows": rows, "bytes": size, "finished_at": now,
+		// row_count:见迁移 0042。map 形式的 Updates 绕过模型的 column 标注。
+		"password": encPw, "row_count": rows, "bytes": size, "finished_at": now,
 	}); uerr != nil {
 		slog.Error("export job completed but marking it done failed", "id", id, "err", uerr)
 		s.failExport(id, "导出已生成但写回状态失败: "+uerr.Error())

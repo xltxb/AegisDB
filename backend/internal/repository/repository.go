@@ -1442,9 +1442,10 @@ func (r *Repo) SaveWebhook(w *model.WebhookConfig) error { return r.db.Save(w).E
 // ordered for a stable tree (database, then table).
 func (r *Repo) SchemaForConnection(connID int64) ([]model.SchemaObject, error) {
 	var rows []model.SchemaObject
-	// `database` is a MySQL reserved word — must be back-quoted (works on SQLite too).
+	// 列名是 db_name(迁移 0040)。从前它叫 `database` —— 一个 MySQL 保留字,
+	// 每一处手写 SQL 都得记得加反引号,而忘掉的那一处只在真机上炸。
 	err := r.db.Where("connection_id = ?", connID).
-		Order("`database` asc, table_name asc").Find(&rows).Error
+		Order("db_name asc, table_name asc").Find(&rows).Error
 	return rows, err
 }
 
@@ -1627,7 +1628,9 @@ func (r *Repo) UpdateAsyncJobLog(id int64, log string) error {
 // FinishAsyncJob records the terminal status + final log/rows/error.
 func (r *Repo) FinishAsyncJob(id int64, status, log, errMsg string, rows int, at time.Time) error {
 	return r.db.Model(&model.AsyncJob{}).Where("id = ?", id).Updates(map[string]any{
-		"status": status, "log": log, "error": errMsg, "rows": rows, "finished_at": at,
+		// 列名是 row_count(迁移 0041)。map 形式的 Updates **绕过**模型上的 column
+		// 标注 —— GORM 拿 map 的键直接当列名,所以这里写错了不会有任何东西提醒你。
+		"status": status, "log": log, "error": errMsg, "row_count": rows, "finished_at": at,
 	}).Error
 }
 

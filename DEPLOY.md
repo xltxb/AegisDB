@@ -196,6 +196,31 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 里的 `ALTER` 要么每一条都幂等(`MODIFY` / `CREATE TABLE IF NOT EXISTS` 这类重复执行无害
 的写法),要么一个文件只放一条(见 ADR 0016 §三)。上面那张豁免表只许变短。
 
+### 保留字列名的改名迁移(`0039` – `0044`)
+
+这六条把 `key` / `database` / `sql` / `rows` 四个 MySQL 保留字列名换掉(ADR 0016 §二)。
+它们**只改列名,不动数据**,也不需要回填。
+
+每个文件只有一条 `ALTER`,同一张表的两列合并进同一条语句 —— MySQL 8 的原子 DDL 保证它
+整条成败,所以中途失败之后直接重跑即可,没有上面那种"前几条已经生效"的中间态。
+
+为什么不写成幂等的:MySQL 的 `CHANGE COLUMN` 不支持 `IF EXISTS`,而
+`SET @ddl := …; PREPARE …` 那套在这个 runner 上也不行 —— 它逐条 `db.Exec`,每条可能落在
+**不同的池连接**上,而用户变量是会话级的,换个连接就是 `NULL`。
+
+**升级顺序要留意**:改完名的列,旧名字不再存在。新旧两版程序不能同时连同一个库 ——
+灰度或回滚时,先把所有实例停在同一版本上再 migrate。这个项目的部署形态本来就是单实例
+(见 PRD「生产部署形态」一节),所以按常规的"停服 → migrate → 起服"走即可。
+
+| 迁移 | 表 | 改名 |
+| --- | --- | --- |
+| `0039` | `tbl_api_client` | `key` → `api_key` |
+| `0040` | `tbl_schema_object` | `database` → `db_name` |
+| `0041` | `tbl_async_job` | `sql` → `sql_text`,`rows` → `row_count` |
+| `0042` | `tbl_export_job` | `sql` → `sql_text`,`rows` → `row_count` |
+| `0043` | `tbl_release` | `sql` → `sql_text` |
+| `0044` | `tbl_release_stage` | `rows` → `row_count` |
+
 ## 启动时的自动动作
 
 - 上次进程遗留的 `running` 导出 / 异步任务标失败(结果未知,不重跑);`running` 发布单标失败、`waiting` 保留、`pending` 重新入队。
