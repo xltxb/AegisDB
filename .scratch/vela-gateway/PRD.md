@@ -125,10 +125,10 @@ DBA 与运维团队对生产数据库的操作目前是"直连 + 口头审批 + 
 |---|---|---|---|
 | 21 | 审批通过后由**网关代执行** | **通过不执行**。通知发起人，由任何本就有权在该实例跑这条命令的人点「执行」；一单一次；执行前复判 | ADR 0010、`service/approval_execute.go` |
 | 19/20 | 多步审批链逐级推进 | 链 = `owner` 角色全部真人成员（无则 `admin`），**任一成员一次决定即终结整单**（approve-1），不逐级推进 | `repository.DecideActiveStep` |
-| 8 | 引擎含 **ClickHouse / Redis** | 引擎下拉 7 项：MySQL / PolarDB / TiDB / MariaDB / PostgreSQL / GaussDB(DWS) / Oracle。SQLite 只有后端驱动（自身存储与既有连接识别），界面建不出 | `frontend/src/lib/engines.ts` |
+| 8 | 引擎含 **ClickHouse / Redis** | **不做**（已决，见下：判定引擎解析的是 SQL）。引擎下拉 7 项：MySQL / PolarDB / TiDB / MariaDB / PostgreSQL / GaussDB(DWS) / Oracle。SQLite 只有后端驱动（自身存储与既有连接识别），界面建不出 | `frontend/src/lib/engines.ts` |
 | 22/25/27 | 规则按**环境**配置 | 规则按**分层（tier）**配置，环境只决定实例归属；新增命令时逐分层指定等级，「放行」也写一条显式 `off` 行 | ADR 0013、env-tier PRD |
 | 23/28 | 严格模式是**全局开关** | 改为**按分层**的 `strict_nowhere`（迁移 0030 起），开关在「分层」页，设置页只留一个跳转链接 | ADR 0013 |
-| 27 | 新建规则可配**审批链** | 未实现。新建规则只有 `command + 各分层等级`，审批链是全局的（或由发布流程阶段的 `approverRole` 指定） | `dto.go` UpsertRiskCommandReq |
+| 27 | 新建规则可配**审批链** | 未实现，**已降级为待排期特性**（见下）。新建规则只有 `command + 各分层等级`，审批链是全局的（或由发布流程阶段的 `approverRole` 指定） | `dto.go` UpsertRiskCommandReq |
 | 43 | CSV 含**审批链** | CSV 列为 `time,actor,instance,command,risk,result,approval_no,hash`，只带单号不带链 | `service/admin.go` |
 | 44 | append-only 哈希链 | 写侧成立（唯一约束防分叉）；**没有读侧的链完整性校验端点**，校验目前只在测试里做 | issue 08 验收项未闭环 |
 | 45/46 | Webhook 带 `X-Vela-Signature`（HMAC-SHA256） | **无 HMAC**。只发 `Authorization: Bearer <secret>` + `X-Vela-Event`；HMAC-SHA256 只用于飞书自定义机器人的签名 | `service/webhook.go` |
@@ -136,8 +136,8 @@ DBA 与运维团队对生产数据库的操作目前是"直连 + 口头审批 + 
 | 50 | 超时可**自动升级** | `auto-escalate` 只把单标为「已升级」并写一条告警审计，**审批人不变、单仍待审**；真正的升级未实现 | `service/gateway.go` |
 | 7 | 保存**即测试接入** | 后端建连接不探测；前端保存后自动发起一次 `POST /connections/:id/test`，效果等价 | `views/ConnectionsView.vue` |
 | 33 | 脚本扫描与终端判定**完全一致** | 基本一致，但 `ScanStatement` 缺 `SessionScoped` 短路：`ALTER SESSION SET …` 扫描报高危、执行放行 | 已建 GitHub issue |
-| 56 | 终端布局变体 **A / B / C** | **未实现**。交付的是固定三栏 + 可拖拽/可折叠 + 沉浸模式（左右两栏同时收起） | `views/TerminalView.vue` |
-| — | `/risk/check` 命中高危返回 `42200` + `ap_no` | `/risk/check` 是**纯预检**，一律返回 `code=0` + Verdict，不建单；`42200` + `ap_no` 出现在 `/terminal/exec` | `service/gateway.go` |
+| 56 | 终端布局变体 **A / B / C** | **未实现，已改 PRD**（见下：原稿指向的是已退役的 Vue 版）。交付的是固定三栏 + 可拖拽/可折叠 + 沉浸模式（左右两栏同时收起） | `views/TerminalView.vue` |
+| — | `/risk/check` 命中高危返回 `42200` + `ap_no` | **原稿错了**（已决，见下）。`/risk/check` 是**纯预检**，一律返回 `code=0` + Verdict，不建单；`42200` + `ap_no` 出现在 `/terminal/exec` | `service/gateway.go` |
 | — | WS Token 经 **query** 鉴权 | 改走 `Sec-WebSocket-Protocol: vela-token, <jwt>` —— query 会把 Token 落进 gin 访问日志与 Referer | `handler/terminal.go` |
 | — | 演示种子含多个角色账号 | 空库首次启动只建 **一个**平台管理员 `linwei@vela.io`，且**不建任何实例**；验证菜单收敛需自建角色与用户 | `bootstrap/seed.go` |
 
@@ -266,9 +266,32 @@ DBA 与运维团队对生产数据库的操作目前是"直连 + 口头审批 + 
 | 真实 MFA 第二因子 | **已交付**。TOTP 自助绑定 / 管理员代绑 / 步进验证 / 宽限期 / 强制绑定开关 |
 | 高级 RBAC（动态能力维度、跨角色继承） | 仍不在范围内。能力集合固定为 8 维三态；多角色按并集，不做继承 |
 
-**待决定**：终端布局变体 A/B/C、ClickHouse / Redis 等非关系型引擎、规则级审批链、CSV 含审批链、
-读侧哈希链校验端点、`/risk/check` 是否也返回 `42200` —— 这几项原稿要求、代码未做，「做 / 改 PRD / 不做」
-尚无人拍板，逐条跟在 GitHub issue #55。本文只如实记录它们没被实现，不代表已被否决。
+### 原稿要求与实现的分歧 —— 逐条已决（GitHub issue #55）
+
+原先这里挂着六项「待决定」。现在每一项都有了结论，不再是悬着的。
+
+| 原稿要求 | 决定 | 为什么 |
+|---|---|---|
+| 读侧哈希链校验端点（issue 08） | **做了** | 见下 |
+| CSV 含审批链（issue 08） | **做了** | 见下 |
+| 保存即测试接入（FR-CONN-02） | **做了** | 见下 |
+| 终端布局变体 A/B/C（#56） | **改 PRD** | 原稿指向的是 `views/TerminalView.vue` —— Vue 版。现役实现是 `frontend/`（React），Vue 版只作对照与回退，不再加新功能。要做也是在 React 端重新设计，那是一条新需求，不是这条的欠账 |
+| ClickHouse / Redis（#8） | **不做** | 判定引擎解析的是 **SQL**：动词提取、高危字典、无 WHERE 拦截、语句拆分，全是 SQL 概念。把一个非 SQL 引擎放进下拉框，等于把它的命令送到一个读不懂它的解析器面前 —— 而**认不出的动词落进 READ 能力**，`db.orders.drop()` 会被判成一次无害的查询。支持它们需要自己的一套判定模型，不是加一行下拉项。理由写在 `frontend/src/lib/engines.ts` 顶部 |
+| 规则级审批链（#27 / FR-RULE-04） | **改 PRD**（降级为待排期特性） | 不是缺陷：审批链现在是全局的，或由发布流程阶段的 `approverRole` 指定，两条路都能配出"这类命令谁批"。把它下放到单条规则要改模型、接口与界面三层，是一个独立特性的体量，不该挂在"未实现项清单"下当欠账 |
+| `/risk/check` 也返回 `42200` + `ap_no` | **改 PRD**（原稿错了） | `/risk/check` 是**纯预检**：终端在人按下执行**之前**调它，用来决定要不要弹审批理由框。它不建单，所以根本没有 `ap_no` 可回。真按原稿做，等于每次预检都建一张单 —— 那正是预检要避免的事 |
+
+已做的三项：
+
+- **读侧哈希链校验**（`GET /audit/verify`）：链一直在写，但从前没有任何地方读它。一条没人验的链，
+  和没有链的区别只在出事那天才显出来。校验认得历史上全部四种 payload 形状（每次往哈希里加字段都
+  刻意不重算历史行），并按版本分别计数 —— 按早期版本通过的行，它的库名/审批人/环境分层当时不在
+  哈希里，报告要让人知道保证到哪一层为止。**查不出**从链尾整段截断，这一点写在结论旁边，不缩成小字。
+- **CSV 含审批链**：这份 CSV 的用处在离开控制台之后，而拿着单号的人多半没有那个控制台的账号。
+- **保存即测试**：从前建连接不探测却把 Status 写死成 `online`，一台地址填错的实例在列表里显示"在线"。
+  探不通不拒绝创建（先登记、再开防火墙是正当顺序），但也不再声称它是好的。
+
+前端测试方案（原稿的 Vitest + zod store 契约测试）与 `uat-结算` 中文 code 两项，各自的结论早已记在
+上面的差异表与 `env-tier-model/PRD.md` 里，不重复。
 
 ## Further Notes
 
