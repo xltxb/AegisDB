@@ -1515,6 +1515,16 @@ paths:
       tags: [audit]
       summary: '[audit] 导出 CSV(参数同上)'
       responses: { '200': { description: text/csv } }
+  /audit/verify:
+    get:
+      tags: [audit]
+      summary: '[audit · 监督角色] 从创世行重算整条审计链,报告第一处对不上的行'
+      description: >
+        链断了不是这次请求失败——请求成功地带回一个坏消息,所以仍然回 200 + 信封,
+        由 data.ok 说结论。data.byVersion 按哈希 payload 版本分别计数:按早期版本
+        通过的行,它的库名/审批人/环境分层当时不在哈希里。
+        覆盖范围:内容被改、行被从链中间抽掉。覆盖不到:从链尾整段截断。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
 
   # ---------------------------------------------------------------- settings
   /settings:

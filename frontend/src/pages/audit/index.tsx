@@ -5,19 +5,48 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
   Calendar, ChevronLeft, ChevronRight, CircleCheck, CircleX, Download, Filter,
-  FlaskConical, Hourglass, TriangleAlert, X,
+  FlaskConical, Hourglass, ShieldCheck, TriangleAlert, X,
 } from 'lucide-react'
-import { useAudit, useAuditExport } from '@/hooks/useAudit'
+import { useAudit, useAuditExport, useAuditVerify } from '@/hooks/useAudit'
 import { meQueryOptions } from '@/api/modules/auth'
 import { Table, type Column } from '@/components/common/Table'
 import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
-import type { AuditRow, AuditQuery } from '@/types'
+import type { AuditRow, AuditQuery, ChainReport } from '@/types'
 
 /** 一页 100 条 —— 审计是往回翻着看的,页太小会把一段连续的操作切碎在两页上。 */
 const PAGE_SIZE = 100
+
+/**
+ * 校验结果横幅。
+ *
+ * 三件事必须同时说清楚,少一件这块横幅就在误导人:
+ *
+ *  1. **结论**——链完好,还是断在哪一行。断了要给出行号:那是查的人唯一能往下走的线索。
+ *  2. **覆盖不到什么**——从链尾整段截断,这个校验查不出来(剩下的链自己仍然自洽)。
+ *     一句孤零零的"链完好"会让人以为什么都查过了,那是假的安全感。
+ *  3. **保证到哪一层**——按早期 payload 版本通过的行,它的库名/审批人/环境分层当时
+ *     不在哈希里。这些行"没被篡改"说的是更少的东西。
+ */
+function ChainBanner({ rep }: { rep: ChainReport }) {
+  const { t } = useTranslation()
+  const older = Object.entries(rep.byVersion ?? {})
+    .filter(([v]) => Number(v) < 4)
+    .reduce((n, [, c]) => n + c, 0)
+  return (
+    <div className={clsx('chain-banner', rep.ok ? 'cb-ok' : 'cb-bad')} role="status">
+      <div className="cb-head">
+        {rep.ok ? <CircleCheck size={15} /> : <TriangleAlert size={15} />}
+        <strong>{rep.ok ? t('audChainOK', { n: rep.checked }) : t('audChainBroken', { id: rep.brokenId })}</strong>
+      </div>
+      {!rep.ok && <div className="cb-reason">{rep.reason}</div>}
+      <div className="cb-note">{rep.note}</div>
+      {older > 0 && <div className="cb-note">{t('audChainOlderRows', { n: older })}</div>}
+    </div>
+  )
+}
 
 /**
  * 两个过滤器都是**点击循环**的按钮,不是下拉。
@@ -83,6 +112,7 @@ export default function AuditPage() {
   }
   const { data, isLoading, error, refetch } = useAudit(query)
   const exportCsv = useAuditExport()
+  const verify = useAuditVerify()
 
   const rows = data?.items ?? []
   const total = data?.total ?? 0
@@ -93,6 +123,13 @@ export default function AuditPage() {
    * 只对**进得去审批页**的人开放这个跳转 —— 否则这一下会撞在守卫上,看着像坏了。
    */
   const canOpenApproval = !!me?.menus?.approve
+  /**
+   * 看得见全部活动的人才给校验入口。
+   *
+   * 这里用「能不能看见别人的记录」当尺子 —— 服务端按同一条规则再判一次,前端这一下
+   * 只是别让按钮摆在一个按下去必然被拒的人面前。
+   */
+  const canSeeAll = !!me?.roleCodes?.some((c) => c === 'admin' || c === 'owner' || c === 'audit')
   function openApproval(apNo: string) {
     if (apNo && canOpenApproval) navigate(`/approvals?ap=${encodeURIComponent(apNo)}`)
   }
@@ -201,8 +238,17 @@ export default function AuditPage() {
           >
             <Download size={14} />{exportCsv.isPending ? t('audExporting') : t('audExport')}
           </Button>
+          {/* 链校验只对看得见全部活动的人开放(服务端同样判一次)—— 对只看得见自己
+              那几行的人,"第 8231 行被改过"本身就是一条他不该看见的信息。 */}
+          {canSeeAll && (
+            <Button variant="ghost" disabled={verify.isPending} onClick={() => verify.mutate()}>
+              <ShieldCheck size={14} />{verify.isPending ? t('audVerifying') : t('audVerify')}
+            </Button>
+          )}
         </div>
       </header>
+
+      {verify.data && <ChainBanner rep={verify.data} />}
 
       {isLoading && <Loading />}
       {error && <ErrorState error={error} retry={() => refetch()} />}

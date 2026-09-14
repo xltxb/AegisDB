@@ -467,25 +467,27 @@ type ExportJob struct {
 	ConnectionID int64  `json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
 	Database     string `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
-	SQL          string `gorm:"type:mediumtext" json:"sql"`              // 64KB TEXT rejected long IN-list exports (migration 0018)
-	Name         string `gorm:"size:128" json:"name"`
-	Status       string `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
+	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
+	Name   string `gorm:"size:128" json:"name"`
+	Status string `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
 	// IncludeSensitive:这份导出要不要**原值**。默认(false)敏感字段照常打码。
 	//
 	// 它不是一个可以自己勾了就生效的开关:带着它的任务不会直接进队列,而是停在
 	// awaiting 等审批。一份带原值的 CSV 落到磁盘、发进聊天工具,比在终端上看一眼
 	// 跑得远得多 —— 这正是脱敏在导出这一路最要紧的原因,所以放开它要有人签字。
-	IncludeSensitive bool       `gorm:"not null;default:false" json:"includeSensitive"`
-	ApprovalID       int64      `gorm:"index:idx_export_approval;not null;default:0" json:"approvalId"`
-	ApNo             string     `gorm:"size:32" json:"apNo"`
-	Rows             int        `json:"rows"`
-	Bytes            int64      `json:"bytes"`                    // total encrypted size across parts
-	Parts            int        `json:"parts"`                    // number of ~100MB CSV files
-	Files            string     `gorm:"type:text" json:"files"`   // newline-joined part paths
-	Password         string     `gorm:"size:128" json:"password"` // holds the AES-encrypted archive password (~68 chars)
-	Error            string     `gorm:"size:255" json:"error"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	FinishedAt       *time.Time `json:"finishedAt"`
+	IncludeSensitive bool   `gorm:"not null;default:false" json:"includeSensitive"`
+	ApprovalID       int64  `gorm:"index:idx_export_approval;not null;default:0" json:"approvalId"`
+	ApNo             string `gorm:"size:32" json:"apNo"`
+	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	Rows       int        `gorm:"column:row_count" json:"rows"`
+	Bytes      int64      `json:"bytes"`                    // total encrypted size across parts
+	Parts      int        `json:"parts"`                    // number of ~100MB CSV files
+	Files      string     `gorm:"type:text" json:"files"`   // newline-joined part paths
+	Password   string     `gorm:"size:128" json:"password"` // holds the AES-encrypted archive password (~68 chars)
+	Error      string     `gorm:"size:255" json:"error"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
 }
 
 func (ExportJob) TableName() string { return "tbl_export_job" }
@@ -499,17 +501,19 @@ type AsyncJob struct {
 	ConnectionID int64  `json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
 	Database     string `gorm:"column:db_name;size:128" json:"database"`
-	SQL          string `gorm:"type:mediumtext" json:"sql"` // see migration 0018
-	Reason       string `gorm:"size:512" json:"reason"`
-	Status       string `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
+	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // see migration 0018
+	Reason string `gorm:"size:512" json:"reason"`
+	Status string `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	// Risk is the verdict that authorised this job, captured at submit time. The
 	// worker audits when the job finishes — possibly an hour later — and the
 	// dictionary may have changed by then, so the level that actually permitted
 	// the run is the one worth recording. It used to be hardcoded to "mid" at
 	// audit time, which made the field meaningless for filtering (ER7).
-	Risk       string     `gorm:"size:16" json:"risk"`        // high|mid|low
-	Log        string     `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
-	Rows       int        `json:"rows"`
+	Risk string `gorm:"size:16" json:"risk"`        // high|mid|low
+	Log  string `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
+	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	Rows       int        `gorm:"column:row_count" json:"rows"`
 	Error      string     `gorm:"size:512" json:"error"`
 	CreatedAt  time.Time  `json:"createdAt"`
 	StartedAt  *time.Time `json:"startedAt"`
@@ -805,10 +809,11 @@ func (WebhookDelivery) TableName() string { return "tbl_webhook_delivery" }
 // SchemaObject — one database.table the gateway exposes for a connection's tree
 // (simulated, like the executor; real introspection is out of scope).
 type SchemaObject struct {
-	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConnectionID int64  `gorm:"index:idx_schema_conn;not null" json:"connectionId"`
-	Database     string `gorm:"size:64;not null" json:"database"`
-	Tbl          string `gorm:"column:table_name;size:64;not null" json:"table"`
+	ID           int64 `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConnectionID int64 `gorm:"index:idx_schema_conn;not null" json:"connectionId"`
+	// db_name 与项目里另外十处 Database 字段一致 —— 这张表是漏网的那一张(迁移 0040)。
+	Database string `gorm:"column:db_name;size:64;not null" json:"database"`
+	Tbl      string `gorm:"column:table_name;size:64;not null" json:"table"`
 }
 
 func (SchemaObject) TableName() string { return "tbl_schema_object" }
@@ -1000,7 +1005,9 @@ type APIClient struct {
 	ID   int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name string `gorm:"size:64;not null" json:"name"`
 	// Key is the public half, safe to log and to show in the console.
-	Key        string `gorm:"size:64;uniqueIndex:idx_apiclient_key;not null" json:"key"`
+	// 列名是 api_key 而不是 key:`key` 是 MySQL 保留字,靠反引号活着意味着每一处手写
+	// SQL 都得记得加(ADR 0016 §二,迁移 0039)。JSON 名不变 —— 接口契约不受这次改名影响。
+	Key        string `gorm:"column:api_key;size:64;uniqueIndex:idx_apiclient_key;not null" json:"key"`
 	SecretHash string `gorm:"size:255;not null" json:"-"`
 	UserID     int64  `gorm:"not null" json:"userId"`
 	UserName   string `gorm:"size:64" json:"userName"` // display snapshot
@@ -1136,9 +1143,10 @@ type Release struct {
 	// 行数),混装让两种评估都失效。见 service.releaseChangeType 的分类口径。
 	ChangeType string `gorm:"size:8" json:"changeType"`
 	// 归属项目,提交时从目标库快照 —— 库以后改挂别的项目,历史单据不跟着改账。
-	ProjectID      int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
-	ProjectName    string `gorm:"size:64" json:"projectName"`
-	SQL            string `gorm:"type:mediumtext" json:"sql"`
+	ProjectID   int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
+	ProjectName string `gorm:"size:64" json:"projectName"`
+	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	SQL            string `gorm:"column:sql_text;type:mediumtext" json:"sql"`
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
 	Reason         string `gorm:"size:512" json:"reason"`
@@ -1198,12 +1206,13 @@ type ReleaseStage struct {
 	// why the link lives on the stage and not only in the log.
 	// ConfirmedBy 是 execute 阶段人工闸的放行人(空 = 未确认,阶段到达即停)。
 	// 审批回答"可不可以做",这里回答"现在做" —— 见 migrations/0024。
-	ConfirmedBy string     `gorm:"size:64;not null;default:''" json:"confirmedBy"`
-	ApprovalID  int64      `gorm:"index:idx_rstage_approval" json:"approvalId"`
-	ApprovalNo  string     `gorm:"size:32" json:"approvalNo"`
-	Rows        int        `json:"rows"`
-	StartedAt   *time.Time `json:"startedAt"`
-	FinishedAt  *time.Time `json:"finishedAt"`
+	ConfirmedBy string `gorm:"size:64;not null;default:''" json:"confirmedBy"`
+	ApprovalID  int64  `gorm:"index:idx_rstage_approval" json:"approvalId"`
+	ApprovalNo  string `gorm:"size:32" json:"approvalNo"`
+	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
+	Rows       int        `gorm:"column:row_count" json:"rows"`
+	StartedAt  *time.Time `json:"startedAt"`
+	FinishedAt *time.Time `json:"finishedAt"`
 }
 
 func (ReleaseStage) TableName() string { return "tbl_release_stage" }

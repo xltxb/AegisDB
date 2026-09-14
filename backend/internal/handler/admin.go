@@ -46,12 +46,20 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	conn, err := h.Svc.CreateConnection(req)
+	conn, probe, err := h.Svc.CreateConnectionProbed(req)
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "创建失败:"+err.Error())
 		return
 	}
-	resp.OK(c, conn)
+	// 探测结论与实例一起回。探不通不是创建失败 —— 实例已经建好了,只是它此刻连不上,
+	// 而那两件事管理员要能分开看见。
+	//
+	// **嵌入**整个实例而不是手抄一份字段清单:抄一份就意味着往 Connection 上加字段时
+	// 这里会静默地少一个。(第一版就是手抄的,当场漏了 layer,而界面按它显示分层标签。)
+	resp.OK(c, struct {
+		*model.Connection
+		Probe *service.ConnProbe `json:"probe"`
+	}{conn, probe})
 }
 
 // UpdateConnection edits an existing instance's config (admin only).
@@ -779,6 +787,20 @@ func (h *Handler) ExportAudit(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename=audit_export.csv")
 	// Prepend a UTF-8 BOM so Excel renders CJK correctly.
 	c.Data(200, "text/csv; charset=utf-8", append([]byte{0xEF, 0xBB, 0xBF}, []byte(csv)...))
+}
+
+// VerifyAuditChain godoc
+// @Summary 从创世行重算整条审计链,报告第一处对不上的行
+// @Router  /audit/verify [get]
+func (h *Handler) VerifyAuditChain(c *gin.Context) {
+	rep, err := h.Svc.VerifyAuditChain(middleware.CurrentUser(c))
+	if err != nil {
+		resp.Fail(c, errCode(err), err.Error())
+		return
+	}
+	// 链断了不是**这次请求**失败 —— 请求成功地得到了一个坏消息。把它报成错误码,
+	// 界面就只能显示"操作失败",而真正要说的那句话("第 8231 行被改过")丢了。
+	resp.OK(c, rep)
 }
 
 // ---------------------------------------------------------------- Settings / Webhook

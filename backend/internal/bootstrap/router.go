@@ -275,6 +275,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// audit
 		a.GET("/audit", menu("audit"), h.ListAudit)
 		a.GET("/audit/export", menu("audit"), h.ExportAudit)
+		// 链校验:菜单同审计,权限再收一道(服务层按"看得见全部活动"判)。
+		a.GET("/audit/verify", menu("audit"), h.VerifyAuditChain)
 
 		// settings & webhook — read is settings-menu; changes are admin-only
 		a.GET("/settings", menu("settings"), h.GetSettings)

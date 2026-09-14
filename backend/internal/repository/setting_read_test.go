@@ -48,15 +48,15 @@ func TestSettingString(t *testing.T) {
 	r := newSettingDB(t)
 	put(t, r, "json", `"你好"`)
 	put(t, r, "legacy", `裸着存的`) // 历史值:没做 JSON 编码
-	put(t, r, "quoted", `"半截`)   // 解不出 JSON,只能裁引号
+	put(t, r, "quoted", `"半截`)  // 解不出 JSON,只能裁引号
 	put(t, r, "empty", ``)
 
 	for _, tc := range []struct{ key, def, want string }{
 		{"json", "兜底", "你好"},
 		{"legacy", "兜底", "裸着存的"},
 		{"quoted", "兜底", "半截"},
-		{"empty", "兜底", "兜底"},   // 空值等于没配
-		{"缺席", "兜底", "兜底"},     // 没有这一行
+		{"empty", "兜底", "兜底"}, // 空值等于没配
+		{"缺席", "兜底", "兜底"},    // 没有这一行
 	} {
 		if got := r.SettingString(tc.key, tc.def); got != tc.want {
 			t.Errorf("SettingString(%q) = %q,want %q", tc.key, got, tc.want)
@@ -78,7 +78,7 @@ func TestSettingBool(t *testing.T) {
 	}{
 		{"yes", false, true},
 		{"no", true, false},
-		{"junk", true, true},   // 读不懂就用兜底,不自作主张
+		{"junk", true, true}, // 读不懂就用兜底,不自作主张
 		{"junk2", false, false},
 		{"empty", true, true},
 		{"缺席", true, true},

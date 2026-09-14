@@ -27,7 +27,8 @@ func (r *Repo) GetAPIClient(id int64) (*model.APIClient, error) {
 // caller, so a timing difference here reveals only whether a key exists.
 func (r *Repo) GetAPIClientByKey(key string) (*model.APIClient, error) {
 	var c model.APIClient
-	if err := r.db.Where("`key` = ?", key).First(&c).Error; err != nil {
+	// 列名是 api_key(迁移 0039)。从前它叫 `key`,靠反引号活着。
+	if err := r.db.Where("api_key = ?", key).First(&c).Error; err != nil {
 		return nil, err
 	}
 	return &c, nil

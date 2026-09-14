@@ -813,3 +813,21 @@ export interface SettingsResp {
   secretsSet?: Record<string, boolean>
   webhookHasSecret?: boolean
 }
+
+/**
+ * 一次审计链校验的结论。
+ *
+ * ok=false 不代表这次请求失败了 —— 请求成功地带回了一个坏消息。
+ * byVersion 按 payload 版本分别计数:按早期版本通过的行,它的 database/operator/
+ * env/tier 当时不在哈希里,保证只到那一层为止。
+ */
+export interface ChainReport {
+  ok: boolean
+  checked: number
+  firstId: number
+  lastId: number
+  brokenId: number
+  reason: string
+  note: string
+  byVersion: Record<string, number>
+}

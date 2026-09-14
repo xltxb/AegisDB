@@ -1159,6 +1159,47 @@ func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {
 	return ss, err
 }
 
+// StepsByApNo 按**单号**一次取回多张单的审批链。
+//
+// 审计行手里只有 ApNo(它是给人看的那个号,也是审计行上唯一的引用),而步骤挂在
+// approval 的主键上。导出一页审计要拼出每一行的审批链,逐行去查就是一页一次 N+1 ——
+// 而导出恰恰是全表范围的那条路。
+//
+// 空单号不参与查询:大多数审计行没有审批单,把它们的空串也拿去 IN 一遍毫无意义。
+func (r *Repo) StepsByApNo(apNos []string) (map[string][]model.ApprovalStep, error) {
+	out := map[string][]model.ApprovalStep{}
+	seen := map[string]bool{}
+	clean := make([]string, 0, len(apNos))
+	for _, n := range apNos {
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		clean = append(clean, n)
+	}
+	if len(clean) == 0 {
+		return out, nil
+	}
+	var aps []model.Approval
+	if err := r.db.Select("id", "ap_no").Where("ap_no IN ?", clean).Find(&aps).Error; err != nil {
+		return nil, err
+	}
+	noByID := map[int64]string{}
+	ids := make([]int64, 0, len(aps))
+	for _, a := range aps {
+		noByID[a.ID] = a.ApNo
+		ids = append(ids, a.ID)
+	}
+	byID, err := r.StepsOfMany(ids)
+	if err != nil {
+		return nil, err
+	}
+	for id, steps := range byID {
+		out[noByID[id]] = steps
+	}
+	return out, nil
+}
+
 // StepsOfMany 一次取回多张单的审批链,按单号分组。
 //
 // 审批列表一页最多 500 张,而原先每张单再查一次 —— 一次翻页最多 501 次查询。这条路径是
@@ -1279,6 +1320,22 @@ func (r *Repo) LastAuditHash() string {
 	return a.Hash
 }
 
+// AuditChainRows 按 id 顺序取出整条审计链,供读侧校验重算。
+//
+// 顺序是 id,不是 occurred_at:链是按写入顺序串起来的,而 occurred_at 可以有并列
+// (同一毫秒两条),按它排会把顺序弄乱,校验就会在没人动过的链上报断裂。
+//
+// 刻意不分页。校验的意义在于"从创世行一路算到链尾",少算任何一段,接口对不上的那行
+// 就成了假警报;而链断在哪里,恰恰是分页边界最可能被误判的地方。审计表会很大,所以这
+// 是一次显式的整表扫描——它由人按下"校验"才发生,不在任何请求的主路上。
+func (r *Repo) AuditChainRows() ([]model.AuditLog, error) {
+	var rows []model.AuditLog
+	if err := r.db.Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
 func (r *Repo) InsertAudit(a *model.AuditLog) error { return r.db.Create(a).Error }
 
 // ListAudit lists audit rows; actorID > 0 restricts to that actor's own commands.
@@ -1385,9 +1442,10 @@ func (r *Repo) SaveWebhook(w *model.WebhookConfig) error { return r.db.Save(w).E
 // ordered for a stable tree (database, then table).
 func (r *Repo) SchemaForConnection(connID int64) ([]model.SchemaObject, error) {
 	var rows []model.SchemaObject
-	// `database` is a MySQL reserved word — must be back-quoted (works on SQLite too).
+	// 列名是 db_name(迁移 0040)。从前它叫 `database` —— 一个 MySQL 保留字,
+	// 每一处手写 SQL 都得记得加反引号,而忘掉的那一处只在真机上炸。
 	err := r.db.Where("connection_id = ?", connID).
-		Order("`database` asc, table_name asc").Find(&rows).Error
+		Order("db_name asc, table_name asc").Find(&rows).Error
 	return rows, err
 }
 
@@ -1570,7 +1628,9 @@ func (r *Repo) UpdateAsyncJobLog(id int64, log string) error {
 // FinishAsyncJob records the terminal status + final log/rows/error.
 func (r *Repo) FinishAsyncJob(id int64, status, log, errMsg string, rows int, at time.Time) error {
 	return r.db.Model(&model.AsyncJob{}).Where("id = ?", id).Updates(map[string]any{
-		"status": status, "log": log, "error": errMsg, "rows": rows, "finished_at": at,
+		// 列名是 row_count(迁移 0041)。map 形式的 Updates **绕过**模型上的 column
+		// 标注 —— GORM 拿 map 的键直接当列名,所以这里写错了不会有任何东西提醒你。
+		"status": status, "log": log, "error": errMsg, "row_count": rows, "finished_at": at,
 	}).Error
 }
 
