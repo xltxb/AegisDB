@@ -1159,6 +1159,47 @@ func (r *Repo) StepsOf(approvalID int64) ([]model.ApprovalStep, error) {
 	return ss, err
 }
 
+// StepsByApNo 按**单号**一次取回多张单的审批链。
+//
+// 审计行手里只有 ApNo(它是给人看的那个号,也是审计行上唯一的引用),而步骤挂在
+// approval 的主键上。导出一页审计要拼出每一行的审批链,逐行去查就是一页一次 N+1 ——
+// 而导出恰恰是全表范围的那条路。
+//
+// 空单号不参与查询:大多数审计行没有审批单,把它们的空串也拿去 IN 一遍毫无意义。
+func (r *Repo) StepsByApNo(apNos []string) (map[string][]model.ApprovalStep, error) {
+	out := map[string][]model.ApprovalStep{}
+	seen := map[string]bool{}
+	clean := make([]string, 0, len(apNos))
+	for _, n := range apNos {
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		clean = append(clean, n)
+	}
+	if len(clean) == 0 {
+		return out, nil
+	}
+	var aps []model.Approval
+	if err := r.db.Select("id", "ap_no").Where("ap_no IN ?", clean).Find(&aps).Error; err != nil {
+		return nil, err
+	}
+	noByID := map[int64]string{}
+	ids := make([]int64, 0, len(aps))
+	for _, a := range aps {
+		noByID[a.ID] = a.ApNo
+		ids = append(ids, a.ID)
+	}
+	byID, err := r.StepsOfMany(ids)
+	if err != nil {
+		return nil, err
+	}
+	for id, steps := range byID {
+		out[noByID[id]] = steps
+	}
+	return out, nil
+}
+
 // StepsOfMany 一次取回多张单的审批链,按单号分组。
 //
 // 审批列表一页最多 500 张,而原先每张单再查一次 —— 一次翻页最多 501 次查询。这条路径是

@@ -46,12 +46,20 @@ func (h *Handler) CreateConnection(c *gin.Context) {
 		resp.Fail(c, resp.CodeBadRequest, "参数错误")
 		return
 	}
-	conn, err := h.Svc.CreateConnection(req)
+	conn, probe, err := h.Svc.CreateConnectionProbed(req)
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "创建失败:"+err.Error())
 		return
 	}
-	resp.OK(c, conn)
+	// 探测结论与实例一起回。探不通不是创建失败 —— 实例已经建好了,只是它此刻连不上,
+	// 而那两件事管理员要能分开看见。
+	//
+	// **嵌入**整个实例而不是手抄一份字段清单:抄一份就意味着往 Connection 上加字段时
+	// 这里会静默地少一个。(第一版就是手抄的,当场漏了 layer,而界面按它显示分层标签。)
+	resp.OK(c, struct {
+		*model.Connection
+		Probe *service.ConnProbe `json:"probe"`
+	}{conn, probe})
 }
 
 // UpdateConnection edits an existing instance's config (admin only).

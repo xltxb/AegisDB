@@ -63,6 +63,32 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 	return c, nil
 }
 
+// ConnProbe 是一次接入探测的结论。
+type ConnProbe struct {
+	OK      bool   `json:"ok"`
+	Message string `json:"message"`
+}
+
+// CreateConnectionProbed 建实例,并当场探一次接入(FR-CONN-02「保存即测试」)。
+//
+// 探不通**不**拒绝创建:先把实例登记好、再去开防火墙或要账号,是正当的顺序。要改的是
+// 别声称它是好的 —— 从前这一路根本不探测,却把 Status 写死成 online,于是一台地址填错
+// 的实例在列表里显示"在线"。
+//
+// 这和 Executor.Test 从前那个桩是同一类谎。那个桩是 `sleep(120ms); return true`,
+// 88 台实例全被报成可连;它已经改成真 ping 了,而建连接这一路还在无条件说好话。
+//
+// 探测的耗时算在这次请求里 —— 管理员按下"保存"就是在等一个答案,让他等一个 dial
+// 超时,好过让他拿到一个假的"在线"然后在终端里才发现。
+func (s *Services) CreateConnectionProbed(req dto.ConnectionCreateReq) (*model.Connection, *ConnProbe, error) {
+	c, err := s.CreateConnection(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	ok, msg := s.Executor.Test(c)
+	return c, &ConnProbe{OK: ok, Message: msg}, nil
+}
+
 // UpdateConnection edits an existing instance's config (address, engine, env,
 // policy, credentials, database). An empty password keeps the stored one so the
 // admin needn't re-enter it on every edit.
@@ -915,17 +941,63 @@ func (s *Services) ExportCSV(u *model.User, risk string, since, until time.Time)
 	if err != nil {
 		return "", err
 	}
+	// 审批链一次取回,不逐行去查 —— 导出是全表范围的那条路,逐行就是 N+1。
+	apNos := make([]string, 0, len(rows))
+	for _, r := range rows {
+		apNos = append(apNos, r.ApprovalNo)
+	}
+	chains, err := s.Repo.StepsByApNo(apNos)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
-	b.WriteString("time,actor,instance,command,risk,result,approval_no,hash\n")
+	b.WriteString("time,actor,instance,command,risk,result,approval_no,approval_chain,hash\n")
 	for _, r := range rows {
 		b.WriteString(strings.Join([]string{
 			r.OccurredAt.Format("2006-01-02 15:04:05"),
 			csvCell(r.ActorName), csvCell(r.Instance), csvCell(r.Command),
-			r.Risk, r.Result, r.ApprovalNo, r.Hash,
+			r.Risk, r.Result, r.ApprovalNo, csvCell(renderChain(chains[r.ApprovalNo])), r.Hash,
 		}, ","))
 		b.WriteByte('\n')
 	}
 	return b.String(), nil
+}
+
+// renderChain 把一张单的审批链写成一格。
+//
+// 这份 CSV 的用处在**离开控制台之后**:交给审计、交给监管、附在事故报告后面。只给一个
+// 单号,等于让看的人回控制台一张一张翻 —— 而他多半没有那个控制台的账号。
+//
+// 每一步写成「姓名(状态@时间)」,按 step_order 串起来。没动过的步骤没有时间,只写状态:
+// 一张卡住的单,看的人第一个问题是"在等谁",而答案就是那个还没有时间的名字。
+func renderChain(steps []model.ApprovalStep) string {
+	if len(steps) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(steps))
+	for _, st := range steps {
+		one := st.Approver + "(" + chainStatusText(st.Status)
+		if st.ActedAt != nil {
+			one += "@" + st.ActedAt.Format("2006-01-02 15:04:05")
+		}
+		parts = append(parts, one+")")
+	}
+	return strings.Join(parts, " > ")
+}
+
+// chainStatusText 用中文写状态 —— 这一列是给人读的,不是给程序解析的。
+func chainStatusText(s string) string {
+	switch s {
+	case "approved":
+		return "已通过"
+	case "rejected":
+		return "已驳回"
+	case "active":
+		return "待批"
+	case "waiting":
+		return "待批(未轮到)"
+	}
+	return s
 }
 
 // ---------------------------------------------------------------- helpers
