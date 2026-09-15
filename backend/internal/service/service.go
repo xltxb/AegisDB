@@ -216,8 +216,8 @@ func (s *Services) appendAudit(actor *model.User, conn *model.Connection, comman
 		// 进哈希的那段字节由 auditPayload 构造 —— 读侧校验用的是**同一个函数**。
 		//
 		// 双快照(env / tier)是从某次改动起进哈希的:一个改了不会破链的快照,证明不了
-		// 任何事。那次刻意没有重算历史行(重算等于把证据重新签一遍),所以老行按
-		// auditPayloadLegacy 那一版算,校验时两版都试。
+		// 任何事。那次刻意没有重算历史行(重算等于把证据重新签一遍),所以老行仍按当时
+		// 那一版算 —— 读侧的 matchAuditRow 从新到旧逐版尝试,认全历史上每一种构造。
 		a.Hash = crypto.ChainHash(prev, auditPayload(a))
 		if err = s.Repo.InsertAudit(a); err == nil {
 			return a
