@@ -40,7 +40,14 @@ backend/configs/config.local.yaml
 Thumbs.db
 
 # ---- Local tooling / test artifacts ----
-.claude/
+# .claude/ 下两类东西性质不同:settings.local.json 是这台机器的权限配置,
+# skills/ 是团队共享的操作说明(怎么把应用跑起来、UI 的选择器长什么样)。
+# 按目录一刀切会把后者也埋掉 —— 换机器就拿回一份过时的说明,而说明过时的
+# 症状往往是「照着做但跑不起来」,查起来比没有说明更费时间。
+# 注意写法:必须是 `.claude/*` 而不是 `.claude/`,否则 git 不会递归进这个
+# 目录,下面那条反忽略永远不生效。
+.claude/*
+!.claude/skills/
 /frontend/test-results/
 /frontend/playwright-report/
 
