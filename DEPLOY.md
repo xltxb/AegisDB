@@ -59,14 +59,21 @@ sudo chown -R vela:vela /opt/vela-gateway && sudo chmod 600 /opt/vela-gateway/ve
 
 ## 3. 准备 PostgreSQL
 
-网关自身的元数据存储只有 PostgreSQL 一种(开发与生产同一种,见 ADR 0018)。建库与账号,例如:
+网关自身的元数据存储只有 PostgreSQL 一种(开发与生产同一种,见 ADR 0018)。
+
+建库与账号 —— 连到**任意**库(通常是 `postgres`)执行:
 
 ```sql
 CREATE DATABASE vela_gateway;
 CREATE USER vela WITH PASSWORD '你的密码';
 GRANT ALL ON DATABASE vela_gateway TO vela;
--- 迁移要在 public schema 里建表,PG 15 起 public 不再默认对所有人可写:
-\connect vela_gateway
+```
+
+然后**连到 `vela_gateway` 这个库**再执行下面这条 —— 它作用于库内的 schema,连在别的库上
+执行只会改错对象(psql 里是 `\connect vela_gateway`,图形客户端里是切换连接):
+
+```sql
+-- 迁移要在 public schema 里建表,而 PG 15 起 public 不再默认对所有人可写。
 GRANT CREATE, USAGE ON SCHEMA public TO vela;
 ```
 
