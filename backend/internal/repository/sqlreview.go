@@ -45,7 +45,10 @@ func (r *Repo) GetSQLReviewRule(id int64) (*model.SQLReviewRule, error) {
 
 func (r *Repo) GetSQLReviewRuleByCode(code string) (*model.SQLReviewRule, error) {
 	var row model.SQLReviewRule
-	if err := r.db.Where("code = ?", code).First(&row).Error; err != nil {
+	// 只在查重上折叠大小写,不在入库时 ToLower——自定义规则的 code 是运营输入的
+	// 自由文本,存储层不替他改写;但"是否已存在"这个判断要恢复 MySQL ci 排序规则
+	// 那会儿的语义,否则 custom.Foo / custom.foo 会被当成两个不同编码放行。
+	if err := r.db.Where("lower(code) = lower(?)", code).First(&row).Error; err != nil {
 		return nil, err
 	}
 	return &row, nil
