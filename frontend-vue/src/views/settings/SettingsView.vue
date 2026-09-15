@@ -252,7 +252,7 @@ async function save() {
       <section v-show="activeTab === 'gateway'" class="card">
         <div class="shead"><div class="sic"><Shield :size="17" color="var(--accent-text)" /></div><div><div class="st">{{ $t('setGw') }}</div><div class="ss">{{ $t('setGwSub') }}</div></div></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setDefPolicy') }}</div><div class="rd">{{ $t('setDefPolicyD') }}</div></div><div class="w180"><VSelect v-model="policy" :options="policyOpts" /></div></div>
-        <!-- 无 WHERE 的 DELETE / UPDATE 按分层开关(迁移 0030),开关在【环境分层】页 —— 
+        <!-- 无 WHERE 的 DELETE / UPDATE 按分层开关(ADR 0013),开关在【环境分层】页 —— 
              判定的另外两层也在那套按分层的规则里,不该有第二个能改同一件事的地方。 -->
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setStrict') }}</div><div class="rd">{{ $t('setStrictD') }}</div></div><RouterLink class="srlink" to="/env-tiers">{{ $t('pStrictGo') }}</RouterLink></div>
         <div class="srow"><div class="grow"><div class="rt">{{ $t('setTimeout') }}</div><div class="rd">{{ $t('setTimeoutD') }}</div></div><div class="w160"><input v-model.number="execTimeout" type="number" min="1" max="3600" class="lkin" /></div></div>

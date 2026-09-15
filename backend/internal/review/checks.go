@@ -134,7 +134,7 @@ var (
 )
 
 // chkRequireWhere is the one review rule that overlaps the risk engine's
-// strict mode, and deliberately so: 严格模式**按分层**开关(ADR 0013,迁移 0030),
+// strict mode, and deliberately so: 严格模式**按分层**开关(ADR 0013),
 // 而 dev 出厂就是关着的 —— 那里清空一张草稿表是日常。发布不一样:它最终要落到某个
 // 受管分层上,所以无论目标那一层的开关是什么,一条无 WHERE 的变更都不该被这条流水线
 // 带过去。

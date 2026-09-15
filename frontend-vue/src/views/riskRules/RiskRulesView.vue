@@ -105,7 +105,7 @@ const coverage = computed(() => {
   return Math.round((gated / total) * 1000) / 10
 })
 
-// 无 WHERE 的 DELETE / UPDATE 现在按分层开关,存在分层上(迁移 0030),和它上面
+// 无 WHERE 的 DELETE / UPDATE 现在按分层开关,存在分层上(ADR 0013),和它上面
 // 两层规则一样。这里只呈现哪些分层开着 —— 改在【环境分层】页,那里是所有按分层
 // 生效的开关的所在地,不再在两个页面各放一个能改同一件事的控件。
 const strictTiers = computed(() => envtier.tiers.filter((x) => x.strictNoWhere).map((x) => x.code))

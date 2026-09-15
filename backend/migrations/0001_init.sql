@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS tbl_env_tier (
   danger_banner     BOOLEAN      NOT NULL DEFAULT false,
   counts_in_pending BOOLEAN      NOT NULL DEFAULT false,
   scan_baseline     BOOLEAN      NOT NULL DEFAULT false,
-  strict_nowhere    BOOLEAN      NOT NULL DEFAULT true,   -- migration 0030
+  strict_nowhere    BOOLEAN      NOT NULL DEFAULT true,   -- ADR 0013
   conn_layer        VARCHAR(64)  NOT NULL DEFAULT '',
   default_role      VARCHAR(64)  NOT NULL DEFAULT '',
   CONSTRAINT pk_tbl_env_tier PRIMARY KEY (code)

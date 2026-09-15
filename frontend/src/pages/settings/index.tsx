@@ -278,7 +278,7 @@ function SettingsForm({ data }: { data: SettingsResp }) {
             </select>
           </CardRow>
           {/*
-            无 WHERE 的 DELETE / UPDATE 按**分层**开关(迁移 0030),开关在环境分层页。
+            无 WHERE 的 DELETE / UPDATE 按**分层**开关(ADR 0013),开关在环境分层页。
             这里只留一个去处,不放第二个能改同一件事的控件 —— 两个入口改同一条规则,
             迟早会有人对着其中一个说"我明明关了"。
           */}

@@ -90,7 +90,7 @@ dev 构建的登录页会预填这组账号，生产构建不预填也不提示�
 
 - 判定链：`菜单权限 → 能力矩阵(角色×能力×分层) → 高危命令字典(命令×分层) → 无 WHERE 拦截(分层)`。
   四层规则**都按分层存**：最后一层拦截不带 WHERE 的 DELETE/UPDATE，2026-09 前它是一个全局开关，
-  于是无法只对 dev 关掉（迁移 0030 起改为按分层，开关在【分层】页）。EXPLAIN 独立成档：`EXPLAIN` 只看计划、按只读判；
+  于是无法只对 dev 关掉（ADR 0013 起改为按分层，开关在【分层】页）。EXPLAIN 独立成档：`EXPLAIN` 只看计划、按只读判；
   而**会真的执行**被包住语句的那些形式按真实执行判 —— `EXPLAIN ANALYZE`／英式拼写
   `ANALYSE`、选项表里的 `(ANALYZE …)`、以及 DWS/GaussDB 的 `EXPLAIN PERFORMANCE`。
 - **会话级设置短路**：`SET search_path …`、Oracle `ALTER SESSION SET …` 这类只影响本连接的语句，

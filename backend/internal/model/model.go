@@ -65,10 +65,14 @@ type EnvTier struct {
 	// a scratch table, yet strict mode still graded that DELETE high and demanded
 	// an approval, and the only way to stop it was to switch the layer off for
 	// PROD as well.
-	// The column name is pinned rather than inflected: GORM turns StrictNoWhere
-	// into `strict_no_where`, while migration 0030 (the authoritative schema on
-	// MySQL) adds `strict_nowhere`. Left to the inflector the two schema paths
-	// disagree, and the MySQL side then reads a column GORM never writes.
+	// The column name is pinned rather than inflected: GORM's inflector turns
+	// StrictNoWhere into `strict_no_where`, while the schema calls it
+	// `strict_nowhere`. The tag is what keeps the two agreeing.
+	//
+	// This used to carry a second reason — two schema paths (GORM AutoMigrate for
+	// dev, hand-written SQL for prod) that would disagree if the inflector were
+	// left to decide. That path is gone (ADR 0018); the baseline is now the only
+	// thing that creates this column, so the tag has to match IT and nothing else.
 	StrictNoWhere bool `gorm:"column:strict_nowhere;not null;default:true" json:"strictNoWhere"`
 	// ScanBaseline marks the REFERENCE tier — the strictest one, held by exactly
 	// one tier. Two things read it: a newly added dictionary command prefills at

@@ -42,7 +42,7 @@ func TestStrictMode_NoWhereDeleteIntercepted(t *testing.T) {
 
 	// Switch the gate on for DEV. It is a per-tier flag now, not the process-wide
 	// setting this test used to flip: that switch could only be moved for every
-	// environment at once, which is what migration 0030 exists to undo.
+	// environment at once, which is what the per-tier switch (ADR 0013) undid.
 	app.tierStrict(token, "dev", true)
 
 	noWhere := app.riskCheck(token, devConn, "DELETE FROM orders")

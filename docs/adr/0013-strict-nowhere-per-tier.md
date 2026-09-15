@@ -3,8 +3,11 @@
 - 状态:已采纳
 - 日期:2026-09-04
 - 相关:`backend/internal/gateway/risk.go`、`internal/model/model.go`、
-  `migrations/0030_env_tier_strict_nowhere.sql`、
   `internal/bootstrap/strict_nowhere_backfill.go`
+- 注(2026-09-15):当时那条 `migrations/0030_env_tier_strict_nowhere.sql` 已随存储
+  迁往 PostgreSQL 一并压进 `migrations/0001_init.sql`(ADR 0018),文件本身不在了。
+  `tbl_env_tier.strict_nowhere` 这一列与本篇记的决定都没有变 —— 代码里原先指向
+  「迁移 0030」的那些注释现在改指本篇,因为本篇才是这个决定还活着的记录。
 
 ## 背景
 

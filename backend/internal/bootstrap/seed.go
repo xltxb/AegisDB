@@ -67,8 +67,8 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 // makes — every command seeded `off` below — that a full-table DELETE on a
 // scratch database is ordinary work, not an incident.
 //
-// An UPGRADED install looks different here: migration 0030 turns the flag on for
-// every existing tier, DEV included, because it can only preserve what was
+// An UPGRADED install looks different here: the per-tier change (ADR 0013) turns
+// the flag on for every existing tier, DEV included, because it can only preserve what was
 // already in force and must not loosen a gate on its own. Un-ticking DEV there
 // is one click, and it is the operator's to make.
 var builtinTiers = []model.EnvTier{

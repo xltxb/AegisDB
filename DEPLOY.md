@@ -162,7 +162,7 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 | `database.seed` | dev true / prod false | 空库写演示引用数据 + 1 个管理员;prod + 空库 → 拒绝启动 |
 | `jwt.ttl_hours` | 8 | 仅回落值;实际登录 TTL 由运行时设置 `security.sessionTTL`(4h / 8h / 24h)决定 |
 | `gateway.exec_timeout_seconds` | 30 | 只在首次 seed 时写进运行时设置 `gateway.execTimeout` |
-| `gateway.default_policy` / `gateway.strict_mode` | `strict` / true | 前者只被存储、判定不读;后者只在升级到 0030 时一次性折进分层 |
+| `gateway.default_policy` / `gateway.strict_mode` | `strict` / true | 前者只被存储、判定不读;后者只在分层化(ADR 0013)那次升级时一次性折进分层 |
 | `webhook.endpoint / secret / retry_max / enabled` | 空 / — / 5 / false | 只在空库首次 seed/init 时写入 Webhook 行;`webhook.events` **无效**(seed 固定订阅 `exec`) |
 | `webhook.allow_private` | dev true / prod false | 同 `VELA_WEBHOOK_ALLOW_PRIVATE` |
 | `secret_key` | 回落 `jwt.secret` | 同 `VELA_SECRET_KEY` |

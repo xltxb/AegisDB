@@ -857,7 +857,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 	prepared := make(map[string]string, len(body))
 	for k, v := range body {
 		// "无 WHERE 的 DELETE / UPDATE" 不再是这里的全局开关,它按分层存在 tbl_env_tier
-		// 上(迁移 0030)。旧客户端可能还在发这个键,静默丢弃 —— 若把它写进 tbl_setting,
+		// 上(ADR 0013)。旧客户端可能还在发这个键,静默丢弃 —— 若把它写进 tbl_setting,
 		// 界面上会出现一个看着像开关、其实什么也不控制的东西。
 		if k == "strictMode" {
 			continue

@@ -13,9 +13,9 @@ const strictBackfillGuard = "envtier.strictNoWhere.backfilled"
 // backfillStrictNoWhere carries the retired global strict switch onto the tiers,
 // exactly once.
 //
-// Before migration 0030, "block DELETE / UPDATE with no WHERE" was one
-// process-wide boolean read from gateway.strict_mode. The column added by that
-// migration defaults to TRUE, which reproduces the shipped default (strict_mode
+// Before the switch went per-tier (ADR 0013), "block DELETE / UPDATE with no
+// WHERE" was one process-wide boolean read from gateway.strict_mode. The column
+// that change introduced defaults to TRUE, which reproduces the shipped default (strict_mode
 // is true in both config files) on every tier. The one case the column default
 // cannot express is a deployment that deliberately set strict_mode to false:
 // SQL cannot read a YAML file, so it is folded in here.
