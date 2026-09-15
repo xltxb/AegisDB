@@ -41,8 +41,13 @@ func newMigratedDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db := testsupport.NewDB(t)
 	cfg := &Config{}
-	// StrictMode=false 与 newTestApp 保持一致:这是 backfillStrictNoWhere 唯一会
-	// 写库的那个取值,让夹具走的是有副作用的那条分支,而不是空转的那条。
+	// 与 newTestApp 取同一个值,理由只是「夹具对自己说的话要一致」—— 不是因为这个取值
+	// 会让折叠真的发生。
+	//
+	// 恰恰相反:此刻 schema 刚建好、一行角色都没有,backfillStrictNoWhere 认出这是个新库
+	// (databaseIsUnseeded),于是**只盖戳、不改任何行**。各分层身上留下的是 builtinTiers
+	// 定的出厂默认(PROD 开、DEV 关)—— 而整套 harness 测试正是按这组默认写断言的。
+	// 升级那一条路由 TestStrictBackfill_UpgradeFoldsAnExplicitOffOntoTheTiers 单独管。
 	cfg.Gateway.StrictMode = false
 	if err := Migrate(cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)

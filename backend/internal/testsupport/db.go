@@ -74,28 +74,7 @@ func NewDB(t *testing.T) *gorm.DB {
 		}
 	})
 
-	// search_path 要写进 DSN 重新连一次 —— 池里的每条连接都得带上它,否则第二条
-	// 连接落回 public,建出来的表就消失在另一个 schema 里。
-	scopedDSN := dsn + " search_path=" + schema
-	if strings.Contains(dsn, "://") {
-		sep := "&"
-		if !strings.Contains(dsn, "?") {
-			sep = "?"
-		}
-		scopedDSN = dsn + sep + "search_path=" + schema
-	}
-
-	scoped, err := gorm.Open(postgres.Open(scopedDSN), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
-	if err != nil {
-		t.Fatalf("连 schema %s: %v", schema, err)
-	}
-	t.Cleanup(func() {
-		if sqlDB, derr := scoped.DB(); derr == nil {
-			_ = sqlDB.Close()
-		}
-	})
+	scoped := openScoped(t, dsn, schema)
 
 	// 直接执行 baseline,不走 bootstrap.RunSQLMigrations。两个理由:
 	//
@@ -112,4 +91,58 @@ func NewDB(t *testing.T) *gorm.DB {
 	}
 
 	return scoped
+}
+
+// scopedDSN 把 search_path 写进连接串。
+//
+// 必须写进 DSN 而不是连上以后再 SET —— 池里的**每一条**连接都得带上它,否则第二条
+// 连接落回 public,建出来的表就消失在另一个 schema 里。
+func scopedDSN(dsn, schema string) string {
+	if strings.Contains(dsn, "://") {
+		sep := "&"
+		if !strings.Contains(dsn, "?") {
+			sep = "?"
+		}
+		return dsn + sep + "search_path=" + schema
+	}
+	return dsn + " search_path=" + schema
+}
+
+// openScoped 在指定 schema 上开一个连接池,并注册关池的清理。
+func openScoped(t *testing.T, dsn, schema string) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(postgres.Open(scopedDSN(dsn, schema)), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		t.Fatalf("连 schema %s: %v", schema, err)
+	}
+	t.Cleanup(func() {
+		if sqlDB, derr := db.DB(); derr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db
+}
+
+// NewSession 在 db 所在的那个 schema 上再开一个**独立连接池**的 *gorm.DB —— 也就是
+// 一个必然不同的 PostgreSQL 会话。
+//
+// 为什么需要专门有这么一个入口:同一个 *sql.DB 上连着取两次 `Conn`,池子按 LIFO 把刚
+// 归还的那条**原样递回来**,两次拿到的是同一个后端进程。而 advisory lock 是按会话计数
+// 且可重入的 —— 于是「上一次忘了解锁」在同一个池子里看起来和「解锁了」一模一样:
+// pg_try_advisory_lock 照样返回 true。
+//
+// 任何想验证会话级锁的测试,第二个参与者都必须来自这里,否则那条用例是确定性的假绿:
+// 它不可能因为它声称守护的那件事而失败。
+func NewSession(t *testing.T, db *gorm.DB) *gorm.DB {
+	t.Helper()
+	var schema string
+	if err := db.Raw(`SELECT current_schema()`).Scan(&schema).Error; err != nil {
+		t.Fatalf("read current_schema: %v", err)
+	}
+	if schema == "" {
+		t.Fatal("current_schema() 是空的 —— 这个 handle 没有绑定到任何 schema")
+	}
+	return openScoped(t, DSN(), schema)
 }

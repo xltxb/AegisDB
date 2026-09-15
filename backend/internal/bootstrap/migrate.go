@@ -84,9 +84,19 @@ func RunSQLMigrations(db *gorm.DB, srcFS fs.FS) error {
 	// to stay held to exclude other processes.
 	//
 	// The lock is keyed by hashtext() of a fixed name rather than a literal
-	// number: PG advisory locks live in ONE global 64-bit namespace shared by the
-	// whole cluster, so a hand-picked integer is a collision waiting for whoever
-	// picks the same one next.
+	// number. Advisory locks are scoped to the DATABASE, not to the schema and not
+	// to the whole cluster (pg_locks carries the database oid; a session in another
+	// database takes the same key freely). So the people who can collide with this
+	// key are whatever else runs inside vela_gateway — and a hand-picked integer is
+	// a collision waiting for the next person who picks the same one.
+	//
+	// Two properties of hashtext() worth knowing, neither of which changes the
+	// choice: it returns int4, so widening to bigint spends only 32 bits of the
+	// 64-bit key space; and it is an undocumented internal function whose output is
+	// not guaranteed stable across PostgreSQL major versions. The latter is
+	// harmless here because the expression is evaluated SERVER-side — every
+	// migrator talking to one server derives the same key, which is the only
+	// agreement this lock needs.
 	sqlDB, err := db.DB()
 	if err != nil {
 		return fmt.Errorf("get sql.DB: %w", err)

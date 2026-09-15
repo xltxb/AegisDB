@@ -40,12 +40,34 @@ func TestMigrate_CreatesEverySchemaTable(t *testing.T) {
 	}
 }
 
-// 跑第二次不炸 —— 账本挡住已应用的版本。
+// 在一个已经建好表的库上跑 Migrate,不炸。
+//
+// 挡住重复执行的其实有两道闸,而这条用例走的是**第二道**:
+//
+//	一、账本(schema_migrations):记着哪个版本应用过,`migrate` 跑第二遍时整份文件都跳过。
+//	二、baseline 自身整体幂等:36 条 CREATE TABLE IF NOT EXISTS + 48 条
+//	    CREATE [UNIQUE] INDEX IF NOT EXISTS,重跑只出 NOTICE。
+//
+// testsupport.NewDB 直接 Exec baseline,**不写账本**。所以这里第一道闸是空的,Migrate
+// 看到「0001 还没应用」,把整份 baseline 又完整跑了一遍 —— 于是这条用例实际压的是第二道闸。
+//
+// 那比注释原本声称的更有价值:账本那道闸由 TestRunSQLMigrations_AppliesAndIsIdempotent
+// 直接盯着,而「baseline 重跑无害」没有别的用例在管,偏偏又是 newMigratedDB 每次建夹具
+// 都要依赖的性质。下面顺带断言账本落了一行 —— 钉住「它真的跑了」,而不是被谁跳过了。
 func TestMigrate_IsIdempotent(t *testing.T) {
 	db := testsupport.NewDB(t)
 	cfg := &Config{}
 	cfg.Gateway.StrictMode = true
 	if err := Migrate(cfg, db); err != nil {
-		t.Fatalf("第二次 Migrate: %v", err)
+		t.Fatalf("在已建好表的库上 Migrate: %v", err)
+	}
+	var applied int64
+	if err := db.Raw(`SELECT count(*) FROM schema_migrations WHERE version = '0001_init.sql'`).
+		Scan(&applied).Error; err != nil {
+		t.Fatalf("count ledger: %v", err)
+	}
+	if applied != 1 {
+		t.Fatalf("账本里 0001_init.sql 有 %d 行, want 1 —— 这一趟没有真的重跑 baseline,"+
+			"那这条用例并没有验证到「重跑无害」", applied)
 	}
 }

@@ -137,10 +137,13 @@ func seedDefaultPipelines(db *gorm.DB) error {
 	return nil
 }
 
-// seedPipelineReference runs all three backfills. Both schema paths call it —
-// the SQL-migration path (MySQL/production) and the AutoMigrate path (dev,
-// tests) — because a backfill that only ran on one of them is a feature that
-// works in development and is invisible in production.
+// seedPipelineReference runs all three backfills. It used to be called from two
+// schema paths — the SQL migrations and a boot-time GORM auto-migration — and the
+// note here was that a backfill hanging off only one of them is a feature that
+// works in development and is invisible in production. There is one path now
+// (Migrate, which serve / migrate / init all go through), so that hazard is gone;
+// what remains true is the reason each backfill exists at all, which is on the
+// individual functions.
 func seedPipelineReference(db *gorm.DB) error {
 	if err := backfillPipelineMenu(db); err != nil {
 		return err

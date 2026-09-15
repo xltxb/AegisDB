@@ -6,6 +6,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	"gorm.io/gorm"
+
 	"velagateway/internal/testsupport"
 )
 
@@ -122,23 +124,43 @@ func TestRunSQLMigrations_ConcurrentRunnersDoNotCollide(t *testing.T) {
 	}
 }
 
-// 锁用完必须还回去:同一个 *gorm.DB 上连着跑两次,第二次不该卡在等锁上。
+// 锁用完必须还回去 —— 下一个**进程**才拿得到。
 //
-// pg_advisory_lock 是会话级的,而 *sql.Conn 用完会**放回连接池**继续服务别的查询。
-// 忘了 unlock 的话那条连接会带着锁回到池里,锁一直到进程退出才释放 —— 表现出来就是
-// 下一次迁移原地等满 60 秒然后报「另一个迁移正在跑」,而那时根本没有别的迁移。
+// pg_advisory_lock 是会话级的,而 *sql.Conn 用完会放回连接池。忘了 unlock 的话,那条
+// 连接带着锁回到池里,锁一直活到进程退出;表现出来就是下一台实例的迁移原地等满 60 秒,
+// 然后报「另一个迁移正在跑」,而那时根本没有别的迁移在跑。
+//
+// 第二个迁移者必须来自 testsupport.NewSession,也就是一个**必然不同的会话**。用同一个
+// *gorm.DB 跑第二次是测不出东西的:池子按 LIFO 把刚归还的那条连接原样递回来,而 advisory
+// lock 同会话可重入 —— 即便上一次真的漏了解锁,pg_try_advisory_lock 也照样返回 true。
+// 那样写出来的用例是确定性的假绿,它不可能因为它声称守护的那件事而失败。
 func TestRunSQLMigrations_ReleasesTheLock(t *testing.T) {
 	db := testsupport.NewDB(t)
-	fsys := fstest.MapFS{
-		"0001_a.sql": {Data: []byte(`CREATE TABLE IF NOT EXISTS t_relock_a (id INT);`)},
+	other := testsupport.NewSession(t, db)
+
+	// 先把「两个会话」这个前提本身钉住。这条断言一旦不成立,下面那个 10 秒断言就会因为
+	// 可重入而无条件通过,整条用例随之失去牙齿 —— 而它失去牙齿的样子和通过一模一样。
+	pid := func(h *gorm.DB) int {
+		t.Helper()
+		var n int
+		if err := h.Raw(`SELECT pg_backend_pid()`).Scan(&n).Error; err != nil {
+			t.Fatalf("pg_backend_pid: %v", err)
+		}
+		return n
 	}
-	if err := RunSQLMigrations(db, fsys); err != nil {
+	if p1, p2 := pid(db), pid(other); p1 == p2 {
+		t.Fatalf("两个 handle 落在同一个后端进程上(pid=%d) —— 这条用例测不了会话级的锁", p1)
+	}
+
+	if err := RunSQLMigrations(db, fstest.MapFS{
+		"0001_a.sql": {Data: []byte(`CREATE TABLE IF NOT EXISTS t_relock_a (id INT);`)},
+	}); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 
 	done := make(chan error, 1)
 	go func() {
-		done <- RunSQLMigrations(db, fstest.MapFS{
+		done <- RunSQLMigrations(other, fstest.MapFS{
 			"0002_b.sql": {Data: []byte(`CREATE TABLE IF NOT EXISTS t_relock_b (id INT);`)},
 		})
 	}()
@@ -148,6 +170,6 @@ func TestRunSQLMigrations_ReleasesTheLock(t *testing.T) {
 			t.Fatalf("second run: %v", err)
 		}
 	case <-time.After(10 * time.Second):
-		t.Fatal("第二次迁移拿不到锁 —— 上一次没有释放,锁被带回了连接池")
+		t.Fatal("另一个会话拿不到锁 —— 上一次迁移没有释放,锁被带回了连接池")
 	}
 }
