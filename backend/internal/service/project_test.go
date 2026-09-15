@@ -67,3 +67,39 @@ func TestUpdateProject_RenameOntoAnotherNameDifferentCase_GetsFriendlyError(t *t
 		t.Errorf("错误信息 = %q, 想要 %q", err.Error(), want)
 	}
 }
+
+// 只调整自己名字的大小写,不该被自己拦下。
+//
+// 查重是「这个名字有没有被**别人**占着」,而 GetProjectByName 折叠大小写之后,
+// Foo 改成 foo 会查到它自己那一行 —— 于是提示「项目「foo」已存在」,而那个
+// "已存在"的正是它本身。
+//
+// MySQL 的 ci 排序规则下同样如此(裸列 `name = 'foo'` 也匹配 Foo),所以这不是
+// 迁到 PostgreSQL 带来的回归,是一直都在的缺陷:一个项目的名字大小写写错了,
+// 就再也改不回来 —— 除非先改成一个不相干的名字、再改成想要的那个。
+func TestUpdateProject_AdjustingItsOwnCaseIsNotADuplicate(t *testing.T) {
+	db := testsupport.NewDB(t)
+	s := &Services{Repo: repository.New(db)}
+	actor := &model.User{ID: 1}
+
+	foo, err := s.CreateProject(actor, dto.ProjectReq{Name: "Foo"})
+	if err != nil {
+		t.Fatalf("create Foo: %v", err)
+	}
+
+	p, err := s.UpdateProject(actor, foo.ID, dto.ProjectReq{Name: "foo"})
+	if err != nil {
+		t.Fatalf("把自己的 Foo 改成 foo 被拒了: %v", err)
+	}
+	if p.Name != "foo" {
+		t.Errorf("改名后 Name = %q, 想要 %q", p.Name, "foo")
+	}
+	// 没有多出一个项目 —— 排除自己不该变成"跳过查重直接插一行"。
+	var n int64
+	if err := db.Model(&model.Project{}).Count(&n).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("项目数 = %d, 应当仍是 1", n)
+	}
+}

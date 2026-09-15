@@ -73,7 +73,14 @@ func (s *Services) UpdateProject(actor *model.User, id int64, req dto.ProjectReq
 	}
 	fields := map[string]any{"updated_at": time.Now()}
 	if n := strings.TrimSpace(req.Name); n != "" && n != p.Name {
-		if _, e := s.Repo.GetProjectByName(n); e == nil {
+		// 查重问的是「这个名字有没有被**别人**占着」,所以查到自己不算冲突。
+		//
+		// GetProjectByName 折叠大小写,于是 Foo 改成 foo 会查到它自己那一行 ——
+		// 不排除的话,提示会是「项目「foo」已存在」,而那个"已存在"的正是它本身,
+		// 结果是一个项目的名字大小写写错了就再也改不回来(除非先改成一个不相干的
+		// 名字、再改回想要的那个)。MySQL 的 ci 排序规则下同样如此,这不是迁库
+		// 带来的。
+		if existing, e := s.Repo.GetProjectByName(n); e == nil && existing.ID != p.ID {
 			return nil, fmt.Errorf("项目「%s」已存在", n)
 		}
 		fields["name"] = clip(n, 64)
