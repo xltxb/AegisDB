@@ -20,6 +20,36 @@ func TestNewDB_SchemasAreIsolated(t *testing.T) {
 	}
 }
 
+// schema 用完就得还回去。
+//
+// 泄漏在测试里是隐形的:每个漏掉的 schema 还攥着一个没关的连接池,攒够了就撞上 PG 的
+// max_connections,之后所有测试都报 "too many clients already" —— 那句报错跟真正的
+// 病因毫无关系,而真正的病因在几百个测试之前。
+func TestNewDB_DropsItsSchemaOnCleanup(t *testing.T) {
+	probe := NewDB(t) // 这个 handle 要活过下面的子测试,用来数账
+	count := func() int64 {
+		var n int64
+		if err := probe.Raw(
+			`SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 't\_%'`,
+		).Scan(&n).Error; err != nil {
+			t.Fatalf("count schemas: %v", err)
+		}
+		return n
+	}
+
+	before := count()
+	t.Run("inner", func(t *testing.T) {
+		NewDB(t)
+		NewDB(t)
+		if got := count(); got != before+2 {
+			t.Fatalf("子测试里 schema 数 = %d, want %d —— NewDB 没建出独占 schema", got, before+2)
+		}
+	})
+	if got := count(); got != before {
+		t.Fatalf("子测试结束后 schema 数 = %d, want %d —— 有 schema 没被清理", got, before)
+	}
+}
+
 // baseline 真的跑过了:36 张表都在。
 func TestNewDB_RunsBaseline(t *testing.T) {
 	db := NewDB(t)

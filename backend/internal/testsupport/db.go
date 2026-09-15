@@ -40,6 +40,17 @@ func DSN() string {
 func NewDB(t *testing.T) *gorm.DB {
 	t.Helper()
 
+	// 每一步都在**成功之后立刻**注册它自己的清理,而不是攒到最后一次性注册。
+	// 中间任何一步 t.Fatalf,前面已经建好的东西都得有人收 —— 否则 baseline SQL
+	// 在开发中写错一次,跑一遍 bootstrap 就在 vela_test 里留下上百个空 schema,
+	// 每个还攥着一个没关的连接池;连跑几次撞上 max_connections,之后所有测试都报
+	// "too many clients already",而那句报错跟真正的病因毫无关系。
+	//
+	// t.Cleanup 是 LIFO,所以注册顺序正好是执行顺序的倒序:
+	//   注册 admin 关池 → 注册 drop schema → 注册 scoped 关池
+	//   执行 scoped 关池 → 执行 drop schema → 执行 admin 关池
+	// drop 要用 admin,所以 admin 的池必须最后才关;scoped 的连接要先放掉,
+	// 否则它们攥着 schema 里的对象。
 	dsn := DSN()
 	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
@@ -47,11 +58,21 @@ func NewDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("连不上测试库 (%s):%v\n建库:createdb vela_test", dsn, err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, derr := admin.DB(); derr == nil {
+			_ = sqlDB.Close()
+		}
+	})
 
 	schema := fmt.Sprintf("t_%d_%d", os.Getpid(), seq.Add(1))
 	if err := admin.Exec(`CREATE SCHEMA ` + schema).Error; err != nil {
 		t.Fatalf("create schema %s: %v", schema, err)
 	}
+	t.Cleanup(func() {
+		if err := admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`).Error; err != nil {
+			t.Logf("清理 schema %s 失败:%v", schema, err)
+		}
+	})
 
 	// search_path 要写进 DSN 重新连一次 —— 池里的每条连接都得带上它,否则第二条
 	// 连接落回 public,建出来的表就消失在另一个 schema 里。
@@ -70,6 +91,11 @@ func NewDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatalf("连 schema %s: %v", schema, err)
 	}
+	t.Cleanup(func() {
+		if sqlDB, derr := scoped.DB(); derr == nil {
+			_ = sqlDB.Close()
+		}
+	})
 
 	// 直接执行 baseline,不走 bootstrap.RunSQLMigrations。两个理由:
 	//
@@ -84,18 +110,6 @@ func NewDB(t *testing.T) *gorm.DB {
 	if err := scoped.Exec(string(sqlBytes)).Error; err != nil {
 		t.Fatalf("baseline 建表失败 (schema %s):%v", schema, err)
 	}
-
-	t.Cleanup(func() {
-		if sqlDB, derr := scoped.DB(); derr == nil {
-			_ = sqlDB.Close()
-		}
-		if err := admin.Exec(`DROP SCHEMA ` + schema + ` CASCADE`).Error; err != nil {
-			t.Logf("清理 schema %s 失败:%v", schema, err)
-		}
-		if sqlDB, derr := admin.DB(); derr == nil {
-			_ = sqlDB.Close()
-		}
-	})
 
 	return scoped
 }
