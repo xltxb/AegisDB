@@ -24,7 +24,10 @@ func (r *Repo) GetProject(id int64) (*model.Project, error) {
 
 func (r *Repo) GetProjectByName(name string) (*model.Project, error) {
 	var p model.Project
-	if err := r.db.Where("name = ?", name).First(&p).Error; err != nil {
+	// 折大小写,和它守护的 uk_project_name（建在 lower(name) 上）保持对称——否则
+	// 这个查重会漏判大小写变体,让 CreateProject/UpdateProject 的友好提示失效,
+	// 改成直接从 DB 唯一约束冒一个裸错误上去。
+	if err := r.db.Where("lower(name) = lower(?)", name).First(&p).Error; err != nil {
 		return nil, err
 	}
 	return &p, nil
