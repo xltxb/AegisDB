@@ -1,6 +1,10 @@
 package testsupport
 
-import "testing"
+import (
+	"fmt"
+	"os"
+	"testing"
+)
 
 // 两个库互不可见:各自建一行,都只看得到自己那一行。
 func TestNewDB_SchemasAreIsolated(t *testing.T) {
@@ -25,12 +29,26 @@ func TestNewDB_SchemasAreIsolated(t *testing.T) {
 // 泄漏在测试里是隐形的:每个漏掉的 schema 还攥着一个没关的连接池,攒够了就撞上 PG 的
 // max_connections,之后所有测试都报 "too many clients already" —— 那句报错跟真正的
 // 病因毫无关系,而真正的病因在几百个测试之前。
+//
+// 计数只数**本进程**建的 schema。
+//
+// 数 `t\_%` 会把整个 vela_test 里所有 schema 都算进来,而 `go test ./...` 默认让多个
+// package 的测试二进制并行跑,同一个库上随时有别人在建和删 —— internal/bootstrap 那个
+// 包一趟就有几百次 NewDB。那样这条用例会随机变红,而且它报出来的话
+// (「有 schema 没被清理」)和真实泄漏一模一样,会把人直接带进一场排查清理逻辑的冤枉路。
+//
+// NewDB 的名字是 t_<pid>_<seq>,所以按自己的 pid 收窄就与别的测试二进制完全隔开了。
+// LIKE 里的 `_` 是通配符,要转义成 `\_` 才是字面量下划线。
+//
+// 前提:本包内不并发调 NewDB(这三条用例都没有 t.Parallel)。谁要给这个包加并行,
+// 按 pid 收窄就挡不住自己人了 —— 那时得让 NewDB 交出它的 schema 名来精确断言。
 func TestNewDB_DropsItsSchemaOnCleanup(t *testing.T) {
 	probe := NewDB(t) // 这个 handle 要活过下面的子测试,用来数账
+	mine := fmt.Sprintf(`t\_%d\_%%`, os.Getpid())
 	count := func() int64 {
 		var n int64
 		if err := probe.Raw(
-			`SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE 't\_%'`,
+			`SELECT count(*) FROM information_schema.schemata WHERE schema_name LIKE ?`, mine,
 		).Scan(&n).Error; err != nil {
 			t.Fatalf("count schemas: %v", err)
 		}
