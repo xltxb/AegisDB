@@ -2230,6 +2230,43 @@ a { color: inherit; text-decoration: none; }
 .ac-kind { font: 500 9.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; }
 .ac-hint { margin-top: 4px; padding: 6px 10px 3px; border-top: 1px solid var(--border-subtle); font: 500 9.5px var(--font-mono); color: var(--text-faint); }
 
+/* ============ 我的申请 /approvals ============ */
+/* 这一页改版前用的 15 个类名里有 12 个在本文件里没有任何规则(cards / card /
+   card-top / apno / badge / st-* / meta / card-act / waiting / btn-primary /
+   hint),所以它渲染出来是裸 HTML:没有卡片、没有状态色、<dl> 直接摊在页面上。
+   现在状态徽标、按钮、加载/空/错三态都改用通用组件(.c-badge / .c-btn /
+   .c-state),这里只留卡片自己的布局。 */
+/* flex 让分段按内容收缩。直接放在块级容器里,.c-seg 会被拉满整行,右边挂着
+   一大片空白边框。 */
+.ap-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.ap-list { display: flex; flex-direction: column; gap: 12px; }
+.ap-card {
+  padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 13px;
+  background: var(--surface-card);
+}
+.ap-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ap-no { font: 600 11.5px var(--font-mono); color: var(--accent-text); }
+
+/* 键值表。dt 定宽,值才对得齐;而命令与库名可能很长,所以允许换行不允许溢出。 */
+.ap-kv { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.ap-kv > div { display: flex; gap: 12px; }
+.ap-kv dt {
+  flex-shrink: 0; width: 64px; font: 500 11.5px/1.7 var(--font-body); color: var(--text-faint);
+}
+.ap-kv dd {
+  margin: 0; min-width: 0; font: 500 11.5px/1.7 var(--font-body); color: var(--text-body);
+  word-break: break-all;
+}
+
+/* 「等待发起人执行」那一行。通过 ≠ 执行(ADR 0010),所以这不是一句提示,
+   是这张单还欠一个动作。 */
+.ap-act {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle);
+}
+.ap-act .c-btn { margin-left: auto; }
+.ap-wait { font: 500 11.5px var(--font-body); color: var(--warning-text); }
+
 /* ============ 审批待办 /inbox (原型 v3) ============ */
 /* 左清单、右详情。右栏定宽 400(与 /async-jobs 同一个数):详情里全是短标签加
    短值,再宽只会把标签和值拉到两端;而左边的命令是要读的。 */

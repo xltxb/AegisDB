@@ -7,6 +7,7 @@ import {
   Undo2, UserX, X,
 } from 'lucide-react'
 import { invalidateApprovals, useApprovals, useDecideApproval } from '@/hooks/useApprovals'
+import { APPROVAL_STATUS_TABS } from '@/lib/approvals'
 import { approvalsApi, type ApprovalStatus } from '@/api/modules/approvals'
 import { meQueryOptions } from '@/api/modules/auth'
 import { useUIStore } from '@/stores/ui'
@@ -41,21 +42,6 @@ const STEP_KEY: Record<string, string> = {
 
 const RISK_TONE: Record<string, BadgeTone> = { high: 'danger', mid: 'warning', low: 'success' }
 const RISK_KEY: Record<string, string> = { high: 'scanHigh', mid: 'scanMid', low: 'scanSafe' }
-
-/**
- * 分段筛选的取值 —— 就是后端认的那几个 status,不再另立一套 tab 名。
- *
- * 原来只有「待审 / 全部」两格,于是"我上周驳回了什么"在界面上无从查起,尽管
- * 接口一直支持。中间那三格的 label 直接复用工单状态那套词(apApproved /
- * apRejected / apExpired),因为它们本来就是同一个东西。
- */
-const TABS: { value: ApprovalStatus; key: string }[] = [
-  { value: 'pending', key: 'ibPending' },
-  { value: 'approved', key: 'apApproved' },
-  { value: 'rejected', key: 'apRejected' },
-  { value: 'expired', key: 'apExpired' },
-  { value: '', key: 'ibAll' },
-]
 
 export default function InboxPage() {
   const { t } = useTranslation()
@@ -176,7 +162,7 @@ export default function InboxPage() {
           <div className="ib-bar">
             <Segmented
               value={status}
-              options={TABS.map((x) => ({ value: x.value, label: tabLabel(x) }))}
+              options={APPROVAL_STATUS_TABS.map((x) => ({ value: x.value, label: tabLabel(x) }))}
               onChange={(v) => { setStatus(v); setPage(1); setSelId(0) }}
             />
 

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { APPROVAL_QUERY_KEYS } from '../../src/lib/approvalKeys'
+import { APPROVAL_QUERY_KEYS } from '../../src/lib/approvals'
 
 // 批完最后一张待办,侧栏那颗红点还挂着 —— 最长再挂 60 秒,直到它自己的
 // refetchInterval 到点。

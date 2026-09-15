@@ -3,7 +3,7 @@ import {
   approvalsApi, approvalsQueryOptions,
   type ApprovalScope, type ApprovalStatus,
 } from '@/api/modules/approvals'
-import { APPROVAL_QUERY_KEYS } from '@/lib/approvalKeys'
+import { APPROVAL_QUERY_KEYS } from '@/lib/approvals'
 import { useUIStore } from '@/stores/ui'
 import { useTranslation } from 'react-i18next'
 

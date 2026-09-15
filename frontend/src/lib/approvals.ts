@@ -1,3 +1,9 @@
+import type { ApprovalStatus } from '@/api/modules/approvals'
+
+/*
+ * 审批两页(/inbox 审批待办 · /approvals 我的申请)共用的常量。
+ */
+
 /**
  * 一次审批决定会让哪些查询过期 —— **所有**审批相关的根键,一个不落。
  *
@@ -19,3 +25,21 @@ export const APPROVAL_QUERY_KEYS = [
   ['approvals-pending'],
   ['approvals-inbox-pending'],
 ] as const
+
+/**
+ * 状态分段的取值 —— 就是后端认的那几个 status(handler.ListApprovals 只放行
+ * 这五种,拼错的值它回 400),不另立一套 tab 名。
+ *
+ * 两页共用一份:审批待办和我的申请筛的是同一批工单、同一组状态,各写一份的
+ * 下场是有一天一页能筛「已过期」而另一页不能,而没人说得出为什么。
+ *
+ * 中间三格的文案直接复用工单状态那套词(apApproved / apRejected / apExpired),
+ * 因为它们本来就是同一个东西。
+ */
+export const APPROVAL_STATUS_TABS: { value: ApprovalStatus; key: string }[] = [
+  { value: 'pending', key: 'ibPending' },
+  { value: 'approved', key: 'apApproved' },
+  { value: 'rejected', key: 'apRejected' },
+  { value: 'expired', key: 'apExpired' },
+  { value: '', key: 'ibAll' },
+]
