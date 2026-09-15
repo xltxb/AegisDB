@@ -1,4 +1,4 @@
-# 部署 AegisDB 数据库网关(生产 · MySQL)
+# 部署 AegisDB 数据库网关(生产 · PostgreSQL)
 
 ## 1. 打包(前后端一体)
 
@@ -36,7 +36,7 @@ tar -czf "vela-gateway-$VERSION-linux-amd64.tar.gz" -C dist .
 dist/
   vela-gateway          单一后端二进制(内置 API + 前端 UI + 内嵌 SQL 迁移)
   web/                  构建后的前端(后端按 web_dir 提供)
-  configs/config.yaml   生产配置(env=prod → MySQL,auto_migrate=false,seed=false)
+  configs/config.yaml   生产配置(env=prod:不灌演示数据、强制 JWT 强度、CORS 收紧;存储恒为 PostgreSQL)
   migrations/           参考 SQL 迁移(同样已内嵌进二进制)
   docs/                 OpenAPI 契约(在线接口文档 /docs 与 /openapi.yaml 从这里读)
   deploy/               systemd unit + 环境变量模板
@@ -51,23 +51,30 @@ dist/
 sudo useradd --system --home /opt/vela-gateway --shell /usr/sbin/nologin vela
 sudo mkdir -p /opt/vela-gateway
 sudo tar -xzf vela-gateway-*-linux-amd64.tar.gz -C /opt/vela-gateway
-sudo cp /opt/vela-gateway/vela.env.example /opt/vela-gateway/vela.env   # 填入 VELA_JWT_SECRET / VELA_MYSQL_DSN
+sudo cp /opt/vela-gateway/vela.env.example /opt/vela-gateway/vela.env   # 填入 VELA_JWT_SECRET / VELA_PG_DSN
 sudo chown -R vela:vela /opt/vela-gateway && sudo chmod 600 /opt/vela-gateway/vela.env
 ```
 
 托管见 `deploy/vela-gateway.service`(其头部注释含完整安装步骤)。下面第 3–6 步在 `/opt/vela-gateway` 下执行。
 
-## 3. 准备 MySQL
+## 3. 准备 PostgreSQL
 
-创建库(字符集 utf8mb4)与账号,例如:
+网关自身的元数据存储只有 PostgreSQL 一种(开发与生产同一种,见 ADR 0018)。建库与账号,例如:
 
 ```sql
-CREATE DATABASE vela_gateway CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'vela'@'%' IDENTIFIED BY '你的密码';
-GRANT ALL ON vela_gateway.* TO 'vela'@'%';
+CREATE DATABASE vela_gateway;
+CREATE USER vela WITH PASSWORD '你的密码';
+GRANT ALL ON DATABASE vela_gateway TO vela;
+-- 迁移要在 public schema 里建表,PG 15 起 public 不再默认对所有人可写:
+\connect vela_gateway
+GRANT CREATE, USAGE ON SCHEMA public TO vela;
 ```
 
-DSN 形如:`vela:密码@tcp(mysql主机:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local`
+DSN 用 libpq 的 key=value 或 URL 形式,例如:
+`host=db.internal port=5432 user=vela password=你的密码 dbname=vela_gateway sslmode=require`
+
+`sslmode` 在生产上明确写出来 —— 缺省的 `prefer` 会在服务端不支持 TLS 时**静默降级成明文**,
+而凭据和全部审计内容都走这条连接。
 
 建议把密钥放进 `vela.env`(由 `vela.env.example` 复制,`chmod 600`),后续命令统一 `set -a; . ./vela.env; set +a` 加载。
 
@@ -77,7 +84,7 @@ DSN 形如:`vela:密码@tcp(mysql主机:3306)/vela_gateway?charset=utf8mb4&parse
 
 ```bash
 cd dist
-set -a; . ./vela.env; set +a          # 载入 VELA_MYSQL_DSN 等
+set -a; . ./vela.env; set +a          # 载入 VELA_PG_DSN 等
 ./vela-gateway migrate
 ```
 
@@ -99,7 +106,7 @@ set -a; . ./vela.env; set +a          # 载入 VELA_MYSQL_DSN 等
 
 ```bash
 cd dist
-set -a; . ./vela.env; set +a          # 至少包含 VELA_JWT_SECRET(≥32 位)与 VELA_MYSQL_DSN
+set -a; . ./vela.env; set +a          # 至少包含 VELA_JWT_SECRET(≥32 位)与 VELA_PG_DSN
 ./vela-gateway -config configs/config.yaml     # 同时提供 API 与前端 UI,监听 :8080
 ```
 
@@ -124,15 +131,14 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 
 | 变量 | 说明 |
 | --- | --- |
-| `VELA_MYSQL_DSN` | 生产 MySQL DSN(覆盖配置文件) |
+| `VELA_PG_DSN` | 网关自身存储的 PostgreSQL DSN(覆盖配置文件的 `database.postgres_dsn`)。生产**必填**:`config.prod.yaml` 里故意留空,而空 DSN 会被 libpq 读成"这台机器的默认库",所以留空 = 拒绝启动 |
 | `VELA_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位、≥8 种不同字符、不在弱值黑名单**;未设 `VELA_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
 | `VELA_SECRET_KEY` | 连接口令与运行时密钥(审批魔方令牌等)的 AES-GCM 静态加密密钥(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量口令解密;**一经设定不可更改**(轮换会导致存量口令无法解密)。未设时启动打 WARN |
 | `VELA_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`);缺 `index.html`/`assets` 时打 WARN |
 | `VELA_TLS_CERT` / `VELA_TLS_KEY` | 直接由网关终止 TLS 的证书/私钥(可选) |
 | `VELA_WEBHOOK_SECRET` | 出站审计 Webhook 的 Bearer Token(随 `Authorization: Bearer` 发送;**不是 HMAC 签名**)。只在空库首次 seed/init 时写入 Webhook 配置行,之后以「设置 › Webhook」为准 |
 | `VELA_WEBHOOK_ALLOW_PRIVATE` | `1/true/yes/on` 时允许 Webhook / 飞书 / 审批魔方的出站目标是内网、loopback、链路本地、CGNAT 地址。默认 dev 放行、prod 拦截(SSRF 防护);生产打开时启动打 WARN |
-| `APP_ENV` / `VELA_ENV` | `prod`(别名 `production` / `release` / `live`)→ MySQL;其它(含 `dev` / `development` / `local`)→ SQLite;未识别的值按 dev 并打 WARN |
-| `VELA_DB_DRIVER` | 强制 `mysql` \| `sqlite`(覆盖上面的 env 推断;yaml 里的 `database.driver` 无效,总被它覆盖) |
+| `APP_ENV` / `VELA_ENV` | 部署档位:`prod`(别名 `production` / `release` / `live`)/ 其它(含 `dev` / `development` / `local`);未识别的值按 dev 并打 WARN。**它不挑存储引擎** —— 两档都是 PostgreSQL;它决定的是演示数据(仅 dev)、生产 JWT 强度校验、CORS 与出站 SSRF 的松紧 |
 | `VELA_ADMIN_EMAIL` / `VELA_ADMIN_PASSWORD` / `VELA_ADMIN_NAME` | `init` 时的管理员凭据;口令 ≥12 位且含大小写 / 数字 / 符号中 ≥3 类 |
 
 ## 配置文件(`configs/config.yaml`)其余键
@@ -143,8 +149,7 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 | `server.mode` | dev `debug` / prod `release` | gin 模式;`debug` 时业务日志(slog JSON)降到 Debug 级 |
 | `server.cors_origins` | dev 两个本地源 / prod 空 | 空 = 不发 CORS 头(同源部署不需要) |
 | `server.trusted_proxies` | 空 | 见第 6 步 |
-| `database.sqlite_path` | `vela-gateway.db` | 仅 dev;自动追加 WAL、`busy_timeout=5000`、外键开、连接池 1 |
-| `database.auto_migrate` | dev true / prod false | 只对 SQLite 生效;MySQL 上忽略并打 WARN(schema 只由 SQL 迁移拥有) |
+| `database.postgres_dsn` | dev 指向本机 `vela_gateway` | 网关自身存储;被 `VELA_PG_DSN` 覆盖。不写 `user=` 时 libpq 回落到当前 OS 用户 |
 | `database.seed` | dev true / prod false | 空库写演示引用数据 + 1 个管理员;prod + 空库 → 拒绝启动 |
 | `jwt.ttl_hours` | 8 | 仅回落值;实际登录 TTL 由运行时设置 `security.sessionTTL`(4h / 8h / 24h)决定 |
 | `gateway.exec_timeout_seconds` | 30 | 只在首次 seed 时写进运行时设置 `gateway.execTimeout` |
@@ -157,69 +162,34 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 
 ## 迁移与 `init` 的行为细节
 
-- `migrate` / `init` 用 MySQL `GET_LOCK('vela_schema_migrate', 60)` 串行,多台同时执行只有一台跑。
+- `migrate` / `init` 用 PostgreSQL 的 `pg_try_advisory_lock(hashtext('vela_schema_migrate'))` 串行,
+  多台同时执行只有一台跑。用 `try` 加一个 **60 秒上限**的重试,而不是会无限阻塞的 `pg_advisory_lock`:
+  超时报的是"另一个迁移正在跑",而不是一次没有任何输出的挂起。锁按**库**计,而且是会话级的
+  —— 所以它固定在一条专用连接上持有到迁移结束(池里换一条连接就等于悄悄放了锁)。
 - 迁移文件里的 `CREATE DATABASE` / `USE` 会被跳过;已应用版本记录在 `schema_migrations`。
 - `migrate` 同时回填引用数据:`gli` / `uat` 环境、五个内置分层、流程模板与规则库、`executed_at`、`strict_nowhere`。
 - `init` 重复执行会**重置**该管理员的密码,并强制其 active + admin 角色。
-### 含多条非幂等 `ALTER` 的历史迁移
 
-迁移**没有事务**:一条一条执行,失败即返回,而重跑是从**文件的第一条**开始。所以一个含
-多条 `ADD COLUMN` 的文件在中途失败之后,重跑必然在第一条报 `1060 Duplicate column name`
-—— 运维看到的是一个和真正原因完全无关的错误。
+### 迁移只有一份 baseline
 
-以下文件有这个性质(括号内为条数,与 `TestMigrations_AltersAreIdempotentOrAlone` 里的
-豁免表逐条对应):
+迁至 PostgreSQL 时,此前 44 个增量迁移压成了单一的 `0001_init.sql`(整份都是
+`CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`,重复执行无害)。
 
-| 文件 | 条数 |
-| --- | --- |
-| `0013_dual_snapshot.sql` | 3 |
-| `0015_approval_script_ref.sql` | 2 |
-| `0019_pipeline_sqlreview.sql` | 2 |
-| `0020_api_client.sql` | 7 |
-| `0025_project.sql` | 3 |
-| `0026_review_spec_provenance.sql` | 2 |
-| `0029_sensitive_export_approval.sql` | 4 |
-| `0033_exec_window_approval.sql` | 5 |
+这里从前有两段运维指南,随那 44 个文件一起删掉了,**不要再去 git 历史里把它们翻出来照做**:
 
-**中途失败了怎么办**(以 `0020` 为例):
+- 一段讲"含多条非幂等 `ALTER` 的文件跑到第 N 条炸了怎么办"(注释掉前几条再重跑)。
+  它点名的 `0013_dual_snapshot.sql`、`0020_api_client.sql`、`0033_exec_window_approval.sql`
+  等文件都不存在了,而 baseline 里每一条语句都幂等 —— 那种中间态现在做不出来。
+- 一段讲 `0039`–`0044` 那六个把 `key` / `database` / `sql` / `rows` 四个 MySQL 保留字列名
+  改掉的迁移(ADR 0016 §二),以及新旧两版程序不能同时连同一个库的升级顺序。改名的结果
+  (`api_key` / `db_name` / `sql_text` / `row_count`)已经是 baseline 里的列名,没有改名动作
+  要执行了。
 
-1. 先看清失败在第几条 —— 错误信息里就有:`migration 0020_api_client.sql statement 5 failed: …`。
-2. 修掉那一条失败的根因(通常是锁等待、磁盘、或目标表被别的会话占着)。
-3. 把**第 1 到 4 条**(已经成功的那几条)在文件里临时注释掉,只留第 5 条起。
-4. 重跑 `vela-gateway migrate`。
-5. 跑通之后把注释恢复 —— 文件必须与仓库里的那份一致,否则下一台机器拿到的是另一个东西。
+`TestMigrations_AltersAreIdempotentOrAlone` 仍然拦着**新**加的迁移:`ALTER` 要么每条都幂等,
+要么一个文件只放一条(ADR 0016 §三)。
 
-第 3 步也可以换成手工 `ALTER TABLE … DROP COLUMN` 把前 4 条撤掉再整文件重跑,但那是在
-生产上做减法,只在确认那几列还没有数据时才可行。
-
-**新文件不会再有这个问题**:`TestMigrations_AltersAreIdempotentOrAlone` 拦着 —— 新迁移
-里的 `ALTER` 要么每一条都幂等(`MODIFY` / `CREATE TABLE IF NOT EXISTS` 这类重复执行无害
-的写法),要么一个文件只放一条(见 ADR 0016 §三)。上面那张豁免表只许变短。
-
-### 保留字列名的改名迁移(`0039` – `0044`)
-
-这六条把 `key` / `database` / `sql` / `rows` 四个 MySQL 保留字列名换掉(ADR 0016 §二)。
-它们**只改列名,不动数据**,也不需要回填。
-
-每个文件只有一条 `ALTER`,同一张表的两列合并进同一条语句 —— MySQL 8 的原子 DDL 保证它
-整条成败,所以中途失败之后直接重跑即可,没有上面那种"前几条已经生效"的中间态。
-
-为什么不写成幂等的:MySQL 的 `CHANGE COLUMN` 不支持 `IF EXISTS`,而
-`SET @ddl := …; PREPARE …` 那套在这个 runner 上也不行 —— 它逐条 `db.Exec`,每条可能落在
-**不同的池连接**上,而用户变量是会话级的,换个连接就是 `NULL`。
-
-**升级顺序要留意**:改完名的列,旧名字不再存在。新旧两版程序不能同时连同一个库 ——
-灰度或回滚时,先把所有实例停在同一版本上再 migrate。这个项目的部署形态本来就是单实例
-(见 PRD「生产部署形态」一节),所以按常规的"停服 → migrate → 起服"走即可。
-
-| 迁移 | 表 | 改名 |
-| --- | --- | --- |
-| `0039` | `tbl_api_client` | `key` → `api_key` |
-| `0040` | `tbl_schema_object` | `database` → `db_name` |
-| `0041` | `tbl_async_job` | `sql` → `sql_text`,`rows` → `row_count` |
-| `0042` | `tbl_export_job` | `sql` → `sql_text`,`rows` → `row_count` |
-| `0043` | `tbl_release` | `sql` → `sql_text` |
-| `0044` | `tbl_release_stage` | `rows` → `row_count` |
+**升级顺序**仍然是"停旧进程 → `./vela-gateway migrate` → 起新进程"。反过来做,新二进制会对着
+旧表结构跑;迁移之后也不要单独回滚二进制。
 
 ## 启动时的自动动作
 
@@ -239,4 +209,6 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 - Webhook 投递记录在 `tbl_webhook_delivery`,界面「设置 › Webhook › 查看投递日志」或
   `GET /api/v1/settings/webhook/deliveries?limit=50`。
 
-> 本地开发仍用零依赖 SQLite:`cd backend && APP_ENV=dev go run ./cmd/server`,前端 `cd frontend && npm run dev`。
+> 本地开发用同一种存储:先 `createdb vela_gateway`,再 `cd backend && APP_ENV=dev go run ./cmd/server`
+> (或 `backend/run-dev.sh` / `backend\run-dev.bat`),前端 `cd frontend && npm run dev`。
+> 跑后端测试另需 `createdb vela_test`(可用 `VELA_TEST_PG_DSN` 指到别处)。

@@ -4,10 +4,12 @@
 /backend/server.exe
 *.test
 *.out
+# 网关自己的库不再是 sqlite(它只住在 PostgreSQL 里),但旧工作区里还留着这个文件,
+# 所以这条模式保留 —— 删掉它只会让一堆机器上突然冒出一个未跟踪文件。
 vela-gateway.db
-# 从 backend/ 起服务时,DSN 写相对路径的 sqlite 连接会就地建库(演示数据里的
-# target.db 就是这么来的)。它们是被管理的**目标库**,装的是测试数据,和网关自己
-# 那个 vela-gateway.db 一样不进仓库 —— 按目录整段忽略,免得每换一个库名就漏一次。
+# DSN 写相对路径的 sqlite 连接从 backend/ 起服务时会就地建库(演示数据里的
+# target.db 就是这么来的)。它们是被管理的**目标库**,装的是测试数据,同样不进仓库
+# —— 按目录整段忽略,免得每换一个库名就漏一次。
 /backend/*.db
 *.db-journal
 *.db-wal

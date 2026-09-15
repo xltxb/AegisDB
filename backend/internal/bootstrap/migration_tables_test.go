@@ -14,10 +14,15 @@ var (
 	alterTableRe  = regexp.MustCompile(`(?i)ALTER TABLE\s+` + "`?" + `(\w+)`)
 )
 
-// Migrations run only against MySQL, so the sqlite-backed suite never executes
-// them — a typo'd table name ships silently and dies on the operator's box
-// ("Table 'vela_gateway.tbl_audit' doesn't exist", migration 0018: the audit
-// table is tbl_audit_log). Cheap static guard: every ALTER TABLE target across
+// A typo'd table name in an ALTER used to ship silently: migrations ran only
+// against MySQL while the suite ran on SQLite and never executed them, so the
+// first execution was on the operator's box ("Table 'vela_gateway.tbl_audit'
+// doesn't exist", migration 0018: the audit table is tbl_audit_log).
+//
+// Since the store became PostgreSQL-only (ADR 0018) every test run applies the
+// baseline for real, so that particular blind spot is gone. This guard stays
+// because it is cheaper and earlier: it fails while the SQL is being written,
+// not once a test gets around to running it. Every ALTER TABLE target across
 // all migration files must be a table some migration CREATEs.
 func TestMigrations_AlterTargetsExistingTables(t *testing.T) {
 	created := map[string]bool{}

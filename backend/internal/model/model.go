@@ -1,5 +1,20 @@
 // Package model holds the GORM data models (tbl_ prefixed, no physical FKs —
 // relational constraints are maintained at the application layer, per backend doc §9).
+//
+// These structs do NOT create tables. Since the store became PostgreSQL-only
+// (ADR 0018), migrations/0001_init.sql is the single schema authority and GORM's
+// AutoMigrate is gone — automigrate_guard_test.go keeps it gone.
+//
+// So the DDL-shaped tags (`type:`, `size:`, `index:`, `uniqueIndex:`) build
+// nothing any more. Only the tags GORM needs to READ and WRITE rows still do
+// work: `column:`, `primaryKey`, `autoIncrement`, `default:`, `-`. Two tests
+// also parse `column:` and `size:` off the source; nothing anywhere parses the
+// index tags.
+//
+// Descriptive is not the same as free to be wrong: a reader who trusts an index
+// tag that no index backs will reason about uniqueness the database does not
+// enforce. So the tags are kept spelled the way the baseline SQL actually built
+// the index — when the two disagree, the SQL is right and the tag is the bug.
 package model
 
 import "time"
@@ -469,7 +484,7 @@ type ExportJob struct {
 	Instance     string `gorm:"size:96" json:"instance"`
 	Database     string `gorm:"column:db_name" json:"database"` // target database the export ran against
 	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
-	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
+	SQL    string `gorm:"column:sql_text;type:text" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
 	Name   string `gorm:"size:128" json:"name"`
 	Status string `gorm:"size:16;not null;default:pending" json:"status"` // awaiting|pending|running|done|failed
 	// IncludeSensitive:这份导出要不要**原值**。默认(false)敏感字段照常打码。
@@ -503,7 +518,7 @@ type AsyncJob struct {
 	Instance     string `gorm:"size:96" json:"instance"`
 	Database     string `gorm:"column:db_name" json:"database"`
 	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
-	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // see migration 0018
+	SQL    string `gorm:"column:sql_text;type:text" json:"sql"` // see migration 0018
 	Reason string `gorm:"size:512" json:"reason"`
 	Status string `gorm:"size:16;not null;default:pending" json:"status"` // pending|running|done|failed
 	// Risk is the verdict that authorised this job, captured at submit time. The
@@ -512,7 +527,7 @@ type AsyncJob struct {
 	// the run is the one worth recording. It used to be hardcoded to "mid" at
 	// audit time, which made the field meaningless for filtering (ER7).
 	Risk string `gorm:"size:16" json:"risk"`        // high|mid|low
-	Log  string `gorm:"type:mediumtext" json:"log"` // streamed NOTICE / progress lines
+	Log  string `gorm:"type:text" json:"log"` // streamed NOTICE / progress lines
 	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
 	Rows       int        `gorm:"column:row_count" json:"rows"`
 	Error      string     `gorm:"size:512" json:"error"`
@@ -643,7 +658,7 @@ type Approval struct {
 	Env      string `gorm:"size:32;not null" json:"env"`
 	TierCode string `gorm:"size:32" json:"tierCode"`
 	Instance string `gorm:"size:64;not null" json:"instance"`
-	Command  string `gorm:"type:mediumtext;not null" json:"command"` // see migration 0018
+	Command  string `gorm:"type:text;not null" json:"command"` // see migration 0018
 	// A script approval keeps the script in the file the initiator uploaded and
 	// records a REFERENCE to it, not its body: Command then holds a bounded,
 	// readable excerpt. The body of a real migration runs to megabytes, and
@@ -752,7 +767,7 @@ type AuditLog struct {
 	Env        string `gorm:"size:32" json:"env"`
 	TierCode   string `gorm:"size:32" json:"tierCode"`
 	Database   string `gorm:"column:db_name" json:"database"`                    // target database the command ran against
-	Command    string `gorm:"type:mediumtext;not null" json:"command"`           // full query on purpose (EX5) — see migration 0018
+	Command    string `gorm:"type:text;not null" json:"command"`           // full query on purpose (EX5) — see migration 0018
 	Risk       string `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"` // high|mid|low
 	Result     string `gorm:"size:16;not null" json:"result"`                    // executed|pending|rejected|warn
 	ApprovalNo string `gorm:"size:32" json:"approvalNo"`
@@ -766,8 +781,8 @@ type AuditLog struct {
 	// layer: two rows can never chain onto the same predecessor, even across
 	// connections/processes where the in-process auditMu doesn't reach (A4). The
 	// single genesis row uses "" as its predecessor. Matches 0001/0002 SQL.
-	PrevHash string `gorm:"type:char(64);uniqueIndex:uk_audit_prev" json:"prevHash"` // fixed-length SHA-256 hex
-	Hash     string `gorm:"type:char(64);not null" json:"hash"`
+	PrevHash string `gorm:"type:varchar(64);uniqueIndex:uk_audit_prev" json:"prevHash"` // fixed-length SHA-256 hex
+	Hash     string `gorm:"type:varchar(64);not null" json:"hash"`
 }
 
 func (AuditLog) TableName() string { return "tbl_audit_log" }
@@ -836,10 +851,10 @@ func (SchemaObject) TableName() string { return "tbl_schema_object" }
 // DBName 上),PostgreSQL 家族才有 schema 这一层 —— 与 gateway.SchemaGroup 的形状一致。
 type MetaTable struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConnectionID int64     `gorm:"index:idx_meta_table_scope,priority:1;not null" json:"connectionId"`
-	DBName       string    `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;not null" json:"database"`
-	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
-	Name         string    `gorm:"column:table_name;index:idx_meta_table_name;size:128;not null" json:"name"`
+	ConnectionID int64     `gorm:"uniqueIndex:idx_meta_table_uniq,priority:1;not null" json:"connectionId"`
+	DBName       string    `gorm:"column:db_name;uniqueIndex:idx_meta_table_uniq,priority:2;not null" json:"database"`
+	SchemaName   string    `gorm:"column:schema_name;uniqueIndex:idx_meta_table_uniq,priority:3;size:128;not null" json:"schema"`
+	Name         string    `gorm:"column:table_name;uniqueIndex:idx_meta_table_uniq,priority:4;index:idx_meta_table_name;size:128;not null" json:"name"`
 	Kind         string    `gorm:"size:16;not null" json:"kind"` // table | view
 	Comment      string    `gorm:"size:512" json:"comment"`
 	SyncedAt     time.Time `json:"syncedAt"`
@@ -854,12 +869,12 @@ func (MetaTable) TableName() string { return "tbl_meta_table" }
 // 的四元组(连接 / 库 / schema / 表名)。
 type MetaColumn struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConnectionID int64     `gorm:"index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
-	DBName       string    `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;not null" json:"database"`
-	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
-	TableName_   string    `gorm:"column:table_name;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
+	ConnectionID int64     `gorm:"uniqueIndex:idx_meta_col_uniq,priority:1;index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
+	DBName       string    `gorm:"column:db_name;uniqueIndex:idx_meta_col_uniq,priority:2;index:idx_meta_col_scope,priority:2;not null" json:"database"`
+	SchemaName   string    `gorm:"column:schema_name;uniqueIndex:idx_meta_col_uniq,priority:3;size:128;not null" json:"schema"`
+	TableName_   string    `gorm:"column:table_name;uniqueIndex:idx_meta_col_uniq,priority:4;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
 	Ordinal      int       `gorm:"not null" json:"ordinal"`
-	Name         string    `gorm:"column:column_name;index:idx_meta_col_name;size:128;not null" json:"name"`
+	Name         string    `gorm:"column:column_name;uniqueIndex:idx_meta_col_uniq,priority:5;index:idx_meta_col_name;size:128;not null" json:"name"`
 	DataType     string    `gorm:"size:128;not null" json:"dataType"`
 	Nullable     bool      `gorm:"not null;default:true" json:"nullable"`
 	ColDefault   string    `gorm:"column:col_default;size:512" json:"default"`
@@ -1147,7 +1162,7 @@ type Release struct {
 	ProjectID   int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
 	ProjectName string `gorm:"size:64" json:"projectName"`
 	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
-	SQL            string `gorm:"column:sql_text;type:mediumtext" json:"sql"`
+	SQL            string `gorm:"column:sql_text;type:text" json:"sql"`
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
 	Reason         string `gorm:"size:512" json:"reason"`
@@ -1200,8 +1215,8 @@ type ReleaseStage struct {
 	Config    string `gorm:"type:text" json:"config"`
 	OnFailure string `gorm:"size:16;not null;default:abort" json:"onFailure"`
 	Status    string `gorm:"size:16;not null;default:pending" json:"status"`
-	Log       string `gorm:"type:mediumtext" json:"log"`
-	Findings  string `gorm:"type:mediumtext" json:"findings"`
+	Log       string `gorm:"type:text" json:"log"`
+	Findings  string `gorm:"type:text" json:"findings"`
 	// ApprovalID/ApNo link an approve stage to the ticket it is waiting on. The
 	// sweeper reads them to resume the run once the ticket is decided, which is
 	// why the link lives on the stage and not only in the log.

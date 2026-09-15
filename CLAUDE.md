@@ -1,8 +1,10 @@
 # AegisDB 数据库管理网关 — Agent 指引
 
-全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（React 19 · TS · Vite · Zustand · TanStack Query）。
+全栈项目：`backend/`（Go · Gin · GORM · PostgreSQL）+ `frontend/`（React 19 · TS · Vite · Zustand · TanStack Query）。
 `frontend-vue/` 是被它取代的 Vue 3 实现，留作对照与回退，不要往那边加新功能。
-本地零依赖启动见 `README.md`（分别双击 `backend\run-sqlite.bat` 与 `frontend\run-dev.bat`，演示登录 `linwei@vela.io / vela123`）。
+本地启动见 `README.md`：先 `createdb vela_gateway`（网关自身的存储是 PostgreSQL，不再有零依赖模式），
+再跑 `backend/run-dev.sh`（macOS/Linux）或双击 `backend\run-dev.bat`（Windows）与 `frontend\run-dev.bat`，
+演示登录 `linwei@vela.io / vela123`。跑后端测试另需 `createdb vela_test`。
 
 ## Agent skills
 

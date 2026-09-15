@@ -1,36 +1,37 @@
-# AegisDB — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
+# AegisDB — LOCAL DEVELOPMENT infrastructure (PostgreSQL 16 + Redis 7).
 # Start with:  docker compose up -d
 # The backend reads connection info from backend/configs/config.yaml
 #
+# You do NOT need this file if PostgreSQL is already installed on the machine
+# (e.g. `brew install postgresql@16`): `createdb vela_gateway` and the default
+# DSN in config.yaml already point at 127.0.0.1:5432. This compose file is for
+# hosts without a local PostgreSQL — note that its user/password differ from the
+# libpq OS-user fallback the default DSN relies on, so set the DSN explicitly:
+#   VELA_PG_DSN="host=127.0.0.1 port=5432 user=vela password=velapass dbname=vela_gateway sslmode=disable"
+#
 # WARNING: the credentials below are weak defaults for local dev only. Ports are
 # bound to 127.0.0.1 so the datastores are NOT exposed on the host's network.
-# Do NOT use this file in production — run MySQL/Redis managed or hardened, with
-# secrets from the environment (C8).
+# Do NOT use this file in production — run PostgreSQL/Redis managed or hardened,
+# with secrets from the environment (C8).
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: vela-mysql
+  postgres:
+    image: postgres:16
+    container_name: vela-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: velaroot
-      MYSQL_DATABASE: vela_gateway
-      MYSQL_USER: vela
-      MYSQL_PASSWORD: velapass
+      POSTGRES_DB: vela_gateway
+      POSTGRES_USER: vela
+      POSTGRES_PASSWORD: velapass
       TZ: Asia/Shanghai
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-      - --default-time-zone=+08:00
     ports:
-      - "127.0.0.1:3306:3306" # bind to loopback only — not the host's public interfaces
+      - "127.0.0.1:5432:5432" # bind to loopback only — not the host's public interfaces
     volumes:
-      - vela_mysql:/var/lib/mysql
+      - vela_pg:/var/lib/postgresql/data
       # Schema is applied by the app, not initdb.d, so it is tracked in
       # schema_migrations and there is a single migration source of truth:
-      #   VELA_MYSQL_DSN=... ./vela-gateway migrate   (then `init` for seed+admin)
-      # (Auto-running the SQL here would replay un-tracked, breaking later ALTERs.)
+      #   VELA_PG_DSN=... ./vela-gateway migrate   (then `init` for seed+admin)
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uvela", "-pvelapass"]
+      test: ["CMD-SHELL", "pg_isready -U vela -d vela_gateway"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -45,5 +46,5 @@ services:
       - vela_redis:/data
 
 volumes:
-  vela_mysql:
+  vela_pg:
   vela_redis:

@@ -11,7 +11,7 @@
 
 [Unit]
 Description=Vela Database Gateway
-After=network-online.target mysql.service
+After=network-online.target postgresql.service
 Wants=network-online.target
 
 [Service]
@@ -19,7 +19,7 @@ Type=simple
 User=vela
 Group=vela
 WorkingDirectory=/opt/vela-gateway
-# Secrets (VELA_JWT_SECRET, VELA_MYSQL_DSN, ...) live here — chmod 600, not in git.
+# Secrets (VELA_JWT_SECRET, VELA_PG_DSN, ...) live here — chmod 600, not in git.
 # The leading '-' avoids an opaque systemd failure if the file is missing; the
 # server then exits with a clear "missing JWT secret" message instead.
 EnvironmentFile=-/opt/vela-gateway/vela.env

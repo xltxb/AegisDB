@@ -18,7 +18,9 @@ import (
 // added an empty tier_code next to the populated env, and an empty value reads
 // as "allow" in both rule lookups — the gateway came up ungoverned with every
 // health check green. migrations/*.sql is now the only thing that defines a
-// table; automigrate_guard_test.go fails if that machinery comes back.
+// table; automigrate_guard_test.go fails if that machinery comes back. The full
+// reasoning — including what the single-store move cost (no more zero-dependency
+// start; tests need a local PostgreSQL) — is ADR 0018.
 func OpenDB(cfg *Config) (*gorm.DB, error) {
 	gcfg := &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Warn)}
 

@@ -13,7 +13,7 @@ db-gateway/
 ├─ frontend-vue/ 被它取代的 Vue 3 实现，留作对照与回退（见文末「两套前端」）
 ├─ docs/        PRD / 前后端开发文档 / 交互原型 / ADR / 四份数据库规范 / 外部审批与开放接口对接指南
 ├─ deploy/      systemd unit + 环境变量模板
-└─ docker-compose.yml  本地 MySQL 8 + Redis 7（可选；后端目前不使用 Redis）
+└─ docker-compose.yml  本地 PostgreSQL 16 + Redis 7（可选，本机已装 PostgreSQL 就不需要；后端目前不使用 Redis）
 ```
 
 ## 技术栈
@@ -23,29 +23,50 @@ db-gateway/
 | 前端 | React 19.3（函数组件 + Hooks · React Compiler） · TypeScript · Vite 6 · Zustand（客户端状态） · TanStack Query（服务端状态） · React Router 7 data router · react-i18next · xterm.js · lucide |
 | 后端 | Go 1.23 · Gin · GORM · JWT · gorilla/websocket · bcrypt / HMAC / AES-GCM · TOTP |
 | 网关目标库 | MySQL / MariaDB / TiDB / PolarDB · PostgreSQL / DWS / GaussDB · Oracle（新建实例的引擎下拉即这 7 项；SQLite 只有后端驱动，界面不提供） |
-| 自身存储 | MySQL 8（生产）/ SQLite（零依赖本地开发） |
+| 自身存储 | PostgreSQL 16（开发与生产同一种；见 ADR 0018） |
 
 ---
 
 ## 快速开始
 
-### 一键启动（Windows，最省事）
+### 前置：一个本机 PostgreSQL
 
-分别双击 **`backend\run-sqlite.bat`**（后端，SQLite，零依赖）与 **`frontend\run-dev.bat`**（前端，Vite），
+网关自身的元数据存储是 PostgreSQL —— 开发和生产同一种，**没有零依赖模式了**（为什么见
+ADR 0018）。开跑之前先把库建出来：
+
+```bash
+# macOS：brew install postgresql@16 && brew services start postgresql@16
+# Debian/Ubuntu：apt install postgresql-16
+createdb vela_gateway      # 服务用
+createdb vela_test         # 跑后端测试用（测试各自建独占 schema，互不干扰）
+```
+
+默认 DSN 是 `host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable`（见
+`backend/configs/config.yaml`）—— 不写 `user=`，libpq 就回落到当前 OS 用户，Homebrew
+装出来的 PostgreSQL 正是这个形态。别的用户名/口令用 `VELA_PG_DSN` 覆盖。
+本机不想装的话，`docker compose up -d` 起仓库根的那份（用户 `vela` / 口令 `velapass`，
+此时要显式给 `VELA_PG_DSN`）。
+
+### 一键启动
+
+后端：macOS / Linux 跑 **`backend/run-dev.sh`**，Windows 双击 **`backend\run-dev.bat`**；
+前端双击 **`frontend\run-dev.bat`** 或 `npm run dev`。
 然后浏览器打开 http://localhost:5173 ，用 `linwei@vela.io` / `vela123` 登录。
 
 ### 手动启动
 
 ```bash
-# 后端（默认 APP_ENV=dev → SQLite，写 ./vela-gateway.db，自动迁移 + 演示数据）
+# 后端（默认 APP_ENV=dev → 连 vela_gateway，跑内嵌 SQL 迁移 + 演示数据）
 cd backend && go run ./cmd/server            # 监听 :8080，健康检查 GET /healthz
 
 # 前端
 cd frontend && npm install && npm run dev    # http://localhost:5173（代理 /api 到 :8080）
 ```
 
-生产路径（MySQL 8）：`APP_ENV=prod go run ./cmd/server`，DSN 见 `backend/configs/config.yaml`
-或环境变量 `VELA_MYSQL_DSN`。环境变量一览与生产部署完整步骤见 **`DEPLOY.md`**。
+`APP_ENV` 只决定演示数据、JWT 强度校验与 CORS/SSRF 的松紧，**不再挑存储引擎**。
+生产路径：`APP_ENV=prod ./vela-gateway`，DSN 由环境变量 `VELA_PG_DSN` 给
+（`configs/config.prod.yaml` 里故意留空，凭据不进仓库）。
+环境变量一览与生产部署完整步骤见 **`DEPLOY.md`**。
 
 ### 演示账号（本地 seed）
 
@@ -397,7 +418,7 @@ DBA，按项目跟进升级单的是业务线上的人。页面只做归属与�
 单二进制同时提供 API 与前端 SPA，内嵌 SQL 迁移；子命令 `version` / `migrate` / `init`。
 服务端**只产出 Linux 二进制** —— 在 Windows 工作站上构建时也一样，那台机器不是部署目标。
 
-完整步骤（MySQL 准备、迁移、初始化管理员、systemd 托管、TLS、反向代理信任列表、环境变量一览、
+完整步骤（PostgreSQL 准备、迁移、初始化管理员、systemd 托管、TLS、反向代理信任列表、环境变量一览、
 运维观测、升级注意事项）见 **`DEPLOY.md`**。
 
 **升级已有环境的顺序**：备份数据库 → 停旧进程 → `./vela-gateway migrate` → 起新进程 →
@@ -458,7 +479,10 @@ WARN 审批人自检: 默认审批链(DBA 负责人) severity=deadlock
 
 ## 测试与质量
 
-- **后端**：`go test ./... -timeout 20m` —— 以 **httptest 黑盒回归网**为主
+- **后端**：`go test ./... -timeout 20m` —— **需要本机 PostgreSQL 与一个 `vela_test` 库**
+  （`createdb vela_test`；换机器或 CI 用 `VELA_TEST_PG_DSN` 覆盖）。每个用例在里面建一个
+  独占 schema，跑完删掉，所以可以并行；连不上是**失败**不是 skip —— 静默跳过等于假绿。
+  以 **httptest 黑盒回归网**为主
   （`backend/internal/bootstrap/` 下 148 个测试文件，启动完整应用实跑 HTTP 接口，覆盖判定链、
   多语句、审批链、审计链、脱敏、导出上限、执行窗口、会话安全等），另有引擎方言 / 口令脱敏 /
   规范审查等单元测试。
@@ -489,7 +513,8 @@ Vue 版自带 218 个单元测试（`cd frontend-vue && npm run test:unit`，Pla
   0003 外部飞书审批 · 0004 按引擎判定方言 · 0005 发布流水线与规范审查 ·
   0006 开放接口提单 · 0009 敏感字段脱敏在服务端做 · 0010 审批通过不执行 ·
   0013 无 WHERE 拦截按分层 · 0014 脚本扫描按目标分层判 · 0015 执行窗口 ·
-  0017 JWT 存 localStorage（记在账上的取舍，附偿还条件）。
+  0017 JWT 存 localStorage（记在账上的取舍，附偿还条件） ·
+  0018 自身存储收敛到 PostgreSQL 单一来源 · 0019 审计链哈希的 payload 版本。
 - `docs/agents/`、`CLAUDE.md`：AI Agent 协作约定（PRD 与实现工单以 markdown 存在 `.scratch/`，
   审查发现的问题记在 GitHub Issues，远端为 https://github.com/xltxb/AegisDB ）。
 
