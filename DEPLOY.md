@@ -108,6 +108,8 @@ set -a; . ./vela.env; set +a          # 载入 VELA_PG_DSN 等
 
 管理员凭据也可用环境变量 `VELA_ADMIN_EMAIL` / `VELA_ADMIN_PASSWORD` / `VELA_ADMIN_NAME`。
 口令要求 **≥12 位且含大小写字母/数字/符号中的 ≥3 类**。`init` 可重复执行:引用数据只在空库写入;重复执行会重置该管理员密码,不会重复建号。
+邮箱按**小写**匹配已有账号(唯一索引建在 `lower(email)` 上),所以 `Ops@Corp.io` 和
+`ops@corp.io` 指的是同一个账号 —— 重置口令时大小写敲错不会建出第二个。
 
 ## 6. 运行
 
@@ -138,7 +140,7 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 
 | 变量 | 说明 |
 | --- | --- |
-| `VELA_PG_DSN` | 网关自身存储的 PostgreSQL DSN(覆盖配置文件的 `database.postgres_dsn`)。生产**必填**:`config.prod.yaml` 里故意留空,而空 DSN 会被 libpq 读成"这台机器的默认库",所以留空 = 拒绝启动 |
+| `VELA_PG_DSN` | 网关自身存储的 PostgreSQL DSN(覆盖配置文件的 `database.postgres_dsn`)。生产**必填**:`config.prod.yaml` 里故意留空,而空 DSN 会被 libpq 读成"这台机器的默认库"(走 unix socket、user = OS 用户、**dbname = OS 用户名**),所以 prod 留空 = 拒绝启动 —— `serve` / `migrate` / `init` **三条路都拦**(`Config.ValidateForDB`),不是只拦 serve |
 | `VELA_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位、≥8 种不同字符、不在弱值黑名单**;未设 `VELA_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
 | `VELA_SECRET_KEY` | 连接口令与运行时密钥(审批魔方令牌等)的 AES-GCM 静态加密密钥(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量口令解密;**一经设定不可更改**(轮换会导致存量口令无法解密)。未设时启动打 WARN |
 | `VELA_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`);缺 `index.html`/`assets` 时打 WARN |
@@ -175,6 +177,7 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
   —— 所以它固定在一条专用连接上持有到迁移结束(池里换一条连接就等于悄悄放了锁)。
 - 迁移文件里的 `CREATE DATABASE` / `USE` 会被跳过;已应用版本记录在 `schema_migrations`。
 - `migrate` 同时回填引用数据:`gli` / `uat` 环境、五个内置分层、流程模板与规则库、`executed_at`、`strict_nowhere`。
+  **`serve` 走的是同一个 `bootstrap.Migrate`**,所以这些动作在每次正常启动时也会发生一遍(见「升级顺序」)。
 - `init` 重复执行会**重置**该管理员的密码,并强制其 active + admin 角色。
 
 ### 迁移只有一份 baseline
@@ -195,15 +198,41 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 `TestMigrations_AltersAreIdempotentOrAlone` 仍然拦着**新**加的迁移:`ALTER` 要么每条都幂等,
 要么一个文件只放一条(ADR 0016 §三)。
 
-**升级顺序**仍然是"停旧进程 → `./vela-gateway migrate` → 起新进程"。反过来做,新二进制会对着
-旧表结构跑;迁移之后也不要单独回滚二进制。
+## 升级顺序:`serve` 自己会迁移
+
+**这一条变了,别照旧的做。** `cmd/server/main.go` 在开监听之前调用 `bootstrap.Migrate`,
+失败就 `os.Exit(1)`。所以"先起新进程"的后果不再是"新二进制对着旧表结构跑" —— 而是
+**新进程自己把库改了**。旧的那句"停旧进程 → migrate → 起新进程"因此不再是一道安全前提,
+它只是让改库这件事发生在一个你看得见、能回滚数据库的时刻。
+
+**单副本**:备份数据库 → 停旧进程 → `./vela-gateway migrate` → 起新进程 →
+`./vela-gateway version` 确认版本。中间那步 `migrate` 现在是可选的(serve 会做同样的事),
+但留着它值得:迁移的成败和耗时单独看得见,而不是混在启动日志里。
+
+**多副本(共享同一个库)**:这里没有"只要不先起新进程就安全"这回事。
+**第一个换上新二进制的副本,就会自己抢到 advisory lock 并把全部迁移跑完**,而此刻另外几台
+旧副本仍在对着**已经改过的表结构**继续服务。滚动重启因此不存在"还没迁移"的窗口,只有两种选择:
+
+- **停机窗口**:先停**全部**旧副本,再 `./vela-gateway migrate`,再逐台起新的。旧代码一秒钟
+  也没见过新表结构。
+- **接受混跑**:先确认这一版的迁移对旧代码向后兼容(只加表/加列、不改名不删列、不加
+  会让旧 INSERT 失败的 NOT NULL),再滚动重启,并接受第一台重启之后到最后一台重启之前
+  这段时间里新旧两版同时读写同一个库。
+
+迁移之后不要单独回滚二进制(旧代码按旧列名查询,列已经不在了)。
 
 ## 启动时的自动动作
 
+- **应用待执行的 SQL 迁移,并回填引用数据** —— serve 启动时最大的一个副作用,见上一节:
+  `bootstrap.Migrate` 拿 `pg_try_advisory_lock` 串行执行 `migrations/*.sql`,随后回填
+  `gli` / `uat` 环境、五个内置分层、流程模板与规则库、`executed_at`、`strict_nowhere` 这五项。
+  任何一步失败,进程 `os.Exit(1)` —— 不会带着半张表开始监听。
 - 上次进程遗留的 `running` 导出 / 异步任务标失败(结果未知,不重跑);`running` 发布单标失败、`waiting` 保留、`pending` 重新入队。
 - 导出归档清理先跑一次(之后每小时;`export.retentionDays` 默认 3,0 = 永久;只删文件不删任务记录)。
 - 审批人自检(见 README「启动自检」)。
 - 元数据定时同步**启动时不跑**,开启后等满一个间隔才跑第一轮。
+- `database.seed` 为真(dev 默认)时写入演示数据;失败同样 `os.Exit(1)` —— 一个没有角色、
+  没有管理员的库不会被留下来继续监听(`/healthz` 不碰数据库,照样返回 ok,而每次登录都 40100)。
 
 ## 运维观测
 

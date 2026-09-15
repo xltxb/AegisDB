@@ -1,10 +1,28 @@
 # ADR 0016:迁移的 MySQL 专属缺陷,只能靠静态闸挡住
 
-- 状态:已采纳
+- 状态:**部分被 ADR 0018 取代(2026-09-15)** —— §二「保留字要换名字」与 §三「每条迁移
+  语句都必须可重跑」仍然有效并仍被大量引用;下面「哪些前提已经失效」列出的部分作为
+  **历史记录**保留,不要照着做。
 - 日期:2026-09-10
 - 相关:`backend/internal/bootstrap/migration_tables_test.go`、
-  `migration_collation_test.go`、`migration_reserved_words_test.go`、
-  `backend/internal/bootstrap/migrate.go`
+  `migration_reserved_words_test.go`、`migration_idempotent_test.go`、
+  `backend/internal/bootstrap/migrate.go`、`docs/adr/0018-postgres-single-store.md`
+
+## 哪些前提已经失效(ADR 0018,2026-09-15)
+
+- **"开发和测试跑 SQLite、生产跑 MySQL 8"不成立了**,连带"`migrations/` 里的 SQL 从来没被
+  任何一套测试真正执行过"也不成立:三档环境统一到 PostgreSQL,`testsupport` 在真库的独占
+  schema 上执行 baseline,每一次 `go test ./internal/bootstrap/` 都跑一遍那份 SQL。
+  §一提到的 `start-dev.bat` / 零依赖启动已经随之取消。
+- **collation 那道闸已经删掉**:`TestMigrationsDeclareCollation` 和
+  `migration_collation_test.go` 都不在了。1267 是 MySQL 专属的失败,PostgreSQL 没有
+  "建表不写 COLLATE 就跟库不一致"这回事。§一那张「现有三道闸」的表因此只剩两道
+  (`TestMigrations_AlterTargetsExistingTables` 与 `TestMigrationsAvoidReservedWords`),
+  而第三格的位置由 `TestMigrations_AltersAreIdempotentOrAlone`(§三那条)补上;
+  §二那张保留字字典的内容已从 MySQL 换成 PostgreSQL 的。
+- **「没有做的事」那笔欠账已经结清**,但不是按它自己写的方式结的:不是去搭一个 CI MySQL,
+  而是取消了"测试跑的库和生产跑的库不是同一种"这件事本身(ADR 0018)。那一节里
+  "在本机引入一个会破坏零依赖启动"的理由已经作废 —— 零依赖启动本身被放弃了。
 
 ## 背景
 
