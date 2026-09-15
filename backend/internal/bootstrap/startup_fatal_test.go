@@ -60,6 +60,10 @@ func TestFatalStartupStepsExit(t *testing.T) {
 	want := map[string]string{
 		"bootstrap.Migrate": "表都没建全的网关会对每个请求返 500,而进程看上去是活的",
 		"bootstrap.Seed":    "播种失败 = 没有角色、没有管理员;/healthz 照样绿,而每次登录都 40100",
+		// --no-migrate 的那一支。它跳过 Migrate,所以必须自己验证 schema 已是最新 ——
+		// 验证不过还继续起,就是对着旧表结构服务,和上面第一条同一个下场,只是这次
+		// 是**自找的**:开关的本意是把迁移交给别人跑,而「别人忘了」正是它要能查出来的。
+		"bootstrap.VerifySchemaCurrent": "跳过迁移却不验证,等于自愿回到「表不全照样监听」那个形状",
 	}
 	found := map[string]bool{}
 

@@ -40,6 +40,14 @@ func main() {
 	}
 
 	cfgPath := flag.String("config", "configs/config.yaml", "path to config file")
+	// --no-migrate 把「迁移」与「服务」重新分开:多副本滚动升级时,第一个重启的
+	// 副本自己改共享库是一件需要能关掉的事(其余旧副本会当场对着新表结构服务)。
+	//
+	// 它**不是**「什么都不做」—— 跳过之后仍然验证 schema 已是最新,差一条就拒绝
+	// 启动。不验证的话,「serve 不迁移、人也忘了跑」就把表不全的网关放上线,
+	// 而那种进程会让 /healthz 变绿、让每个请求 500。
+	noMigrate := flag.Bool("no-migrate", false,
+		"跳过启动时的自动迁移(仍会验证 schema 是最新的;迁移需另行 `vela-gateway migrate`)")
 	flag.Parse()
 
 	cfg, err := bootstrap.LoadConfig(*cfgPath)
@@ -69,7 +77,14 @@ func main() {
 	// 失败必须 os.Exit。一台没有表的网关照样能监听端口 —— 每个请求 500,而进程
 	// 看上去是活的,于是探活探到的是一个「跑着的坏进程」。下面的 Seed 同理:它从前
 	// 只打日志不退出,留下一个没有角色、没有管理员却 /healthz 全绿的副本。
-	if err := bootstrap.Migrate(cfg, db); err != nil {
+	if *noMigrate {
+		// 不应用,但要验证。差一条都不放行 —— 见 VerifySchemaCurrent 的注释。
+		if err := bootstrap.VerifySchemaCurrent(db, bootstrap.MigrationsFS()); err != nil {
+			slog.Error("schema is not up to date and --no-migrate was given", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("skipping automatic migration (--no-migrate); schema verified up to date")
+	} else if err := bootstrap.Migrate(cfg, db); err != nil {
 		slog.Error("schema migration failed", "err", err)
 		os.Exit(1)
 	}
