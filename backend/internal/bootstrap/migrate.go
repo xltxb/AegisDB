@@ -25,19 +25,12 @@ type schemaMigration struct {
 
 func (schemaMigration) TableName() string { return "schema_migrations" }
 
-// Migrate brings the database schema up to date.
-//
-//   - MySQL (production): applies the embedded, versioned SQL migrations in
-//     migrations/*.sql, tracked in the schema_migrations table. This is the
-//     authoritative schema for prod and never silently ALTERs an existing table.
-//   - SQLite (dev/tests): the hand-written SQL is MySQL-specific, so fall back to
-//     GORM AutoMigrate which understands the sqlite dialect.
+// Migrate brings the database schema up to date. It applies the embedded,
+// versioned SQL migrations in migrations/*.sql, tracked in the
+// schema_migrations table. That SQL is the one authoritative schema — in every
+// environment — and it never silently ALTERs an existing table.
 func Migrate(cfg *Config, db *gorm.DB) error {
-	if cfg.Database.Driver == "mysql" {
-		if err := RunSQLMigrations(db, migrations.FS); err != nil {
-			return err
-		}
-	} else if err := autoMigrate(db); err != nil {
+	if err := RunSQLMigrations(db, migrations.FS); err != nil {
 		return err
 	}
 	// Reference DATA that a later release introduced has to be backfilled here

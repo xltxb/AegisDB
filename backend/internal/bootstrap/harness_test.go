@@ -1,6 +1,6 @@
 package bootstrap
 
-// harness_test.go boots the entire AegisDB against a throwaway SQLite file
+// harness_test.go boots the entire AegisDB against a throwaway PostgreSQL schema
 // with seed data and exposes it through an httptest server. Tests drive the real
 // /api/v1 HTTP seam end-to-end (auth -> middleware -> three-layer engine -> audit),
 // asserting only externally observable behaviour, never internal collaborators.
@@ -11,7 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"velagateway/internal/gateway"
@@ -19,6 +18,7 @@ import (
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/internal/service"
+	"velagateway/internal/testsupport"
 	"velagateway/pkg/crypto"
 	"velagateway/pkg/jwt"
 )
@@ -33,15 +33,12 @@ type testApp struct {
 }
 
 // newTestApp assembles the app exactly like cmd/server/main.go, but against an
-// isolated in-temp-dir SQLite database seeded with the demo dataset.
+// isolated PostgreSQL schema seeded with the demo dataset.
 func newTestApp(t *testing.T) *testApp {
 	t.Helper()
 
 	cfg := &Config{}
 	cfg.Server.Mode = "release"
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "vela-test.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
 	cfg.JWT.Secret = "test-secret"
 	cfg.JWT.TTLHours = 1
@@ -51,15 +48,7 @@ func newTestApp(t *testing.T) *testApp {
 	// X-Forwarded-For (the real client IP) is honored by the IP allowlist.
 	cfg.Server.TrustedProxies = []string{"127.0.0.1", "::1"}
 
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	// Close the SQLite handle before t.TempDir() removal runs (cleanups are LIFO),
-	// otherwise Windows refuses to delete the still-open database file.
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
+	db := testsupport.NewDB(t)
 	repo := repository.New(db)
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)

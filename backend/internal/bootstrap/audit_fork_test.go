@@ -1,12 +1,12 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/internal/testsupport"
 )
 
 // A4: the hash chain's integrity must not depend solely on an in-process mutex.
@@ -15,18 +15,7 @@ import (
 // or processes. Here we drive the repository directly: a second row reusing an
 // existing prev_hash must be rejected.
 func TestAudit_PrevHashUniquePreventsFork(t *testing.T) {
-	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "audit.db")
-	cfg.Database.AutoMigrate = true
-
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
+	db := testsupport.NewDB(t)
 	repo := repository.New(db)
 
 	mk := func(cmd, prev, hash string) *model.AuditLog {

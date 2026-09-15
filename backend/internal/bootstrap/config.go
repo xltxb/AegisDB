@@ -27,9 +27,10 @@ var weakJWTSecrets = map[string]bool{
 
 // Config is the full backend configuration loaded from configs/config.yaml.
 type Config struct {
-	// Env is the deployment profile: "dev" (local, SQLite) or "prod" (MySQL).
-	// Resolved from APP_ENV/VELA_ENV env vars, falling back to this yaml field
-	// then "dev". It drives the default database driver — see LoadConfig.
+	// Env is the deployment profile: "dev" or "prod". Resolved from APP_ENV/
+	// VELA_ENV env vars, falling back to this yaml field then "dev". It decides
+	// seeding, prod JWT-strength enforcement and CORS — NOT the storage engine;
+	// that is PostgreSQL in every profile. See LoadConfig.
 	Env    string `yaml:"env"`
 	Server struct {
 		Addr        string   `yaml:"addr"`
@@ -49,10 +50,9 @@ type Config struct {
 		TrustedProxies []string `yaml:"trusted_proxies"`
 	} `yaml:"server"`
 	Database struct {
-		Driver      string `yaml:"driver"`
-		MySQLDSN    string `yaml:"mysql_dsn"`
-		SQLitePath  string `yaml:"sqlite_path"`
-		AutoMigrate bool   `yaml:"auto_migrate"`
+		// PostgresDSN is the gateway's own store. libpq key=value or URL form;
+		// omitting user= lets libpq fall back to the OS user.
+		PostgresDSN string `yaml:"postgres_dsn"`
 		Seed        bool   `yaml:"seed"`
 	} `yaml:"database"`
 	JWT struct {
@@ -96,8 +96,8 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	// Environment overrides (handy for docker / CI).
-	if v := os.Getenv("VELA_MYSQL_DSN"); v != "" {
-		cfg.Database.MySQLDSN = v
+	if v := os.Getenv("VELA_PG_DSN"); v != "" {
+		cfg.Database.PostgresDSN = v
 	}
 	if v := os.Getenv("VELA_JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
@@ -121,26 +121,16 @@ func LoadConfig(path string) (*Config, error) {
 		cfg.Webhook.AllowPrivate = isTruthy(v)
 	}
 
-	// Resolve the deployment profile and, from it, the database driver.
-	// Precedence for the driver (highest first):
-	//   1. VELA_DB_DRIVER      — explicit manual override (mysql|sqlite)
-	//   2. APP_ENV / VELA_ENV / config.env  — dev→sqlite, prod→mysql
-	// Local dev thus needs zero dependencies (SQLite) while prod uses MySQL,
-	// switched from a single startup knob.
+	// Resolve the deployment profile. Storage is PostgreSQL in every profile, so
+	// `env` no longer picks a driver — it decides seeding, JWT-strength
+	// enforcement and CORS. Precedence: APP_ENV > VELA_ENV > config.env > "dev".
 	rawEnv := firstNonEmpty(os.Getenv("APP_ENV"), os.Getenv("VELA_ENV"), cfg.Env)
 	if rawEnv != "" && !isKnownEnv(rawEnv) {
-		// e.g. APP_ENV=staging → falls through to dev (SQLite). Surface it rather
-		// than silently degrading a would-be non-dev deployment to a local file (C6).
-		slog.Warn("未识别的环境名,将按 dev 处理(使用 SQLite)", "env", rawEnv)
+		// e.g. APP_ENV=staging → falls through to dev. Surface it rather than
+		// silently degrading a would-be non-dev deployment (C6).
+		slog.Warn("未识别的环境名,将按 dev 处理", "env", rawEnv)
 	}
 	cfg.Env = normalizeEnv(firstNonEmpty(rawEnv, "dev"))
-	if v := os.Getenv("VELA_DB_DRIVER"); v != "" {
-		cfg.Database.Driver = v
-	} else if cfg.Env == "prod" {
-		cfg.Database.Driver = "mysql"
-	} else {
-		cfg.Database.Driver = "sqlite"
-	}
 	// NOTE: the prod JWT-secret enforcement lives in ValidateForServe (called on
 	// the serve path only). `migrate`/`init` need just the DSN and must not be
 	// blocked by a missing JWT secret with an unrelated error (R26).
@@ -207,7 +197,8 @@ func distinctBytes(s string) int {
 }
 
 // isKnownEnv reports whether s is a recognized environment alias. LoadConfig warns
-// on anything else so an env like "staging" doesn't silently degrade to SQLite.
+// on anything else so an env like "staging" doesn't silently degrade to dev —
+// which would turn on the demo seed and drop the prod JWT-strength check.
 func isKnownEnv(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "prod", "production", "release", "live", "dev", "development", "local":

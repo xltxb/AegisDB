@@ -133,14 +133,14 @@ func gormColumnName(field string) string {
 	return strings.ToLower(upperRunRe.ReplaceAllString(field, "${1}${3}_${2}${4}"))
 }
 
-// 列名不得是 MySQL 保留字 —— 模型这一侧。
+// 列名不得是 PostgreSQL 保留字 —— 模型这一侧。
 //
-// 隔壁 TestMigrationsAvoidReservedWords 只看 .sql 文件,而且**加了反引号就放行**。于是
-// 存量的 key / database / sql / rows 靠反引号活了很久,而 ADR 0016 §二要的是换名字:
+// 隔壁 TestMigrationsAvoidReservedWords 只看 .sql 文件,而且**加了双引号就放行**。于是
+// 存量的 key / database / sql / rows 靠引号活了很久,而 ADR 0016 §二要的是换名字:
 //
-//	· 反引号是 MySQL 的写法,此后每一处手写 SQL 都得记得加。忘一次就是一句 1064
-//	  「你的语法有问题」—— 它连是哪个词都不说,因为报错指向的是**下一个** token。
-//	· 开发环境永远碰不到:那边是 SQLite,这几个词在它上面都是合法列名。
+//	· 此后每一处手写 SQL 都得记得加引号。忘一次就是一句 `syntax error at or near
+//	  "user"`,而它往往指向的是**下一个** token。
+//	· 在 PG 上加了双引号还会把名字变成大小写敏感的,`"User"` 和 user 从此是两个东西。
 //	· GORM 生成的语句自己会加引号,所以 ORM 那条路一直没事 —— 出事的永远是那几句
 //	  手写的 Where / Order,以及 map 形式的 Updates(见上一条用例)。
 func TestModels_NoReservedColumnNames(t *testing.T) {
@@ -163,14 +163,14 @@ func TestModels_NoReservedColumnNames(t *testing.T) {
 				}
 				col = rest
 			}
-			// 复用隔壁那张**完整的** MySQL 8.0 保留字表(migration_reserved_words_test.go),
+			// 复用隔壁那张**完整的** PostgreSQL 保留字表(migration_reserved_words_test.go),
 			// 不另抄一份缩水版 —— 抄一份就意味着两张表会分叉,而分叉的那一半正好漏掉
 			// 下一次要撞的那个词。
-			if mysqlReserved[strings.ToUpper(col)] {
-				t.Errorf("%s.%s 的列名是 %q —— MySQL 保留字。\n"+
-					"    加反引号能让它跑起来,但此后每一处手写 SQL 都得记得加,忘一次就是一句\n"+
-					"    1064「你的语法有问题」,而它连是哪个词都不说。ADR 0016 §二:换个名字。\n"+
-					"    改法:给字段加 gorm:\"column:<新名字>\",并配一条 CHANGE COLUMN 的迁移。",
+			if pgReserved[strings.ToUpper(col)] {
+				t.Errorf("%s.%s 的列名是 %q —— PostgreSQL 保留字。\n"+
+					"    加双引号能让它跑起来,但此后每一处手写 SQL 都得记得加,忘一次就是一句\n"+
+					"    syntax error,而且引号还会让这个名字变成大小写敏感的。ADR 0016 §二:换个名字。\n"+
+					"    改法:给字段加 gorm:\"column:<新名字>\",并配一条 RENAME COLUMN 的迁移。",
 					rt.Name(), f.Name, col)
 			}
 		}

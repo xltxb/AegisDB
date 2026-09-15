@@ -178,7 +178,7 @@ func main() {
 	}()
 
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
-	slog.Info("AegisDB listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
+	slog.Info("AegisDB listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "tls", tls)
 	if cfg.Env == "prod" && !tls {
 		slog.Warn("生产环境未启用 TLS:请配置 server.tls_cert/tls_key,或在前置反向代理终止 TLS,避免凭据 / JWT 明文传输")
 	}
@@ -210,9 +210,8 @@ func runInit(args []string) {
 		slog.Error("load config failed", "err", err)
 		os.Exit(1)
 	}
-	// `init` opens the DB without boot-time AutoMigrate, then migrates explicitly
-	// (versioned SQL on MySQL, AutoMigrate on sqlite) before seeding.
-	cfg.Database.AutoMigrate = false
+	// `init` opens the DB (OpenDB never creates tables), then migrates explicitly
+	// with the versioned SQL before seeding.
 	db, err := bootstrap.OpenDB(cfg)
 	if err != nil {
 		slog.Error("database init failed", "err", err)
@@ -227,7 +226,7 @@ func runInit(args []string) {
 		slog.Error("initialization failed", "err", err)
 		os.Exit(1)
 	}
-	slog.Info("initialization complete", "driver", cfg.Database.Driver, "env", cfg.Env)
+	slog.Info("initialization complete", "env", cfg.Env)
 }
 
 // runMigrate handles `server migrate [flags]`: apply pending SQL migrations to
@@ -243,7 +242,6 @@ func runMigrate(args []string) {
 		slog.Error("load config failed", "err", err)
 		os.Exit(1)
 	}
-	cfg.Database.AutoMigrate = false // migration is done explicitly below
 	db, err := bootstrap.OpenDB(cfg)
 	if err != nil {
 		slog.Error("database open failed", "err", err)
@@ -253,5 +251,5 @@ func runMigrate(args []string) {
 		slog.Error("migration failed", "err", err)
 		os.Exit(1)
 	}
-	slog.Info("migration complete", "driver", cfg.Database.Driver, "env", cfg.Env)
+	slog.Info("migration complete", "env", cfg.Env)
 }

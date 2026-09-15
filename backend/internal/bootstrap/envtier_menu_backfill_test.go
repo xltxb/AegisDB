@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/internal/testsupport"
 )
 
 // Tiers and environments got a menu of their own ("envtier"). A menu key with no
@@ -17,18 +17,9 @@ import (
 func openSeededDB(t *testing.T) *repository.Repo {
 	t.Helper()
 	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "envtier-menu.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
 
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
+	db := testsupport.NewDB(t)
 	repo := repository.New(db)
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)

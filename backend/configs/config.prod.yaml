@@ -1,11 +1,11 @@
-# AegisDB — PRODUCTION configuration (MySQL).
+# AegisDB — PRODUCTION configuration (PostgreSQL).
 # Initialize once, then run:
-#   VELA_MYSQL_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
-#   VELA_MYSQL_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml
-# Secrets should come from the environment (VELA_MYSQL_DSN / VELA_JWT_SECRET),
+#   VELA_PG_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
+#   VELA_PG_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml
+# Secrets should come from the environment (VELA_PG_DSN / VELA_JWT_SECRET),
 # not this file.
 
-env: "prod"                 # → MySQL
+env: "prod"                 # decides seeding / JWT-strength / CORS, not the store
 
 server:
   addr: ":8080"
@@ -14,10 +14,12 @@ server:
   web_dir: "web"            # built frontend (dist) served by the backend
 
 database:
-  # Prefer the VELA_MYSQL_DSN env var; this is only a fallback default.
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
-  sqlite_path: "vela-gateway.db"
-  auto_migrate: false        # do NOT alter schema on every boot; `vela-gateway init` migrates explicitly
+  # REQUIRED: set the production DSN via VELA_PG_DSN — it carries credentials
+  # and must not live in a checked-in file. Left empty here on purpose; libpq
+  # would otherwise read an empty DSN as "whatever this host defaults to",
+  # so supply it explicitly:
+  #   VELA_PG_DSN="host=db.internal port=5432 user=vela dbname=vela_gateway sslmode=require"
+  postgres_dsn: ""
   seed: false                # NO demo data in production — use `vela-gateway init`
 
 jwt:

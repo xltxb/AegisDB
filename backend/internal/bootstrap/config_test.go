@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,9 +13,7 @@ func writeTempConfig(t *testing.T, envLine string) string {
 	t.Helper()
 	body := envLine + `
 database:
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway"
-  sqlite_path: "vela-gateway.db"
-  auto_migrate: false
+  postgres_dsn: "host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable"
   seed: false
 jwt:
   secret: "test-strong-secret-0123456789abcdef-xyz"
@@ -32,12 +31,10 @@ jwt:
 func TestConfig_ProdServeRejectsCommittedDevSecretButMigrateLoads(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
 	t.Setenv("VELA_ENV", "")
-	t.Setenv("VELA_DB_DRIVER", "")
 
 	body := `env: "prod"
 database:
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway"
-  sqlite_path: "vela-gateway.db"
+  postgres_dsn: "host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable"
 jwt:
   secret: "change-me-vela-gateway-dev-secret"
 `
@@ -60,7 +57,6 @@ jwt:
 func TestConfig_ProdServeAcceptsStrongSecret(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
 	t.Setenv("VELA_ENV", "")
-	t.Setenv("VELA_DB_DRIVER", "")
 	body := `env: "prod"
 jwt:
   secret: "a-strong-production-secret-0123456789abcd"
@@ -78,31 +74,27 @@ jwt:
 	}
 }
 
-// TestLoadConfigDriverResolution pins the dev(sqlite)/prod(mysql) switch and the
-// precedence: VELA_DB_DRIVER > APP_ENV/VELA_ENV > config.env > default(dev).
-func TestLoadConfigDriverResolution(t *testing.T) {
+// env 仍然要解析(它决定 seed / JWT 强度校验 / CORS),但不再决定存储驱动 ——
+// 存储只有 PostgreSQL 一种,VELA_DB_DRIVER 这个开关连同它的歧义一起没了。
+func TestLoadConfigEnvResolution(t *testing.T) {
 	cases := []struct {
-		name       string
-		envLine    string // yaml `env:` line (may be empty)
-		appEnv     string
-		velaEnv    string
-		driverEnv  string
-		wantEnv    string
-		wantDriver string
+		name    string
+		envLine string // yaml `env:` line (may be empty)
+		appEnv  string
+		velaEnv string
+		wantEnv string
 	}{
-		{"default is dev/sqlite", "", "", "", "", "dev", "sqlite"},
-		{"yaml env:prod -> mysql", `env: "prod"`, "", "", "", "prod", "mysql"},
-		{"APP_ENV=prod overrides yaml dev", `env: "dev"`, "prod", "", "", "prod", "mysql"},
-		{"APP_ENV=production alias", "", "production", "", "", "prod", "mysql"},
-		{"VELA_ENV=prod when APP_ENV empty", "", "", "prod", "", "prod", "mysql"},
-		{"VELA_DB_DRIVER wins over prod env", `env: "prod"`, "prod", "", "sqlite", "prod", "sqlite"},
-		{"unknown env falls back to dev", "", "staging", "", "", "dev", "sqlite"},
+		{"default is dev", "", "", "", "dev"},
+		{"yaml env:prod", `env: "prod"`, "", "", "prod"},
+		{"APP_ENV=prod overrides yaml dev", `env: "dev"`, "prod", "", "prod"},
+		{"APP_ENV=production alias", "", "production", "", "prod"},
+		{"VELA_ENV=prod when APP_ENV empty", "", "", "prod", "prod"},
+		{"unknown env falls back to dev", "", "staging", "", "dev"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("APP_ENV", tc.appEnv)
 			t.Setenv("VELA_ENV", tc.velaEnv)
-			t.Setenv("VELA_DB_DRIVER", tc.driverEnv)
 
 			cfg, err := LoadConfig(writeTempConfig(t, tc.envLine))
 			if err != nil {
@@ -111,9 +103,20 @@ func TestLoadConfigDriverResolution(t *testing.T) {
 			if cfg.Env != tc.wantEnv {
 				t.Errorf("Env = %q, want %q", cfg.Env, tc.wantEnv)
 			}
-			if cfg.Database.Driver != tc.wantDriver {
-				t.Errorf("Driver = %q, want %q", cfg.Database.Driver, tc.wantDriver)
+			if cfg.Database.PostgresDSN == "" {
+				t.Error("postgres_dsn 未读入")
 			}
 		})
+	}
+}
+
+func TestLoadConfig_EnvOverridesDSN(t *testing.T) {
+	t.Setenv("VELA_PG_DSN", "host=127.0.0.1 dbname=from_env sslmode=disable")
+	cfg, err := LoadConfig(writeTempConfig(t, `env: "dev"`))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if !strings.Contains(cfg.Database.PostgresDSN, "from_env") {
+		t.Fatalf("VELA_PG_DSN 未覆盖: %q", cfg.Database.PostgresDSN)
 	}
 }

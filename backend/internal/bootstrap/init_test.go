@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/internal/testsupport"
 	"velagateway/pkg/crypto"
 )
 
@@ -13,20 +13,9 @@ import (
 // and re-running is idempotent (resets the admin password, no duplicate).
 func TestInitDatabase_CreatesAdminAndReferenceOnly(t *testing.T) {
 	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "init.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Gateway.DefaultPolicy = "strict"
 
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	defer func() {
-		if sqlDB, e := db.DB(); e == nil {
-			_ = sqlDB.Close() // release the sqlite file so TempDir cleanup can delete it (Windows)
-		}
-	}()
+	db := testsupport.NewDB(t)
 	repo := repository.New(db)
 
 	if err := InitDatabase(repo, cfg, "ops@corp.io", "S3cret!Passw0rd", "Ops Admin"); err != nil {

@@ -1,10 +1,10 @@
 # AegisDB — backend configuration
 
 # Deployment profile: dev | prod
-#   dev  → SQLite (zero-dependency local run, writes ./vela-gateway.db)
-#   prod → MySQL  (see docker-compose.yml / mysql_dsn below)
-# Overridable at startup via APP_ENV (or VELA_ENV): `APP_ENV=prod ./server`
-# flips the whole app to MySQL. VELA_DB_DRIVER=mysql|sqlite forces a driver.
+# It no longer picks a storage engine — that is PostgreSQL in both profiles.
+# What it decides: the demo seed (dev only), the prod JWT-strength check, and
+# how permissive CORS / the outbound SSRF guard are.
+# Overridable at startup via APP_ENV (or VELA_ENV): `APP_ENV=prod ./server`.
 env: "dev"
 
 server:
@@ -14,15 +14,13 @@ server:
     - "http://localhost:5173"
     - "http://127.0.0.1:5173"
 
-# Storage — the active driver is chosen by `env` above (dev→sqlite, prod→mysql),
-# not set here directly. Both endpoints stay configured so either profile works.
+# Storage — the gateway's own metadata store. PostgreSQL only.
+# Create it once with:  createdb vela_gateway
+# Override at runtime with VELA_PG_DSN.
 database:
-  # MySQL DSN (used when env=prod; matches docker-compose.yml credentials)
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
-  # SQLite file (used when env=dev)
-  sqlite_path: "vela-gateway.db"
-  auto_migrate: true     # GORM AutoMigrate on boot
-  seed: true             # insert demo data (mirrors the prototype) when tables are empty
+  # Omitting user= lets libpq fall back to the OS user.
+  postgres_dsn: "host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable"
+  seed: true     # insert demo data when tables are empty
 
 jwt:
   secret: "change-me-vela-gateway-dev-secret"

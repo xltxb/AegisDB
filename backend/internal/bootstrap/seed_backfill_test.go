@@ -1,11 +1,11 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
+	"velagateway/internal/testsupport"
 )
 
 // Seeding must be idempotent for additive data: a database created before the
@@ -14,18 +14,9 @@ import (
 // skipping new seed data on existing installations.
 func TestSeed_BackfillsSchemaOnExistingDB(t *testing.T) {
 	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "seed-test.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
 
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
+	db := testsupport.NewDB(t)
 	repo := repository.New(db)
 
 	if err := Seed(repo, cfg); err != nil {
