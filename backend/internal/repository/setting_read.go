@@ -12,6 +12,7 @@ package repository
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -48,6 +49,18 @@ func (r *Repo) SettingBool(key string, def bool) bool {
 }
 
 // SettingInt 读一个整数设置(JSON 编码),读不懂就用 def。
+//
+// 同一个整数会以两种形态落库:seed 与默认值写的是裸的 JSON 数字 `2`,而从
+// PUT /api/v1/settings 传字符串进来时存的是 JSON 字符串 `"2"`。两者是同一个值的
+// 两种编码,所以都认。
+//
+// 只认前者的后果是**静默回落到默认值**:设置页上明明填了、库里明明有,读出来却是
+// def,而调用方拿到的是一个合法的数字,不会有任何错误冒出来 —— 一个设置"看起来
+// 生效了其实没有",比它明确报错难查得多。
+//
+// 这和隔壁 SettingBool"刻意不认 1/yes/on"不是一回事:那里拒绝的是**猜语义**
+// (运维写 1 到底想开还是想关,这里没资格替他决定);这里认的是同一个字面量的另一种
+// 写法,没有任何要猜的东西。读不懂的仍然回落 def —— 见下面 Atoi 那一步。
 func (r *Repo) SettingInt(key string, def int) int {
 	v, err := r.GetSetting(key)
 	if err != nil || v == "" {
@@ -56,6 +69,12 @@ func (r *Repo) SettingInt(key string, def int) int {
 	var n int
 	if json.Unmarshal([]byte(v), &n) == nil {
 		return n
+	}
+	var s string
+	if json.Unmarshal([]byte(v), &s) == nil {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
+			return n
+		}
 	}
 	return def
 }
