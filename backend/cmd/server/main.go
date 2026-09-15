@@ -48,7 +48,8 @@ func main() {
 		os.Exit(1)
 	}
 	// Serving signs tokens, so a strong prod JWT secret is mandatory here (but not
-	// for the migrate/init subcommands above).
+	// for the migrate/init subcommands above — those call ValidateForDB, which
+	// ValidateForServe subsumes).
 	if err := cfg.ValidateForServe(); err != nil {
 		slog.Error("invalid configuration", "err", err)
 		os.Exit(1)
@@ -66,7 +67,8 @@ func main() {
 	// backfillApprovalExecuted 这四个回填,它们此前只挂在 migrate 子命令上。
 	//
 	// 失败必须 os.Exit。一台没有表的网关照样能监听端口 —— 每个请求 500,而进程
-	// 看上去是活的:Seed 失败只打日志不退出,于是探活探到的是一个「跑着的坏进程」。
+	// 看上去是活的,于是探活探到的是一个「跑着的坏进程」。下面的 Seed 同理:它从前
+	// 只打日志不退出,留下一个没有角色、没有管理员却 /healthz 全绿的副本。
 	if err := bootstrap.Migrate(cfg, db); err != nil {
 		slog.Error("schema migration failed", "err", err)
 		os.Exit(1)
@@ -90,8 +92,13 @@ func main() {
 	crypto.SetSecretKey(secretKey)
 
 	if cfg.Database.Seed {
+		// 同样必须 os.Exit,理由和上面 Migrate 那条一模一样:播种失败留下的是一个
+		// 没有角色、没有管理员的库,而 /healthz 不碰数据库,照样返回 ok。编排系统
+		// 于是把流量切给一个所有人都登不上的副本。prod 的 seed 本来就关着,所以
+		// 这条只影响 dev / 演示 —— 而那正是它会咬人的地方。
 		if err := bootstrap.Seed(repo, cfg); err != nil {
 			slog.Error("seed failed", "err", err)
+			os.Exit(1)
 		}
 	}
 	// The webhook SSRF guard blocks private/loopback targets. Dev relaxes it by
@@ -221,6 +228,13 @@ func runInit(args []string) {
 		slog.Error("load config failed", "err", err)
 		os.Exit(1)
 	}
+	// Same storage guard serve uses. Without it a prod config with an empty
+	// postgres_dsn does not fail — libpq connects to the local default database
+	// (dbname = OS user) and `init` happily creates the admin THERE.
+	if err := cfg.ValidateForDB(); err != nil {
+		slog.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 	// `init` opens the DB (OpenDB never creates tables), then migrates explicitly
 	// with the versioned SQL before seeding.
 	db, err := bootstrap.OpenDB(cfg)
@@ -251,6 +265,13 @@ func runMigrate(args []string) {
 	cfg, err := bootstrap.LoadConfig(*cfgPath)
 	if err != nil {
 		slog.Error("load config failed", "err", err)
+		os.Exit(1)
+	}
+	// Same storage guard serve uses — and this is the path where it matters most:
+	// an empty prod postgres_dsn would otherwise build all 36 tables in the local
+	// default database (dbname = OS user) and exit 0.
+	if err := cfg.ValidateForDB(); err != nil {
+		slog.Error("invalid configuration", "err", err)
 		os.Exit(1)
 	}
 	db, err := bootstrap.OpenDB(cfg)

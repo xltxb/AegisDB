@@ -68,7 +68,10 @@ func UpsertAdmin(repo *repository.Repo, email, password, name string) (*model.Us
 
 	db := repo.DB()
 	var u model.User
-	if err := db.Where("email = ?", email).First(&u).Error; err == nil {
+	// lower() 两边都套,与 repository.GetUserByEmail 对称。baseline 把 idx_user_email
+	// 建在 lower(email) 上,所以裸列 `email = ?` 在 PG 上会漏掉大小写不同的那一行 ——
+	// 然后走进下面的 Create 分支,撞索引报 23505,而这条路是管理员口令重置的唯一通道。
+	if err := db.Where("lower(email) = lower(?)", email).First(&u).Error; err == nil {
 		// existing account: reset password + ensure admin role/active
 		u.PasswordHash = hash
 		u.RoleID = role.ID

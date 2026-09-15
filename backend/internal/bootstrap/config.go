@@ -133,14 +133,38 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.Env = normalizeEnv(firstNonEmpty(rawEnv, "dev"))
 	// NOTE: the prod JWT-secret enforcement lives in ValidateForServe (called on
 	// the serve path only). `migrate`/`init` need just the DSN and must not be
-	// blocked by a missing JWT secret with an unrelated error (R26).
+	// blocked by a missing JWT secret with an unrelated error (R26) — they call
+	// ValidateForDB instead.
 	return cfg, nil
 }
 
+// ValidateForDB enforces what EVERY path that opens the gateway's own store must
+// have set: an explicit PostgreSQL DSN in production. serve, `migrate` and `init`
+// all call it — a guard that only serve honours is no guard at all, because
+// `migrate` and `init` run FIRST and they are the ones that create objects.
+//
+// 生产必须显式给出 DSN。空串不是「没配」——libpq 把空 DSN 读成「走 unix socket,
+// user = 当前 OS 用户,**dbname = OS 用户名**」,而且连得上。所以漏填 postgres_dsn
+// 的后果不是启动失败,是网关**静默连上一个不相干的库**,在上面建 36 张表、写审计、
+// 存加密后的口令,一切看起来都正常 —— 直到有人去真正的生产库里找这些数据。
+//
+// 只在 prod 拦。dev 的 config.yaml 自带 DSN,而本机随手跑一下不该被这条挡住。
+func (c *Config) ValidateForDB() error {
+	if c.Env != "prod" {
+		return nil
+	}
+	if strings.TrimSpace(c.Database.PostgresDSN) == "" {
+		return fmt.Errorf("生产环境必须配置 database.postgres_dsn(或 VELA_PG_DSN):" +
+			"留空不会报错,libpq 会连上本机默认库并在上面建表")
+	}
+	return nil
+}
+
 // ValidateForServe enforces what production must have set before the server is
-// allowed to serve: a strong, non-placeholder JWT signing key (C4/R10) and an
-// explicit PostgreSQL DSN. Schema migration and initialization skip this — they
-// don't sign tokens. Call this right before starting the HTTP listener.
+// allowed to serve: everything ValidateForDB requires, plus a strong,
+// non-placeholder JWT signing key (C4/R10). Schema migration and initialization
+// only call ValidateForDB — they don't sign tokens. Call this right before
+// starting the HTTP listener.
 func (c *Config) ValidateForServe() error {
 	// Trusted proxies must parse as IPs/CIDRs. gin silently falls back to trusting
 	// ALL proxies when SetTrustedProxies is given a bad value, which would let a
@@ -160,18 +184,12 @@ func (c *Config) ValidateForServe() error {
 		return fmt.Errorf("trusted_proxies 配置非法(需为 IP 或 CIDR):%q", p)
 	}
 
+	// 存储那条守卫是共用的 —— serve / migrate / init 都要过(见 ValidateForDB)。
+	if err := c.ValidateForDB(); err != nil {
+		return err
+	}
 	if c.Env != "prod" {
 		return nil
-	}
-	// 生产必须显式给出 DSN。空串不是「没配」——libpq 把空 DSN 读成「连本机默认库,
-	// 用 OS 用户的名字当库名」,而且连得上。所以漏填 postgres_dsn 的后果不是启动失败,
-	// 是网关**静默连上一个不相干的库**,在上面建 36 张表、写审计、存加密后的口令,
-	// 一切看起来都正常 —— 直到有人去真正的生产库里找这些数据。
-	//
-	// 只在 prod 拦。dev 的 config.yaml 自带 DSN,而本机随手跑一下不该被这条挡住。
-	if strings.TrimSpace(c.Database.PostgresDSN) == "" {
-		return fmt.Errorf("生产环境必须配置 database.postgres_dsn(或 VELA_PG_DSN):" +
-			"留空不会报错,libpq 会连上本机默认库并在上面建表")
 	}
 	sec := strings.TrimSpace(c.JWT.Secret)
 	if weakJWTSecrets[sec] {

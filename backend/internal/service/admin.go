@@ -809,12 +809,16 @@ func (s *Services) Invite(req dto.InviteReq) (*model.User, error) {
 	if err := s.validateRoleIDs([]int64{req.RoleID}); err != nil {
 		return nil, err
 	}
-	name := req.Email
-	if at := strings.Index(req.Email, "@"); at > 0 {
-		name = req.Email[:at]
+	// 规范化到小写,跟 CreateUser 一致。baseline 的 idx_user_email 建在 lower(email)
+	// 上,而这里从前把 `Ops@Vela.io` 原样写进库 —— 这是全仓唯一一条不折叠的建号路径,
+	// 也就是日后 UpsertAdmin 撞上那个唯一索引的源头(见 email_case_test.go)。
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	name := email
+	if at := strings.Index(email, "@"); at > 0 {
+		name = email[:at]
 	}
 	u := &model.User{
-		Name: name, Email: req.Email, RoleID: req.RoleID, Status: "invited",
+		Name: name, Email: email, RoleID: req.RoleID, Status: "invited",
 		Initials: initials(name), Dept: "—", LastActive: "—",
 	}
 	if err := s.Repo.CreateUser(u); err != nil {
