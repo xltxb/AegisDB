@@ -526,7 +526,7 @@ type AsyncJob struct {
 	// dictionary may have changed by then, so the level that actually permitted
 	// the run is the one worth recording. It used to be hardcoded to "mid" at
 	// audit time, which made the field meaningless for filtering (ER7).
-	Risk string `gorm:"size:16" json:"risk"`        // high|mid|low
+	Risk string `gorm:"size:16" json:"risk"`  // high|mid|low
 	Log  string `gorm:"type:text" json:"log"` // streamed NOTICE / progress lines
 	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
 	Rows       int        `gorm:"column:row_count" json:"rows"`
@@ -767,7 +767,7 @@ type AuditLog struct {
 	Env        string `gorm:"size:32" json:"env"`
 	TierCode   string `gorm:"size:32" json:"tierCode"`
 	Database   string `gorm:"column:db_name" json:"database"`                    // target database the command ran against
-	Command    string `gorm:"type:text;not null" json:"command"`           // full query on purpose (EX5) — see migration 0018
+	Command    string `gorm:"type:text;not null" json:"command"`                 // full query on purpose (EX5) — see migration 0018
 	Risk       string `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"` // high|mid|low
 	Result     string `gorm:"size:16;not null" json:"result"`                    // executed|pending|rejected|warn
 	ApprovalNo string `gorm:"size:32" json:"approvalNo"`

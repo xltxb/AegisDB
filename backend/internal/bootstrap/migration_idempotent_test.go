@@ -28,23 +28,78 @@ import (
 	"velagateway/migrations"
 )
 
-// alterClauseRe 抓 ALTER 的 ADD/DROP 子句,并记下它后面有没有跟 IF (NOT) EXISTS。
+// alterClauseRe 抓 ALTER 的 ADD/DROP 子句:第 1 组是紧跟 ADD/DROP 的那个词,第 2 组是
+// 它后面可选的 IF (NOT) EXISTS。
 //
 // PostgreSQL 给了幂等的写法:ADD COLUMN IF NOT EXISTS / DROP COLUMN IF EXISTS /
-// CREATE INDEX IF NOT EXISTS —— 用它们就不会被这条正则抓到。不带 IF (NOT) EXISTS 的
+// CREATE INDEX IF NOT EXISTS —— 用它们就不会被算进来。不带 IF (NOT) EXISTS 的
 // ADD/DROP 重跑就会报 42701 / 42703,所以它们都算。
-var alterClauseRe = regexp.MustCompile(`(?i)\b(?:ADD|DROP)\s+(?:COLUMN|INDEX|KEY|CONSTRAINT|UNIQUE)\b(\s+IF\s+(?:NOT\s+)?EXISTS\b)?`)
+//
+// **COLUMN 是可省略的**,和隔壁 migration_reserved_words_test.go 的 addColumnRe 同理:
+// `ALTER TABLE t ADD a TEXT` / `ALTER TABLE t DROP a` 都是合法的 PG。从前这条正则要求
+// 字面量 COLUMN,于是省了它的写法一条都抓不到 —— 那恰恰是最容易随手写出来的形式,
+// 而这条闸会对着它绿着。所以这里把关键字整个做成可选的,代价是 ADD/DROP 后面跟什么
+// 都会先被抓下来,由 standaloneObjects 在下面滤掉。
+var alterClauseRe = regexp.MustCompile(`(?i)\b(?:ADD|DROP)\s+(\w+)(\s+IF\s+(?:NOT\s+)?EXISTS\b)?`)
+
+// standaloneObjects:跟在 DROP/ADD 后面的这些词开的是**独立语句**(DROP TABLE、
+// DROP VIEW、DROP TYPE …),不是 ALTER TABLE 的子句。放开 COLUMN 之后它们会被上面
+// 那条正则一并抓到,在这里滤掉 —— 否则一句无害的 `DROP TABLE IF EXISTS` 也会被记成
+// 一条非幂等 ALTER。
+//
+// INDEX / CONSTRAINT / KEY / UNIQUE **不在**这张表里:它们既可能是 ALTER 的子句,
+// 独立的 `DROP INDEX x` 重跑一样会报错,两种身份都该被这条闸管。
+var standaloneObjects = map[string]bool{
+	"TABLE": true, "VIEW": true, "MATERIALIZED": true, "SCHEMA": true, "DATABASE": true,
+	"TYPE": true, "SEQUENCE": true, "TRIGGER": true, "FUNCTION": true, "PROCEDURE": true,
+	"EXTENSION": true, "POLICY": true, "RULE": true, "OWNED": true,
+}
 
 // countNonIdempotentAlters 数出 body 里不带 IF (NOT) EXISTS 的 ADD/DROP 子句。
 // Go 的 regexp 没有负向先行断言,所以把后缀一起匹配下来,再按捕获组筛掉幂等的那些。
 func countNonIdempotentAlters(body string) int {
 	n := 0
 	for _, m := range alterClauseRe.FindAllStringSubmatch(body, -1) {
-		if m[1] == "" { // 没有 IF (NOT) EXISTS —— 重跑就会报错
+		word := strings.ToUpper(m[1])
+		if standaloneObjects[word] {
+			continue // DROP TABLE / DROP TYPE … —— 不是 ALTER 的子句
+		}
+		if word == "IF" {
+			continue // `ADD IF NOT EXISTS c …`:\w+ 把 IF 吃掉了,后缀组落空,但它是幂等写法
+		}
+		if m[2] == "" { // 没有 IF (NOT) EXISTS —— 重跑就会报错
 			n++
 		}
 	}
 	return n
+}
+
+// countNonIdempotentAlters 自己也要有测试。这条闸今天守着**零个**活的对象 ——
+// baseline 里一条 ALTER 都没有(整份是 CREATE TABLE / CREATE INDEX IF NOT EXISTS),
+// 所以「对着迁移目录跑一遍」永远是绿的,它证明不了这条闸还认得出缺陷。表驱动用例
+// 是它此刻唯一的牙齿。
+func TestCountNonIdempotentAlters(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		sql  string
+		want int
+	}{
+		{"ADD COLUMN 带关键字", "ALTER TABLE t ADD COLUMN x TEXT;", 1},
+		{"ADD 省略 COLUMN", "ALTER TABLE t ADD x TEXT;", 1},
+		{"DROP 省略 COLUMN", "ALTER TABLE t DROP x;", 1},
+		{"ADD COLUMN IF NOT EXISTS", "ALTER TABLE t ADD COLUMN IF NOT EXISTS x TEXT;", 0},
+		{"DROP COLUMN IF EXISTS", "ALTER TABLE t DROP COLUMN IF EXISTS x;", 0},
+		{"ADD CONSTRAINT 没有幂等写法", "ALTER TABLE t ADD CONSTRAINT c CHECK (n > 0);", 1},
+		{"三条省略 COLUMN 的 ADD", "ALTER TABLE t ADD a TEXT;\nALTER TABLE t ADD b TEXT;\nALTER TABLE t ADD c TEXT;", 3},
+		{"DROP TABLE 不是 ALTER 子句", "DROP TABLE IF EXISTS t;\nDROP TABLE u;", 0},
+		{"CREATE TABLE 不该被抓到", "CREATE TABLE IF NOT EXISTS t (id BIGSERIAL PRIMARY KEY);", 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := countNonIdempotentAlters(c.sql); got != c.want {
+				t.Errorf("countNonIdempotentAlters(%q) = %d, 期望 %d", c.sql, got, c.want)
+			}
+		})
+	}
 }
 
 func TestMigrations_AltersAreIdempotentOrAlone(t *testing.T) {

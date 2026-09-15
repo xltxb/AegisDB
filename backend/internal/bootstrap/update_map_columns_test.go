@@ -120,6 +120,17 @@ func tableModels(t *testing.T) []modelStruct {
 					tag = unq
 				}
 			}
+			// 嵌入字段的 Names 是**空的**(`gorm.Model` 这种),于是下面的循环一次都不转,
+			// 它带进来的每一个列都从这两条闸眼前消失 —— 而消失的方式是静默的。
+			// internal/model 今天零嵌入,所以这里从来没被触发过;真正的问题是「哪天有人
+			// 加了一个」,那时该响的是这一句,而不是一条永远绿着的守卫。
+			if len(f.Names) == 0 {
+				t.Fatalf("%s 里有一个嵌入字段(匿名字段)。这两条闸按 f.Names 遍历结构体字段,\n"+
+					"    而嵌入字段的 Names 是空的 —— 它带进来的列会被**静默跳过**,\n"+
+					"    保留字检查和 Updates 列名检查都管不到它们。\n"+
+					"    要么把字段展开写,要么先教会 tableModels 递归展开嵌入结构体。",
+					name)
+			}
 			for _, n := range f.Names {
 				m.fields = append(m.fields, struct{ name, tag string }{n.Name, tag})
 			}
