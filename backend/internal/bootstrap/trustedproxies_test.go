@@ -10,6 +10,8 @@ func TestValidateForServe_RejectsBadTrustedProxy(t *testing.T) {
 		c := &Config{}
 		c.Env = "prod"
 		c.JWT.Secret = "a-strong-prod-secret-0123456789-abcdefgh"
+		// prod 另外要求 postgres_dsn 非空,这里补上,好让这条用例只测代理列表。
+		c.Database.PostgresDSN = "host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable"
 		return c
 	}
 

@@ -60,6 +60,17 @@ func main() {
 		slog.Error("database init failed", "err", err)
 		os.Exit(1)
 	}
+	// 此前这一步藏在 OpenDB 的自动建表分支里,只有 dev 走到。现在 serve /
+	// migrate / init 三条路都经过同一个 Migrate —— 顺带修好了一个旧缺陷:dev 的
+	// serve 路径从来没跑过 backfillGliEnv / backfillEnvTiers / seedPipelineReference /
+	// backfillApprovalExecuted 这四个回填,它们此前只挂在 migrate 子命令上。
+	//
+	// 失败必须 os.Exit。一台没有表的网关照样能监听端口 —— 每个请求 500,而进程
+	// 看上去是活的:Seed 失败只打日志不退出,于是探活探到的是一个「跑着的坏进程」。
+	if err := bootstrap.Migrate(cfg, db); err != nil {
+		slog.Error("schema migration failed", "err", err)
+		os.Exit(1)
+	}
 
 	repo := repository.New(db)
 

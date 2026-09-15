@@ -27,31 +27,121 @@ import (
 	"testing"
 )
 
-// knownColumns 汇总每个模型声明过的列名(含 column: 标注与 GORM 默认命名)。
+// modelColumn 把一个模型字段折算成它真正的列名,第二个返回值 false 表示这个字段
+// 根本不入库(gorm:"-" 或非导出字段)。两条闸都按同一套规则读列名 —— 分成两份就
+// 意味着它们迟早对同一个字段给出两个答案。
+func modelColumn(fieldName, tag string) (string, bool) {
+	if fieldName == "" || !ast.IsExported(fieldName) {
+		return "", false
+	}
+	gtag := reflect.StructTag(tag).Get("gorm")
+	if strings.TrimSpace(gtag) == "-" {
+		return "", false
+	}
+	col := gormColumnName(fieldName)
+	if j := strings.Index(gtag, "column:"); j >= 0 {
+		rest := gtag[j+len("column:"):]
+		if k := strings.IndexAny(rest, ";"); k >= 0 {
+			rest = rest[:k]
+		}
+		col = rest
+	}
+	return col, true
+}
+
+// modelStruct 是 internal/model 里一个真正对应到表的结构体。
+type modelStruct struct {
+	name   string
+	fields []struct{ name, tag string }
+}
+
+// tableModels 列出 internal/model 里**每一个**落库的模型 —— 判据是它有 TableName()。
 //
-// 清单直接用 allModels —— 就是 AutoMigrate 拿去建表的那一份。另抄一份模型清单,
-// 漏掉的那个模型就正好是这条闸管不到的那个。
+// 从前这份清单是 db.go 里的 allModels,也就是 AutoMigrate 拿去建表的那一份。
+// AutoMigrate 整条路已经拆掉(schema 只由 migrations/*.sql 定义),那份清单随之消失,
+// 而这两条闸还需要知道「有哪些模型」。
+//
+// 这里不把那份清单抄进测试文件:一份手抄的清单会漂,而漏掉的那个模型就正好是这两条闸
+// 管不到的那个 —— 新加一张表的人不会想到还要回来登记一次。改成从源码里数:凡是声明了
+// TableName() 的结构体就是一张表,这个判据跟着代码自己长。
+func tableModels(t *testing.T) []modelStruct {
+	t.Helper()
+	fset := token.NewFileSet()
+	pkg, err := parser.ParseDir(fset, "../model", func(fi fs.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatalf("parse ../model: %v", err)
+	}
+
+	structs := map[string]*ast.StructType{}
+	hasTableName := map[string]bool{}
+	for _, p := range pkg {
+		for _, f := range p.Files {
+			for _, d := range f.Decls {
+				switch d := d.(type) {
+				case *ast.GenDecl:
+					for _, spec := range d.Specs {
+						ts, ok := spec.(*ast.TypeSpec)
+						if !ok {
+							continue
+						}
+						if st, ok := ts.Type.(*ast.StructType); ok {
+							structs[ts.Name.Name] = st
+						}
+					}
+				case *ast.FuncDecl:
+					if d.Name.Name != "TableName" || d.Recv == nil || len(d.Recv.List) != 1 {
+						continue
+					}
+					rt := d.Recv.List[0].Type
+					if star, ok := rt.(*ast.StarExpr); ok {
+						rt = star.X
+					}
+					if id, ok := rt.(*ast.Ident); ok {
+						hasTableName[id.Name] = true
+					}
+				}
+			}
+		}
+	}
+
+	out := []modelStruct{}
+	for name := range hasTableName {
+		st, ok := structs[name]
+		if !ok {
+			t.Fatalf("%s 有 TableName() 却找不到它的结构体声明 —— 这份解析漏了东西", name)
+		}
+		m := modelStruct{name: name}
+		for _, f := range st.Fields.List {
+			tag := ""
+			if f.Tag != nil {
+				if unq, err := strconv.Unquote(f.Tag.Value); err == nil {
+					tag = unq
+				}
+			}
+			for _, n := range f.Names {
+				m.fields = append(m.fields, struct{ name, tag string }{n.Name, tag})
+			}
+		}
+		out = append(out, m)
+	}
+	// 空清单会让下面两条闸**静默地**变成永远通过 —— 而那正是它们要防的那种失效。
+	if len(out) == 0 {
+		t.Fatal("在 ../model 里没数出任何模型,这两条闸等于没跑")
+	}
+	return out
+}
+
+// knownColumns 汇总每个模型声明过的列名(含 column: 标注与 GORM 默认命名)。
 func knownColumns(t *testing.T) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
-	for _, m := range allModels {
-		rt := reflect.TypeOf(m).Elem()
-		for i := 0; i < rt.NumField(); i++ {
-			f := rt.Field(i)
-			if f.PkgPath != "" {
+	for _, m := range tableModels(t) {
+		for _, f := range m.fields {
+			col, ok := modelColumn(f.name, f.tag)
+			if !ok {
 				continue
-			}
-			tag := f.Tag.Get("gorm")
-			if strings.TrimSpace(tag) == "-" {
-				continue
-			}
-			col := gormColumnName(f.Name)
-			if j := strings.Index(tag, "column:"); j >= 0 {
-				rest := tag[j+len("column:"):]
-				if k := strings.IndexAny(rest, ";"); k >= 0 {
-					rest = rest[:k]
-				}
-				col = rest
 			}
 			out[col] = true
 		}
@@ -144,24 +234,11 @@ func gormColumnName(field string) string {
 //	· GORM 生成的语句自己会加引号,所以 ORM 那条路一直没事 —— 出事的永远是那几句
 //	  手写的 Where / Order,以及 map 形式的 Updates(见上一条用例)。
 func TestModels_NoReservedColumnNames(t *testing.T) {
-	for _, m := range allModels {
-		rt := reflect.TypeOf(m).Elem()
-		for i := 0; i < rt.NumField(); i++ {
-			f := rt.Field(i)
-			if f.PkgPath != "" {
+	for _, m := range tableModels(t) {
+		for _, f := range m.fields {
+			col, ok := modelColumn(f.name, f.tag)
+			if !ok {
 				continue
-			}
-			tag := f.Tag.Get("gorm")
-			if strings.TrimSpace(tag) == "-" {
-				continue
-			}
-			col := gormColumnName(f.Name)
-			if j := strings.Index(tag, "column:"); j >= 0 {
-				rest := tag[j+len("column:"):]
-				if k := strings.IndexAny(rest, ";"); k >= 0 {
-					rest = rest[:k]
-				}
-				col = rest
 			}
 			// 复用隔壁那张**完整的** PostgreSQL 保留字表(migration_reserved_words_test.go),
 			// 不另抄一份缩水版 —— 抄一份就意味着两张表会分叉,而分叉的那一半正好漏掉
@@ -171,7 +248,7 @@ func TestModels_NoReservedColumnNames(t *testing.T) {
 					"    加双引号能让它跑起来,但此后每一处手写 SQL 都得记得加,忘一次就是一句\n"+
 					"    syntax error,而且引号还会让这个名字变成大小写敏感的。ADR 0016 §二:换个名字。\n"+
 					"    改法:给字段加 gorm:\"column:<新名字>\",并配一条 RENAME COLUMN 的迁移。",
-					rt.Name(), f.Name, col)
+					m.name, f.name, col)
 			}
 		}
 	}

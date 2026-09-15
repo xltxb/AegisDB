@@ -57,7 +57,11 @@ jwt:
 func TestConfig_ProdServeAcceptsStrongSecret(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
 	t.Setenv("VELA_ENV", "")
+	// prod 还要求 postgres_dsn 非空(见 TestValidateForServe_RejectsEmptyProdDSN),
+	// 这里一并给上,好让这条用例只测密钥强度那一半。
 	body := `env: "prod"
+database:
+  postgres_dsn: "host=127.0.0.1 port=5432 dbname=vela_gateway sslmode=disable"
 jwt:
   secret: "a-strong-production-secret-0123456789abcd"
 `

@@ -13,6 +13,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"gorm.io/gorm"
+
 	"velagateway/internal/gateway"
 	"velagateway/internal/handler"
 	"velagateway/internal/model"
@@ -22,6 +24,31 @@ import (
 	"velagateway/pkg/crypto"
 	"velagateway/pkg/jwt"
 )
+
+// newMigratedDB 是 testsupport.NewDB 再加一次 Migrate —— 也就是**真实启动做的事**。
+//
+// testsupport.NewDB 直接 Exec baseline SQL,绕过了 Migrate。它必须这么做:bootstrap
+// 的测试是内部测试,testsupport 再 import bootstrap 就是循环导入。代价是 Migrate 里
+// 那五个回填(backfillGliEnv / backfillEnvTiers / seedPipelineReference /
+// backfillApprovalExecuted / backfillStrictNoWhere)在测试里一个都不跑,于是测试看到的
+// 是一个「表齐了但参考数据全空」的库 —— 而空的参考数据在这套系统里到处读作「放行」,
+// 那正是这些回填存在的理由。
+//
+// 所以补这一刀的位置只能在 bootstrap 包里。baseline 整体幂等(36 条 CREATE TABLE
+// IF NOT EXISTS + 48 条 CREATE INDEX IF NOT EXISTS),重跑只出 NOTICE;而这一跑也
+// 顺带让整套 harness 测试每次都压一遍 RunSQLMigrations 和它的 advisory lock。
+func newMigratedDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := testsupport.NewDB(t)
+	cfg := &Config{}
+	// StrictMode=false 与 newTestApp 保持一致:这是 backfillStrictNoWhere 唯一会
+	// 写库的那个取值,让夹具走的是有副作用的那条分支,而不是空转的那条。
+	cfg.Gateway.StrictMode = false
+	if err := Migrate(cfg, db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	return db
+}
 
 // testApp is a running gateway instance bound to an httptest server.
 type testApp struct {
@@ -48,7 +75,7 @@ func newTestApp(t *testing.T) *testApp {
 	// X-Forwarded-For (the real client IP) is honored by the IP allowlist.
 	cfg.Server.TrustedProxies = []string{"127.0.0.1", "::1"}
 
-	db := testsupport.NewDB(t)
+	db := newMigratedDB(t)
 	repo := repository.New(db)
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)

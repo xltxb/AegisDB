@@ -281,6 +281,26 @@ var wrongBuiltinLayers = map[string][]string{
 // Only a label this code wrote itself is replaced (see wrongBuiltinNames). An
 // operator who has renamed a tier keeps their name — overwriting a deliberate
 // edit to fix our own mistake would be its own kind of wrong.
+// databaseIsUnseeded 报告这个库还没被播过种 —— 一张角色表都还是空的。
+//
+// Migrate 里挂着的那几个回填,性质上都是**升级修补**:它们要修的是一个已经在跑、
+// 已经有数据的库。而 serve / init / migrate 三条路现在都是先 Migrate 再播种,所以
+// 它们每一次都会先在一个**空库**上被调用一遍。
+//
+// 空库上「什么都没做」不是问题,问题是那几个回填都会顺手盖一个「做过了」的戳。戳在
+// 空库上盖下去,记的是一件根本没发生过的事,而后面真正该做的那一次会被这个戳挡掉 ——
+// 或者反过来,把本该由 builtinTiers 定下的出厂默认当成「历史遗留状态」给改写了。
+//
+// 用角色表判断,因为三条播种路径(seedFreshData / seedReference)都以它为总闸:
+// `repo.Count(&model.Role{}) == 0` 就是它们各自判断「这库是不是新的」的那句话。
+func databaseIsUnseeded(db *gorm.DB) (bool, error) {
+	var roles int64
+	if err := db.Model(&model.Role{}).Count(&roles).Error; err != nil {
+		return false, err
+	}
+	return roles == 0, nil
+}
+
 // builtinTierCorrectionKey 记着「补内置分层」这件事已经做过了。
 //
 // correctBuiltinTiers 做两件事,而它们的性质完全不同:
@@ -375,6 +395,26 @@ func correctBuiltinTiers(db *gorm.DB) error {
 	if !corrected {
 		if err := mirrorTierRules(db, model.EnvStaging, model.EnvUat); err != nil {
 			return err
+		}
+		// 参考数据还没落地的库,**不记**这一笔。
+		//
+		// 这个标记的意思是「五分层修正做过了」,而在一个连角色都还没有的库上,上面那次
+		// mirrorTierRules 是从一张空的 staging 规则表往外抄 —— 一行都没抄到。这时候盖
+		// 上戳,记的就是一件根本没发生过的事,而它会把**后面真正的**那次抄写永久挡掉
+		// (backfillGliEnv 与这里都先问 builtinTierCorrectionDone)。
+		//
+		// 结果是 gli 与 uat 各拿到 10 条能力行(种子直接写的那些)而不是 40 条,风险
+		// 字典一条都没有 —— 而这套系统里两处规则查询都把「没有行」读作放行。一台
+		// 崭新的网关会带着两个**不受管控的分层**上线,健康检查全绿。
+		//
+		// 这条路是真的被走到的:`server init` 与 serve 都是先 Migrate(此时库是空的)
+		// 再播种。空库上跳过这一戳,等播种之后的那次调用再来盖 —— 那一次才有东西可抄。
+		fresh, err := databaseIsUnseeded(db)
+		if err != nil {
+			return err
+		}
+		if fresh {
+			return nil
 		}
 		// 记下这件事做过了。放在最后:中途失败就当没做过,下次重来 —— 补分层与克隆
 		// 规则都只补缺失的行,重来是安全的。

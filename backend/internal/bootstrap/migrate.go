@@ -11,7 +11,6 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
 	"velagateway/migrations"
 	"velagateway/pkg/sqlutil"
 )
@@ -54,8 +53,9 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 		return err
 	}
 	// 历史审批单的执行时刻:不回填的话,旧行为下已经跑过的命令会重新变成"可执行"。
-	// 两条 schema 路径都要挂 —— 生产走 SQL 迁移,dev/测试走 AutoMigrate,漏掉任何
-	// 一条,那条路上的库就带着一批可以被再跑一次的历史单。
+	// 从前 schema 有两条路(生产走 SQL 迁移,dev/测试走 GORM 自动建表),这个回填两条
+	// 都得挂,漏掉任何一条,那条路上的库就带着一批可以被再跑一次的历史单。现在只剩
+	// 这一条路,而 serve / migrate / init 三个入口全都经过它。
 	if err := backfillApprovalExecuted(db); err != nil {
 		return err
 	}
@@ -63,137 +63,70 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	return backfillStrictNoWhere(db, cfg.Gateway.StrictMode)
 }
 
-// autoMigrate creates/updates every table from the GORM models (dev/sqlite).
-func autoMigrate(db *gorm.DB) error {
-	if err := renameRuleTierColumns(db); err != nil {
-		return err
-	}
-	if err := db.AutoMigrate(allModels...); err != nil {
-		return fmt.Errorf("auto-migrate: %w", err)
-	}
-	// The AutoMigrate path is dev/tests' only schema step (OpenDB calls it
-	// directly), so the reference backfills have to hang off it too — see
-	// seedPipelineReference.
-	if err := seedPipelineReference(db); err != nil {
-		return err
-	}
-	if err := backfillApprovalExecuted(db); err != nil {
-		return err
-	}
-	slog.Info("schema migrated (auto-migrate)")
-	return nil
-}
-
-// renameRuleTierColumns renames `env` to `tier_code` on the two rule tables,
-// BEFORE AutoMigrate looks at them.
-//
-// The order is the whole point. AutoMigrate does not rename anything: shown a
-// model whose field no longer matches the column, it ADDS `tier_code` and leaves
-// `env` in place, still holding the data and still part of the primary key. Every
-// rule lookup would then read an empty column and find nothing — and both lookups
-// spell "no rows" as permission granted. The database would come up looking
-// healthy with every instance ungoverned.
-//
-// MySQL takes the equivalent step through migration 0016. This path is dev and
-// test (sqlite), where the schema comes from the models.
-func renameRuleTierColumns(db *gorm.DB) error {
-	m := db.Migrator()
-	for _, tbl := range []struct {
-		model any
-		name  string
-	}{
-		{&model.RoleCapability{}, "tbl_role_capability"},
-		{&model.RiskCommand{}, "tbl_risk_command"},
-	} {
-		if !m.HasTable(tbl.model) {
-			continue // fresh database: AutoMigrate creates it with the right name
-		}
-		// Read the real column list rather than asking about a field the model no
-		// longer has. Migrator.HasColumn resolves names through the model schema
-		// first, which makes it an unreliable way to ask "is the OLD column still
-		// there" — precisely the question here.
-		cols, err := m.ColumnTypes(tbl.model)
-		if err != nil {
-			return fmt.Errorf("read columns of %s: %w", tbl.name, err)
-		}
-		var hasEnv, hasTier bool
-		for _, c := range cols {
-			switch c.Name() {
-			case "env":
-				hasEnv = true
-			case "tier_code":
-				hasTier = true
-			}
-		}
-		if !hasEnv {
-			continue // already renamed, or created new
-		}
-		if hasTier {
-			// Half-migrated: a build that added tier_code without moving the data.
-			// tier_code is empty, env still holds the tier codes, and `env` is part
-			// of the primary key so it cannot simply be dropped. Refuse rather than
-			// start — every rule lookup would read the empty column and find
-			// nothing, and nothing is how this system spells "allowed".
-			return fmt.Errorf(
-				"%s has both `env` and `tier_code`: the schema is half-migrated and rule lookups would read an empty column "+
-					"(which reads as PERMITTED). Restore this database from backup and start again with this build", tbl.name)
-		}
-		if err := db.Exec("ALTER TABLE " + tbl.name + " RENAME COLUMN env TO tier_code").Error; err != nil {
-			return fmt.Errorf("rename %s.env → tier_code: %w", tbl.name, err)
-		}
-		slog.Info("renamed rule column env → tier_code", "table", tbl.name)
-	}
-	return nil
-}
-
 // RunSQLMigrations applies every pending *.sql file from srcFS in lexical order,
 // recording each applied version in schema_migrations. Each version is applied
-// at most once (the ledger) and never concurrently (a MySQL advisory lock), so
-// non-idempotent statements (ALTER/INSERT in future migrations) are safe. Do NOT
-// rely on `docker-entrypoint-initdb.d` to run these files too — that would apply
-// them without a ledger entry and replay them on the next `migrate`.
+// at most once (the ledger) and never concurrently (a PostgreSQL advisory lock),
+// so non-idempotent statements (ALTER/INSERT in future migrations) are safe. Do
+// NOT rely on `docker-entrypoint-initdb.d` to run these files too — that would
+// apply them without a ledger entry and replay them on the next `migrate`.
 func RunSQLMigrations(db *gorm.DB, srcFS fs.FS) error {
 	// Serialize concurrent migrators (e.g. multi-replica deploy hooks) with a
-	// MySQL advisory lock so two processes can't apply the same version and
-	// collide on the schema_migrations primary key (R14). SQLite is single-file
-	// and needs no such lock.
-	if db.Dialector.Name() == "mysql" {
-		// GET_LOCK / RELEASE_LOCK are SESSION-scoped, so they must run on the SAME
-		// physical connection, and the lock must stay held for the whole migration.
-		// SetMaxOpenConns(1) doesn't guarantee connection IDENTITY — if the pooled
-		// connection is dropped and recreated mid-migration the session lock is lost
-		// silently. Instead pin ONE dedicated *sql.Conn and hold it end-to-end (B4).
-		// The DDL itself may run on other pool connections; the lock only needs to
-		// stay held to exclude other processes.
-		sqlDB, err := db.DB()
-		if err != nil {
-			return fmt.Errorf("get sql.DB: %w", err)
-		}
-		ctx := context.Background()
-		conn, err := sqlDB.Conn(ctx)
-		if err != nil {
-			return fmt.Errorf("pin migration connection: %w", err)
-		}
-		defer conn.Close() // returns the pinned connection to the pool
+	// PostgreSQL advisory lock so two processes can't apply the same version and
+	// collide on the schema_migrations primary key (R14). There is only one
+	// dialect now, so the lock is unconditional — no branch to fall past.
+	//
+	// pg_advisory_lock / pg_advisory_unlock are SESSION-scoped, so they must run
+	// on the SAME physical connection, and the lock must stay held for the whole
+	// migration. SetMaxOpenConns(1) doesn't guarantee connection IDENTITY — if the
+	// pooled connection is dropped and recreated mid-migration the session lock is
+	// lost silently. Instead pin ONE dedicated *sql.Conn and hold it end-to-end
+	// (B4). The DDL itself may run on other pool connections; the lock only needs
+	// to stay held to exclude other processes.
+	//
+	// The lock is keyed by hashtext() of a fixed name rather than a literal
+	// number: PG advisory locks live in ONE global 64-bit namespace shared by the
+	// whole cluster, so a hand-picked integer is a collision waiting for whoever
+	// picks the same one next.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("get sql.DB: %w", err)
+	}
+	ctx := context.Background()
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("pin migration connection: %w", err)
+	}
+	defer conn.Close() // returns the pinned connection to the pool
 
-		var got int
-		if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK('vela_schema_migrate', 60)").Scan(&got); err != nil {
+	// 用 try 版本而不是 pg_advisory_lock:后者无限阻塞,会把「另一个迁移正在跑」
+	// 变成一次没有任何输出的挂起。try 立即返回 boolean,外面包一个有上限的重试,
+	// 保住 MySQL 版 GET_LOCK(..., 60) 的等待语义。
+	const lockSQL = `SELECT pg_try_advisory_lock(hashtext('vela_schema_migrate')::bigint)`
+	deadline := time.Now().Add(60 * time.Second)
+	var got bool
+	for {
+		if err := conn.QueryRowContext(ctx, lockSQL).Scan(&got); err != nil {
 			return fmt.Errorf("acquire migration lock: %w", err)
 		}
-		if got != 1 {
+		if got {
+			break
+		}
+		if time.Now().After(deadline) {
 			return fmt.Errorf("could not acquire migration lock (another migration is running)")
 		}
-		// Released on the SAME connection (LIFO: runs before conn.Close). A result
-		// other than 1 means the lock wasn't held at release — surface it.
-		defer func() {
-			var released int
-			if err := conn.QueryRowContext(ctx, "SELECT RELEASE_LOCK('vela_schema_migrate')").Scan(&released); err != nil {
-				slog.Warn("release migration lock failed", "err", err)
-			} else if released != 1 {
-				slog.Warn("migration lock not held at release (connection may have dropped)", "result", released)
-			}
-		}()
+		time.Sleep(500 * time.Millisecond)
 	}
+	// Released on the SAME connection (LIFO: runs before conn.Close). A false
+	// result means the lock wasn't held at release — surface it.
+	defer func() {
+		var released bool
+		if err := conn.QueryRowContext(ctx,
+			`SELECT pg_advisory_unlock(hashtext('vela_schema_migrate')::bigint)`).Scan(&released); err != nil {
+			slog.Warn("release migration lock failed", "err", err)
+		} else if !released {
+			slog.Warn("migration lock not held at release (connection may have dropped)")
+		}
+	}()
 
 	if err := db.AutoMigrate(&schemaMigration{}); err != nil {
 		return fmt.Errorf("create schema_migrations: %w", err)

@@ -292,16 +292,17 @@ type Connection struct {
 	Port         int    `gorm:"not null" json:"port"`
 	// Env holds an Environment.Code, so it must be as wide as one (32). It was
 	// sized 16 back when the only legal values were the four built-in strings.
-	Env         string    `gorm:"size:32;index:idx_connection_env;not null" json:"env"`
-	Policy      string    `gorm:"size:32;not null" json:"policy"` // strict|approve-1|audit-only
-	DefaultRole string    `gorm:"size:64" json:"defaultRole"`
-	Layer       string    `gorm:"size:64" json:"layer"`
-	Username    string    `gorm:"size:64" json:"username"`                       // real-execution credentials
-	Password    string    `gorm:"size:255" json:"-"`                             // never serialized
-	Database    string    `gorm:"column:db_name;size:128" json:"database"`       // default schema / sqlite file
-	Tags        string    `gorm:"size:255" json:"tags"`                          // comma-separated labels for group access
-	Status      string    `gorm:"size:16;not null;default:online" json:"status"` // ConnOnline | ConnMaint
-	CreatedAt   time.Time `json:"createdAt"`
+	Env         string `gorm:"size:32;index:idx_connection_env;not null" json:"env"`
+	Policy      string `gorm:"size:32;not null" json:"policy"` // strict|approve-1|audit-only
+	DefaultRole string `gorm:"size:64" json:"defaultRole"`
+	Layer       string `gorm:"size:64" json:"layer"`
+	Username    string `gorm:"size:64" json:"username"` // real-execution credentials
+	Password    string `gorm:"size:255" json:"-"`       // never serialized
+	// 没有 size —— 见 0001_init.sql:这一列对 sqlite 目标库装的是文件绝对路径,TEXT。
+	Database  string    `gorm:"column:db_name" json:"database"`                // default schema / sqlite file
+	Tags      string    `gorm:"size:255" json:"tags"`                          // comma-separated labels for group access
+	Status    string    `gorm:"size:16;not null;default:online" json:"status"` // ConnOnline | ConnMaint
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (Connection) TableName() string { return "tbl_connection" }
@@ -338,7 +339,7 @@ func (Project) TableName() string { return "tbl_project" }
 type DatabaseProject struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ConnectionID int64     `gorm:"uniqueIndex:uk_db_project,priority:1;not null" json:"connectionId"`
-	Database     string    `gorm:"column:db_name;uniqueIndex:uk_db_project,priority:2;size:128;not null" json:"database"`
+	Database     string    `gorm:"column:db_name;uniqueIndex:uk_db_project,priority:2;not null" json:"database"`
 	ProjectID    int64     `gorm:"not null;index:idx_db_project_project" json:"projectId"`
 	CreatedBy    int64     `gorm:"not null;default:0" json:"createdBy"`
 	CreatedAt    time.Time `json:"createdAt"`
@@ -370,7 +371,7 @@ type ExecWindow struct {
 
 	// 作用范围:库级。两者都必须有值 —— 空库名会让一个窗口悄悄覆盖整台实例。
 	ConnectionID int64  `gorm:"index:idx_window_scope,priority:1;not null" json:"connectionId"`
-	Database     string `gorm:"column:db_name;index:idx_window_scope,priority:2;size:128;not null" json:"database"`
+	Database     string `gorm:"column:db_name;index:idx_window_scope,priority:2;not null" json:"database"`
 
 	Kind     string `gorm:"size:16;not null" json:"kind"` // once | recurring
 	Timezone string `gorm:"size:64;not null" json:"timezone"`
@@ -466,7 +467,7 @@ type ExportJob struct {
 	UserID       int64  `gorm:"index:idx_export_user;not null" json:"userId"`
 	ConnectionID int64  `json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
-	Database     string `gorm:"column:db_name;size:128" json:"database"` // target database the export ran against
+	Database     string `gorm:"column:db_name" json:"database"` // target database the export ran against
 	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
 	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // 64KB TEXT rejected long IN-list exports (migration 0018)
 	Name   string `gorm:"size:128" json:"name"`
@@ -500,7 +501,7 @@ type AsyncJob struct {
 	UserID       int64  `gorm:"index:idx_async_user;not null" json:"userId"`
 	ConnectionID int64  `json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
-	Database     string `gorm:"column:db_name;size:128" json:"database"`
+	Database     string `gorm:"column:db_name" json:"database"`
 	// 列名是 sql_text:`sql` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
 	SQL    string `gorm:"column:sql_text;type:mediumtext" json:"sql"` // see migration 0018
 	Reason string `gorm:"size:512" json:"reason"`
@@ -656,7 +657,7 @@ type Approval struct {
 	ScriptUploadID int64  `gorm:"not null;default:0" json:"scriptUploadId,omitempty"`
 	ScriptSHA256   string `gorm:"size:64" json:"scriptSha256,omitempty"`
 	Keyword        string `gorm:"size:32" json:"keyword"`
-	Database       string `gorm:"column:db_name;size:128" json:"database"` // selected target database
+	Database       string `gorm:"column:db_name" json:"database"` // selected target database
 	InitiatorID    int64  `gorm:"index:idx_approval_initiator;not null" json:"initiatorId"`
 	Initiator      string `gorm:"size:64" json:"initiator"`
 	Reason         string `gorm:"size:512" json:"reason"`
@@ -750,7 +751,7 @@ type AuditLog struct {
 	// Empty on rows predating the split.
 	Env        string `gorm:"size:32" json:"env"`
 	TierCode   string `gorm:"size:32" json:"tierCode"`
-	Database   string `gorm:"column:db_name;size:128" json:"database"`           // target database the command ran against
+	Database   string `gorm:"column:db_name" json:"database"`                    // target database the command ran against
 	Command    string `gorm:"type:mediumtext;not null" json:"command"`           // full query on purpose (EX5) — see migration 0018
 	Risk       string `gorm:"size:16;index:idx_audit_risk;not null" json:"risk"` // high|mid|low
 	Result     string `gorm:"size:16;not null" json:"result"`                    // executed|pending|rejected|warn
@@ -812,7 +813,7 @@ type SchemaObject struct {
 	ID           int64 `gorm:"primaryKey;autoIncrement" json:"id"`
 	ConnectionID int64 `gorm:"index:idx_schema_conn;not null" json:"connectionId"`
 	// db_name 与项目里另外十处 Database 字段一致 —— 这张表是漏网的那一张(迁移 0040)。
-	Database string `gorm:"column:db_name;size:64;not null" json:"database"`
+	Database string `gorm:"column:db_name;not null" json:"database"`
 	Tbl      string `gorm:"column:table_name;size:64;not null" json:"table"`
 }
 
@@ -836,7 +837,7 @@ func (SchemaObject) TableName() string { return "tbl_schema_object" }
 type MetaTable struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ConnectionID int64     `gorm:"index:idx_meta_table_scope,priority:1;not null" json:"connectionId"`
-	DBName       string    `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;size:128;not null" json:"database"`
+	DBName       string    `gorm:"column:db_name;index:idx_meta_table_scope,priority:2;not null" json:"database"`
 	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
 	Name         string    `gorm:"column:table_name;index:idx_meta_table_name;size:128;not null" json:"name"`
 	Kind         string    `gorm:"size:16;not null" json:"kind"` // table | view
@@ -854,7 +855,7 @@ func (MetaTable) TableName() string { return "tbl_meta_table" }
 type MetaColumn struct {
 	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	ConnectionID int64     `gorm:"index:idx_meta_col_scope,priority:1;not null" json:"connectionId"`
-	DBName       string    `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;size:128;not null" json:"database"`
+	DBName       string    `gorm:"column:db_name;index:idx_meta_col_scope,priority:2;not null" json:"database"`
 	SchemaName   string    `gorm:"column:schema_name;size:128;not null" json:"schema"`
 	TableName_   string    `gorm:"column:table_name;index:idx_meta_col_scope,priority:3;size:128;not null" json:"table"`
 	Ordinal      int       `gorm:"not null" json:"ordinal"`
@@ -1134,7 +1135,7 @@ type Release struct {
 	PipelineName string `gorm:"size:128" json:"pipelineName"` // snapshot
 	ConnectionID int64  `gorm:"not null" json:"connectionId"`
 	Instance     string `gorm:"size:96" json:"instance"`
-	Database     string `gorm:"column:db_name;size:128" json:"database"`
+	Database     string `gorm:"column:db_name" json:"database"`
 	Env          string `gorm:"size:32" json:"env"`
 	TierCode     string `gorm:"size:32" json:"tierCode"`
 	Engine       string `gorm:"size:32" json:"engine"` // snapshot: which dialect it was reviewed as
