@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import {
-  Check, ChevronLeft, ChevronRight, Clock, Inbox, Info, ShieldAlert, TimerOff, Undo2, UserX, X,
+  Check, ChevronLeft, ChevronRight, Clock, Inbox, Info, Search, ShieldAlert, TimerOff,
+  Undo2, UserX, X,
 } from 'lucide-react'
-import { useApprovals, useDecideApproval } from '@/hooks/useApprovals'
+import { invalidateApprovals, useApprovals, useDecideApproval } from '@/hooks/useApprovals'
 import { approvalsApi, type ApprovalStatus } from '@/api/modules/approvals'
 import { meQueryOptions } from '@/api/modules/auth'
 import { useUIStore } from '@/stores/ui'
@@ -14,7 +15,7 @@ import { Button } from '@/components/common/Button'
 import { Segmented } from '@/components/common/Segmented'
 import { Empty, ErrorState, Loading } from '@/components/common/States'
 import {
-  batchableOf, highPendingCount, initialOf, keywordAt, stepDone, waitingOn,
+  batchableOf, formatWhen, highPendingCount, initialOf, keywordAt, stepDone, waitingOn,
 } from '@/lib/inbox'
 import type { Approval } from '@/types'
 import { confirmAction } from '@/lib/confirm'
@@ -41,23 +42,50 @@ const STEP_KEY: Record<string, string> = {
 const RISK_TONE: Record<string, BadgeTone> = { high: 'danger', mid: 'warning', low: 'success' }
 const RISK_KEY: Record<string, string> = { high: 'scanHigh', mid: 'scanMid', low: 'scanSafe' }
 
-const at = (s: string) => (s ? s.slice(5, 16).replace('T', ' ') : '—')
+/**
+ * 分段筛选的取值 —— 就是后端认的那几个 status,不再另立一套 tab 名。
+ *
+ * 原来只有「待审 / 全部」两格,于是"我上周驳回了什么"在界面上无从查起,尽管
+ * 接口一直支持。中间那三格的 label 直接复用工单状态那套词(apApproved /
+ * apRejected / apExpired),因为它们本来就是同一个东西。
+ */
+const TABS: { value: ApprovalStatus; key: string }[] = [
+  { value: 'pending', key: 'ibPending' },
+  { value: 'approved', key: 'apApproved' },
+  { value: 'rejected', key: 'apRejected' },
+  { value: 'expired', key: 'apExpired' },
+  { value: '', key: 'ibAll' },
+]
 
 export default function InboxPage() {
   const { t } = useTranslation()
   const notify = useUIStore((s) => s.notify)
   const { data: me } = useQuery(meQueryOptions())
-  const [tab, setTab] = useState<'pending' | 'all'>('pending')
+  const qc = useQueryClient()
+  const [status, setStatus] = useState<ApprovalStatus>('pending')
   const [page, setPage] = useState(1)
   const [selId, setSelId] = useState(0)
-  const [busy, setBusy] = useState(false)
+  // 批量的进度。null = 没在批量;{done, total} 会显示成「批量中 3/12」——
+  // 串行发 N 张就是 N 个来回,一个不动的「批量中」说不出还要等多久。
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
+  // 批量里没能通过的那几张。**留在页面上**,不进 toast:toast 会自己消失,而
+  // 「哪几张没过、为什么」正是人接下来要处理的事。
+  const [failures, setFailures] = useState<{ apNo: string; message: string }[]>([])
 
-  const status: ApprovalStatus = tab === 'pending' ? 'pending' : ''
+  // 搜索框:输入即时回显(qInput),真正发请求的是防抖之后的 q。
+  const [qInput, setQInput] = useState('')
+  const [q, setQ] = useState('')
+  useEffect(() => {
+    const id = setTimeout(() => { setQ(qInput.trim()); setPage(1); setSelId(0) }, 300)
+    return () => clearTimeout(id)
+  }, [qInput])
+
   // scope 固定 mine —— 收件箱是「轮到我签字的」,后端的 mine 正是"我在审批链上"
   // (repository.approvalScope)。用 all 会把我自己发起的、我能执行的一起拖进来,
   // 那是「我的申请」页的范围。
-  const { data, isLoading, error, refetch } = useApprovals('mine', page, status)
+  const { data, isLoading, error, refetch } = useApprovals('mine', page, status, q)
   const decide = useDecideApproval()
+  const busy = !!batch
 
   /**
    * 「全部」那一格的计数。
@@ -80,15 +108,33 @@ export default function InboxPage() {
   const highN = highPendingCount(rows)
   const batchable = batchableOf(rows)
 
+  /**
+   * 分段上那一格的文字。
+   *
+   * 只有「待审」和「全部」带数字 —— 另外三格没有对应的服务端计数,要显示就得
+   * 为每一格各发一次 pageSize=1 的请求,而那三个数字没人靠它做决定。
+   *
+   * 搜索开着时一个数字都不挂:「待审 · N」读的是 CountPendingApprovals,它按
+   * scope 数,**不认 q**(顶栏那颗徽章读的也是它)。把它压在一个只有两条命中的
+   * 搜索结果上面,就成了「待审 · 12」顶着两行。数字和列表答的不是同一个问题时,
+   * 宁可不显示。
+   */
+  function tabLabel(x: { value: ApprovalStatus; key: string }): string {
+    const counted = x.value === 'pending' || x.value === ''
+    if (q || !counted) return t(x.key)
+    return `${t(x.key)} · ${x.value === 'pending' ? pendingN : allCount.data ?? total}`
+  }
+
   async function batchApprove() {
     if (!batchable.length) {
       notify(t('ibBatchNone'), 'info')
       return
     }
     if (!confirmAction(t('ibBatchConfirm', { n: batchable.length }))) return
-    setBusy(true)
+    setFailures([])
+    setBatch({ done: 0, total: batchable.length })
     let done = 0
-    const failed: string[] = []
+    const failed: { apNo: string; message: string }[] = []
     // 一张一张发,不并发:每张都是一次独立的判定与审计写入,而后端在这一步还会
     // 再判一次可决定性。串行让失败停在那一张上,也让失败清单说得出是哪几张。
     for (const a of batchable) {
@@ -96,17 +142,24 @@ export default function InboxPage() {
         await approvalsApi.approve(a.id)
         done += 1
       } catch (e) {
-        failed.push(`${a.apNo}: ${(e as Error).message}`)
+        failed.push({ apNo: a.apNo, message: (e as Error).message })
       }
+      setBatch({ done: done + failed.length, total: batchable.length })
     }
-    setBusy(false)
+    setBatch(null)
+    // 失败的那几张留在页面上逐条列出来。上一版把它们收进数组之后只用了
+    // `failed.length` —— toast 说「已通过 3 张,2 张失败」,而哪 2 张、为什么,
+    // 算出来了又扔掉了。人接下来要做的事全在这份清单里。
+    setFailures(failed)
     notify(
       failed.length
         ? t('ibBatchPartial', { n: done, f: failed.length })
         : t('ibBatchDone', { n: done }),
       failed.length ? 'error' : 'ok',
     )
-    refetch()
+    // 走统一的失效清单,不是只 refetch 手上这一页:顶栏与侧栏那两颗计数读的是
+    // 另外两个键,只刷新列表会让红点挂到 60 秒后自己轮询才消。
+    invalidateApprovals(qc)
   }
 
   return (
@@ -122,23 +175,57 @@ export default function InboxPage() {
         <div className="ib-main">
           <div className="ib-bar">
             <Segmented
-              value={tab}
-              options={[
-                { value: 'pending', label: `${t('ibPending')} · ${pendingN}` },
-                { value: 'all', label: `${t('ibAll')} · ${allCount.data ?? total}` },
-              ]}
-              onChange={(v) => { setTab(v); setPage(1); setSelId(0) }}
+              value={status}
+              options={TABS.map((x) => ({ value: x.value, label: tabLabel(x) }))}
+              onChange={(v) => { setStatus(v); setPage(1); setSelId(0) }}
             />
+
+            <div className="ib-search">
+              <Search size={14} />
+              <input
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
+                placeholder={t('ibSearchHint')}
+                aria-label={t('ibSearchHint')}
+              />
+              {qInput && (
+                <button type="button" onClick={() => setQInput('')} aria-label={t('ibClear')}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+
             <div className="grow">
               <Button
                 variant="secondary"
                 disabled={busy || !batchable.length}
                 onClick={batchApprove}
               >
-                {busy ? t('ibBatching') : t('ibBatch')}
+                {batch ? t('ibBatching', { n: batch.done, total: batch.total }) : t('ibBatch')}
               </Button>
             </div>
           </div>
+
+          {/*
+            批量里没能通过的那几张 —— 逐条列出单号与后端给的理由,并且**留在
+            页面上**直到人自己关掉。这些信息上一版算出来就扔了。
+          */}
+          {failures.length > 0 && (
+            <div className="ib-fail">
+              <div className="ib-fail-top">
+                <ShieldAlert size={15} />
+                <strong>{t('ibFailTitle', { n: failures.length })}</strong>
+                <button type="button" onClick={() => setFailures([])} aria-label={t('close')}>
+                  <X size={14} />
+                </button>
+              </div>
+              <ul>
+                {failures.map((f) => (
+                  <li key={f.apNo}><b>{f.apNo}</b><span>{f.message}</span></li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {highN > 0 && (
             <div className="ib-warn">
@@ -190,8 +277,10 @@ export default function InboxPage() {
               </>
             ) : (
               <div className="ib-empty">
+                {/* 「搜不到」和「没有待办」是两件事:前者要人改搜索词,后者是
+                    今天没活儿。同一句话会让人以为自己已经清空了收件箱。 */}
                 <Inbox size={26} />
-                <span>{t('ibEmpty')}</span>
+                <span>{q ? t('ibNoMatch', { q }) : t('ibEmpty')}</span>
               </div>
             )
           )}
@@ -201,7 +290,7 @@ export default function InboxPage() {
           {sel ? (
             <Detail
               a={sel}
-              busy={decide.isPending}
+              busy={decide.isPending || busy}
               onDecide={(approve) => {
                 if (!approve && !confirmAction(t('ibRejectConfirm', { no: sel.apNo }))) return
                 decide.mutate({ id: sel.id, approve })
@@ -261,7 +350,7 @@ function Row({
         {mine && (
           <Badge tone="warning" icon={<UserX size={10} />}>{t('ibMine')}</Badge>
         )}
-        <span className="ib-when">{at(a.createdAt)}</span>
+        <span className="ib-when">{formatWhen(a.createdAt, new Date())}</span>
       </div>
 
       <div className="ib-cmd"><Command command={a.command} keyword={a.keyword} /></div>

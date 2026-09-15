@@ -75,3 +75,25 @@ export function keywordAt(command: string, keyword: string): number {
   if (!keyword) return -1
   return command.toUpperCase().indexOf(keyword.toUpperCase())
 }
+
+/**
+ * 列表里那一列时间。
+ *
+ * 显示的是**服务端发来的墙上时钟**,不做时区换算 —— 后端给的是带偏移的 RFC3339
+ * (`2026-09-15T23:26:21.525018+08:00`),这里按字面切,与 export / scripts /
+ * asyncJobs 三页同一套规矩。换成 `new Date(...)` 本地化不是不行,但那要四个页面
+ * 一起改,否则同一条记录在不同页面显示不同的时刻。
+ *
+ * 跨年才补年份。原来的写法(`s.slice(5, 16)`)一律切掉年份,于是「全部」里一张
+ * 2025-09-15 的单和一张 2026-09-15 的单长得一模一样 —— 审批记录是要被追溯的
+ * 东西,差一年不是小事。而给每一行都挂上「2026-」又会把真正要看的月日挤窄,
+ * 所以只在不是今年时才写出来。
+ *
+ * `now` 是参数而不是在函数里读 `new Date()`:一个读当前时间的纯函数没法被钉住,
+ * 它的测试会在明年自己变色。
+ */
+export function formatWhen(iso: string | null | undefined, now: Date): string {
+  if (!iso) return '—'
+  const sameYear = iso.slice(0, 4) === String(now.getFullYear())
+  return iso.slice(sameYear ? 5 : 0, 16).replace('T', ' ')
+}

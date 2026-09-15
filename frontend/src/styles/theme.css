@@ -2238,6 +2238,44 @@ a { color: inherit; text-decoration: none; }
 .ib-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .ib-bar .grow { margin-left: auto; }
 
+/* 搜索框。服务端筛(见 api/modules/approvals.ts),所以它对第三页上的工单
+   一样有效 —— 只搜当前页的搜索框会对一张存在的单子回答"没有"。 */
+.ib-search {
+  display: flex; align-items: center; gap: 7px; padding: 0 10px; height: 32px; min-width: 260px;
+  border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken);
+}
+.ib-search svg { flex-shrink: 0; color: var(--text-faint); }
+.ib-search input {
+  flex: 1; min-width: 0; border: 0; background: none; outline: none;
+  font: 500 12px/1 var(--font-body); color: var(--text-body);
+}
+.ib-search input::placeholder { color: var(--text-faint); }
+.ib-search button {
+  display: flex; border: 0; padding: 2px; border-radius: 5px; background: none;
+  cursor: pointer; color: var(--text-faint);
+}
+.ib-search button:hover { color: var(--text-body); background: var(--surface-card); }
+
+/* 批量里没能通过的那几张。留在页面上直到人自己关掉 —— 这是一份待办,不是一条
+   转瞬即逝的提示。 */
+.ib-fail {
+  margin-bottom: 16px; border: 1px solid var(--danger);
+  border-radius: 11px; background: var(--danger-subtle); overflow: hidden;
+}
+.ib-fail-top {
+  display: flex; align-items: center; gap: 8px; padding: 10px 13px;
+  font: 600 12px/1.5 var(--font-body); color: var(--danger-text);
+}
+.ib-fail-top svg { flex-shrink: 0; }
+.ib-fail-top button {
+  margin-left: auto; display: flex; border: 0; padding: 2px; border-radius: 5px;
+  background: none; cursor: pointer; color: var(--danger-text); opacity: .7;
+}
+.ib-fail-top button:hover { opacity: 1; }
+.ib-fail ul { margin: 0; padding: 0 13px 11px; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.ib-fail li { display: flex; gap: 9px; font: 500 11.5px/1.6 var(--font-body); color: var(--text-body); }
+.ib-fail li b { flex-shrink: 0; font: 600 11.5px var(--font-mono); color: var(--danger-text); }
+
 .ib-warn {
   display: flex; align-items: flex-start; gap: 9px; padding: 11px 14px; margin-bottom: 16px;
   border-left: 3px solid var(--danger); border-radius: 0 10px 10px 0; background: var(--danger-subtle);

@@ -15,7 +15,7 @@ export default function ApprovalsPage() {
   const { t } = useTranslation()
   const [scope, setScope] = useState<ApprovalScope>('mine')
   const { data, isLoading, error } = useApprovals(scope)
-  const exec = useExecuteApproval(scope)
+  const exec = useExecuteApproval()
 
   const rows: Approval[] = data?.items ?? []
 

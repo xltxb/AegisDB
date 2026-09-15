@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 
 import {
-  batchableOf, highPendingCount, initialOf, keywordAt, stepDone, waitingOn,
+  batchableOf, formatWhen, highPendingCount, initialOf, keywordAt, stepDone, waitingOn,
 } from '../../src/lib/inbox'
 import type { Approval, ApprovalStep } from '../../src/types'
 
@@ -157,4 +157,44 @@ test('关键字为空或没出现在命令里,不高亮', () => {
 test('命中的是命令里那一段的真实位置,不是从头算起', () => {
   // 位置用来切字符串;错一位就会把高亮画在相邻的字符上。
   expect(keywordAt('  TRUNCATE TABLE x', 'TRUNCATE')).toBe(2)
+})
+
+// ───────────────────────────────────────────── formatWhen
+
+// 「全部」那一格会翻到很久以前的单子,而原来的写法是 `s.slice(5, 16)` —— 年份
+// 被切掉了。于是一张 2025-09-15 的单和一张 2026-09-15 的单在列表里长得一模一样,
+// 都是「09-15 23:26」。审批记录是要被追溯的东西,差一年不是小事。
+//
+// 只在**跨年时**补年份,不是一律显示:待审那一批几乎全是这几天的,给每一行都挂上
+// 「2026-」只会把真正要看的月日挤窄。
+//
+// now 是参数而不是读 new Date():否则这组用例到了明年就会自己变色。
+
+test('今年的单只显示月日时分', () => {
+  expect(formatWhen('2026-09-15T23:26:21+08:00', new Date('2026-12-31T00:00:00+08:00')))
+    .toBe('09-15 23:26')
+})
+
+test('往年的单补上年份', () => {
+  expect(formatWhen('2025-09-15T23:26:21+08:00', new Date('2026-01-01T00:00:00+08:00')))
+    .toBe('2025-09-15 23:26')
+})
+
+test('明年的单也补年份 —— 判的是"不是今年",不是"比今年早"', () => {
+  // 执行窗口可以排到明年,跨年那几天列表里两种年份会同时出现。
+  expect(formatWhen('2027-01-02T08:00:00+08:00', new Date('2026-12-31T23:00:00+08:00')))
+    .toBe('2027-01-02 08:00')
+})
+
+test('空值给破折号,不给 NaN 也不给空白', () => {
+  expect(formatWhen('', new Date('2026-09-15T00:00:00+08:00'))).toBe('—')
+  expect(formatWhen(null, new Date('2026-09-15T00:00:00+08:00'))).toBe('—')
+})
+
+test('显示的是服务端发来的墙上时钟,不做时区换算', () => {
+  // 后端发的是带偏移的 RFC3339(`2026-09-15T23:26:21.525018+08:00`),列表页一律
+  // 按字面显示 —— 与 export / scripts / asyncJobs 三页同一套规矩。这里钉住它,
+  // 免得有人"顺手"改成 new Date(...) 本地化,让同一个库的四个页面各显示各的。
+  expect(formatWhen('2026-09-15T23:26:21.525018+08:00', new Date('2026-06-01T00:00:00Z')))
+    .toBe('09-15 23:26')
 })

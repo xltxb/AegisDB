@@ -1,13 +1,24 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 import {
   approvalsApi, approvalsQueryOptions,
   type ApprovalScope, type ApprovalStatus,
 } from '@/api/modules/approvals'
+import { APPROVAL_QUERY_KEYS } from '@/lib/approvalKeys'
 import { useUIStore } from '@/stores/ui'
 import { useTranslation } from 'react-i18next'
 
-export function useApprovals(scope: ApprovalScope, page = 1, status: ApprovalStatus = '') {
-  return useQuery(approvalsQueryOptions(scope, page, status))
+export function useApprovals(
+  scope: ApprovalScope, page = 1, status: ApprovalStatus = '', q = '',
+) {
+  return useQuery(approvalsQueryOptions(scope, page, status, q))
+}
+
+/**
+ * 把 APPROVAL_QUERY_KEYS 一次性失效。决定、批量、执行都走这一条,不各写各的 ——
+ * 两条路径各列一份键,正是侧栏那颗红点被漏掉的成因。
+ */
+export function invalidateApprovals(qc: QueryClient) {
+  for (const queryKey of APPROVAL_QUERY_KEYS) qc.invalidateQueries({ queryKey })
 }
 
 /**
@@ -17,7 +28,7 @@ export function useApprovals(scope: ApprovalScope, page = 1, status: ApprovalSta
  * "已执行"再回滚,会让人以为变更生效过。失败时必须仍然是原样,所以只在成功后
  * 失效查询,让服务端说最终状态。
  */
-export function useExecuteApproval(scope: ApprovalScope) {
+export function useExecuteApproval() {
   const qc = useQueryClient()
   const notify = useUIStore((s) => s.notify)
   const { t } = useTranslation()
@@ -27,7 +38,7 @@ export function useExecuteApproval(scope: ApprovalScope) {
       approvalsApi.execute(id, mfaCode),
     onSuccess: () => {
       notify(t('apExecDone'), 'ok')
-      qc.invalidateQueries({ queryKey: ['approvals', scope] })
+      invalidateApprovals(qc)
     },
     onError: (e: Error) => notify(e.message, 'error'),
   })
@@ -40,9 +51,10 @@ export function useExecuteApproval(scope: ApprovalScope) {
  * 上再判一遍可决定性(service.DecideBlockFor)。抢先把行画成「已通过」,再因为
  * 「该工单已被处理,请刷新」回滚,会让人以为自己批过又被撤销了。
  *
- * 成功后把 `approvals` 下所有的查询一起失效 —— 收件箱的两个分段(待审 / 全部)、
- * 「我的申请」页、顶栏那颗计数读的是不同的键,少失效哪一个,那一处就会继续显示
- * 一张已经不在了的单子。
+ * 成功后走 invalidateApprovals ——收件箱的几个分段、「我的申请」页、顶栏与侧栏
+ * 那两颗计数读的是不同的键,少失效哪一个,那一处就会继续显示一张已经不在了的单子。
+ * 这里刻意不自己列键:这份清单原来就是在这里被写漏的(侧栏那颗从来没进过),
+ * 而漏掉的那一行看起来和写全了一模一样。
  */
 export function useDecideApproval() {
   const qc = useQueryClient()
@@ -54,8 +66,7 @@ export function useDecideApproval() {
       approve ? approvalsApi.approve(id) : approvalsApi.reject(id),
     onSuccess: (_d, v) => {
       notify(t(v.approve ? 'ibApproved' : 'ibRejected'), 'ok')
-      qc.invalidateQueries({ queryKey: ['approvals'] })
-      qc.invalidateQueries({ queryKey: ['approvals-pending'] })
+      invalidateApprovals(qc)
     },
     onError: (e: Error) => notify(e.message, 'error'),
   })

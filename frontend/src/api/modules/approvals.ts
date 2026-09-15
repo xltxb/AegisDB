@@ -21,11 +21,16 @@ export const approvalsApi = {
    * 列表是分页的:一张躺在第三页的待审单,客户端筛只会得到"没有" —— 而收件箱
    * 顶上那个「待审 · N」正是靠它数数,漏报等于让人以为自己没有待办。
    */
-  list: (scope: ApprovalScope, page = 1, pageSize = 20, status: ApprovalStatus = '') =>
+  list: (scope: ApprovalScope, page = 1, pageSize = 20, status: ApprovalStatus = '', q = '') =>
     http
       .get<unknown, Envelope<ApprovalPage>>(
         `/approvals?scope=${scope}&page=${page}&pageSize=${pageSize}` +
-          (status ? `&status=${status}` : ''),
+          (status ? `&status=${status}` : '') +
+          // q 同样在服务端筛(repository.ListApprovalsPaged 里匹配单号/实例/库/
+          // 命令/发起人,% 和 _ 都转义过)。理由与 status 一样,而且更硬:一个只
+          // 搜当前页的搜索框会对躺在第三页的工单回答"没有",人会据此认为它不存在。
+          // 会说谎的搜索框比没有搜索框糟。
+          (q ? `&q=${encodeURIComponent(q)}` : ''),
       )
       .then(ok),
 
@@ -50,10 +55,13 @@ export const approvalsQueryOptions = (
   scope: ApprovalScope,
   page = 1,
   status: ApprovalStatus = '',
+  q = '',
 ) =>
   queryOptions({
-    queryKey: ['approvals', scope, page, status] as const,
-    queryFn: () => approvalsApi.list(scope, page, 20, status),
+    // q 进键:换个搜索词就是另一份结果。少了它,清空搜索框会命中上一次的缓存,
+    // 列表停在搜索结果上不动。
+    queryKey: ['approvals', scope, page, status, q] as const,
+    queryFn: () => approvalsApi.list(scope, page, 20, status, q),
   })
 
 /**
