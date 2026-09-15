@@ -333,7 +333,9 @@ func (s *Services) applyVerdict(ctx context.Context, u *model.User, conn *model.
 // 单条语句原样走老路:它要带回结果集(列和行),而批量不带 —— 一次回执里塞不下 N 个
 // 结果集,脚本通道当初也是这么定的。
 func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql string, timeout time.Duration) gateway.ExecResult {
-	stmts := sqlutil.SplitStatements(sql)
+	// 按目标引擎的方言拆 —— 判定层(gateway.DialectFor(...).Split)用的是同一套规则,
+	// 两边读出不同的语句数正是这个函数最不该出的事。
+	stmts := sqlutil.SplitStatementsFor(conn.Engine, sql)
 	if len(stmts) <= 1 {
 		return s.Executor.Run(ctx, conn, sql, timeout)
 	}

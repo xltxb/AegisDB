@@ -56,8 +56,15 @@ func DialectFor(engine string) Dialect {
 // 要按它写给谁来读 —— 目前只有字符串字面量里的反斜杠(见 backslashEscapes)。
 type sqlDialect struct{ engine string }
 
-func (sqlDialect) Name() string                     { return "sql" }
-func (sqlDialect) Split(cmd string) []string        { return sqlutil.SplitStatements(cmd) }
+func (sqlDialect) Name() string { return "sql" }
+
+// Split 把引擎标签一并交给拆分器。
+//
+// 有两条规则只对一家成立:嵌套块注释(仅 PostgreSQL)与 \G(仅 MySQL 客户端)。
+// 从前这里丢掉了 engine,于是两者都按最保守的那套读 —— PG 的嵌套注释会在第一个 */
+// 提前收尾,把注释后半段当成 SQL 发出去(语法错);MySQL 的 \G 既不分句也不剥掉,
+// 原样发给驱动同样是语法错。
+func (d sqlDialect) Split(cmd string) []string      { return sqlutil.SplitStatementsFor(d.engine, cmd) }
 func (sqlDialect) Verb(cmd string) string           { return ParseVerb(cmd) }
 func (sqlDialect) Capability(verb string) string    { return MapVerbToCapability(verb) }
 func (sqlDialect) IsRead(cmd string) bool           { return IsRead(cmd) }

@@ -131,6 +131,20 @@ func (st Statement) Raw(sql string) string {
 // 拆分本身一个字节都没变 —— 上面那条"绝不合并"的铁律说的是**怎么拆**,这里只是把
 // 拆到哪儿也记下来。SplitStatements 现在从它派生,两者因此不可能对不上。
 func SplitStatementsWithSpans(sql string) []Statement {
+	return splitSpansWith(dialectRules{}, sql)
+}
+
+// splitWith 是带方言开关的拆分。零值规则 = 既有行为,一个字节不差。
+func splitWith(r dialectRules, sql string) []string {
+	sts := splitSpansWith(r, sql)
+	out := make([]string, 0, len(sts))
+	for _, st := range sts {
+		out = append(out, st.Text)
+	}
+	return out
+}
+
+func splitSpansWith(rules dialectRules, sql string) []Statement {
 	var out []Statement
 	var b pending
 	execDepth := 0 // >0 while inside /*!ver ... */: keep the body, drop the markers
@@ -180,6 +194,13 @@ func SplitStatementsWithSpans(sql string) []Statement {
 		if delim != ";" && strings.HasPrefix(sql[i:], delim) {
 			flush(i + len(delim))
 			i += len(delim) - 1
+			continue
+		}
+		// \G:mysql 客户端的「执行并竖排输出」。它不是 SQL,所以既当分隔符,也不进
+		// 语句文本 —— 原样发给驱动是语法错。只对 MySQL 家族生效(见 dialectRules)。
+		if rules.backslashG && sql[i] == '\\' && i+1 < len(sql) && (sql[i+1] == 'G' || sql[i+1] == 'g') {
+			flush(i + 2)
+			i++
 			continue
 		}
 		c := sql[i]
@@ -270,8 +291,47 @@ func SplitStatementsWithSpans(sql string) []Statement {
 					b.put(' ')
 					break
 				}
-				i += 2 // plain block comment: remove up to the matching "*/"
-				for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') {
+				// 优化器提示 /*+ … */ —— 长得像注释,服务端却会读它。
+				//
+				// 丢掉它不报错,只是执行计划悄悄变成另一个,而写它的人拿不到任何
+				// 提示。三家的 hint 都写在这个记号里(MySQL、Oracle、PG 的 pg_hint_plan),
+				// 所以保留它对谁都对,不必分方言。
+				//
+				// 里面的分号一并原样带着:它属于提示的正文,不是语句分隔符。
+				if i+2 < len(sql) && sql[i+2] == '+' {
+					start := i
+					i += 3
+					for i+1 < len(sql) && !(sql[i] == '*' && sql[i+1] == '/') {
+						i++
+					}
+					i++ // 指向结尾的 '/'
+					if i < len(sql) {
+						b.puts(sql[start : i+1])
+					} else {
+						b.puts(sql[start:]) // 没写完的提示:原样留着,让服务端去说它错在哪
+					}
+					break
+				}
+				// 普通块注释:整段换成一个空白。
+				//
+				// PostgreSQL 的块注释可以嵌套,别家不行 —— 按方言决定是数层数还是
+				// 见到第一个 */ 就收尾。开错的后果见 dialectRules.nestedBlockComments。
+				i += 2
+				depth := 1
+				for i+1 < len(sql) {
+					if rules.nestedBlockComments && sql[i] == '/' && sql[i+1] == '*' {
+						depth++
+						i += 2
+						continue
+					}
+					if sql[i] == '*' && sql[i+1] == '/' {
+						depth--
+						if depth == 0 {
+							break
+						}
+						i += 2
+						continue
+					}
 					i++
 				}
 				i++ // skip the closing '/'
