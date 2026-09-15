@@ -28,47 +28,61 @@ import (
 	"velagateway/migrations"
 )
 
-// alterClauseRe 抓 ALTER 的 ADD/DROP 子句:第 1 组是紧跟 ADD/DROP 的那个词,第 2 组是
-// 它后面可选的 IF (NOT) EXISTS。
+// 这条闸数的是「重跑会炸的 ALTER 子句」。
 //
-// PostgreSQL 给了幂等的写法:ADD COLUMN IF NOT EXISTS / DROP COLUMN IF EXISTS /
-// CREATE INDEX IF NOT EXISTS —— 用它们就不会被算进来。不带 IF (NOT) EXISTS 的
-// ADD/DROP 重跑就会报 42701 / 42703,所以它们都算。
+// 做法是先切句、再只看 ALTER TABLE 那些句子,而不是对整个文件做关键字匹配。
+// 从前是后者,于是不得不维护一张 standaloneObjects 表去滤掉 DROP TABLE /
+// DROP VIEW 这类独立语句 —— 而那张表按**关键字**匹配,列名一旦撞上表里的词就
+// 被静默滤掉:`ALTER TABLE t ADD type TEXT` 数成 0。type / schema / rule /
+// policy 都是再普通不过的列名,database 更是这个项目自己用过的
+// (tbl_schema_object.database,迁移 0040 才改名)。漏抓是静默的,比误报危险。
 //
-// **COLUMN 是可省略的**,和隔壁 migration_reserved_words_test.go 的 addColumnRe 同理:
-// `ALTER TABLE t ADD a TEXT` / `ALTER TABLE t DROP a` 都是合法的 PG。从前这条正则要求
-// 字面量 COLUMN,于是省了它的写法一条都抓不到 —— 那恰恰是最容易随手写出来的形式,
-// 而这条闸会对着它绿着。所以这里把关键字整个做成可选的,代价是 ADD/DROP 后面跟什么
-// 都会先被抓下来,由 standaloneObjects 在下面滤掉。
-var alterClauseRe = regexp.MustCompile(`(?i)\b(?:ADD|DROP)\s+(\w+)(\s+IF\s+(?:NOT\s+)?EXISTS\b)?`)
+// 切句之后那张表就不需要了:独立语句不以 ALTER TABLE 开头,天然落在计数之外。
+var (
+	// 语句必须以 ALTER TABLE 开头才进入计数。
+	//
+	// 与隔壁 migration_tables_test.go 的 alterTableRe 不是一回事:那个抓的是
+	// ALTER TABLE **后面的表名**(查拼写用),不锚定行首;这个只问「这句是不是
+	// 一条 ALTER TABLE」。
+	alterStmtHeadRe = regexp.MustCompile(`(?is)^\s*ALTER\s+TABLE\b`)
 
-// standaloneObjects:跟在 DROP/ADD 后面的这些词开的是**独立语句**(DROP TABLE、
-// DROP VIEW、DROP TYPE …),不是 ALTER TABLE 的子句。放开 COLUMN 之后它们会被上面
-// 那条正则一并抓到,在这里滤掉 —— 否则一句无害的 `DROP TABLE IF EXISTS` 也会被记成
-// 一条非幂等 ALTER。
-//
-// INDEX / CONSTRAINT / KEY / UNIQUE **不在**这张表里:它们既可能是 ALTER 的子句,
-// 独立的 `DROP INDEX x` 重跑一样会报错,两种身份都该被这条闸管。
-var standaloneObjects = map[string]bool{
-	"TABLE": true, "VIEW": true, "MATERIALIZED": true, "SCHEMA": true, "DATABASE": true,
-	"TYPE": true, "SEQUENCE": true, "TRIGGER": true, "FUNCTION": true, "PROCEDURE": true,
-	"EXTENSION": true, "POLICY": true, "RULE": true, "OWNED": true,
-}
+	// 列属性修改:ALTER [COLUMN] x SET/DROP DEFAULT|NOT NULL。它改的是已有列的
+	// 属性,重跑无害,但句子里带着 DROP —— 先整段摘掉,免得被下面数进去。
+	columnAttrRe = regexp.MustCompile(`(?is)\bALTER\s+(?:COLUMN\s+)?\w+\s+(?:SET|DROP)\s+(?:DEFAULT|NOT\s+NULL)`)
+
+	// 剩下的 ADD/DROP 子句。第 1 组是紧跟的那个词,第 2 组是可选的 IF (NOT) EXISTS。
+	//
+	// COLUMN 是**可省的**:`ADD a TEXT` / `DROP a` 都是合法 PG,而那恰恰是最容易
+	// 随手写出来的形式。隔壁 migration_reserved_words_test.go 的 addColumnRe 同理。
+	alterClauseRe = regexp.MustCompile(`(?i)\b(?:ADD|DROP)\s+(\w+)(\s+IF\s+(?:NOT\s+)?EXISTS\b)?`)
+
+	// 字符串字面量。里面的 ADD/DROP 是数据不是语句。
+	// 简化处理:不认 '' 这种转义写法 —— 迁移文件里没有,真出现了会多摘一点,
+	// 方向是保守的(少数不是多数)。
+	sqlStringRe = regexp.MustCompile(`'[^']*'`)
+)
 
 // countNonIdempotentAlters 数出 body 里不带 IF (NOT) EXISTS 的 ADD/DROP 子句。
-// Go 的 regexp 没有负向先行断言,所以把后缀一起匹配下来,再按捕获组筛掉幂等的那些。
+//
+// PostgreSQL 给了幂等写法:ADD COLUMN IF NOT EXISTS / DROP COLUMN IF EXISTS。
+// 不带它的 ADD/DROP 重跑会报 42701 / 42703,所以都算。ADD CONSTRAINT 没有幂等
+// 写法,照样算 —— 它就该独占一个迁移文件。
 func countNonIdempotentAlters(body string) int {
+	body = sqlStringRe.ReplaceAllString(stripSQLComments(body), "''")
+
 	n := 0
-	for _, m := range alterClauseRe.FindAllStringSubmatch(body, -1) {
-		word := strings.ToUpper(m[1])
-		if standaloneObjects[word] {
-			continue // DROP TABLE / DROP TYPE … —— 不是 ALTER 的子句
+	for _, stmt := range strings.Split(body, ";") {
+		if !alterStmtHeadRe.MatchString(stmt) {
+			continue // CREATE TABLE、DROP TABLE、INSERT … 都不是 ALTER 的子句
 		}
-		if word == "IF" {
-			continue // `ADD IF NOT EXISTS c …`:\w+ 把 IF 吃掉了,后缀组落空,但它是幂等写法
-		}
-		if m[2] == "" { // 没有 IF (NOT) EXISTS —— 重跑就会报错
-			n++
+		stmt = columnAttrRe.ReplaceAllString(stmt, " ")
+		for _, m := range alterClauseRe.FindAllStringSubmatch(stmt, -1) {
+			if strings.EqualFold(m[1], "IF") {
+				continue // `ADD IF NOT EXISTS c …`:\w+ 把 IF 吃掉了,后缀组落空,但它是幂等写法
+			}
+			if m[2] == "" { // 没有 IF (NOT) EXISTS —— 重跑就会报错
+				n++
+			}
 		}
 	}
 	return n
@@ -93,6 +107,23 @@ func TestCountNonIdempotentAlters(t *testing.T) {
 		{"三条省略 COLUMN 的 ADD", "ALTER TABLE t ADD a TEXT;\nALTER TABLE t ADD b TEXT;\nALTER TABLE t ADD c TEXT;", 3},
 		{"DROP TABLE 不是 ALTER 子句", "DROP TABLE IF EXISTS t;\nDROP TABLE u;", 0},
 		{"CREATE TABLE 不该被抓到", "CREATE TABLE IF NOT EXISTS t (id BIGSERIAL PRIMARY KEY);", 0},
+
+		// 列名撞上「独立语句的宾语」那批词。按关键字滤会把这些全放过去,而
+		// type / schema / rule / policy 都是再普通不过的列名 —— database 更是
+		// 这个项目自己用过的(tbl_schema_object.database,迁移 0040 才改名)。
+		{"列名叫 type", "ALTER TABLE t ADD type TEXT;", 1},
+		{"列名叫 schema", "ALTER TABLE t ADD schema TEXT;", 1},
+		{"列名叫 rule", "ALTER TABLE t DROP rule;", 1},
+		{"列名叫 database 且带幂等写法", "ALTER TABLE t ADD COLUMN IF NOT EXISTS database TEXT;", 0},
+
+		// ALTER COLUMN … DROP DEFAULT / DROP NOT NULL 改的是已有列的属性,
+		// 重跑无害,不该被记成非幂等。
+		{"ALTER COLUMN DROP DEFAULT", "ALTER TABLE t ALTER COLUMN x DROP DEFAULT;", 0},
+		{"ALTER COLUMN DROP NOT NULL", "ALTER TABLE t ALTER COLUMN x DROP NOT NULL;", 0},
+
+		// 注释和字符串字面量里的 ADD/DROP 不是语句。
+		{"注释里的 ADD COLUMN", "-- ALTER TABLE t ADD COLUMN x TEXT;\nCREATE TABLE IF NOT EXISTS u (id BIGINT);", 0},
+		{"字符串字面量里的 ADD COLUMN", "INSERT INTO t (note) VALUES ('ALTER TABLE t ADD COLUMN x TEXT');", 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if got := countNonIdempotentAlters(c.sql); got != c.want {
