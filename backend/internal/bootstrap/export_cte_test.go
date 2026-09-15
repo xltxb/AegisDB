@@ -18,7 +18,7 @@ func TestExport_CTESelectAcceptedMutatingCTERefused(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
-		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")
+		map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set export path")
 
 	cte := "WITH monthly AS (\n  SELECT user_id, SUM(amount) AS total\n  FROM orders\n  GROUP BY user_id\n)\nSELECT * FROM monthly WHERE total > 100"
 	r := app.do(http.MethodPost, "/api/v1/export", token, map[string]any{

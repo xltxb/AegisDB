@@ -19,7 +19,7 @@ func TestExport_RejectsNonReadOnlySQL(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
 
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	// Each of these must be refused (mutations + a stacked-query smuggle attempt).
 	blocked := []string{
@@ -62,7 +62,7 @@ func TestExport_RejectsDialectLexerSmuggles(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	blocked := []string{
 		`SELECT 1 FROM dual /*!40000 INTO OUTFILE '/tmp/pwn' */`, // executable comment body
@@ -90,7 +90,7 @@ func TestExport_HonoursCapabilityMatrixAndMaintenance(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
 	prod := app.connIDByEnv(token, "prod")
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	const sql = "SELECT * FROM events"
 	roleID := app.roleIDByCode(token, "admin")
@@ -119,7 +119,7 @@ func TestExport_SubmissionIsAudited(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	longSQL := "SELECT id, name /* " + strings.Repeat("wide ", 30) + " */ FROM users WHERE tier = 'vip_marker_tail'"
 	eq(t, app.do(http.MethodPost, "/api/v1/export", token, map[string]any{

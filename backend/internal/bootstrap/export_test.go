@@ -134,7 +134,7 @@ func TestExport_ParallelJobsAllComplete(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	ids := []int64{}
 	for i := 0; i < 4; i++ {

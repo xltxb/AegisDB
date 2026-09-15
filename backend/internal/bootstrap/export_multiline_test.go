@@ -42,7 +42,7 @@ func TestExport_MultilineAndTrailingSemicolonExecute(t *testing.T) {
 	}
 	_ = json.Unmarshal(cr.Data, &conn)
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
-		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")
+		map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set export path")
 
 	cases := map[string]string{
 		"multiline":      "SELECT id,\n       status,\n       amount\nFROM orders\nWHERE amount > 5\nORDER BY id",

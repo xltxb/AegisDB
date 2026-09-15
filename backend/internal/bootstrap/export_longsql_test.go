@@ -16,7 +16,7 @@ func TestExport_LongSQLAcceptedAndOversizeRefusedClearly(t *testing.T) {
 	token := app.login("linwei@vela.io", "vela123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
-		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")
+		map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set export path")
 
 	// ~120KB single read-only statement — past the old 64KB TEXT cap.
 	longIn := "SELECT id, name FROM users WHERE id IN (1" + strings.Repeat(",1234567", 15_000) + ")"

@@ -50,7 +50,7 @@ func TestExport_SplitsIntoParts(t *testing.T) {
 		ID int64 `json:"id"`
 	}
 	_ = json.Unmarshal(cr.Data, &conn)
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	id := app.submitExport(token, conn.ID, "SELECT id, note FROM t", "big")
 	job := app.waitJob(token, id)

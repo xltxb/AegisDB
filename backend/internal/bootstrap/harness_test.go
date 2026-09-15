@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -104,6 +105,60 @@ func newTestApp(t *testing.T) *testApp {
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 	return &testApp{srv: srv, t: t, svc: svc, repo: repo, cfg: cfg}
+}
+
+// exportTempDir 建一个导出目录,并挂上「等后台导出任务收敛」的清理。
+//
+// 导出是**异步**的:审批通过或提交之后,任务进 exportQueue,由 service.New 起的
+// worker goroutine 去跑。测试体到这里就返回了,而那个 goroutine 还活着。
+//
+// t.Cleanup 是 LIFO,而 t.TempDir() 的 RemoveAll 是在**调用它的那一刻**注册的 ——
+// 也就是 newTestApp 之后。于是清理的实际顺序是:先删目录、再关服务器、最后关库,
+// 而 worker 这时可能正往那个目录写归档、正把任务标成 done。两件事同时发生:
+//
+//	ERROR export job completed but marking it done failed err="sql: database is closed"
+//	TempDir RemoveAll cleanup: unlinkat ...: directory not empty
+//
+// 单跑时 worker 来得及收尾,所以看不见;`go test ./...` 全包并行、机器满载时就来不及。
+// 更糟的是它会**吃掉后面的清理** —— 清理链在中途失败,排在后面的 DROP SCHEMA 就不跑了,
+// 残留的 schema 攒起来会撞 PG 的 max_connections,而那时的报错和真正的病因毫无关系。
+//
+// 所以等待必须注册得**比 RemoveAll 更晚**(才能更早执行),这也是它住在这个函数里、
+// 而不是 newTestApp 里的原因 —— 那里注册太早了。
+func (a *testApp) exportTempDir() string {
+	a.t.Helper()
+	dir := a.t.TempDir()
+	a.t.Cleanup(func() { a.waitExportsSettled() })
+	return dir
+}
+
+// waitExportsSettled 等到没有导出任务停在 pending / running。
+//
+// 超时报错而不是静静放过:一个迟迟不收敛的任务要么是 worker 卡住了,要么是任务
+// 根本没被消费 —— 两者都是真问题,不该被一句「等了 5 秒还没好」盖过去。
+func (a *testApp) waitExportsSettled() {
+	a.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var n int64
+		err := a.repo.DB().Model(&model.ExportJob{}).
+			Where("status IN ?", []string{model.ExportPending, model.ExportRunning}).
+			Count(&n).Error
+		if err != nil {
+			// 库已经关了 —— 说明注册顺序错了,等待排在了 DB 清理后面。
+			a.t.Errorf("等待导出收敛时数据库已关闭(清理顺序不对):%v", err)
+			return
+		}
+		if n == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			a.t.Errorf("等了 5 秒仍有 %d 个导出任务停在 pending/running —— "+
+				"worker 卡住了,或者任务压根没进队列", n)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // apiResp mirrors the unified envelope { code, msg, data }.

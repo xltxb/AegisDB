@@ -60,7 +60,7 @@ func TestIsolation_ExportDownloadIsPerUser(t *testing.T) {
 	admin := app.login("linwei@vela.io", "vela123")
 	l2 := app.login("chenhao@vela.io", "vela123")
 	dev := app.connIDByEnv(admin, "dev")
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
+	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": app.exportTempDir()}).Code, 0, "set path")
 
 	id := app.submitExport(admin, dev, "SELECT id, name FROM users", "admin-only")
 	job := app.waitJob(admin, id)

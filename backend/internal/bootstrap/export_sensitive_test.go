@@ -26,7 +26,7 @@ func (a *testApp) lastExportJob(connID int64) model.ExportJob {
 func (a *testApp) exportSetup(token string) int64 {
 	a.t.Helper()
 	eq(a.t, a.do(http.MethodPut, "/api/v1/settings", token,
-		map[string]any{"export.savePath": a.t.TempDir()}).Code, 0, "配置导出路径")
+		map[string]any{"export.savePath": a.exportTempDir()}).Code, 0, "配置导出路径")
 	return a.connIDByEnv(token, "dev")
 }
 
@@ -156,5 +156,16 @@ func TestSensitiveExport_TheWorkerRefusesToUnmaskWithoutAGrantedTicket(t *testin
 	}
 	if err := app.svc.SensitiveExportApproved(fresh); err == nil {
 		t.Fatal("没有有效审批单时,worker 必须拒绝放行原值")
+	}
+
+	// 上面那一行是个**孤儿**:status 被直接改成 pending,却从没进过 exportQueue,
+	// 所以没有 worker 会去消费它,它会一直停在 pending。
+	//
+	// 这正是真实世界里进程重启留下的那种行(内存队列不跨重启),产品对它有专门的
+	// 处置 —— 启动时的 FailStuckExportJobs。夹具制造了这种行,就该用同一个机制
+	// 收拾干净,否则 exportTempDir 的收敛等待会把它当成「worker 卡住了」报出来,
+	// 而那个报错说的其实是这条测试自己欠下的债。
+	if _, err := app.repo.FailStuckExportJobs(); err != nil {
+		t.Fatalf("清理夹具造出来的孤儿任务: %v", err)
 	}
 }
