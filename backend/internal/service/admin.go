@@ -813,6 +813,20 @@ func (s *Services) Invite(req dto.InviteReq) (*model.User, error) {
 	// 上,而这里从前把 `Ops@Vela.io` 原样写进库 —— 这是全仓唯一一条不折叠的建号路径,
 	// 也就是日后 UpsertAdmin 撞上那个唯一索引的源头(见 email_case_test.go)。
 	email := strings.TrimSpace(strings.ToLower(req.Email))
+	// 形状校验,与 CreateUser 一致。binding:"required" 只挡得住空字符串:一个
+	// `" "` 经 TrimSpace 之后会写进一行**空 email**,而那一行要参与 lower(email)
+	// 唯一索引 —— 第二次同样的误操作撞上唯一约束,报错指向索引而不是那次输入。
+	if email == "" || !strings.Contains(email, "@") {
+		return nil, ErrBadRequest
+	}
+	// 查重。不查的话这里会直接去撞 idx_user_email,而对外的 code 两种走法都是
+	// 40001(handler 把 Invite 的任何 error 都翻成「邮箱可能已存在」)—— 差别在
+	// 服务端:撞索引在日志里留下的是一条唯一约束冲突,读日志的人看到的是数据库
+	// 在报错,而不是一次被正常拒绝的输入。GetUserByEmail 已折叠大小写,所以
+	// `Ops@Vela.io` 与 `ops@vela.io` 在这里是同一个账号。
+	if _, err := s.Repo.GetUserByEmail(email); err == nil {
+		return nil, ErrBadRequest
+	}
 	name := email
 	if at := strings.Index(email, "@"); at > 0 {
 		name = email[:at]
