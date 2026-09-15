@@ -143,8 +143,13 @@ func seedTestAudit(repo *repository.Repo, connID, userID map[string]int64) {
 	prev := ""
 	for _, r := range rows {
 		occurred := day.Add(time.Duration(r.h)*time.Hour + time.Duration(r.m)*time.Minute + time.Duration(r.s)*time.Second)
+		// 这几行是**老年代**的行:字段只有 v1 那七个(没有 database/operator/env/tier),
+		// 校验器靠逐版尝试认出它们。但时间要按 UTC 归一 —— 那不是某一版的字段,而是
+		// payload 的算法(见 service/audit_chain.go 的 v5):算法对每一版都生效,
+		// 所以连 v1 形状的行也得按归一后的写法签名,否则这里造出来的是一批**任何版本
+		// 都验不过**的行。
 		payload, _ := json.Marshal(map[string]any{
-			"time": occurred.Format(time.RFC3339), "actor": r.who, "instance": r.inst,
+			"time": occurred.UTC().Format(time.RFC3339), "actor": r.who, "instance": r.inst,
 			"command": r.cmd, "risk": r.risk, "result": r.result, "ap": r.apNo,
 		})
 		h := crypto.ChainHash(prev, payload)

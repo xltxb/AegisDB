@@ -30,10 +30,10 @@ import (
 	"velagateway/pkg/crypto"
 )
 
-// 这条链历史上用过四种 payload 构造。校验必须认全它们。
+// 这条链历史上用过五种 payload 构造。校验必须认全它们。
 //
 // 每次往哈希里加字段,都刻意**没有**重算历史行 —— 重算等于把证据重新签一遍,那就不是
-// 证据了。代价是:一个从 2026-07 跑到今天的部署,链上四个年代的行都有,而只认最新那一
+// 证据了。代价是:一个从 2026-07 跑到今天的部署,链上好几个年代的行都有,而只认最新那一
 // 版的校验器会把绝大多数历史行报成"被篡改"。那比不校验更糟:没人会信一个天天喊狼来了
 // 的警报,最后的结果是校验被关掉。
 //
@@ -43,6 +43,21 @@ import (
 //	v2  2026-07-21  + database        (记录命令落在哪个库)
 //	v3  2026-07-30  + operator        (外部审批人,EA4)
 //	v4  2026-08-07  + env + tier      (双快照)
+//	v5  2026-09-15  time 改为 UTC 归一(迁 PostgreSQL 时的时区无关化)
+//
+// v5 与前四版不是同一类改动。v1→v4 每次都是**加字段**,所以分支是 `if version >= n`,
+// 老行按老分支照样算得出来。v5 改的是**算法**:同一批字段,时间的写法变了。算法改动
+// 没有"只对新行生效"的写法 —— 归一化对每一版都生效(见 auditPayloadFor 里那一行,
+// 它不在任何 if 里)。版本号在这里的用处只剩一个:让读侧的逐版尝试先试新写法。
+//
+// 于是 v5 和 v4 对同一行算出的字节完全一样(该行的 Location 若已是 UTC),而这不是
+// bug:matchAuditRow 从新到旧试,新库里的行第一次就命中 v5。
+//
+// 为什么不把归一化留给 v5、让 v1..v4 保持老写法以救回老行:救不回来。老行的哈希签的是
+// **写入进程当时那个 Location** 印出来的字符串,而那个 Location 哪儿也没存 —— 读回来
+// 挂什么时区由驱动、列类型和进程 TZ 决定。保留老写法只会让"老行验不验得过"取决于读的
+// 时候恰好碰上哪个 Location,也就是把恒假的警报换成随机的警报。这次刻意选了确定的那
+// 一边。
 //
 // 试多个版本不放宽任何东西:每一版都得拿出一个真实的 SHA-256 前像,而那只有当时那个
 // 写入器才拿得出来。
@@ -50,11 +65,14 @@ import (
 // 但有一件事必须说清楚:**一行按 v1 校验通过,只说明 v1 里那七个字段没被动过**。它的
 // database / operator / env / tier 当时不在哈希里,所以事后被填进去或改掉,这个校验
 // 看不出来。报告按版本分别计数,就是为了让看的人知道自己手里的保证到哪一层为止。
-const currentAuditPayloadVersion = 4
+const currentAuditPayloadVersion = 5
 
 func auditPayloadFor(a *model.AuditLog, version int) []byte {
 	m := map[string]any{
-		"time": a.OccurredAt.Format(time.RFC3339), "actor": a.ActorName,
+		// UTC 归一 —— 哈希不能跟着读回来的 Location 走。存进 TIMESTAMPTZ 的是绝对
+		// 时刻,取出来挂什么时区由驱动和会话决定,而链的定义必须只认那个时刻本身。
+		// 不放在 if version >= 5 里:v5 标的是算法变更,对每一版都生效(见上)。
+		"time": a.OccurredAt.UTC().Format(time.RFC3339), "actor": a.ActorName,
 		"instance": a.Instance, "command": a.Command, "risk": a.Risk,
 		"result": a.Result, "ap": a.ApprovalNo,
 	}
@@ -80,7 +98,7 @@ func auditPayload(a *model.AuditLog) []byte {
 
 // matchAuditRow 找出这一行是按哪一版算的哈希。0 表示哪一版都对不上。
 //
-// 从新到旧试:今天写进来的行第一次就命中,不必把四版都算一遍。
+// 从新到旧试:今天写进来的行第一次就命中,不必把五版都算一遍。
 func matchAuditRow(prev string, a *model.AuditLog) int {
 	for v := currentAuditPayloadVersion; v >= 1; v-- {
 		if crypto.ChainHash(prev, auditPayloadFor(a, v)) == a.Hash {

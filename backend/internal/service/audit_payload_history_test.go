@@ -13,7 +13,19 @@ package service
 // 所以这组用例钉的不是某个具体形状,而是那条规矩本身:
 //   · 每一版都得能算出哈希,且各版互不相同(否则版本号是假的);
 //   · 最新版必须真的是 currentAuditPayloadVersion;
-//   · 各版的字段集合必须逐层包含——历史上每次都是"加字段",没有删过。
+//   · 各版的字段集合必须逐层包含——加字段的那几版每次都是"加",没有删过。
+//
+// 版本号标记两类改动,规矩不一样:
+//
+//   · **加字段**(v1→v4)。新分支 `if version >= n`,老行按老分支照样算得出来,所以
+//     各版的字节必然不同、字段集合逐层包含。
+//   · **改算法**(v5:时间改为 UTC 归一)。同一批字段,只是写法变了,而算法改动没有
+//     "只对新行生效"的写法——它对每一版都生效。于是这种版本与前一版对同一行算出的
+//     字节**一样**,上面那条"各版互不相同"对它不成立。
+//
+// 下面那张 algorithmOnlyVersions 表把后一类点名列出来,而不是把断言放宽掉:放宽掉,
+// 「加了字段却忘了加版本号」就又没人看着了。算法版自己该被什么钉住,在
+// audit_chain_test.go 里(同一时刻不同时区必须算出同一个哈希)。
 
 import (
 	"encoding/json"
@@ -45,12 +57,31 @@ func keysOf(t *testing.T, b []byte) map[string]bool {
 	return out
 }
 
+// algorithmOnlyVersions 点名那些"不加字段、只改算法"的版本。
+//
+// 加进来要有理由:一个版本落在这里,就等于声明它与前一版对同一行算出的字节相同 ——
+// 它区分的是**怎么算**,不是**算什么**。
+var algorithmOnlyVersions = map[int]bool{
+	5: true, // time 改为 UTC 归一(迁 PostgreSQL 时的时区无关化)
+}
+
 func TestAuditPayloadVersions_EachIsDistinctAndGrows(t *testing.T) {
 	a := sampleRow()
 	prevKeys := map[string]bool{}
 	seen := map[string]int{}
 	for v := 1; v <= currentAuditPayloadVersion; v++ {
 		b := auditPayloadFor(a, v)
+		if algorithmOnlyVersions[v] {
+			// 算法版不加字段,所以它必须与前一版**完全一样**。这一条不是放宽,是另一
+			// 个断言:哪天有人顺手往算法版里塞了个字段,它会在这里红。
+			if v > 1 && string(b) != string(auditPayloadFor(a, v-1)) {
+				t.Errorf("v%d 被列为只改算法的版本,却与 v%d 算出不同的 payload —— 它加了字段,那就该另开一版并从 algorithmOnlyVersions 里拿掉", v, v-1)
+			}
+			// 刻意不往 seen 里记:这串字节已经以前一版的名义记过了,再覆盖一次,
+			// 将来真撞上重复时报出来的会是算法版而不是那个真正没区分开的版本。
+			prevKeys = keysOf(t, b)
+			continue
+		}
 		if old, dup := seen[string(b)]; dup {
 			t.Errorf("v%d 与 v%d 算出来的 payload 一模一样 —— 版本号是假的,多出来的那一版什么也不区分", v, old)
 		}
@@ -73,9 +104,11 @@ func TestAuditPayload_WritesTheNewestVersion(t *testing.T) {
 	if string(auditPayload(a)) != string(auditPayloadFor(a, currentAuditPayloadVersion)) {
 		t.Fatal("auditPayload 写出来的不是最新版")
 	}
-	// 最新版必须比前一版**多**些东西。往 auditPayloadFor 最新分支里加字段而不动版本号,
-	// 这里不会响 —— 会响的是下面那条。
-	if currentAuditPayloadVersion > 1 {
+	// 最新版若是"加字段"那一类,它必须比前一版**多**些东西。往 auditPayloadFor 最新
+	// 分支里加字段而不动版本号,这里不会响 —— 会响的是下面那条。
+	//
+	// 算法版(见 algorithmOnlyVersions)排除在外:它与前一版字节相同本来就是它的定义。
+	if currentAuditPayloadVersion > 1 && !algorithmOnlyVersions[currentAuditPayloadVersion] {
 		if string(auditPayloadFor(a, currentAuditPayloadVersion)) ==
 			string(auditPayloadFor(a, currentAuditPayloadVersion-1)) {
 			t.Error("最新版与前一版没有差别")
