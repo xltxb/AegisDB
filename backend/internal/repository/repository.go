@@ -52,7 +52,9 @@ func (r *Repo) DB() *gorm.DB { return r.db }
 
 func (r *Repo) GetUserByEmail(email string) (*model.User, error) {
 	var u model.User
-	if err := r.db.Where("email = ?", email).First(&u).Error; err != nil {
+	// lower() 两边都套,才能命中 baseline 里 lower(email) 上的那个唯一索引。
+	// 入库侧已经 ToLower(admin.go),但历史行和外部导入不保证,所以查询侧也折一次。
+	if err := r.db.Where("lower(email) = lower(?)", email).First(&u).Error; err != nil {
 		return nil, err
 	}
 	return &u, nil
