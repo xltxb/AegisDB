@@ -59,6 +59,11 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	if err := backfillApprovalExecuted(db); err != nil {
 		return err
 	}
+	// 历史行里非规范大小写的邮箱。三条建号路径今天都折叠了,所以这只对升级上来的
+	// 库有事可做;留着不修的代价是一颗哑雷,见该函数。
+	if err := backfillLowerEmail(db); err != nil {
+		return err
+	}
 	// 把退役的全局严格模式折进各分层。只有"显式关掉"的部署需要写库,见该函数。
 	return backfillStrictNoWhere(db, cfg.Gateway.StrictMode)
 }
