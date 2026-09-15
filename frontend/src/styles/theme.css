@@ -1085,6 +1085,12 @@ a { color: inherit; text-decoration: none; }
 
 .aud-db { color: var(--text-faint); }
 .aud-cmd { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+/* 窗口放行记录里的命令:一行装不下就截断,完整内容在 title 上。
+   这张表是回看用的,一屏能扫过几十条比每条都完整展开更有用。 */
+.win-aud-cmd { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 12px var(--font-mono); color: var(--text-body); }
+.win-aud-inst { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 12px var(--font-mono); color: var(--text-muted); }
 /* 命令的第一个词按风险着色 —— 扫一列命令时,颜色比读完整句快得多。 */
 .aud-kw { flex: none; font: 600 12.5px var(--font-mono); color: var(--accent-text); }
 .aud-kw.k-high { color: var(--danger-text); }

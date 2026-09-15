@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { BusFront, Trash2, Plus } from 'lucide-react'
-import { useExecWindows, useCreateExecWindow, useDeleteExecWindow } from '@/hooks/useExecWindows'
+import { BusFront, Trash2, Plus, ScrollText } from 'lucide-react'
+import { useExecWindows, useCreateExecWindow, useDeleteExecWindow, useExecWindowAudit } from '@/hooks/useExecWindows'
 import { connectionsQueryOptions } from '@/api/modules/connections'
 import { Table, type Column } from '@/components/common/Table'
 import { Badge, toneOfStatus } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
-import type { ExecWindow, Connection } from '@/types'
+import type { ExecWindow, Connection, AuditRow } from '@/types'
 
 /** ISO 星期(1=周一…7=周日)的文案键 —— 值跟着界面语言走。 */
 const WEEKDAY_KEY = ['wd1', 'wd2', 'wd3', 'wd4', 'wd5', 'wd6', 'wd7']
@@ -28,6 +28,8 @@ export default function ExecWindowsPage() {
   const create = useCreateExecWindow()
   const del = useDeleteExecWindow()
   const [open, setOpen] = useState(false)
+  // 正在回看放行记录的那扇窗口。0 = 没开 —— hook 据此不发请求。
+  const [auditOf, setAuditOf] = useState<ExecWindow | null>(null)
 
   const connName = useMemo(() => {
     const m = new Map<number, string>()
@@ -96,6 +98,13 @@ export default function ExecWindowsPage() {
           <span className="cell-sub">{w.apNo}</span>
           <Button
             variant="ghost"
+            title={t('winAuditTitle')}
+            onClick={() => setAuditOf(w)}
+          >
+            <ScrollText size={14} />
+          </Button>
+          <Button
+            variant="ghost"
             title={t('winClose')}
             disabled={del.isPending}
             onClick={() => del.mutate(w.id)}
@@ -138,6 +147,8 @@ export default function ExecWindowsPage() {
           empty={<Empty hint={t('winEmpty')} />}
         />
       )}
+
+      <PassedModal window={auditOf} onClose={() => setAuditOf(null)} />
 
       <ApplyModal
         open={open}
@@ -261,6 +272,70 @@ function ApplyModal({
         <label>{t('winReason')}</label>
         <textarea value={f.reason ?? ''} onChange={(e) => set({ reason: e.target.value })} />
       </div>
+    </Modal>
+  )
+}
+
+/**
+ * 这扇门开着的时候放行了什么。
+ *
+ * 窗口自己的审批回答的是「这扇门凭什么开着」,这里回答另一半 —— 两半对同一个审查者
+ * 都要紧,而在此之前后一半只能靠人对着审计日志按时段去猜。
+ *
+ * 权限由后端判(与审计列表同一把尺子)。没有审计权限的人在这里拿到的是一条报错,
+ * 不是一张空表 —— 空表会被读成「这扇门什么也没放行过」,那是另一个意思。
+ */
+function PassedModal({ window: w, onClose }: { window: ExecWindow | null; onClose: () => void }) {
+  const { t } = useTranslation()
+  const { data, isLoading, error, refetch } = useExecWindowAudit(w?.id ?? 0)
+  const rows = (data ?? []) as AuditRow[]
+
+  // 列与审计页复用同一批文案键 —— 同一种东西在两处叫不同的名字,是让人以为它们
+  // 是两种东西的最短路径。
+  const columns: Column<AuditRow>[] = [
+    {
+      key: 'time', head: t('colTime'), width: '1.3fr',
+      cell: (r) => <span className="cell-sub">{new Date(r.occurredAt).toLocaleString()}</span>,
+    },
+    { key: 'who', head: t('colWho'), width: '0.9fr', cell: (r) => r.actor },
+    {
+      // 库名也截断:sqlite 目标库的 database 是一条绝对路径,不截的话它会换三行、
+      // 把整行撑高,而这张表的用处是一屏扫过几十条。完整值在 title 上。
+      key: 'inst', head: t('colInstance'), width: '1.1fr',
+      cell: (r) => (
+        <span className="win-aud-inst" title={r.database ? `${r.instance} / ${r.database}` : r.instance}>
+          {r.instance}{r.database ? ` / ${r.database}` : ''}
+        </span>
+      ),
+    },
+    {
+      key: 'cmd', head: t('colCmd'), width: '2.4fr',
+      cell: (r) => <code className="win-aud-cmd" title={r.command}>{r.command}</code>,
+    },
+    {
+      key: 'risk', head: t('colRisk'), width: '0.7fr',
+      cell: (r) => <Badge tone={r.risk === 'high' ? 'danger' : r.risk === 'mid' ? 'warning' : 'neutral'}>{r.risk}</Badge>,
+    },
+  ]
+
+  return (
+    <Modal
+      open={!!w}
+      title={t('winAuditTitle')}
+      sub={w ? `${w.name} · ${t('winAuditSub')}` : ''}
+      onClose={onClose}
+      footer={<Button variant="ghost" onClick={onClose}>{t('close')}</Button>}
+    >
+      {isLoading && <Loading />}
+      {error && <ErrorState error={error} retry={() => refetch()} />}
+      {!isLoading && !error && (
+        <Table
+          columns={columns}
+          rows={rows}
+          rowKey={(r) => r.id}
+          empty={<Empty hint={t('winAuditEmpty')} />}
+        />
+      )}
     </Modal>
   )
 }

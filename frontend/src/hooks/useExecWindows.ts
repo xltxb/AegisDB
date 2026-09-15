@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { execWindowsApi, execWindowsQueryOptions } from '@/api/modules/execWindows'
+import { execWindowAuditQueryOptions, execWindowsApi, execWindowsQueryOptions } from '@/api/modules/execWindows'
 import { useUIStore } from '@/stores/ui'
 import type { ExecWindow } from '@/types'
 
 export function useExecWindows() {
   return useQuery(execWindowsQueryOptions())
+}
+
+// 某扇窗口放行过的命令。id 为 0 时不发请求(见 queryOptions 里的 enabled)。
+export function useExecWindowAudit(id: number) {
+  return useQuery(execWindowAuditQueryOptions(id))
 }
 
 function useInvalidate() {
