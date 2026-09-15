@@ -1330,9 +1330,19 @@ func (r *Repo) LastAuditHash() string {
 // 刻意不分页。校验的意义在于"从创世行一路算到链尾",少算任何一段,接口对不上的那行
 // 就成了假警报;而链断在哪里,恰恰是分页边界最可能被误判的地方。审计表会很大,所以这
 // 是一次显式的整表扫描——它由人按下"校验"才发生,不在任何请求的主路上。
-func (r *Repo) AuditChainRows() ([]model.AuditLog, error) {
+func (r *Repo) AuditChainRows() ([]model.AuditLog, error) { return r.AuditChainRowsFrom(0) }
+
+// AuditChainRowsFrom 取 id >= from 的审计行。from = 0 即全表(链的默认形态)。
+//
+// 分段的理由见 service.auditVerifyFromKey:从旧库搬来的行按旧算法签名,验不过,
+// 而一条永远报红的链会把人训练成忽略那个警报。
+func (r *Repo) AuditChainRowsFrom(from int64) ([]model.AuditLog, error) {
 	var rows []model.AuditLog
-	if err := r.db.Order("id").Find(&rows).Error; err != nil {
+	q := r.db.Order("id")
+	if from > 0 {
+		q = q.Where("id >= ?", from)
+	}
+	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	return rows, nil

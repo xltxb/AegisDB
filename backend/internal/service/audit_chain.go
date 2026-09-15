@@ -28,6 +28,7 @@ package service
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"velagateway/internal/model"
@@ -134,12 +135,31 @@ type ChainReport struct {
 	// v5 名下(包括当年真由 v4 写入器写下的老行)。两者覆盖的字段集相同,这个字段要
 	// 表达的"保证到哪一层"因此没有变。
 	ByVersion map[int]int `json:"byVersion"`
+	// VerifiedFromID 是本次校验的起点。0 = 从创世行查起(默认)。
+	//
+	// 非 0 意味着这条链**被分了段**:这一行之前的记录没有参与校验,它们是真是假
+	// 本次结论一概不表态。设它的唯一正当理由见 auditVerifyFromKey。
+	VerifiedFromID int64 `json:"verifiedFromId"`
 	// Note 说清这个结论覆盖不到什么 —— 一句"链完好"如果让人以为末尾截断也查得出来,
 	// 那它就成了假的安全感。
 	Note string `json:"note"`
 }
 
-const chainNote = "本校验覆盖:内容被改、行被从链中间抽掉。覆盖不到:从链尾整段截断(需把链尾锚到网关之外)。"
+// auditVerifyFromKey 记录分段校验的起点行号。
+//
+// 存在的理由只有一个:从旧库搬过来的审计行。它们的哈希是按旧算法签的 —— 迁到
+// PostgreSQL 时链哈希做了 UTC 归一(ADR 0019),而老行写入时的时区没有存在任何
+// 地方,所以任何版本都验不过。一条永远报红的链等于没有链:它只会训练人忽略那个
+// 警报,而警报被忽略之后,真正的篡改也就没人看了。
+//
+// 代价是**真实**的:起点之前那段从此不受保护。所以它必须出现在报告里(见
+// ChainReport.VerifiedFromID 与下面拼进 Note 的那句),不能只躺在设置表里 ——
+// 一个看不见的起点会让"链完好"这四个字悄悄换掉含义。
+
+const (
+	chainNote          = "本校验覆盖:内容被改、行被从链中间抽掉。覆盖不到:从链尾整段截断(需把链尾锚到网关之外)。"
+	auditVerifyFromKey = "audit.chain.verifyFromId"
+)
 
 // VerifyAuditChain 从头到尾重算一遍审计链。
 //
@@ -158,17 +178,32 @@ func (s *Services) VerifyAuditChain(u *model.User) (*ChainReport, error) {
 	if !s.canSeeAllActivity(u) {
 		return nil, ErrForbidden
 	}
-	rows, err := s.Repo.AuditChainRows()
+	from := int64(s.Repo.SettingInt(auditVerifyFromKey, 0))
+	rows, err := s.Repo.AuditChainRowsFrom(from)
 	if err != nil {
 		return nil, err
 	}
 	rep := &ChainReport{OK: true, Checked: len(rows), Note: chainNote, ByVersion: map[int]int{}}
+	if from > 0 {
+		rep.VerifiedFromID = from
+		// 把它拼进 Note,而不是只放进一个新字段:读报告的人未必逐个字段看,
+		// 但"覆盖不到什么"那句话是他一定会读的 —— 分段正是一件属于那句话的事。
+		rep.Note += fmt.Sprintf("本次从第 %d 行起校验,更早的记录不在结论范围内。", from)
+	}
 	if len(rows) == 0 {
 		return rep, nil
 	}
 	rep.FirstID, rep.LastID = rows[0].ID, rows[len(rows)-1].ID
 
-	prev := "" // 创世行的前驱是空串
+	// 起点行的前驱。
+	//
+	// 分段时它**不是**空串:那一行前面本来就有行,只是不查。拿空串去比会让每一次
+	// 分段校验都报"链的第一行不是创世行" —— 一个由这个功能自己制造的假警报。
+	// 所以分段时把起点行的 prev_hash 当作锚点接受下来,从它往后查。
+	prev := ""
+	if from > 0 && len(rows) > 0 {
+		prev = rows[0].PrevHash
+	}
 	for i := range rows {
 		a := &rows[i]
 		if a.PrevHash != prev {
