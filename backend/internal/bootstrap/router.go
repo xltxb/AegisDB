@@ -193,6 +193,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		// 执行窗口(「班车」):读对进得来这个菜单的人开放 —— 一扇免审批的门开在哪、
 		// 什么时候开,不该只有管理员知道;写限管理员,每次变动进审计链。
 		a.GET("/exec-windows", h.ListExecWindows)
+		// 放行记录走审计自己的权限(service 里判),所以这里不挂 menu 闸 ——
+		// 挂了反而会让"能管窗口"成为看命令原文的通行证。
+		a.GET("/exec-windows/:id/audit", h.ExecWindowAudit)
 		// 执行窗口有了自己的菜单键。申请**不再要求管理员** —— 这个功能的整个改动
 		// 就在于"开门的人和签字的人不是同一个"。改和撤只有申请人自己或管理员能做,
 		// 那条判断在 service 里(路由只认得菜单,认不出这一行是谁的)。

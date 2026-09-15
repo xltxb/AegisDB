@@ -1348,6 +1348,16 @@ func (r *Repo) AuditChainRowsFrom(from int64) ([]model.AuditLog, error) {
 	return rows, nil
 }
 
+// AuditByOperatorLike 按 Operator 的 LIKE 模式取审计行,新的在前。
+//
+// 模式由调用方构造 —— Operator 里编码的是什么、怎么认,是 service 的知识
+// (见 service.windowOperatorLike)。这里只负责按它查。
+func (r *Repo) AuditByOperatorLike(pattern string) ([]model.AuditLog, error) {
+	var rows []model.AuditLog
+	err := r.db.Where("operator LIKE ?", pattern).Order("id desc").Find(&rows).Error
+	return rows, err
+}
+
 func (r *Repo) InsertAudit(a *model.AuditLog) error { return r.db.Create(a).Error }
 
 // ListAudit lists audit rows; actorID > 0 restricts to that actor's own commands.

@@ -1123,6 +1123,22 @@ paths:
         撤销不走审批:关一扇门永远不需要第二个人同意。同样限申请人本人或平台管理员。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows/{id}/audit:
+    get:
+      tags: [tiers]
+      summary: 这扇执行窗口放行过的命令
+      description: >
+        窗口开着的那段时间里,本该走审批却被直接放行的命令 —— 也就是"这扇门凭什么
+        开着"之后的另一半:它开着的时候放行了什么。
+
+        归属记在审计行的 operator 上(`执行窗口 · <名字> (#<id>)`),而 operator 从
+        payload v3 起就在链哈希里,所以这个归属事后改不了。按 **id** 认领而不是名字:
+        窗口改名之后,它此前放行过的记录仍然归它。
+
+        权限与审计列表同一把尺子(canSeeAllActivity),不是"能管窗口就能看" ——
+        这里交出来的是别人执行过的命令原文,自己判一套就成了绕过审计可见性的后门。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /environments:
     get:
       tags: [tiers]

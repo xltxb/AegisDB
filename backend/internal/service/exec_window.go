@@ -184,5 +184,51 @@ func windowOperator(w *model.ExecWindow) string {
 	if w == nil {
 		return ""
 	}
-	return "执行窗口 · " + w.Name + " (#" + strconv.FormatInt(w.ID, 10) + ")"
+	return windowOperatorPrefix + w.Name + windowOperatorIDSuffix(w.ID)
+}
+
+// 构造与查询共用的两个零件。
+//
+// 拆出来不是为了少打几个字,是因为**两边各写一遍字符串是这个功能最可能坏掉的方式**:
+// 改了 windowOperator 的措辞之后,按窗口取审计会安静地返回空列表 —— 不报错,只是那扇
+// 门看起来从没放行过任何东西,而"这扇门放行了什么"正是要问的问题。
+// TestWindowOperator_MatchesItsOwnQueryPattern 钉住这两半对得上。
+const windowOperatorPrefix = "执行窗口 · "
+
+func windowOperatorIDSuffix(id int64) string {
+	return " (#" + strconv.FormatInt(id, 10) + ")"
+}
+
+// windowOperatorLike 是按窗口 id 取审计行的 LIKE 模式。
+//
+// 认 **id 不认名字**:窗口改名之后,它此前放行过的记录仍然归它 —— 那些记录写下时是
+// 什么样就是什么样(Operator 在链哈希里,本来也改不了)。中间那个 % 吃掉的正是当时的
+// 名字,连名字里带 % 或 _ 的情况一并盖住,因为那段根本不参与匹配。
+func windowOperatorLike(id int64) string {
+	return windowOperatorPrefix + "%" + windowOperatorIDSuffix(id)
+}
+
+// operatorBelongsToWindow 判断一条审计的 Operator 是不是这扇门放行留下的。
+//
+// 与 windowOperatorLike 是同一个判断的两种写法:一个给数据库,一个给 Go。
+func operatorBelongsToWindow(op string, id int64) bool {
+	return strings.HasPrefix(op, windowOperatorPrefix) &&
+		strings.HasSuffix(op, windowOperatorIDSuffix(id))
+}
+
+// AuditForWindow 取这扇门放行过的命令,新的在前。
+//
+// Operator 上没有索引,所以这是一次全表扫。按窗口回看是合规审查的动作,不在任何热
+// 路径上,今天这么做是对的;等审计表长到让这一次扫描变得难受时,该做的是给审计行加
+// 一个真正的 window 列,而不是在这里加缓存 —— 那时历史行可以从 Operator 解析回填。
+func (s *Services) AuditForWindow(u *model.User, id int64) ([]model.AuditLog, error) {
+	// 与审计本身同一把尺子(canSeeAllActivity),不是"能管窗口就能看"。
+	//
+	// 这个入口交出来的是**别人执行过的命令原文** —— 和审计列表是同一类东西,只是换了
+	// 个问法。自己判一套的话,它就成了绕过审计可见性的后门:一个够格管窗口、却不够格
+	// 看全量活动的人,能从这里把命令一条条读走。
+	if !s.canSeeAllActivity(u) {
+		return nil, ErrForbidden
+	}
+	return s.Repo.AuditByOperatorLike(windowOperatorLike(id))
 }

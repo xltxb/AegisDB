@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"github.com/gin-gonic/gin"
+	"strconv"
 
 	"velagateway/internal/dto"
 	"velagateway/internal/middleware"
@@ -30,6 +31,27 @@ func (h *Handler) ListExecWindows(c *gin.Context) {
 		return
 	}
 	resp.OK(c, ws)
+}
+
+// ExecWindowAudit godoc
+// @Summary 这扇执行窗口放行过的命令
+// @Router  /exec-windows/{id}/audit [get]
+func (h *Handler) ExecWindowAudit(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	rows, err := h.Svc.AuditForWindow(middleware.CurrentUser(c), id)
+	if errors.Is(err, service.ErrForbidden) {
+		resp.Fail(c, resp.CodeForbidden, "需要审计查看权限")
+		return
+	}
+	if err != nil {
+		resp.Fail(c, resp.CodeInternalError, "加载失败")
+		return
+	}
+	resp.OK(c, rows)
 }
 
 // CreateExecWindow godoc
