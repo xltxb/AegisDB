@@ -1,32 +1,17 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 func newTierDB(t *testing.T) (*gorm.DB, *Repo) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "tier.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	// Close the handle before t.TempDir() removal runs (cleanups are LIFO), or
-	// Windows refuses to delete the still-open database file.
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.EnvTier{}, &model.Environment{},
-		&model.RoleCapability{}, &model.RiskCommand{}, &model.Connection{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return db, New(db)
 }
 

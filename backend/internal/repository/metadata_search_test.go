@@ -1,14 +1,10 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 // 元数据搜索里的 `%` 和 `_` 要当字面量,不当通配符。
@@ -23,17 +19,7 @@ import (
 // 没有** —— 只转义不写 ESCAPE,在 SQLite 上反而什么都搜不到。
 func newMetaDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "meta.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.MetaTable{}, &model.MetaColumn{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	repo := New(db)
 	for _, tb := range []model.MetaTable{
 		{ConnectionID: 1, DBName: "orders_db", Name: "t_order"},

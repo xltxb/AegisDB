@@ -11,29 +11,15 @@ package repository
 // 另外两份还留着,于是同一个 key 在两个地方读出两个值,而两边都不报错。
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 func newSettingDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "setting.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.Setting{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return New(db)
 }
 

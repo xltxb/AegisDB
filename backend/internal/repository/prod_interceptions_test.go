@@ -1,14 +1,12 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 // 拦截数按**审计行自己的快照**算,不按实例此刻绑在哪一层算。
@@ -22,18 +20,7 @@ import (
 //	  值得留着"的时候
 func newAuditDB(t *testing.T) (*gorm.DB, *Repo) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "audit.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.AuditLog{}, &model.Connection{},
-		&model.Environment{}, &model.EnvTier{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	// prod 计入待处置,dev 不计入。
 	for _, tier := range []model.EnvTier{
 		{Code: "prod", DisplayName: "生产", CountsInPending: true},

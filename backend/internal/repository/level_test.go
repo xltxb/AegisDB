@@ -7,29 +7,15 @@ package repository
 // 以为自己写对了,而他下次照着改,改的是一个从来没生效过的值。
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 func newCapDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "cap.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.RoleCapability{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return New(db)
 }
 

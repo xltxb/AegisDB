@@ -13,27 +13,13 @@ package repository
 import (
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-	"path/filepath"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 func newRoleDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "role.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.Role{}, &model.User{}, &model.RoleMember{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return New(db)
 }
 

@@ -1,30 +1,16 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 func newWindowDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "win.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.ExecWindow{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return New(db)
 }
 

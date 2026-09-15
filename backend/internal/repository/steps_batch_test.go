@@ -1,14 +1,10 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
-
 	"velagateway/internal/model"
+	"velagateway/internal/testsupport"
 )
 
 // 审批列表一页最多 500 张单,而每张单再查一次审批链 —— 一次翻页最多 501 次查询。
@@ -20,17 +16,7 @@ import (
 // 一次查完:按 approval_id IN (…) 取回所有步骤,再按单分组。
 func newStepsDB(t *testing.T) *Repo {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "steps.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.ApprovalStep{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return New(db)
 }
 

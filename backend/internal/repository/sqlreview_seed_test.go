@@ -12,28 +12,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/internal/review"
+	"velagateway/internal/testsupport"
 )
 
 func seedRepo(t *testing.T) (*repository.Repo, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_pragma=busy_timeout(5000)"),
-		&gorm.Config{Logger: logger.Discard})
-	if err != nil {
-		t.Fatalf("open: %v", err)
-	}
-	if err := db.Migrator().DropTable(&model.SQLReviewRule{}); err != nil {
-		t.Fatalf("drop: %v", err)
-	}
-	if err := db.AutoMigrate(&model.SQLReviewRule{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := testsupport.NewDB(t)
 	return repository.New(db), db
 }
 
