@@ -888,6 +888,51 @@ test('能力矩阵在 768 下仍然横滚,不被这轮改动顺手修掉', async
 })
 ```
 
+- [ ] **Step 2b: 补一条「轨道数 = 单元格数」的 DOM 断言**
+
+在同一个 spec 里追加。这是规格点名的唯一新缺陷类别的真正守卫 —— 纯函数层够不到它，
+它只在调用方把**未经 `visibleCols` 过滤**的列表喂给 `gridTemplate` 时发生，
+表现为整张表错位一列，而类型检查与构建都看不见。
+
+```ts
+// 轨道数与单元格数脱节 = 整张表错位一列。这件事只有布局算完之后才看得出来,
+// 所以它在这里,不在单测里 —— 单测那层拿不到「实际渲染了几个单元格」。
+test('每张表的 grid 轨道数都等于它每行的单元格数', async ({ page }) => {
+  await stubAll(page)
+  await page.goto('/login')
+  await page.click('button.portal-opt:has-text("管理后台")')
+  await page.fill('input[type="email"]', 'linwei@vela.io')
+  await page.fill('input[type="password"]', 'vela123')
+  await page.click('button.login-submit')
+  await page.waitForTimeout(1500)
+
+  for (const w of WIDTHS) {
+    await page.setViewportSize({ width: w, height: 900 })
+    for (const route of ADMIN_ROUTES) {
+      await page.goto(`/${route}`)
+      await page.waitForTimeout(300)
+      const bad = await page.evaluate(() => {
+        const out: string[] = []
+        for (const head of document.querySelectorAll('.c-thead')) {
+          // computed value 是解析后的像素轨道列表,minmax() 已经被算成一个值,
+          // 所以数它比数模板字符串里的空格可靠。
+          const tracks = getComputedStyle(head).gridTemplateColumns.split(' ').length
+          if (head.children.length !== tracks) {
+            out.push(`表头 ${tracks} 轨道 vs ${head.children.length} 单元格`)
+          }
+          const row = head.parentElement?.querySelector('.c-trow')
+          if (row && row.children.length !== tracks) {
+            out.push(`数据行 ${row.children.length} 单元格 vs ${tracks} 轨道`)
+          }
+        }
+        return out
+      })
+      expect(bad, `${route} 在 ${w}px 下轨道与单元格对不上`).toEqual([])
+    }
+  }
+})
+```
+
 - [ ] **Step 3: 跑 e2e**
 
 Run: `cd frontend && npm run test:e2e`
