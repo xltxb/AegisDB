@@ -98,6 +98,8 @@ export default function UsersPage() {
               user={u}
               roles={roles ?? []}
               isAdmin={isAdmin}
+              tpl={tpl}
+              show={show}
               onOpen={() => setDetail(u)}
             />
           ))}
@@ -125,24 +127,26 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'wa
   )
 }
 
+/**
+ * 列由父组件算好传进来,这一行不自己订阅档位。
+ *
+ * 之前每个 UserRow 各调一次 `useBreakpoint()` —— 几百个用户就是几百个 matchMedia
+ * 监听器,而它们算出来的结果必然一样(读的是同一份 COLS、同一个视口)。表头已经算过
+ * 一遍,传下来既省掉那些订阅,也让「表头与数据行列数一致」从约定变成结构上的必然。
+ */
 function UserRow({
-  user, roles, isAdmin, onOpen,
+  user, roles, isAdmin, tpl, show, onOpen,
 }: {
   user: UserView
   roles: RoleBrief[]
   isAdmin: boolean
+  tpl: string
+  show: (key: string) => boolean
   onOpen: () => void
 }) {
   const { t } = useTranslation()
   const [expand, setExpand] = useState(false)
   const noRole = !user.roleIds?.length
-
-  // 每一行都是独立组件实例,自己订阅档位、自己算列 —— 和表头各算各的,
-  // 但读的是同一份 COLS,轨道数不会因此和表头脱节。
-  const bp = useBreakpoint()
-  const cols = visibleCols(COLS, bp)
-  const tpl = gridTemplate(cols)
-  const show = (key: string) => cols.some((c) => c.key === key)
 
   return (
     <>
