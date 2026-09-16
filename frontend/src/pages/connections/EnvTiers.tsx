@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Boxes, Layers, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { gridTemplate, visibleCols, type ColSpec } from '@/lib/tableColumns'
 import { envTiersQueryOptions, environmentsQueryOptions } from '@/api/modules/envtier'
 import {
   useCreateEnvTier, useCreateEnvironment, useDeleteEnvTier, useDeleteEnvironment,
@@ -61,7 +63,17 @@ export function EnvTiers() {
 
 // ------------------------------------------------------------------- 分层
 
-const TIER_COLS = '1.6fr 88px 88px 88px 88px 120px 1.2fr 76px'
+/** 分层表:分层名、默认角色、操作是主干;四个开关列最先收。 */
+const TIER_COLS: ColSpec[] = [
+  { key: 'tier', width: '1.6fr' },
+  { key: 'mfa', width: '88px', priority: 3 },
+  { key: 'banner', width: '88px', priority: 3 },
+  { key: 'pending', width: '88px', priority: 3 },
+  { key: 'scan', width: '88px', priority: 3 },
+  { key: 'layer', width: '120px', priority: 2 },
+  { key: 'role', width: '1.2fr' },
+  { key: 'ops', width: '76px' },
+]
 
 function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const { t } = useTranslation()
@@ -69,6 +81,12 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const del = useDeleteEnvTier()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<EnvTier | null>(null)
+
+  // 窄屏收列:四个开关(mfa/banner/pending/scan)最先收,layer 其次。
+  const bp = useBreakpoint()
+  const cols = visibleCols(TIER_COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
 
   const boundEnvs = (code: string) => envs.filter((e) => e.tierCode === code)
 
@@ -112,13 +130,15 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       <div className="c-table">
-        <div className="c-thead" style={{ gridTemplateColumns: TIER_COLS }}>
+        <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
           <div>{t('etColTier')}</div>
-          <div className="ctr">{t('etColMfa')}</div>
-          <div className="ctr">{t('etColBanner')}</div>
-          <div className="ctr">{t('etColPending')}</div>
-          <div className="ctr" title={t('etColStrictHint')}>{t('etColStrict')}</div>
-          <div className="ctr">{t('etColBaseline')}</div>
+          {show('mfa') && <div className="ctr">{t('etColMfa')}</div>}
+          {show('banner') && <div className="ctr">{t('etColBanner')}</div>}
+          {show('pending') && <div className="ctr">{t('etColPending')}</div>}
+          {show('scan') && (
+            <div className="ctr" title={t('etColStrictHint')}>{t('etColStrict')}</div>
+          )}
+          {show('layer') && <div className="ctr">{t('etColBaseline')}</div>}
           <div>{t('etColBound')}</div>
           <div />
         </div>
@@ -129,7 +149,7 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
           const reason = blockReason(tier)
           const bound = boundEnvs(tier.code)
           return (
-            <div key={tier.code} className="c-trow" style={{ gridTemplateColumns: TIER_COLS }}>
+            <div key={tier.code} className="c-trow" style={{ gridTemplateColumns: tpl }}>
               <div className="c-td conn-et-name">
                 <Badge tone={toneOfDot(dotFor(tier.code, tiers))}>{tier.code}</Badge>
                 <span>
@@ -137,48 +157,58 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
                   <span className="cell-sub">{tier.connLayer} · {tier.defaultRole}</span>
                 </span>
               </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.requireMfa}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { requireMfa: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.dangerBanner}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { dangerBanner: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.countsInPending}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { countsInPending: v } })}
-                />
-              </div>
-              <div className="c-td ctr" title={t('etColStrictHint')}>
-                <Switch
-                  checked={tier.strictNoWhere}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { strictNoWhere: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                {tier.scanBaseline ? (
-                  <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
-                ) : (
-                  <button
-                    type="button"
-                    className="conn-linkbtn"
+              {show('mfa') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.requireMfa}
                     disabled={update.isPending}
-                    onClick={() => makeBaseline(tier)}
-                  >
-                    {t('etBaselineSet')}
-                  </button>
-                )}
-              </div>
+                    onChange={(v) => update.mutate({ tier, patch: { requireMfa: v } })}
+                  />
+                </div>
+              )}
+              {show('banner') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.dangerBanner}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { dangerBanner: v } })}
+                  />
+                </div>
+              )}
+              {show('pending') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.countsInPending}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { countsInPending: v } })}
+                  />
+                </div>
+              )}
+              {show('scan') && (
+                <div className="c-td ctr" title={t('etColStrictHint')}>
+                  <Switch
+                    checked={tier.strictNoWhere}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { strictNoWhere: v } })}
+                  />
+                </div>
+              )}
+              {show('layer') && (
+                <div className="c-td ctr">
+                  {tier.scanBaseline ? (
+                    <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
+                  ) : (
+                    <button
+                      type="button"
+                      className="conn-linkbtn"
+                      disabled={update.isPending}
+                      onClick={() => makeBaseline(tier)}
+                    >
+                      {t('etBaselineSet')}
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="c-td conn-chipline">
                 {bound.length
                   ? bound.map((e) => <span key={e.code} className="conn-chip">{e.code}</span>)
@@ -349,7 +379,13 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
 
 // ------------------------------------------------------------------- 环境
 
-const ENV_COLS = '1.6fr 1.6fr 120px 96px'
+/** 环境表只有 4 列,mid 下不必收 —— 收列是为了给挤压让路,没挤压就别收。 */
+const ENV_COLS: ColSpec[] = [
+  { key: 'env', width: '1.6fr' },
+  { key: 'label', width: '1.6fr', priority: 2 },
+  { key: 'tier', width: '120px' },
+  { key: 'ops', width: '96px' },
+]
 
 function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const { t } = useTranslation()
@@ -357,6 +393,12 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Environment | null>(null)
   const [deleting, setDeleting] = useState<Environment | null>(null)
+
+  // 窄屏收列:只有「绑定分层」这一列会收,其余三列一律保留。
+  const bp = useBreakpoint()
+  const cols = visibleCols(ENV_COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
 
   const count = (code: string) => usage?.[code] ?? 0
 
@@ -374,9 +416,9 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       <div className="c-table">
-        <div className="c-thead" style={{ gridTemplateColumns: ENV_COLS }}>
+        <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
           <div>{t('etColEnv')}</div>
-          <div>{t('etColTierBind')}</div>
+          {show('label') && <div>{t('etColTierBind')}</div>}
           <div className="ctr">{t('etColInsts')}</div>
           <div />
         </div>
@@ -386,16 +428,18 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
         {envs.map((e) => {
           const tier = tiers.find((x) => x.code === e.tierCode)
           return (
-            <div key={e.code} className="c-trow" style={{ gridTemplateColumns: ENV_COLS }}>
+            <div key={e.code} className="c-trow" style={{ gridTemplateColumns: tpl }}>
               <div className="c-td conn-et-name">
                 <Badge tone={toneOfDot(dotFor(e.tierCode, tiers))}>{e.code}</Badge>
                 <span className="cell-strong">{e.displayName || e.code}</span>
               </div>
-              <div className="c-td conn-et-name">
-                <span className="conn-chip">{e.tierCode}</span>
-                {/* 分层已被删时这里没有名字可显示 —— 照实说,而不是显示一个空格。 */}
-                <span className="cell-sub">{tier?.displayName || t('etTierGone')}</span>
-              </div>
+              {show('label') && (
+                <div className="c-td conn-et-name">
+                  <span className="conn-chip">{e.tierCode}</span>
+                  {/* 分层已被删时这里没有名字可显示 —— 照实说,而不是显示一个空格。 */}
+                  <span className="cell-sub">{tier?.displayName || t('etTierGone')}</span>
+                </div>
+              )}
               <div className="c-td ctr mono">{t('etInstN', { n: count(e.code) })}</div>
               <div className="c-td row-ops">
                 <Button variant="ghost" title={t('etRebind')} onClick={() => setEditing(e)}>
