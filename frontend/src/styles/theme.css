@@ -1887,8 +1887,25 @@ a { color: inherit; text-decoration: none; }
   .tv-grid > .tv-insp.open { transform: translateX(0); }
   .tv-edge.right { display: none; }
   /* 覆盖层是绝对定位、铺满整个高度,会盖住工具条右端本身的唤回按钮 ——
-     不提层级,展开后再点一次就够不着它,收不回去了。 */
-  .tv-insp-toggle { position: relative; z-index: calc(var(--z-overlay) + 1); }
+     不提层级,展开后再点一次就够不着它,收不回去了。
+     sticky 而不是 relative:.tv-bar 横向 overflow-x:auto 又隐藏了滚动条,
+     长库名(或任何一个把这一条工具条撑宽的字段,比如当前库名)会把这颗
+     按钮顶到可视区外,而它在这一档是唤回检查器的唯一入口(见上方 A3)。
+     sticky + right: 0 让它贴着工具条自己的可视区右边,不管前面撑了多宽,
+     滚到哪都摸得到,不用去逐个字段找上限。背景色补成和工具条一致,否则
+     滚动时后面的按钮会从它底下透出来。 */
+  .tv-insp-toggle { position: sticky; right: 0; z-index: calc(var(--z-overlay) + 1); background: var(--surface-raised); }
+  /* 收起态的导轨(inspCollapsed 时渲染的 .tv-rail.right)在这一档下不该出现:
+     点它只会把 inspCollapsed 设回 false,而 .tv-insp 在这一档默认以关闭态
+     (translateX(100%))渲染,被上面这条 .tv-grid{overflow:hidden} 裁掉 ——
+     点了什么都不会发生。这一档下唤回检查器的唯一入口是 .tv-insp-toggle。 */
+  .tv-rail.right { display: none; }
+}
+@media (min-width: 1281px) {
+  /* 宽屏下检查器是常驻第三栏,不是覆盖层——这颗按钮在这一档是哑按钮,
+     .open 类不产生任何视觉变化。既然 ≤1280 已经有 .tv-insp-toggle 唤回
+     入口,这里就不必留一个看着能点、其实什么都不做的按钮。 */
+  .tv-insp-toggle { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .tv-grid > .tv-insp { transition: none; }
