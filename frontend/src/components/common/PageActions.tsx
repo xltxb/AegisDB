@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { MoreHorizontal } from 'lucide-react'
 import { useBreakpoint } from '@/hooks/useBreakpoint'
 
@@ -31,7 +31,7 @@ export function PageActions({
     return () => document.removeEventListener('mousedown', onDown)
   }, [open])
 
-  if (!narrow) return <>{primary}{extras.map((e) => <span key={e.key}>{e.node}</span>)}</>
+  if (!narrow) return <>{primary}{extras.map((e) => <Fragment key={e.key}>{e.node}</Fragment>)}</>
 
   return (
     <>
