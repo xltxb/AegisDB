@@ -142,6 +142,17 @@ test('每张表的 grid 轨道数都等于它每行的单元格数', async ({ pa
   // 否则说明前面的假阳性正在发生。
   let tablesSeen = 0
 
+  // tablesSeen > 0 只挡得住「整轮一张表都没量到」。变异测试证实它挡不住「共用
+  // Table.tsx 的表头整体消失」:把 c-thead 这个类名改掉,connections/users/
+  // env-tiers 三张手搓表各自渲染自己的 .c-thead,计数照样撑得住,测试仍然通过。
+  // gov / users / audit 三条路由本身就走共用 <Table>(参见上面对 c-thead 渲染
+  // 条件的说明),单独给它们各自钉一句 > 0 才挡得住这一类回归——路由增减表格
+  // 不会误报,只有「这条已知路由上共用组件的表头整体消失」才触发。connections
+  // 不在这份名单里:它的表头包在 `!!rows.length` 里,这套全空桩下不渲染,拿来
+  // 做锚点自己就会先假阳性。
+  const SHARED_TABLE_ROUTES = ['gov', 'users', 'audit']
+  const sharedSeen: Record<string, number> = { gov: 0, users: 0, audit: 0 }
+
   for (const w of WIDTHS) {
     await page.setViewportSize({ width: w, height: 900 })
     for (const route of ADMIN_ROUTES) {
@@ -166,9 +177,14 @@ test('每张表的 grid 轨道数都等于它每行的单元格数', async ({ pa
         return { bad: out, count: heads.length }
       })
       tablesSeen += count
+      if (route in sharedSeen) sharedSeen[route] += count
       expect(bad, `${route} 在 ${w}px 下轨道与单元格对不上`).toEqual([])
     }
   }
 
   expect(tablesSeen, '整轮下来一张 .c-thead 表都没量到 —— 多半是路由被送去了别处,不是页面本身没有表').toBeGreaterThan(0)
+
+  for (const route of SHARED_TABLE_ROUTES) {
+    expect(sharedSeen[route], `${route} 在共用 <Table> 组件上一次 .c-thead 都没渲染出来 —— 共用表头可能整批消失了`).toBeGreaterThan(0)
+  }
 })
