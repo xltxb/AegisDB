@@ -113,14 +113,12 @@ a { color: inherit; text-decoration: none; }
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-card);
 }
-.top-head { display: flex; align-items: baseline; gap: 10px; }
-.top-title { font: 700 16px var(--font-display); color: var(--text-strong); letter-spacing: -.01em; }
-.top-sub { font: 500 12px var(--font-mono); color: var(--text-faint); }
 /* 390 宽下「数据库管理网关」会竖成一列单字,压在页面标题上 —— flex 子项的
    min-width 默认是 auto,它不肯缩,于是改为逐字折行。单行省略才是对的:
    标题是路牌,认不出来就该截断,不该把自己摊平成一张纸条。 */
-.top-head { min-width: 0; }
-.top-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.top-title { font: 700 16px var(--font-display); color: var(--text-strong); letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-sub { font: 500 12px var(--font-mono); color: var(--text-faint); }
 /* .top-title 省略后宽度可能被压到 0,这时角色名(.top-sub)会独占 .top-head
    仅剩的那点空间——同样没处躲,中文没有词间断点,就逐字竖排、溢出到页头
    下方压在页面内容上。跟标题同一套道理:认不出来就截断。 */
