@@ -21,6 +21,7 @@ import { downloadCsv, toCsv } from '@/lib/csv'
 import { confirmAction } from '@/lib/confirm'
 import { Badge, toneOfStatus } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
+import { PageActions } from '@/components/common/PageActions'
 import { Segmented } from '@/components/common/Segmented'
 import { useUIStore } from '@/stores/ui'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
@@ -417,18 +418,32 @@ export default function ConnectionsPage() {
             ]}
           />
           {view === 'instances' && (
-            <>
-              {/* 项目与「库归属」是同一件事的两头:在这里建项目,回到表上就能把库挂过去。 */}
-              <Button variant="secondary" onClick={() => setProjectsOpen(true)}>
-                <FolderKanban size={15} />{t('prTitle')}
-              </Button>
-              <Button variant="secondary" onClick={() => setImportOpen(true)}>
-                <Upload size={15} />{t('connImport')}
-              </Button>
-              <Button variant="primary" onClick={() => setDraft(blankDraft(envList[0]?.code ?? ''))}>
-                <Plus size={15} />{t('connNew')}
-              </Button>
-            </>
+            <PageActions
+              primary={
+                <Button variant="primary" onClick={() => setDraft(blankDraft(envList[0]?.code ?? ''))}>
+                  <Plus size={15} />{t('connNew')}
+                </Button>
+              }
+              extras={[
+                {
+                  key: 'projects',
+                  // 项目与「库归属」是同一件事的两头:在这里建项目,回到表上就能把库挂过去。
+                  node: (
+                    <Button variant="secondary" onClick={() => setProjectsOpen(true)}>
+                      <FolderKanban size={15} />{t('prTitle')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'import',
+                  node: (
+                    <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                      <Upload size={15} />{t('connImport')}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           )}
         </div>
       </header>

@@ -13,6 +13,7 @@ import { Table, type Column } from '@/components/common/Table'
 import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
+import { PageActions } from '@/components/common/PageActions'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
 import type { AuditRow, AuditQuery, ChainReport } from '@/types'
 
@@ -231,20 +232,29 @@ export default function AuditPage() {
               </button>
             )}
           </div>
-          <Button
-            variant="secondary"
-            disabled={exportCsv.isPending}
-            onClick={() => exportCsv.mutate(query)}
-          >
-            <Download size={14} />{exportCsv.isPending ? t('audExporting') : t('audExport')}
-          </Button>
-          {/* 链校验只对看得见全部活动的人开放(服务端同样判一次)—— 对只看得见自己
-              那几行的人,"第 8231 行被改过"本身就是一条他不该看见的信息。 */}
-          {canSeeAll && (
-            <Button variant="ghost" disabled={verify.isPending} onClick={() => verify.mutate()}>
-              <ShieldCheck size={14} />{verify.isPending ? t('audVerifying') : t('audVerify')}
-            </Button>
-          )}
+          <PageActions
+            primary={
+              <Button
+                variant="secondary"
+                disabled={exportCsv.isPending}
+                onClick={() => exportCsv.mutate(query)}
+              >
+                <Download size={14} />{exportCsv.isPending ? t('audExporting') : t('audExport')}
+              </Button>
+            }
+            extras={canSeeAll ? [
+              {
+                key: 'verify',
+                // 链校验只对看得见全部活动的人开放(服务端同样判一次)—— 对只看得见自己
+                // 那几行的人,"第 8231 行被改过"本身就是一条他不该看见的信息。
+                node: (
+                  <Button variant="ghost" disabled={verify.isPending} onClick={() => verify.mutate()}>
+                    <ShieldCheck size={14} />{verify.isPending ? t('audVerifying') : t('audVerify')}
+                  </Button>
+                ),
+              },
+            ] : []}
+          />
         </div>
       </header>
 
