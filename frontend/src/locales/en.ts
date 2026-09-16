@@ -175,6 +175,7 @@ export const en: Dict = {
   termPickConn: 'Pick an instance on the left first',
   termReconnect: 'Reconnect',
   termInspector: 'Context · risk check',
+  tvInspector: 'Show context / risk check',
   termTargetInst: 'Instance',
   termTier: 'Tier',
   termPolicy: 'Policy',

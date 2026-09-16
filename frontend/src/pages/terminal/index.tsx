@@ -127,6 +127,8 @@ export default function TerminalPage() {
   const [treeCollapsed, setTreeCollapsed] = useState(false)
   const [inspCollapsed, setInspCollapsed] = useState(false)
   const [zen, setZen] = useState(false)
+  // ≤1280 时检查器变成覆盖层,默认收着 —— 宽屏下它是第三栏,这个状态用不上。
+  const [inspOpen, setInspOpen] = useState(false)
   const [resizing, setResizing] = useState<Side | null>(null)
   const [gridView, setGridView] = useState(localStorage.getItem(GRID_VIEW_KEY) === '1')
   const [gridH, setGridH] = useState(clampH(Number(localStorage.getItem(GRID_H_KEY)) || GRID_H_DEFAULT))
@@ -851,6 +853,11 @@ export default function TerminalPage() {
           <button className="tv-act" title={zen ? t('zenExit') : t('zenEnter')} onClick={() => setZen(!zen)}>
             {zen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
+          {/* ≤1280 下检查器是覆盖层而非第三栏,靠这颗按钮唤回 —— 宽屏下它仍是第三栏,
+              按钮照样存在但无碍布局(检查器本就常驻可见)。 */}
+          <button className="tv-act tv-insp-toggle" title={t('tvInspector')} onClick={() => setInspOpen((v) => !v)}>
+            <PanelRightOpen size={15} />
+          </button>
           <Button variant="ghost" title={t('termReconnect')} onClick={() => session.reconnect()}><RotateCw size={14} /></Button>
         </div>
 
@@ -924,7 +931,7 @@ export default function TerminalPage() {
         <div className="tv-rail right" title={t('ctxExpand')} onClick={() => setInspCollapsed(false)}><PanelRightOpen size={16} /></div>
       )}
       {!inspCollapsed && !zen && (
-        <aside className="tv-insp">
+        <aside className={clsx('tv-insp', inspOpen && 'open')}>
           <div className="tv-panel-head">
             <ShieldAlert size={14} />{t('termInspector')}
             <span className="grow" />

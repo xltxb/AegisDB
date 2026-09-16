@@ -1848,6 +1848,8 @@ a { color: inherit; text-decoration: none; }
   grid-template-rows: minmax(0, 1fr); gap: 0;
   border: 1px solid var(--border-subtle); border-radius: 14px;
   background: var(--surface-card); overflow: hidden;
+  /* ≤1280 下检查器变成 position:absolute 的覆盖层,要以这里为定位祖先。 */
+  position: relative;
 }
 .tv-grid.tree-collapsed { grid-template-columns: 30px 1fr var(--insp-w, 340px); }
 .tv-grid.insp-collapsed { grid-template-columns: var(--tree-w, 268px) 1fr 30px; }
@@ -1866,8 +1868,22 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 1280px) {
   .tv-grid { grid-template-columns: var(--tree-w, 248px) 1fr; }
   .tv-grid.tree-collapsed { grid-template-columns: 30px 1fr; }
-  .tv-grid > :last-child { display: none; }
+  /* 不再 display:none —— 它是「这条语句为什么被拦」的答案,掉了就问不到了。
+     改成从右侧滑出的覆盖层,默认收着,由页头的按钮唤回。 */
+  .tv-grid > .tv-insp {
+    position: absolute; right: 0; top: 0; bottom: 0; z-index: var(--z-overlay);
+    width: min(320px, 86vw);
+    transform: translateX(100%); transition: transform var(--dur-base, .18s) ease;
+    box-shadow: var(--shadow-overlay, 0 8px 24px rgb(0 0 0 / .28));
+  }
+  .tv-grid > .tv-insp.open { transform: translateX(0); }
   .tv-edge.right { display: none; }
+  /* 覆盖层是绝对定位、铺满整个高度,会盖住工具条右端本身的唤回按钮 ——
+     不提层级,展开后再点一次就够不着它,收不回去了。 */
+  .tv-insp-toggle { position: relative; z-index: calc(var(--z-overlay) + 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tv-grid > .tv-insp { transition: none; }
 }
 @media (max-width: 1040px) {
   .tv-grid { grid-template-columns: 30px 1fr; }
