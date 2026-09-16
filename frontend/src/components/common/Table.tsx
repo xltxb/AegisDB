@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { gridTemplate, visibleCols, type ColSpec } from '@/lib/tableColumns'
 
-export interface Column<Row> {
-  key: string
+export interface Column<Row> extends ColSpec {
   head: ReactNode
-  /** grid 列宽,如 '1.5fr' / '96px'(原型各表都用 grid 而不是 table)。 */
-  width: string
   cell: (row: Row) => ReactNode
   mono?: boolean
 }
@@ -25,11 +24,15 @@ export function Table<Row>({
   empty?: ReactNode
   onRowClick?: (r: Row) => void
 }) {
-  const tpl = columns.map((c) => c.width).join(' ')
+  // 窄屏收列,而不是把八列压进 768px。被收起的值由各页自己的展开行交代 ——
+  // 这里只负责「轨道与单元格始终一致」这一条。
+  const bp = useBreakpoint()
+  const cols = visibleCols(columns, bp)
+  const tpl = gridTemplate(cols)
   return (
     <div className="c-table">
       <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
-        {columns.map((c) => <div key={c.key}>{c.head}</div>)}
+        {cols.map((c) => <div key={c.key}>{c.head}</div>)}
       </div>
       {!rows.length && <div className="c-empty">{empty}</div>}
       {rows.map((r) => (
@@ -39,7 +42,7 @@ export function Table<Row>({
           style={{ gridTemplateColumns: tpl }}
           onClick={onRowClick ? () => onRowClick(r) : undefined}
         >
-          {columns.map((c) => (
+          {cols.map((c) => (
             <div key={c.key} className={clsx('c-td', c.mono && 'mono')}>{c.cell(r)}</div>
           ))}
         </div>

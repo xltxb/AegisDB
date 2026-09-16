@@ -41,3 +41,13 @@
   --z-modal:   1100;  /* @kind other */
   --z-toast:   1200;  /* @kind other */
 }
+
+/* ---- 断点 ----
+   两个断点,不是八个。值必须与 src/lib/breakpoints.ts 的 BP_NARROW / BP_MID
+   一致 —— CSS 取不到 TS 常量,这一对只能靠人盯住。改一处就要改两处。
+
+     narrow  max-width: 768px    只留主干列;卡片行上下堆叠
+     mid     max-width: 1080px   次要列收起;双栏折单栏
+
+   终端页 .tv-grid 的 1500/1280/1040 三档是写明的例外:它是全站唯一的三栏
+   页面,栏宽微调与形态切换的阈值本就不该和通用页面共用一个值。 */

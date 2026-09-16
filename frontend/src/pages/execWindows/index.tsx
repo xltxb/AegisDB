@@ -68,15 +68,15 @@ export default function ExecWindowsPage() {
       ),
     },
     {
-      key: 'db', head: t('winColDb'), width: '1.1fr', mono: true,
+      key: 'db', head: t('winColDb'), width: '1.1fr', mono: true, priority: 2,
       cell: (w) => `${connName.get(w.connectionId) ?? `#${w.connectionId}`} · ${w.database}`,
     },
     {
-      key: 'tz', head: t('winColTz'), width: '1.2fr', mono: true,
+      key: 'tz', head: t('winColTz'), width: '1.2fr', mono: true, priority: 3,
       cell: (w) => (w.kind === 'recurring' ? w.timezone : '—'),
     },
     {
-      key: 'days', head: t('winColDays'), width: '0.8fr',
+      key: 'days', head: t('winColDays'), width: '0.8fr', priority: 3,
       cell: (w) =>
         w.kind === 'once'
           ? '—'
@@ -297,11 +297,11 @@ function PassedModal({ window: w, onClose }: { window: ExecWindow | null; onClos
       key: 'time', head: t('colTime'), width: '1.3fr',
       cell: (r) => <span className="cell-sub">{new Date(r.occurredAt).toLocaleString()}</span>,
     },
-    { key: 'who', head: t('colWho'), width: '0.9fr', cell: (r) => r.actor },
+    { key: 'who', head: t('colWho'), width: '0.9fr', priority: 3, cell: (r) => r.actor },
     {
       // 库名也截断:sqlite 目标库的 database 是一条绝对路径,不截的话它会换三行、
       // 把整行撑高,而这张表的用处是一屏扫过几十条。完整值在 title 上。
-      key: 'inst', head: t('colInstance'), width: '1.1fr',
+      key: 'inst', head: t('colInstance'), width: '1.1fr', priority: 3,
       cell: (r) => (
         <span className="win-aud-inst" title={r.database ? `${r.instance} / ${r.database}` : r.instance}>
           {r.instance}{r.database ? ` / ${r.database}` : ''}
@@ -313,7 +313,7 @@ function PassedModal({ window: w, onClose }: { window: ExecWindow | null; onClos
       cell: (r) => <code className="win-aud-cmd" title={r.command}>{r.command}</code>,
     },
     {
-      key: 'risk', head: t('colRisk'), width: '0.7fr',
+      key: 'risk', head: t('colRisk'), width: '0.7fr', priority: 2,
       cell: (r) => <Badge tone={r.risk === 'high' ? 'danger' : r.risk === 'mid' ? 'warning' : 'neutral'}>{r.risk}</Badge>,
     },
   ]

@@ -71,3 +71,13 @@ export async function stubShell(page: Page, me: unknown = ADMIN) {
     r.fulfill(envelope({ items: [], total: 0, page: 1, pageSize: 1 })))
   await page.route('**/api/v1/settings', (r) => r.fulfill(envelope({})))
 }
+
+/** 两个门户各自能到的页面。门户选错不会报错,只会被静默送回 /terminal。 */
+export const OPS_ROUTES = [
+  'dashboard', 'terminal', 'approvals', 'inbox', 'changes',
+  'scripts', 'export', 'async-jobs', 'exec-windows', 'catalog',
+]
+export const ADMIN_ROUTES = [
+  'connections', 'risk-rules', 'sql-review', 'gov',
+  'permissions', 'pipelines', 'users', 'audit', 'settings',
+]

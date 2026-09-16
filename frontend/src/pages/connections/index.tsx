@@ -21,9 +21,12 @@ import { downloadCsv, toCsv } from '@/lib/csv'
 import { confirmAction } from '@/lib/confirm'
 import { Badge, toneOfStatus } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
+import { PageActions } from '@/components/common/PageActions'
 import { Segmented } from '@/components/common/Segmented'
 import { useUIStore } from '@/stores/ui'
 import { Loading, ErrorState, Empty } from '@/components/common/States'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { gridTemplate, visibleCols, type ColSpec } from '@/lib/tableColumns'
 import { ConnectionModal, POLICIES, blankDraft, draftOf } from './ConnectionModal'
 import { ImportModal } from './ImportModal'
 import { ProjectsModal } from './ProjectsModal'
@@ -32,12 +35,19 @@ import { DbPanel } from './DbPanel'
 import type { Connection, EnvTier, Environment, Project } from '@/types'
 
 /**
- * 八列的比例来自原型。写成常量,表头与每一行只可能取到同一份。
- *
- * 第一列是那个 26px 的勾选框:批量动作(巡检 / 改策略 / 导出)全都建立在"选了哪几台"
- * 之上,而它必须和数据行对齐,所以它是一列,不是塞进实例名格子里的一个附件。
+ * 8 列。勾选框、实例名、状态、操作是主干,窄屏一律保留 —— 一张选不中、
+ * 看不出死活、点不动的表,列再全也没用。
  */
-const COLS = '26px 1.45fr 0.9fr 1.6fr 0.8fr 1fr 1.05fr 112px'
+const COLS: ColSpec[] = [
+  { key: 'sel', width: '26px' },
+  { key: 'inst', width: '1.45fr' },
+  { key: 'engine', width: '0.9fr', priority: 2 },
+  { key: 'addr', width: '1.6fr', priority: 3 },
+  { key: 'role', width: '0.8fr', priority: 3 },
+  { key: 'policy', width: '1fr', priority: 3 },
+  { key: 'status', width: '1.05fr' },
+  { key: 'ops', width: '112px' },
+]
 
 /** 每组先渲染多少行。这一页每行都带着标签、下拉框和可展开的库面板 —— 一次铺开的
  *  不是 N 行文本,而是上千个节点。 */
@@ -103,6 +113,12 @@ export default function ConnectionsPage() {
   const syncMeta = useSyncConnectionMetadata()
   const batchProbe = useBatchProbe()
   const batchPolicy = useBatchPolicy()
+
+  // 窄屏收列:勾选框 / 实例 / 状态 / 操作是主干,其余按优先级让路。
+  const bp = useBreakpoint()
+  const cols = visibleCols(COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
 
   /** 实例 / 环境与分层。原型 v2 把它们折进同一页 —— 一个是实例挂在哪,另一个是
    *  挂过去之后按什么规矩办,分成两条路由只会让人在两页之间来回对照。 */
@@ -402,18 +418,32 @@ export default function ConnectionsPage() {
             ]}
           />
           {view === 'instances' && (
-            <>
-              {/* 项目与「库归属」是同一件事的两头:在这里建项目,回到表上就能把库挂过去。 */}
-              <Button variant="secondary" onClick={() => setProjectsOpen(true)}>
-                <FolderKanban size={15} />{t('prTitle')}
-              </Button>
-              <Button variant="secondary" onClick={() => setImportOpen(true)}>
-                <Upload size={15} />{t('connImport')}
-              </Button>
-              <Button variant="primary" onClick={() => setDraft(blankDraft(envList[0]?.code ?? ''))}>
-                <Plus size={15} />{t('connNew')}
-              </Button>
-            </>
+            <PageActions
+              primary={
+                <Button variant="primary" onClick={() => setDraft(blankDraft(envList[0]?.code ?? ''))}>
+                  <Plus size={15} />{t('connNew')}
+                </Button>
+              }
+              extras={[
+                {
+                  key: 'projects',
+                  // 项目与「库归属」是同一件事的两头:在这里建项目,回到表上就能把库挂过去。
+                  node: (
+                    <Button variant="secondary" onClick={() => setProjectsOpen(true)}>
+                      <FolderKanban size={15} />{t('prTitle')}
+                    </Button>
+                  ),
+                },
+                {
+                  key: 'import',
+                  node: (
+                    <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                      <Upload size={15} />{t('connImport')}
+                    </Button>
+                  ),
+                },
+              ]}
+            />
           )}
         </div>
       </header>
@@ -526,7 +556,7 @@ export default function ConnectionsPage() {
               对得上。
             */
             <div className={clsx('c-table', 'conn-table', dense && 'dense')}>
-              <div className="c-thead" style={{ gridTemplateColumns: COLS }}>
+              <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
                 <div>
                   <input
                     type="checkbox"
@@ -536,10 +566,10 @@ export default function ConnectionsPage() {
                   />
                 </div>
                 <div>{t('connColInstance')}</div>
-                <div>{t('connColEngine')}</div>
-                <div>{t('connColAddr')}</div>
-                <div>{t('connColRole')}</div>
-                <div>{t('connColPolicy')}</div>
+                {show('engine') && <div>{t('connColEngine')}</div>}
+                {show('addr') && <div>{t('connColAddr')}</div>}
+                {show('role') && <div>{t('connColRole')}</div>}
+                {show('policy') && <div>{t('connColPolicy')}</div>}
                 <div>{t('connColStatus')}</div>
                 <div />
               </div>
@@ -584,7 +614,7 @@ export default function ConnectionsPage() {
                           <Fragment key={c.id}>
                             <div
                               className={clsx('c-trow', 'conn-row', sel.has(c.id) && 'sel')}
-                              style={{ gridTemplateColumns: COLS }}
+                              style={{ gridTemplateColumns: tpl }}
                             >
                               <div className="c-td">
                                 <input
@@ -614,33 +644,37 @@ export default function ConnectionsPage() {
                                   </div>
                                 )}
                               </div>
-                              <div className="c-td">{engineDisplay(c.engine)}</div>
-                              <div className="c-td conn-host">
-                                <span className="mono" title={`${c.host}:${c.port}`}>
-                                  <Hi text={`${c.host}:${c.port}`} needle={needle} />
-                                </span>
-                                <button
-                                  type="button"
-                                  className="conn-iconbtn"
-                                  title={t(copiedId === c.id ? 'connCopied' : 'connCopy')}
-                                  onClick={() => copyHost(c)}
-                                >
-                                  {copiedId === c.id ? <Check size={12} /> : <Copy size={12} />}
-                                </button>
-                                {!dense && c.database && <div className="cell-sub">{c.database}</div>}
-                              </div>
-                              <div className="c-td mono">{c.defaultRole || '—'}</div>
-                              <div className="c-td">
-                                <select
-                                  className={clsx('conn-polsel', `t-${policyTone(c.policy)}`)}
-                                  value={c.policy}
-                                  title={t('connFPolicy')}
-                                  disabled={setPolicy.isPending}
-                                  onChange={(e) => setPolicy.mutate({ id: c.id, policy: e.target.value })}
-                                >
-                                  {POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
-                                </select>
-                              </div>
+                              {show('engine') && <div className="c-td">{engineDisplay(c.engine)}</div>}
+                              {show('addr') && (
+                                <div className="c-td conn-host">
+                                  <span className="mono" title={`${c.host}:${c.port}`}>
+                                    <Hi text={`${c.host}:${c.port}`} needle={needle} />
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="conn-iconbtn"
+                                    title={t(copiedId === c.id ? 'connCopied' : 'connCopy')}
+                                    onClick={() => copyHost(c)}
+                                  >
+                                    {copiedId === c.id ? <Check size={12} /> : <Copy size={12} />}
+                                  </button>
+                                  {!dense && c.database && <div className="cell-sub">{c.database}</div>}
+                                </div>
+                              )}
+                              {show('role') && <div className="c-td mono">{c.defaultRole || '—'}</div>}
+                              {show('policy') && (
+                                <div className="c-td">
+                                  <select
+                                    className={clsx('conn-polsel', `t-${policyTone(c.policy)}`)}
+                                    value={c.policy}
+                                    title={t('connFPolicy')}
+                                    disabled={setPolicy.isPending}
+                                    onChange={(e) => setPolicy.mutate({ id: c.id, policy: e.target.value })}
+                                  >
+                                    {POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                                  </select>
+                                </div>
+                              )}
                               <div className="c-td conn-status">
                                 {/*
                                   徽标本身就是开关:在线 ⇄ 维护是这一页最常按的一下,

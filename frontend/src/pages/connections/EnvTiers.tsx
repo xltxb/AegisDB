@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Boxes, Layers, Pencil, Plus, ShieldCheck, Trash2 } from 'lucide-react'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { gridTemplate, visibleCols, type ColSpec } from '@/lib/tableColumns'
 import { envTiersQueryOptions, environmentsQueryOptions } from '@/api/modules/envtier'
 import {
   useCreateEnvTier, useCreateEnvironment, useDeleteEnvTier, useDeleteEnvironment,
@@ -61,7 +63,17 @@ export function EnvTiers() {
 
 // ------------------------------------------------------------------- 分层
 
-const TIER_COLS = '1.6fr 88px 88px 88px 88px 120px 1.2fr 76px'
+/** 分层表:分层名、默认角色、操作是主干;四个开关列最先收。 */
+const TIER_COLS: ColSpec[] = [
+  { key: 'tier', width: '1.6fr' },
+  { key: 'mfa', width: '88px', priority: 3 },
+  { key: 'banner', width: '88px', priority: 3 },
+  { key: 'pending', width: '88px', priority: 3 },
+  { key: 'scan', width: '88px', priority: 3 },
+  { key: 'baseline', width: '120px', priority: 2 },
+  { key: 'role', width: '1.2fr' },
+  { key: 'ops', width: '76px' },
+]
 
 function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const { t } = useTranslation()
@@ -69,6 +81,12 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const del = useDeleteEnvTier()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<EnvTier | null>(null)
+
+  // 窄屏收列:四个开关(mfa/banner/pending/scan)最先收,baseline 其次。
+  const bp = useBreakpoint()
+  const cols = visibleCols(TIER_COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
 
   const boundEnvs = (code: string) => envs.filter((e) => e.tierCode === code)
 
@@ -112,13 +130,15 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       <div className="c-table">
-        <div className="c-thead" style={{ gridTemplateColumns: TIER_COLS }}>
+        <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
           <div>{t('etColTier')}</div>
-          <div className="ctr">{t('etColMfa')}</div>
-          <div className="ctr">{t('etColBanner')}</div>
-          <div className="ctr">{t('etColPending')}</div>
-          <div className="ctr" title={t('etColStrictHint')}>{t('etColStrict')}</div>
-          <div className="ctr">{t('etColBaseline')}</div>
+          {show('mfa') && <div className="ctr">{t('etColMfa')}</div>}
+          {show('banner') && <div className="ctr">{t('etColBanner')}</div>}
+          {show('pending') && <div className="ctr">{t('etColPending')}</div>}
+          {show('scan') && (
+            <div className="ctr" title={t('etColStrictHint')}>{t('etColStrict')}</div>
+          )}
+          {show('baseline') && <div className="ctr">{t('etColBaseline')}</div>}
           <div>{t('etColBound')}</div>
           <div />
         </div>
@@ -129,7 +149,7 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
           const reason = blockReason(tier)
           const bound = boundEnvs(tier.code)
           return (
-            <div key={tier.code} className="c-trow" style={{ gridTemplateColumns: TIER_COLS }}>
+            <div key={tier.code} className="c-trow" style={{ gridTemplateColumns: tpl }}>
               <div className="c-td conn-et-name">
                 <Badge tone={toneOfDot(dotFor(tier.code, tiers))}>{tier.code}</Badge>
                 <span>
@@ -137,48 +157,58 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
                   <span className="cell-sub">{tier.connLayer} · {tier.defaultRole}</span>
                 </span>
               </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.requireMfa}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { requireMfa: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.dangerBanner}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { dangerBanner: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                <Switch
-                  checked={tier.countsInPending}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { countsInPending: v } })}
-                />
-              </div>
-              <div className="c-td ctr" title={t('etColStrictHint')}>
-                <Switch
-                  checked={tier.strictNoWhere}
-                  disabled={update.isPending}
-                  onChange={(v) => update.mutate({ tier, patch: { strictNoWhere: v } })}
-                />
-              </div>
-              <div className="c-td ctr">
-                {tier.scanBaseline ? (
-                  <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
-                ) : (
-                  <button
-                    type="button"
-                    className="conn-linkbtn"
+              {show('mfa') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.requireMfa}
                     disabled={update.isPending}
-                    onClick={() => makeBaseline(tier)}
-                  >
-                    {t('etBaselineSet')}
-                  </button>
-                )}
-              </div>
+                    onChange={(v) => update.mutate({ tier, patch: { requireMfa: v } })}
+                  />
+                </div>
+              )}
+              {show('banner') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.dangerBanner}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { dangerBanner: v } })}
+                  />
+                </div>
+              )}
+              {show('pending') && (
+                <div className="c-td ctr">
+                  <Switch
+                    checked={tier.countsInPending}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { countsInPending: v } })}
+                  />
+                </div>
+              )}
+              {show('scan') && (
+                <div className="c-td ctr" title={t('etColStrictHint')}>
+                  <Switch
+                    checked={tier.strictNoWhere}
+                    disabled={update.isPending}
+                    onChange={(v) => update.mutate({ tier, patch: { strictNoWhere: v } })}
+                  />
+                </div>
+              )}
+              {show('baseline') && (
+                <div className="c-td ctr">
+                  {tier.scanBaseline ? (
+                    <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
+                  ) : (
+                    <button
+                      type="button"
+                      className="conn-linkbtn"
+                      disabled={update.isPending}
+                      onClick={() => makeBaseline(tier)}
+                    >
+                      {t('etBaselineSet')}
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="c-td conn-chipline">
                 {bound.length
                   ? bound.map((e) => <span key={e.code} className="conn-chip">{e.code}</span>)
@@ -203,7 +233,18 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       {creating && <TierForm tiers={tiers} onClose={() => setCreating(false)} />}
-      {editing && <TierEdit tier={editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <TierEdit
+          // 弹窗里的四个开关 + 基准分层直接读 tier 的字段并即点即发(和表格里的
+          // <Switch> 同一套即时写入),所以要喂"当前这份"而不是打开弹窗那一刻的
+          // 快照——否则点完一下,mutate 成功、缓存也刷新了,弹窗上却还照旧显示
+          // 点之前的状态,再点一下等于把同一个方向的请求又发一遍。displayName /
+          // connLayer / defaultRole 这些改名字段不受影响,它们本就存在组件自己
+          // 的表单状态 f 里,只在打开那一刻取一次初值。
+          tier={tiers.find((x) => x.code === editing.code) ?? editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
   )
 }
@@ -305,6 +346,19 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
   })
   const set = (patch: Partial<typeof f>) => setF((p) => ({ ...p, ...patch }))
 
+  // 四个开关与基准分层在 mid/narrow 下从表格里收走,而它们在这张表里**没有第二条
+  // 入口**——所以弹窗要把它们接住。写入方式与表格里的 <Switch> / 按钮走同一个
+  // update.mutate,不另起写入路径;基准分层保留同一条确认语义(见下方 makeBaseline),
+  // 不降级成静默开关。
+  function toggle(patch: Partial<EnvTier>) {
+    update.mutate({ tier, patch })
+  }
+  function makeBaseline() {
+    if (tier.scanBaseline) return
+    if (!confirmAction(t('etBaselineConfirm', { code: tier.code }))) return
+    update.mutate({ tier, patch: { scanBaseline: true } })
+  }
+
   return (
     <Modal
       open
@@ -343,13 +397,75 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
         </div>
       </div>
       <div className="notice">{t('etCodeFixed', { code: tier.code })}</div>
+
+      <div className="conn-et-switches">
+        <label>
+          <Switch
+            checked={tier.requireMfa}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ requireMfa: v })}
+          />
+          {t('etColMfa')}
+        </label>
+        <label>
+          <Switch
+            checked={tier.dangerBanner}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ dangerBanner: v })}
+          />
+          {t('etColBanner')}
+        </label>
+        <label>
+          <Switch
+            checked={tier.countsInPending}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ countsInPending: v })}
+          />
+          {t('etColPending')}
+        </label>
+        <label title={t('etColStrictHint')}>
+          <Switch
+            checked={tier.strictNoWhere}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ strictNoWhere: v })}
+          />
+          {t('etColStrict')}
+        </label>
+      </div>
+
+      <div className="fld">
+        <label>{t('etColBaseline')}</label>
+        {tier.scanBaseline ? (
+          <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
+        ) : (
+          <button
+            type="button"
+            className="conn-linkbtn"
+            disabled={update.isPending}
+            onClick={makeBaseline}
+          >
+            {t('etBaselineSet')}
+          </button>
+        )}
+      </div>
     </Modal>
   )
 }
 
 // ------------------------------------------------------------------- 环境
 
-const ENV_COLS = '1.6fr 1.6fr 120px 96px'
+/**
+ * 环境表只有 4 列,**任何档位都不收** —— 收列是为了给挤压让路,4 列在 768 下不挤。
+ *
+ * 第二列是「绑定分层」,不是显示名:它是一个环境最要紧的事实(归哪个分层管,
+ * 也就决定了适用哪套规则),藏起来这张表就只剩一串环境名。
+ */
+const ENV_COLS: ColSpec[] = [
+  { key: 'env', width: '1.6fr' },
+  { key: 'tierBind', width: '1.6fr' },
+  { key: 'insts', width: '120px' },
+  { key: 'ops', width: '96px' },
+]
 
 function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const { t } = useTranslation()
@@ -357,6 +473,12 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Environment | null>(null)
   const [deleting, setDeleting] = useState<Environment | null>(null)
+
+  // 4 列在 768 下也不挤,所以这里不收列 —— 但仍走 useBreakpoint / gridTemplate
+  // 这一套机制,留着将来给这张表加第五列时,收列的地方已经在了。
+  const bp = useBreakpoint()
+  const cols = visibleCols(ENV_COLS, bp)
+  const tpl = gridTemplate(cols)
 
   const count = (code: string) => usage?.[code] ?? 0
 
@@ -374,7 +496,7 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       <div className="c-table">
-        <div className="c-thead" style={{ gridTemplateColumns: ENV_COLS }}>
+        <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
           <div>{t('etColEnv')}</div>
           <div>{t('etColTierBind')}</div>
           <div className="ctr">{t('etColInsts')}</div>
@@ -386,7 +508,7 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
         {envs.map((e) => {
           const tier = tiers.find((x) => x.code === e.tierCode)
           return (
-            <div key={e.code} className="c-trow" style={{ gridTemplateColumns: ENV_COLS }}>
+            <div key={e.code} className="c-trow" style={{ gridTemplateColumns: tpl }}>
               <div className="c-td conn-et-name">
                 <Badge tone={toneOfDot(dotFor(e.tierCode, tiers))}>{e.code}</Badge>
                 <span className="cell-strong">{e.displayName || e.code}</span>

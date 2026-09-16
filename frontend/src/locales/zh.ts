@@ -182,6 +182,7 @@ export const zh = {
   termPickConn: '先在左侧选一台实例',
   termReconnect: '重连会话',
   termInspector: '执行上下文 · 风险检查',
+  tvInspector: '唤回执行上下文 / 风险检查',
   termTargetInst: '目标实例',
   termTier: '控制分层',
   termPolicy: '网关策略',

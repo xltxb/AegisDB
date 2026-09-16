@@ -22,10 +22,18 @@ import { Loading, ErrorState, Empty } from '@/components/common/States'
 import { confirmAction } from '@/lib/confirm'
 import { initialsOf } from '@/lib/initials'
 import { useUIStore } from '@/stores/ui'
+import { useBreakpoint } from '@/hooks/useBreakpoint'
+import { gridTemplate, visibleCols, type ColSpec } from '@/lib/tableColumns'
 import type { RoleBrief, UserView } from '@/types'
 
-/** 主表列宽,照原型:用户 / 账号 / 角色 / 最近活跃 / 状态。 */
-const COLS = '1.4fr 1.6fr 2.2fr 0.9fr 0.9fr'
+/** 用户 / 账号 / 角色 / 最近活跃 / 状态。用户名与状态是主干。 */
+const COLS: ColSpec[] = [
+  { key: 'user', width: '1.4fr' },
+  { key: 'account', width: '1.6fr', priority: 3 },
+  { key: 'roles', width: '2.2fr', priority: 2 },
+  { key: 'active', width: '0.9fr', priority: 3 },
+  { key: 'status', width: '0.9fr' },
+]
 
 export default function UsersPage() {
   const { t } = useTranslation()
@@ -35,6 +43,12 @@ export default function UsersPage() {
   const [invite, setInvite] = useState(false)
   const [create, setCreate] = useState(false)
   const [detail, setDetail] = useState<UserView | null>(null)
+
+  // 窄屏收列:用户名与状态是主干,账号 / 角色 / 最近活跃按优先级让路。
+  const bp = useBreakpoint()
+  const cols = visibleCols(COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
 
   const rows = users ?? []
   const noRole = rows.filter((u) => !u.roleIds?.length).length
@@ -70,11 +84,11 @@ export default function UsersPage() {
 
       {!isLoading && !error && (
         <div className="c-table us-table">
-          <div className="c-thead" style={{ gridTemplateColumns: COLS }}>
+          <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
             <div>{t('usColUser')}</div>
-            <div>{t('usColAccount')}</div>
-            <div>{t('usColRoles')}</div>
-            <div>{t('usColActive')}</div>
+            {show('account') && <div>{t('usColAccount')}</div>}
+            {show('roles') && <div>{t('usColRoles')}</div>}
+            {show('active') && <div>{t('usColActive')}</div>}
             <div>{t('usColStatus')}</div>
           </div>
           {!rows.length && <Empty hint={t('usEmpty')} />}
@@ -123,11 +137,18 @@ function UserRow({
   const [expand, setExpand] = useState(false)
   const noRole = !user.roleIds?.length
 
+  // 每一行都是独立组件实例,自己订阅档位、自己算列 —— 和表头各算各的,
+  // 但读的是同一份 COLS,轨道数不会因此和表头脱节。
+  const bp = useBreakpoint()
+  const cols = visibleCols(COLS, bp)
+  const tpl = gridTemplate(cols)
+  const show = (key: string) => cols.some((c) => c.key === key)
+
   return (
     <>
       <div
         className={clsx('c-trow clickable', user.status === 'disabled' && 'us-off')}
-        style={{ gridTemplateColumns: COLS }}
+        style={{ gridTemplateColumns: tpl }}
         onClick={onOpen}
       >
         <div className="c-td us-cell">
@@ -144,25 +165,27 @@ function UserRow({
           {noRole && <ShieldOff size={15} className="us-warnicon" aria-label={t('usNoRole')} />}
         </div>
 
-        <div className="c-td mono">{user.email}</div>
+        {show('account') && <div className="c-td mono">{user.email}</div>}
 
-        <div className="c-td us-rolecell">
-          {user.roles?.length
-            ? user.roles.map((r) => <span key={r} className="us-rolechip">{r}</span>)
-            : <span className="us-norole">{t('usNoRole')}</span>}
-          {isAdmin && (
-            <button
-              type="button"
-              className={clsx('us-assign', expand && 'on')}
-              title={t('usAssign')}
-              onClick={(e) => { e.stopPropagation(); setExpand((v) => !v) }}
-            >
-              <ChevronDown size={13} />
-            </button>
-          )}
-        </div>
+        {show('roles') && (
+          <div className="c-td us-rolecell">
+            {user.roles?.length
+              ? user.roles.map((r) => <span key={r} className="us-rolechip">{r}</span>)
+              : <span className="us-norole">{t('usNoRole')}</span>}
+            {isAdmin && (
+              <button
+                type="button"
+                className={clsx('us-assign', expand && 'on')}
+                title={t('usAssign')}
+                onClick={(e) => { e.stopPropagation(); setExpand((v) => !v) }}
+              >
+                <ChevronDown size={13} />
+              </button>
+            )}
+          </div>
+        )}
 
-        <div className="c-td mono">{user.lastActive || '—'}</div>
+        {show('active') && <div className="c-td mono">{user.lastActive || '—'}</div>}
 
         <div className="c-td us-statuscell" onClick={(e) => e.stopPropagation()}>
           <span
