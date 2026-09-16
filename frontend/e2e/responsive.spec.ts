@@ -60,6 +60,15 @@ for (const [portal, routes] of [['运维前台', OPS_ROUTES], ['管理后台', A
           await expect(page, `${route} 被静默送去了别处 —— 多半是门户选错`).toHaveURL(new RegExp(`/${route}$`))
           await page.waitForTimeout(300)
           expect(await overflow(page, w), `${route} 在 ${w}px 下横向溢出`).toBeLessThanOrEqual(1)
+          // 页面级溢出断言按构造看不见内层横滚:症状表第 3 行「审计页 .page-head
+          // 内层横滚 638→735 @768」就是一处内层容器自己滚、外壳并不溢出的例子。
+          // 只在这一条已知会发生过的路由 × 宽度上单独钉一句,不是给每条路由都加。
+          if (w === 768 && route === 'audit') {
+            expect(
+              await page.locator('.page-head').evaluate((el) => el.scrollWidth - el.clientWidth),
+              'audit 页 .page-head 在 768px 下内层横滚',
+            ).toBeLessThanOrEqual(1)
+          }
         }
       })
     }
@@ -75,6 +84,11 @@ test('窄屏下标题不被挤成竖排单字', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 900 })
   await page.goto('/settings')
   await expect(page.locator('.top-title')).toBeVisible()
+
+  // 适配下限那句话的另一半:「外壳在 390 下不应自身溢出」——实测从 33 修到了 0,
+  // 但之前没有断言钉住它。折行判定只看 .top-title 自己的高宽比,看不到壳体整体
+  // 溢出;这两件事根因相同(.top-head 的 min-width:0),但要各自断言。
+  expect(await overflow(page, 390), '壳体在 390 下自身溢出').toBeLessThanOrEqual(1)
 
   const ratio = await page.locator('.top-title').evaluate((el) => {
     const r = el.getBoundingClientRect()
