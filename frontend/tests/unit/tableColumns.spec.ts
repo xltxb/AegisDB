@@ -26,13 +26,17 @@ test('不写 priority 视同 1,narrow 下仍在场', () => {
   expect(visibleCols([{ key: 'a', width: '1fr' }], 'narrow').map((c) => c.key)).toEqual(['a'])
 })
 
-// 这条是整套改动的核心约束。grid 轨道数和渲染出的单元格数一旦脱节,
-// 表格会整体错位一列,而类型检查与构建都看不见。
-test('模板的轨道数恒等于可见列数', () => {
-  for (const bp of ['wide', 'mid', 'narrow'] as const) {
-    const vis = visibleCols(COLS, bp)
-    expect(gridTemplate(vis).split(' ').length, `${bp} 档轨道数对不上`).toBe(vis.length)
-  }
+// 列宽可以带空格 —— `minmax(88px, 1fr)` 这类值本仓库已经在用
+// (见 components/permission/CapabilityMatrix.tsx)。模板必须原样拼接它们,
+// 期望值是手写的字面量,不从被测函数推导,否则这条测试就只是在复述实现。
+test('带空格的列宽原样拼进模板', () => {
+  const cols: ColSpec[] = [
+    { key: 'head', width: 'minmax(150px, 2fr)' },
+    { key: 'a', width: 'minmax(88px, 1fr)' },
+    { key: 'b', width: '96px', priority: 3 },
+  ]
+  expect(gridTemplate(visibleCols(cols, 'wide'))).toBe('minmax(150px, 2fr) minmax(88px, 1fr) 96px')
+  expect(gridTemplate(visibleCols(cols, 'mid'))).toBe('minmax(150px, 2fr) minmax(88px, 1fr)')
 })
 
 test('模板按列序拼接宽度', () => {
