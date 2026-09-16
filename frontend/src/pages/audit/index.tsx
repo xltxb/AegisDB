@@ -154,11 +154,11 @@ export default function AuditPage() {
       cell: (r) => fmtTime(r.occurredAt),
     },
     {
-      key: 'who', head: t('colWho'), width: '1fr',
+      key: 'who', head: t('colWho'), width: '1fr', priority: 2,
       cell: (r) => r.actor,
     },
     {
-      key: 'inst', head: t('colInstance'), width: '1.1fr', mono: true,
+      key: 'inst', head: t('colInstance'), width: '1.1fr', mono: true, priority: 3,
       cell: (r) => <>{r.instance}{r.database && <span className="aud-db"> / {r.database}</span>}</>,
     },
     {
@@ -171,7 +171,7 @@ export default function AuditPage() {
       ),
     },
     {
-      key: 'risk', head: t('colRisk'), width: '0.8fr',
+      key: 'risk', head: t('colRisk'), width: '0.8fr', priority: 2,
       cell: (r) => (
         <Badge tone={RISK_TONE[r.risk] ?? 'accent'}>{t(RISK_LABEL[r.risk] ?? 'audRiskLow')}</Badge>
       ),
@@ -184,7 +184,7 @@ export default function AuditPage() {
       },
     },
     {
-      key: 'ap', head: t('colAp'), width: '0.9fr',
+      key: 'ap', head: t('colAp'), width: '0.9fr', priority: 3,
       cell: (r) => (
         <span
           className={clsx('aud-ap', r.approvalNo && canOpenApproval && 'link', !r.approvalNo && 'none')}

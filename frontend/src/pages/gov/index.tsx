@@ -75,11 +75,11 @@ export default function GovPage() {
       ),
     },
     {
-      key: 'style', head: t('govColStyle'), width: '1fr',
+      key: 'style', head: t('govColStyle'), width: '1fr', priority: 2,
       cell: (r) => <Badge tone="accent">{t(`govStyle_${r.maskStyle}`)}</Badge>,
     },
     {
-      key: 'preview', head: t('govColPreview'), width: '1.6fr',
+      key: 'preview', head: t('govColPreview'), width: '1.6fr', priority: 3,
       cell: (r) => (
         <span className="gov-preview" title={t('govPreviewTip')}>
           <span className="gov-dim">{SAMPLE}</span>
@@ -89,7 +89,7 @@ export default function GovPage() {
       ),
     },
     {
-      key: 'exempt', head: t('govColExempt'), width: '1.2fr',
+      key: 'exempt', head: t('govColExempt'), width: '1.2fr', priority: 3,
       cell: (r) => (
         <span className="gov-exempt">
           <Switch checked={!r.enabled} disabled={!isAdmin || save.isPending} onChange={(v) => toggleExempt(r, v)} />

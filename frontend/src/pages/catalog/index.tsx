@@ -364,11 +364,11 @@ function TableDetail({
       ),
     },
     {
-      key: 'type', head: t('catColType'), width: '1.2fr', mono: true,
+      key: 'type', head: t('catColType'), width: '1.2fr', mono: true, priority: 2,
       cell: (c) => <>{c.dataType}{c.nullable ? '' : ` ${t('catNotNull')}`}</>,
     },
     {
-      key: 'idx', head: t('catColIndex'), width: '1fr',
+      key: 'idx', head: t('catColIndex'), width: '1fr', priority: 3,
       // 缓存里只有主键这一个索引信息(MetaColumn.isPk),没有二级索引 —— 所以这一列
       // 只说主键,不说"无索引":我们并不知道有没有。
       cell: (c) => (c.isPk
