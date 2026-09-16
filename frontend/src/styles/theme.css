@@ -163,10 +163,16 @@ a { color: inherit; text-decoration: none; }
 .page-head h1 { margin: 0 0 4px; font: 700 20px var(--font-display); color: var(--text-strong); letter-spacing: -.015em; }
 .page-head p { margin: 0; font: 400 13px var(--font-body); color: var(--text-muted); }
 .page-head .grow { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-/* 窄屏自动让出边距,不再硬顶容器边缘。上限值不变 —— 它们是排版决定,
-   不是自适应问题。 */
-.page { max-width: min(100% - 32px, 1120px); }
-.page-narrow { max-width: min(100% - 32px, 960px); }
+/* 曾经改成 min(100% - 32px, N) 想让窄屏自动让出额外边距 —— 但 .page 是块级
+   元素,没有 margin-inline: auto,这道额外的 32px 缩进整段落在右边(实测:
+   768 下左 0 / 右 32,1440 下左 0 / 右 190),两侧从此不对称。而 .content
+   本身已经有 24px 28px 的 padding,窄屏下容器宽度本就小于这些上限,.page
+   会直接顶满容器 —— 也就是贴着 .content 的内边缘,两侧对称地留出
+   .content 的 28px,并不是"硬顶到视口边缘"。这里不需要再叠一层缩进,
+   加 margin-inline: auto 又会改变宽屏下"贴左对齐"的既有版式,所以直接把
+   这道多余的缩进去掉。上限值本身不变 —— 它们是排版决定,不是自适应问题。 */
+.page { max-width: 1120px; }
+.page-narrow { max-width: 960px; }
 
 @media (max-width: 768px) {
   /* .page-head 在窄屏折成两行:标题独占一行,.grow(动作区)让到下一行。
@@ -512,7 +518,10 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ============ 变更工单 ============ */
-.chg, .pl { max-width: min(100% - 32px, 1320px); }
+/* 不再叠加 min(100% - 32px, N) 里那道额外缩进 —— 理由见 .page 上方的注释:
+   没有 margin-inline: auto,这道缩进只会落在右边,而 .content 的 28px
+   padding 已经对称地给出了边距。 */
+.chg, .pl { max-width: 1320px; }
 .chg-wrap, .pl-wrap { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .chg-wrap, .pl-wrap { grid-template-columns: 1fr; } }
 .chg-list, .pl-list { display: flex; flex-direction: column; gap: 8px; max-height: 76vh; overflow-y: auto; }
@@ -911,7 +920,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* ---- /permissions ---- */
-.perm-page { max-width: min(100% - 32px, 1240px); }
+/* 同 .page:去掉 min(100% - 32px, N) 那道额外缩进,理由见该处注释。 */
+.perm-page { max-width: 1240px; }
 .perm-grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 1080px) { .perm-grid { grid-template-columns: 1fr; } }
 .perm-roles {
