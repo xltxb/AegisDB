@@ -16,6 +16,7 @@ export const zh = {
   portalFrontendHint: '终端、审批、变更与导出',
   portalBackendHint: '连接、规则、权限与设置',
   loginFailed: '登录失败',
+  loginBadResp: '登录响应里没有令牌 —— 多半是网关或代理替后端应答了,请联系管理员',
   loginThrottled: '尝试过于频繁,请稍后再试',
 
   // 外壳

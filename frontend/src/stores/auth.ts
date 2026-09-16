@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import http, { ok, TOKEN_KEY, type Envelope } from '@/api/http'
 import type { Me, LoginResp } from '@/types'
+import { isUsableLoginResp } from '@/lib/loginResp'
+import i18n from '@/locales'
 
 /** 能力矩阵的一格:能力 × 分层 → 档位。 */
 export type CapLevel = 'allow' | 'approve' | 'deny'
@@ -40,6 +42,10 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const data = await http
       .post<unknown, Envelope<LoginResp>>('/auth/login', { email, password, mfaCode })
       .then(ok)
+    // 落盘之前先确认这真是一次登录。缺 token 时直接写进去的是字符串 "undefined" ——
+    // 真值,守卫放行,于是界面看着像登上了而每个请求都在 401(issue #79)。
+    // 抛出去而不是静默:登录页已经会展示 `(e as Error).message`。
+    if (!isUsableLoginResp(data)) throw new Error(i18n.t('loginBadResp'))
     localStorage.setItem(TOKEN_KEY, data.token)
     if (portal) localStorage.setItem(PORTAL_KEY, portal)
     set({ token: data.token, me: data.user, ...(portal ? { portal } : {}) })

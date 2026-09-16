@@ -15,6 +15,7 @@ export const en: Dict = {
   portalFrontendHint: 'Terminal, approvals, changes and exports',
   portalBackendHint: 'Connections, rules, permissions and settings',
   loginFailed: 'Sign-in failed',
+  loginBadResp: 'The sign-in response carried no token — a gateway or proxy most likely answered instead of the backend. Ask an administrator.',
   loginThrottled: 'Too many attempts, try again later',
   navTerminal: 'Terminal',
   navTerminalShort: 'Terminal',
