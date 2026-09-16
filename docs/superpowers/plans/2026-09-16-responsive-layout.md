@@ -410,11 +410,16 @@ const TIER_COLS: ColSpec[] = [
   { key: 'ops', width: '76px' },
 ]
 
-/** 环境表只有 4 列,mid 下不必收 —— 收列是为了给挤压让路,没挤压就别收。 */
+/**
+ * 环境表只有 4 列,**任何档位都不收** —— 收列是为了给挤压让路,4 列在 768 下不挤。
+ *
+ * 第二列是「绑定分层」,不是显示名:它是一个环境最要紧的事实(归哪个分层管,
+ * 也就决定了适用哪套规则),藏起来这张表就只剩一串环境名。
+ */
 const ENV_COLS: ColSpec[] = [
   { key: 'env', width: '1.6fr' },
-  { key: 'label', width: '1.6fr', priority: 2 },
-  { key: 'tier', width: '120px' },
+  { key: 'tierBind', width: '1.6fr' },
+  { key: 'insts', width: '120px' },
   { key: 'ops', width: '96px' },
 ]
 ```
