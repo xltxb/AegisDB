@@ -233,7 +233,18 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       </div>
 
       {creating && <TierForm tiers={tiers} onClose={() => setCreating(false)} />}
-      {editing && <TierEdit tier={editing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <TierEdit
+          // 弹窗里的四个开关 + 基准分层直接读 tier 的字段并即点即发(和表格里的
+          // <Switch> 同一套即时写入),所以要喂"当前这份"而不是打开弹窗那一刻的
+          // 快照——否则点完一下,mutate 成功、缓存也刷新了,弹窗上却还照旧显示
+          // 点之前的状态,再点一下等于把同一个方向的请求又发一遍。displayName /
+          // connLayer / defaultRole 这些改名字段不受影响,它们本就存在组件自己
+          // 的表单状态 f 里,只在打开那一刻取一次初值。
+          tier={tiers.find((x) => x.code === editing.code) ?? editing}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </>
   )
 }
@@ -335,6 +346,19 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
   })
   const set = (patch: Partial<typeof f>) => setF((p) => ({ ...p, ...patch }))
 
+  // 四个开关与基准分层在 mid/narrow 下从表格里收走,而它们在这张表里**没有第二条
+  // 入口**——所以弹窗要把它们接住。写入方式与表格里的 <Switch> / 按钮走同一个
+  // update.mutate,不另起写入路径;基准分层保留同一条确认语义(见下方 makeBaseline),
+  // 不降级成静默开关。
+  function toggle(patch: Partial<EnvTier>) {
+    update.mutate({ tier, patch })
+  }
+  function makeBaseline() {
+    if (tier.scanBaseline) return
+    if (!confirmAction(t('etBaselineConfirm', { code: tier.code }))) return
+    update.mutate({ tier, patch: { scanBaseline: true } })
+  }
+
   return (
     <Modal
       open
@@ -373,6 +397,57 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
         </div>
       </div>
       <div className="notice">{t('etCodeFixed', { code: tier.code })}</div>
+
+      <div className="conn-et-switches">
+        <label>
+          <Switch
+            checked={tier.requireMfa}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ requireMfa: v })}
+          />
+          {t('etColMfa')}
+        </label>
+        <label>
+          <Switch
+            checked={tier.dangerBanner}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ dangerBanner: v })}
+          />
+          {t('etColBanner')}
+        </label>
+        <label>
+          <Switch
+            checked={tier.countsInPending}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ countsInPending: v })}
+          />
+          {t('etColPending')}
+        </label>
+        <label title={t('etColStrictHint')}>
+          <Switch
+            checked={tier.strictNoWhere}
+            disabled={update.isPending}
+            onChange={(v) => toggle({ strictNoWhere: v })}
+          />
+          {t('etColStrict')}
+        </label>
+      </div>
+
+      <div className="fld">
+        <label>{t('etColBaseline')}</label>
+        {tier.scanBaseline ? (
+          <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
+        ) : (
+          <button
+            type="button"
+            className="conn-linkbtn"
+            disabled={update.isPending}
+            onClick={makeBaseline}
+          >
+            {t('etBaselineSet')}
+          </button>
+        )}
+      </div>
     </Modal>
   )
 }
