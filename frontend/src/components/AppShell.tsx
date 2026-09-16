@@ -237,15 +237,17 @@ export default function AppShell() {
             </button>
             <span className={clsx('pill pill-health', !gwOnline && 'off')}>
               <Activity size={14} />
-              {gwOnline
-                ? `${t('gwOnline')}${gw.data ? ` · p50 ${gw.data.p50Ms}ms` : ''}`
-                : t('gwOffline')}
+              <span className="pill-label">
+                {gwOnline
+                  ? `${t('gwOnline')}${gw.data ? ` · p50 ${gw.data.p50Ms}ms` : ''}`
+                  : t('gwOffline')}
+              </span>
             </span>
             {/* 待审批只在运维前台出现:管理后台是配置面,那里没人在等着签字。 */}
             {!isBackend && !!menus.approve && (
               <span className="pill pill-pending">
                 <Hourglass size={14} />
-                {t('pendingN')} {pendingN}
+                <span className="pill-label">{t('pendingN')} {pendingN}</span>
               </span>
             )}
             <button className="iconbtn" onClick={toggleLang} title="zh / en"><Languages size={16} /></button>
