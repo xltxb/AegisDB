@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { BusFront, Trash2, Plus, ScrollText } from 'lucide-react'
 import { useExecWindows, useCreateExecWindow, useDeleteExecWindow, useExecWindowAudit } from '@/hooks/useExecWindows'
 import { connectionsQueryOptions } from '@/api/modules/connections'
+import { useDbOptions } from '@/hooks/useDbOptions'
 import { Table, type Column } from '@/components/common/Table'
 import { Badge, toneOfStatus } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
@@ -176,6 +177,9 @@ function ApplyModal({
   })
   const set = (patch: Partial<ExecWindow>) => setF((p) => ({ ...p, ...patch }))
 
+  const conn = conns.find((c) => c.id === f.connectionId)
+  const db = useDbOptions(conn)
+
   return (
     <Modal
       open={open}
@@ -202,18 +206,31 @@ function ApplyModal({
       <div className="fld-2">
         <div className="fld">
           <label>{t('winInstance')}</label>
+          {/* 换实例必须清掉已选的库:A 上的 appdb 在 B 上未必存在,留着就会提交一个
+              不存在的库名,而这张单开出去的是一段生产执行窗口。 */}
           <select
             value={f.connectionId ?? 0}
-            onChange={(e) => set({ connectionId: Number(e.target.value) })}
+            onChange={(e) => set({ connectionId: Number(e.target.value), database: '' })}
           >
             <option value={0}>—</option>
             {conns.map((c) => <option key={c.id} value={c.id}>{c.env}-{c.name}</option>)}
           </select>
         </div>
         <div className="fld">
-          {/* 库名必填:一台实例底下往往混着不同业务的库,放开面越小越好。 */}
+          {/* 库名必填:一台实例底下往往混着不同业务的库,放开面越小越好。
+              所以**不预选**实例的默认库 —— 这张单开出去的是一段生产执行窗口,
+              该由人明确点一下,而不是在没注意的情况下带着默认值提交。 */}
           <label>{t('winDatabase')}</label>
-          <input value={f.database ?? ''} onChange={(e) => set({ database: e.target.value })} />
+          {db.options.length ? (
+            <select value={f.database ?? ''} onChange={(e) => set({ database: e.target.value })}>
+              <option value="">—</option>
+              {db.options.map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+          ) : (
+            /* 探查**不抛**,连不上或没凭据时返回空清单(见 useDbOptions)。必填的字段
+               不能因此变成填不了,所以退回手填 —— 与导出页同一个降级。 */
+            <input value={f.database ?? ''} onChange={(e) => set({ database: e.target.value })} />
+          )}
         </div>
       </div>
       <div className="fld-2">
