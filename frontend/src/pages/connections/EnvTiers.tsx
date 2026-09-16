@@ -70,7 +70,7 @@ const TIER_COLS: ColSpec[] = [
   { key: 'banner', width: '88px', priority: 3 },
   { key: 'pending', width: '88px', priority: 3 },
   { key: 'scan', width: '88px', priority: 3 },
-  { key: 'layer', width: '120px', priority: 2 },
+  { key: 'baseline', width: '120px', priority: 2 },
   { key: 'role', width: '1.2fr' },
   { key: 'ops', width: '76px' },
 ]
@@ -82,7 +82,7 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<EnvTier | null>(null)
 
-  // 窄屏收列:四个开关(mfa/banner/pending/scan)最先收,layer 其次。
+  // 窄屏收列:四个开关(mfa/banner/pending/scan)最先收,baseline 其次。
   const bp = useBreakpoint()
   const cols = visibleCols(TIER_COLS, bp)
   const tpl = gridTemplate(cols)
@@ -138,7 +138,7 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
           {show('scan') && (
             <div className="ctr" title={t('etColStrictHint')}>{t('etColStrict')}</div>
           )}
-          {show('layer') && <div className="ctr">{t('etColBaseline')}</div>}
+          {show('baseline') && <div className="ctr">{t('etColBaseline')}</div>}
           <div>{t('etColBound')}</div>
           <div />
         </div>
@@ -193,7 +193,7 @@ function TierTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
                   />
                 </div>
               )}
-              {show('layer') && (
+              {show('baseline') && (
                 <div className="c-td ctr">
                   {tier.scanBaseline ? (
                     <Badge tone="success" icon={<ShieldCheck size={12} />}>{t('etBaselineOn')}</Badge>
@@ -379,11 +379,16 @@ function TierEdit({ tier, onClose }: { tier: EnvTier; onClose: () => void }) {
 
 // ------------------------------------------------------------------- 环境
 
-/** 环境表只有 4 列,mid 下不必收 —— 收列是为了给挤压让路,没挤压就别收。 */
+/**
+ * 环境表只有 4 列,**任何档位都不收** —— 收列是为了给挤压让路,4 列在 768 下不挤。
+ *
+ * 第二列是「绑定分层」,不是显示名:它是一个环境最要紧的事实(归哪个分层管,
+ * 也就决定了适用哪套规则),藏起来这张表就只剩一串环境名。
+ */
 const ENV_COLS: ColSpec[] = [
   { key: 'env', width: '1.6fr' },
-  { key: 'label', width: '1.6fr', priority: 2 },
-  { key: 'tier', width: '120px' },
+  { key: 'tierBind', width: '1.6fr' },
+  { key: 'insts', width: '120px' },
   { key: 'ops', width: '96px' },
 ]
 
@@ -394,11 +399,11 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
   const [editing, setEditing] = useState<Environment | null>(null)
   const [deleting, setDeleting] = useState<Environment | null>(null)
 
-  // 窄屏收列:只有「绑定分层」这一列会收,其余三列一律保留。
+  // 4 列在 768 下也不挤,所以这里不收列 —— 但仍走 useBreakpoint / gridTemplate
+  // 这一套机制,留着将来给这张表加第五列时,收列的地方已经在了。
   const bp = useBreakpoint()
   const cols = visibleCols(ENV_COLS, bp)
   const tpl = gridTemplate(cols)
-  const show = (key: string) => cols.some((c) => c.key === key)
 
   const count = (code: string) => usage?.[code] ?? 0
 
@@ -418,7 +423,7 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
       <div className="c-table">
         <div className="c-thead" style={{ gridTemplateColumns: tpl }}>
           <div>{t('etColEnv')}</div>
-          {show('label') && <div>{t('etColTierBind')}</div>}
+          <div>{t('etColTierBind')}</div>
           <div className="ctr">{t('etColInsts')}</div>
           <div />
         </div>
@@ -433,13 +438,11 @@ function EnvTable({ tiers, envs }: { tiers: EnvTier[]; envs: Environment[] }) {
                 <Badge tone={toneOfDot(dotFor(e.tierCode, tiers))}>{e.code}</Badge>
                 <span className="cell-strong">{e.displayName || e.code}</span>
               </div>
-              {show('label') && (
-                <div className="c-td conn-et-name">
-                  <span className="conn-chip">{e.tierCode}</span>
-                  {/* 分层已被删时这里没有名字可显示 —— 照实说,而不是显示一个空格。 */}
-                  <span className="cell-sub">{tier?.displayName || t('etTierGone')}</span>
-                </div>
-              )}
+              <div className="c-td conn-et-name">
+                <span className="conn-chip">{e.tierCode}</span>
+                {/* 分层已被删时这里没有名字可显示 —— 照实说,而不是显示一个空格。 */}
+                <span className="cell-sub">{tier?.displayName || t('etTierGone')}</span>
+              </div>
               <div className="c-td ctr mono">{t('etInstN', { n: count(e.code) })}</div>
               <div className="c-td row-ops">
                 <Button variant="ghost" title={t('etRebind')} onClick={() => setEditing(e)}>
