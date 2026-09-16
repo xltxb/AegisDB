@@ -10,7 +10,6 @@
 db-gateway/
 ├─ backend/     Go + Gin + GORM 后端（REST + WebSocket；风险引擎/RBAC/审批/审计哈希链/多引擎真实执行）
 ├─ frontend/    React 19 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
-├─ frontend-vue/ 被它取代的 Vue 3 实现，留作对照与回退（见文末「两套前端」）
 ├─ docs/        PRD / 前后端开发文档 / 交互原型 / ADR / 四份数据库规范 / 外部审批与开放接口对接指南
 ├─ deploy/      systemd unit + 环境变量模板
 └─ docker-compose.yml  本地 PostgreSQL 16 + Redis 7（可选，本机已装 PostgreSQL 就不需要；后端目前不使用 Redis）
@@ -499,14 +498,20 @@ WARN 审批人自检: 默认审批链(DBA 负责人) severity=deadlock
 - **服务端状态一律归 TanStack Query**，只有真正属于客户端的才进 Zustand。把列表塞进客户端 store 会得到
   两份真相，而它们分叉时的表现是「刷新一下就变了」。
 
-### 两套前端
+### 前端的两个测试口
 
-`frontend/` 是当前实现（React 19）。`frontend-vue/` 是被它取代的 Vue 3 实现，**留在仓库里**作为对照与回退：
-它功能更全（CSV 批量导入导出、批量巡检、库归属、连接页的检索与分组），React 版尚未补齐这些，
-清单见 `.scratch/` 与 GitHub issue。两边连同一个后端，可以同时起：React 在 5173，Vue 在 5174。
+`frontend/`（React 19）是唯一的前端实现。曾经并存的 Vue 3 版已经移除——它的功能、纯逻辑与浏览器
+行为合约都已在 React 版落地并被测试盯住，留着第二套只会让「改哪一边」成为每次改动的第一个问题。
+需要对照时从 git 历史取。
 
-Vue 版自带 218 个单元测试（`cd frontend-vue && npm run test:unit`，Playwright runner 跑 `src/lib/*` 的纯逻辑
-与词条、结构检查）与 5 个浏览器 e2e。React 版的纯逻辑从那里原样移植，测试尚未搬过来。
+两个口跑的是两种东西，不要互相替代：
+
+- `npm run test:unit`（256 例，`playwright.unit.config.ts`）——**Node 里跑纯逻辑**，没有浏览器也没有
+  dev server。结果渲染里的控制字符、行编辑器的忙/排队状态机、导入表的校验，都是这一口盯的。
+- `npm run test:e2e`（16 例，`playwright.config.ts`）——**真浏览器里跑真应用**，自动拉起 Vite，API 由
+  各 spec 自己打桩，所以不需要起 Go 后端。这一口盯的是排版和层叠算完之后才成立的事：能力矩阵塌成
+  一列、媒体查询没能收掉动画、两个数据源里坏了一个就把实例树整棵清空——类型检查、构建和单测
+  都看不见这些。
 
 ## 文档
 
