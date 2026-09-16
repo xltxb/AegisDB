@@ -168,6 +168,7 @@ export default function GovPage() {
         <RuleModal
           rule={editing}
           busy={save.isPending}
+          isAdmin={isAdmin}
           onClose={() => setEditing(null)}
           onSubmit={(body) => save.mutate({ id: editing.id, body }, { onSuccess: () => setEditing(null) })}
         />
@@ -203,16 +204,26 @@ function JitPanel() {
 }
 
 function RuleModal({
-  rule, busy, onClose, onSubmit,
+  rule, busy, isAdmin, onClose, onSubmit,
 }: {
   rule: SensitiveColumn
   busy: boolean
+  isAdmin: boolean
   onClose: () => void
   onSubmit: (body: Partial<SensitiveColumn>) => void
 }) {
   const { t } = useTranslation()
   const [f, setF] = useState<SensitiveColumn>(rule)
   const set = (patch: Partial<SensitiveColumn>) => setF((p) => ({ ...p, ...patch }))
+
+  // exempt 列在 mid/narrow 下从表格里收走,而它是全页唯一能开关豁免的地方 ——
+  // 弹窗要把它接住。这里只改本地表单状态,真正的写入仍然走 onSubmit → PUT
+  // 整行覆盖(见页面顶部 toggleExempt 的注释),不另起一条写入路径。确认语义
+  // 与表格里的开关一致:朝"明文"方向(打开豁免)要先确认一次,关掉豁免不问。
+  function toggleExempt(exempt: boolean) {
+    if (exempt && !confirmAction(t('govExemptConfirm', { col: `${f.tableName}.${f.columnName}` }))) return
+    set({ enabled: !exempt })
+  }
 
   return (
     <Modal
@@ -262,6 +273,13 @@ function RuleModal({
       <div className="fld">
         <label>{t('govNote')}</label>
         <input value={f.note} placeholder={t('govNotePh')} onChange={(e) => set({ note: e.target.value })} />
+      </div>
+      <div className="fld">
+        <label>{t('govColExempt')}</label>
+        <span className="gov-exempt">
+          <Switch checked={!f.enabled} disabled={!isAdmin || busy} onChange={toggleExempt} />
+          <span className="cell-sub">{t(f.enabled ? 'govMasking' : 'govExempted')}</span>
+        </span>
       </div>
       <div className="gov-previewbox">
         <span className="cell-sub">{t('govColPreview')}</span>
