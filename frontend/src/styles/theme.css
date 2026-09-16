@@ -168,6 +168,24 @@ a { color: inherit; text-decoration: none; }
 .page { max-width: min(100% - 32px, 1120px); }
 .page-narrow { max-width: min(100% - 32px, 960px); }
 
+@media (max-width: 768px) {
+  /* .page-head 在窄屏折成两行:标题独占一行,.grow(动作区)让到下一行。
+     不折的话标题和 .grow 挤在同一行里抢空间 —— 标题那个 flex 子项的
+     min-width 默认是 auto,而中文没有词间断点,auto 算出来约等于"能不能在
+     任意两个字之间断行"的宽度,近似单字宽,于是标题被压成一列竖排单字
+     (和 Task 6 修 .top-head 时的根因一样)。折成两行后标题拿到整行宽度,
+     正常情况下用不着再挤;下面这行 min-width: 0 只是给"标题文本本身就比
+     窄屏可用宽度还长"这种极端情况兜底,配合 .page-head h1 的 nowrap+
+     ellipsis,兜底方式是截断,不是退回逐字竖排。 */
+  .page-head { flex-wrap: wrap; }
+  .page-head > div:first-child { min-width: 0; }
+  .page-head h1 { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* .grow 让到自己一行、占满宽度,不再贴右对齐;内部再允许换行 —— 审计页
+     三个筛选器加一个「导出 CSV」按钮,在这一行的可用宽度里仍然放不下,
+     只能靠 .grow 自己再拆成两三行,而不是被外层硬顶出一条内层横向滚动条。 */
+  .page-head .grow { flex: 1 1 100%; flex-wrap: wrap; margin-left: 0; }
+}
+
 /* ---- 卡片 ---- */
 .c-card {
   border: 1px solid var(--border-subtle); border-radius: 14px;
