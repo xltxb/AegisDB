@@ -1,6 +1,6 @@
 # ADR 0011:MySQL 在线加索引走 gh-ost 那套(自研)
 
-- 状态:进行中(阶段一已落地)
+- 状态:进行中(阶段一、二已落地)
 - 日期:2026-09-01
 - 相关:`backend/internal/osc/`
 
@@ -86,11 +86,25 @@ DDL 给不了的三件事:
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| 一 | 纯逻辑前置检查 + 事实采集 | **前置检查已完成**(22 条断言) |
-| 二 | 影子表创建、ALTER 应用、分块拷贝 | 未开始 |
+| 一 | 纯逻辑前置检查 + 事实采集 | **已完成** |
+| 二 | 影子表创建、ALTER 应用、分块拷贝 | **已完成** |
 | 三 | binlog 订阅与重放 | 未开始 |
 | 四 | cut-over(两步锁重命名) | 未开始 |
 | 五 | 限流 / 暂停 / 中止 / 进度 | 未开始 |
+
+阶段二落地时补上的两件事,值得记一笔:
+
+- **`gather.go` 原本不存在。** 阶段一的提交里 `preflight.go` 的注释引用了它,但包里
+  只有前置检查本身 —— 那 14 条规则当时只能从手写的 `Facts` 字面量触发,够不到任何
+  真实例。采集层现在补上了,它**只如实搬运,不做任何判断**,连"这算不算问题"都不判;
+  读不到的字段写零值,因为判定层对未知有自己的立场(磁盘余量拿不到不拦)。
+- **测试用的 MySQL 一度没有了。** `5a329a3` 在把网关自身存储收敛到 PostgreSQL
+  (ADR 0018)时,顺手把 compose 里的 `mysql:8.0` 换成了 `postgres:16`。那对存储是
+  对的,但 OSC 要的 MySQL 是**被管理的目标库**,是另一个角色。现在以 `mysql-target`
+  的名字加回来了,并按重放的需要配了 ROW + FULL,而不是用默认值。
+
+分块拷贝只支持**单列**唯一非空键。多列键的游标是一个元组,`> ?` 要改写成字典序比较;
+加索引这个场景里单列主键覆盖了绝大多数表,先把能做对的做对。
 
 **整个特性默认关闭,直到全部阶段落地。** 半成品绝不能从界面上点得到 —— 一个跑到
 一半的迁移留下的是影子表和一段没追平的 binlog,而人以为自己"加了个索引"。
@@ -100,8 +114,27 @@ DDL 给不了的三件事:
 前置检查是纯函数,不依赖 MySQL,已测透。
 
 **阶段二起必须对着真 MySQL 测** —— 拷贝与重放的交错、cut-over 的锁竞争,拿 sqlite
-或 mock 测出来的绿色是假的。仓库根的 `docker-compose.yml` 里有 MySQL 8(默认开
-binlog 且是 ROW 格式),`docker compose up -d` 即可。
+或 mock 测出来的绿色是假的。两种起法都行:
+
+```bash
+# 本机装(macOS)。新版 MySQL 默认就是 log_bin=ON / ROW / FULL,不必改配置。
+brew install mysql && brew services start mysql
+mysql -u root -e "CREATE DATABASE osc_test;
+  CREATE USER 'vela'@'127.0.0.1' IDENTIFIED BY 'velapass';
+  GRANT ALL ON osc_test.* TO 'vela'@'127.0.0.1';
+  GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'vela'@'127.0.0.1';"
+
+# 或用仓库根的 mysql-target 容器(端口 3307,避开本机的 3306)
+docker compose up -d mysql-target
+export VELA_OSC_MYSQL_DSN="vela:velapass@tcp(127.0.0.1:3307)/osc_test"
+```
+
+**连不上是失败,不是 skip。** 和后端其余测试对 `vela_test` 的规矩一致:静默跳过会让
+一个谁也没跑过的 `osc` 包看起来是绿的,而它是会在生产库上改表的东西。
+
+那条不变式(拷贝 `INSERT IGNORE` 永不覆盖)有一条测试单独钉住,并做过变异验证:把它
+改成 `REPLACE`,测试立刻报「id=5 的值被拷贝盖回成了旧值」。能通过不等于能失败,这种
+承重的断言值得确认它真的会红。
 
 这一条不是流程要求,是这个特性的前提:一个自己会动数据的工具,没有对着真数据库跑过
 的代码路径,等于没写。
