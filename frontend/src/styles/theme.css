@@ -604,6 +604,17 @@ a { color: inherit; text-decoration: none; }
 /* ============ 变更流程配置 ============ */
 .pl-name { font: 600 13.5px var(--font-body); color: var(--text-strong); }
 .pl-desc { display: block; margin-top: 3px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+/*
+ * 预览横跨整幅,排在两栏之上 —— 它回答的是「这条流程长什么形状」,而形状要铺得开
+ * 才看得出来。放进右侧属性栏(394px)时六个节点会挤到名字压邻居、末项被切掉。
+ */
+.pl-preview { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+/* 宽画布下节点均分铺开,而不是全挤在左边留一片空白。 */
+.pl-preview .sg-strip { justify-content: space-between; }
+/* 名字再长也不许压到邻居身上 —— 这是那处挤压的直接原因。 */
+.pl-preview .sg-node { max-width: 180px; }
+.pl-preview .sg-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: block; }
+
 .pl-egrid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .pl-egrid { grid-template-columns: 1fr; } }
 .pl-stages { display: flex; flex-direction: column; gap: 8px; min-width: 0; }

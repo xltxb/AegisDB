@@ -147,6 +147,17 @@ export default function PipelinesPage() {
               )}
             </header>
 
+            {/*
+              预览横跨整幅,不进右侧属性栏 —— 它要回答的是「这条流程长什么形状」,
+              而形状只有在六个节点铺得开的时候才看得出来。塞进 394px 的窄栏里,
+              节点会互相挤到名字压邻居、末项被切掉(它本来就是按宽画布设计的,
+              变更工单页正是整幅在用)。
+            */}
+            <div className="pl-preview">
+              <div className="pl-flabel">{t('plPreview')}</div>
+              <StageStrip stages={preview} />
+            </div>
+
             <div className="pl-egrid">
               <div className="pl-stages">
                 <div className="pl-flabel">{t('plStages')}</div>
@@ -211,8 +222,6 @@ export default function PipelinesPage() {
                   <span>{t('plIsDefault')}</span>
                   <Switch checked={current.isDefault} disabled={!isAdmin} onChange={(v) => patch({ isDefault: v })} />
                 </div>
-                <div className="pl-flabel">{t('plPreview')}</div>
-                <StageStrip stages={preview} />
               </aside>
             </div>
           </section>
