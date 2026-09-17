@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -54,9 +56,16 @@ func openMySQLAs(t *testing.T, dsn string) *sql.DB {
 
 // 每个用例自己的表,名字带上用例名 —— 并行跑时互不干扰,失败后残留的表也一眼看得出
 // 是谁留下的。
+//
+// 同一个用例里要建多张表时必须各自唯一:光用 t.Name() 会让第二张表覆盖第一张,而
+// 症状是"订阅收到了不该收到的事件" —— 指向的是过滤逻辑,而错在夹具。所以名字后面
+// 挂一个序号。
+var tableSeq atomic.Int64
+
 func makeTable(t *testing.T, db *sql.DB, ddl string) string {
 	t.Helper()
-	name := fmt.Sprintf("t_%s", t.Name())
+	name := fmt.Sprintf("t_%s_%d", t.Name(), tableSeq.Add(1))
+	name = strings.NewReplacer("/", "_", " ", "_").Replace(name)
 	if len(name) > 60 {
 		name = name[:60]
 	}
@@ -233,3 +242,12 @@ func TestGather_SeesTheShapesThatMustBeRefused(t *testing.T) {
 
 // Preflight 返回两个值,这里只要阻塞项。
 func firstOf(bs []Blocker, _ []Warning) []Blocker { return bs }
+
+func mustExec(t *testing.T, db interface {
+	ExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)
+}, q string) {
+	t.Helper()
+	if _, err := db.ExecContext(context.Background(), q); err != nil {
+		t.Fatalf("执行失败 %q: %v", q, err)
+	}
+}
