@@ -33,13 +33,13 @@ type Facts struct {
 	Schema string
 	Table  string
 
-	TableExists   bool
-	HasPK         bool     // 有主键
-	UniqueNotNull []string // 可代替主键做分块的唯一非空键
-	ForeignKeysOut int     // 本表指向别人的外键
-	ForeignKeysIn  int     // 别人指向本表的外键
-	Triggers       int     // 本表上的触发器
-	GeneratedCols  int     // 生成列/虚拟列
+	TableExists    bool
+	HasPK          bool     // 有主键
+	UniqueNotNull  []string // 可代替主键做分块的唯一非空键
+	ForeignKeysOut int      // 本表指向别人的外键
+	ForeignKeysIn  int      // 别人指向本表的外键
+	Triggers       int      // 本表上的触发器
+	GeneratedCols  int      // 生成列/虚拟列
 
 	EstimatedRows int64 // information_schema 的估算值,不精确
 	DataBytes     int64 // 数据 + 索引字节数

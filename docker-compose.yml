@@ -1,4 +1,4 @@
-# AegisDB — LOCAL DEVELOPMENT infrastructure (PostgreSQL 16 + Redis 7).
+# AegisDB — LOCAL DEVELOPMENT infrastructure (PostgreSQL 16 + Redis 7 + a MySQL 8 target).
 # Start with:  docker compose up -d
 # The backend reads connection info from backend/configs/config.yaml
 #
@@ -45,6 +45,51 @@ services:
     volumes:
       - vela_redis:/data
 
+  # A MySQL 8 to point the gateway AT — a managed target, not the gateway's own
+  # store. That distinction matters: ADR 0018 settled the gateway's storage on
+  # PostgreSQL and is not in question here. What needs a real MySQL is
+  # internal/osc, the gh-ost-style online schema change: shadow tables, chunked
+  # copy interleaved with binlog replay, and a cut-over that races for a lock.
+  # ADR 0011 is explicit that green from sqlite or a mock is fake green there,
+  # because none of those failure modes exist without a real server.
+  #
+  # The settings below are what that work needs, not MySQL defaults:
+  #   log-bin        the replay stream is read from it
+  #   binlog-format  ROW — STATEMENT cannot be replayed row by row
+  #   row-image      FULL — under MINIMAL an UPDATE carries only the changed
+  #                  columns, and the REPLACE INTO used for replay would write
+  #                  the rest as defaults, silently destroying data
+  mysql-target:
+    image: mysql:8.0
+    container_name: vela-mysql-target
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: velaroot
+      MYSQL_DATABASE: osc_test
+      MYSQL_USER: vela
+      MYSQL_PASSWORD: velapass
+    command:
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      # 3307, because a locally installed MySQL already holds 3306 — and a local
+      # one is all the OSC tests need, so this container is the fallback for
+      # hosts without one. Point the tests at it with:
+      #   VELA_OSC_MYSQL_DSN="vela:velapass@tcp(127.0.0.1:3307)/osc_test"
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - vela_mysql_target:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pvelaroot"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
 volumes:
   vela_pg:
   vela_redis:
+  vela_mysql_target:
