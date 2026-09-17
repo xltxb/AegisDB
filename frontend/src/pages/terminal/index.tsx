@@ -787,6 +787,12 @@ export default function TerminalPage() {
     onPointerMove: (e: ReactPointerEvent) => {
       if (resizing !== side || !gridRef.current) return
       const box = gridRef.current.getBoundingClientRect()
+      /*
+       * 这里是 pointermove 处理器的**函数体**,只有拖动时才会跑,不在渲染期。
+       * 规则看到的是「一个在渲染期创建的箭头函数里读了 ref」—— 它静态上分不出
+       * 「创建」和「调用」,而读 ref 正是事件处理器被允许做的事。
+       */
+      // eslint-disable-next-line react-hooks/refs
       setW(side, side === 'tree' ? e.clientX - box.left : box.right - e.clientX)
     },
     onPointerUp: (e: ReactPointerEvent) => {

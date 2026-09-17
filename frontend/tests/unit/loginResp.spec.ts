@@ -18,7 +18,7 @@ test('一份正常的登录响应可用', () => {
 })
 
 test('缺 token —— 正是 #79 那条路径', () => {
-  const { token, ...noToken } = good
+  const { token: _token, ...noToken } = good
   expect(isUsableLoginResp(noToken)).toBe(false)
 })
 
@@ -34,7 +34,7 @@ test('token 不是字符串不算可用', () => {
 
 // 没有 user 的话 `login()` 返回 undefined,而调用方拿它去算落地页。
 test('缺 user 不算可用', () => {
-  const { user, ...noUser } = good
+  const { user: _user, ...noUser } = good
   expect(isUsableLoginResp(noUser)).toBe(false)
 })
 
@@ -53,7 +53,7 @@ test('data 是 null / undefined / 字符串都不算可用', () => {
 // 只校验**真正被消费的**两个字段。`expiresAt` 全仓库没有一处读它,把它列进必填会让
 // 一个本来能用的响应被拒掉 —— 校验该盯着消费方,不是盯着类型声明。
 test('缺 expiresAt 仍然可用,多余字段也不影响', () => {
-  const { expiresAt, ...noExp } = good
+  const { expiresAt: _expiresAt, ...noExp } = good
   expect(isUsableLoginResp(noExp)).toBe(true)
   expect(isUsableLoginResp({ ...good, somethingNew: 1 })).toBe(true)
 })

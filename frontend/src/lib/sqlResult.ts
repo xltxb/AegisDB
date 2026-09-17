@@ -36,7 +36,7 @@ export function parseColumns(sql: string): string[] {
   const list = m[1].trim()
   if (list === '*' || /(^|\W)\*(\W|$)/.test(list)) return []
   const cols = splitTopLevel(list).map((raw) => {
-    let col = raw.trim()
+    const col = raw.trim()
     // alias:  expr AS name  |  expr name
     const asMatch = /\s+as\s+([`"\w]+)\s*$/i.exec(col)
     if (asMatch) return clean(asMatch[1])

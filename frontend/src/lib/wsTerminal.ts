@@ -13,7 +13,7 @@ export interface WsTerminalOpts {
   // the auth token in the Sec-WebSocket-Protocol header instead of the query
   // string, keeping it out of access logs / Referer.
   protocols?: () => string[]
-  onMessage: (m: any) => void
+  onMessage: (m: unknown) => void
   onStatus: (s: WsStatus, attempt: number) => void
   // Called when the socket repeatedly fails to even open (likely a rejected /
   // expired token). The client stops reconnecting; the app should force a
@@ -82,13 +82,15 @@ export class WsTerminal {
       this.startHeartbeat()
     }
     ws.onmessage = (ev) => {
-      let m: any
+      let m: unknown
       try {
         m = JSON.parse(ev.data)
       } catch {
         return
       }
-      if (m.type === 'pong') {
+      // 服务端发来的东西没有类型保证 —— 心跳判定前先确认它真是个带 type 的对象,
+      // 而不是数组、null 或一个裸字符串。
+      if (typeof m === 'object' && m !== null && (m as { type?: unknown }).type === 'pong') {
         this.clearPongTimer()
         return
       }
@@ -149,7 +151,7 @@ export class WsTerminal {
     this.pongTimer = null
   }
 
-  send(obj: any): boolean {
+  send(obj: unknown): boolean {
     if (!this.isOpen) return false
     try {
       this.ws!.send(JSON.stringify(obj))

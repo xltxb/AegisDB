@@ -96,10 +96,16 @@ export function useTerminalSession(opts: Opts) {
   const [status, setStatus] = useState<WsStatus>('connecting')
   const theme = useUIStore((s) => s.theme)
 
-  // 回调放进 ref,这样 effect 不必把它们列进依赖 —— 否则每次父组件重渲染都会
-  // 拆掉重建整个终端。
+  /*
+   * 回调放进 ref,这样下面那个 effect 不必把它们列进依赖 —— 否则每次父组件重渲染
+   * 都会拆掉重建整个终端。
+   *
+   * 写入放在 effect 里而不是渲染期:渲染期写 ref 违反 React 规则(被打断的渲染会
+   * 留下一个谁也没要的值)。这里可以安全地挪,因为 `cb.current` **只在回调里被读**
+   * (onKey / onSubmit / onPaste 等),它们都在提交之后才触发,那时 ref 已经是新的。
+   */
   const cb = useRef(opts)
-  cb.current = opts
+  useEffect(() => { cb.current = opts })
 
   useEffect(() => {
     const host = hostRef.current

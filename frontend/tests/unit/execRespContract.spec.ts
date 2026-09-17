@@ -18,7 +18,7 @@ function openapiExecRespFields(): string[] {
   expect(start, 'openapi.yaml 里找不到 ExecResp').toBeGreaterThan(-1)
   const rest = yaml.slice(start + 1)
   // 到下一个同级 schema 为止
-  const end = rest.search(/\n    \w+:/)
+  const end = rest.search(/\n {4}\w+:/)
   const block = end > 0 ? rest.slice(0, end) : rest
   const props = block.slice(block.indexOf('properties:'))
   return [...props.matchAll(/^\s{8}(\w+):/gm)].map((m) => m[1])

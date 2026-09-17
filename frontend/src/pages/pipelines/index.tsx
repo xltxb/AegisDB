@@ -447,7 +447,7 @@ function cfgGet(config: string, key: string): string {
   try { return (JSON.parse(config || '{}')[key] ?? '') as string } catch { return '' }
 }
 function cfgSet(config: string, key: string, value: string): string {
-  let obj: Record<string, unknown> = {}
+  let obj: Record<string, unknown>
   try { obj = JSON.parse(config || '{}') } catch { obj = {} }
   obj[key] = value
   return JSON.stringify(obj)

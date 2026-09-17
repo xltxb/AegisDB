@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "type-check": "tsc --noEmit",
+    "lint": "eslint .",
     "test:unit": "playwright test -c playwright.unit.config.ts",
     "test:e2e": "playwright test",
     "preview": "vite preview"
@@ -32,12 +33,16 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "typescript": "~5.7.2",
+    "typescript-eslint": "^8.70.0",
     "vite": "^6.0.5"
   }
 }
