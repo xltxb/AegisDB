@@ -84,6 +84,13 @@ type Job struct {
 	CreatedAt  time.Time  `json:"createdAt"`
 	UpdatedAt  time.Time  `json:"updatedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
+
+	// Running 不落库(`gorm:"-"`):它是**本进程此刻**有没有在推进这条任务,由接口层
+	// 从 Runner 填。
+	//
+	// 库里一条 copying 的记录,可能正在跑,也可能是上个进程死在半路留下的 —— status
+	// 分不开这两件事,而界面要靠它决定给不给「中止」、要不要列进「需要人工收拾」。
+	Running bool `gorm:"-" json:"running"`
 }
 
 func (Job) TableName() string { return "tbl_osc_job" }

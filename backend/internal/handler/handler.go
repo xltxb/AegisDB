@@ -16,6 +16,8 @@ type Handler struct {
 	Svc      *service.Services
 	Repo     *repository.Repo
 	loginLim *loginLimiter
+	// osc 是 MySQL 在线表结构变更,默认**不接线**(见 AttachOSC)。
+	osc *oscGate
 }
 
 func New(svc *service.Services, repo *repository.Repo) *Handler {

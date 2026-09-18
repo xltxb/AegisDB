@@ -45,3 +45,9 @@ webhook:
   # Only enable for a TRUSTED internal target — it re-opens SSRF to internal
   # services and the cloud metadata endpoint. Overridable via VELA_WEBHOOK_ALLOW_PRIVATE.
   allow_private: false
+
+# 在线表结构变更(ADR 0011)。生产上保持关闭:它还缺少从库延迟限流,
+# 一次全表拷贝不会因为从库追不上而自己减速。详见 configs/config.yaml 的注释。
+osc:
+  enabled: false
+  chunk_size: 0

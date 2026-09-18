@@ -83,6 +83,20 @@ type Config struct {
 		// internal services and the cloud metadata endpoint.
 		AllowPrivate bool `yaml:"allow_private"`
 	} `yaml:"webhook"`
+	// OSC 是 MySQL 在线表结构变更(ADR 0011)。
+	//
+	// **默认关闭,而且应当保持关闭**:它会在生产库上建影子表、成块拷贝全表、订阅
+	// binlog 回放增量,最后原子改名。整条链路已经跑通并有真实 MySQL 上的测试,但还
+	// 缺一件要紧的东西 —— 真实从库延迟的读取。也就是说 `MaxLag` 目前没有数据源,
+	// 限流形同虚设。一次不会自己减速的全表拷贝,在主从架构下能把从库拖垮。
+	//
+	// 补上从库延迟采集之前,这个开关只该在你清楚自己在做什么的环境里打开。
+	OSC struct {
+		Enabled bool `yaml:"enabled"`
+		// ChunkSize 是每批拷贝的行数,0 表示用 osc 包的默认值。调小它能让中止更快
+		// 生效,也让拷贝对主库更温和。
+		ChunkSize int `yaml:"chunk_size"`
+	} `yaml:"osc"`
 }
 
 // LoadConfig reads YAML config from path, applying env overrides for secrets/DSN.

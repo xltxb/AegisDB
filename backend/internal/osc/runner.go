@@ -114,6 +114,21 @@ func (r *Runner) Abort(_ context.Context, id int64) error {
 	return nil
 }
 
+// IsRunning 说的是**这个进程**此刻手上有没有这条任务。
+//
+// 它回答的是状态字段回答不了的问题:库里一条 copying 的记录,可能是正在跑,也可能是
+// 上一个进程死在半路留下的 —— 两者的 status 一模一样。能分清的只有进程自己。
+//
+// 多副本共享一个库时,别的副本正在跑的任务在这里也是 false。所以这个值只能用来说
+// 「我没在推进它」,不能用来说「没有人在推进它」—— 前者是事实,后者是猜测,而按猜测
+// 去删一张影子表可能删掉另一台正在用的。
+func (r *Runner) IsRunning(id int64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.running[id]
+	return ok
+}
+
 // Get 读一条任务。
 func (r *Runner) Get(ctx context.Context, id int64) (*Job, error) {
 	var j Job
@@ -129,6 +144,17 @@ func (r *Runner) Unfinished(ctx context.Context) ([]Job, error) {
 	err := r.store.WithContext(ctx).
 		Where("status IN ?", []JobStatus{JobPending, JobPreflight, JobCopying, JobReplaying, JobCutOver}).
 		Order("id DESC").Find(&out).Error
+	return out, err
+}
+
+// Recent 按时间倒序列出最近的任务,包括已经结束的 —— 界面要靠它同时看到
+// 「正在跑的」和「上次留下的残局」。
+func (r *Runner) Recent(ctx context.Context, limit int) ([]Job, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	out := []Job{} // 不是 nil:它会被直接序列化成 JSON,空列表要是 [] 而不是 null
+	err := r.store.WithContext(ctx).Order("id DESC").Limit(limit).Find(&out).Error
 	return out, err
 }
 

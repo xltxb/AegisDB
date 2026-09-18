@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,9 +13,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"velagateway/internal/gateway"
 	"velagateway/internal/handler"
 	"velagateway/internal/middleware"
 	"velagateway/internal/model"
+	"velagateway/internal/osc"
 	"velagateway/internal/repository"
 	"velagateway/internal/service"
 	"velagateway/pkg/jwt"
@@ -45,6 +48,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// admin restricts role/permission configuration + user management to the
 	// platform-admin role (viewing stays at the `perms` menu).
 	admin := middleware.AdminOnly(repo)
+
+	// 在线表结构变更接线是无条件的 —— 开关关着时拒绝的是**发起**,不是整套接口。
+	// 拒绝的话术和业务码在 handler 里。
+	runner := osc.NewRunner(repo.DB(), oscConnect(repo))
+	runner.ChunkSize = cfg.OSC.ChunkSize
+	h.AttachOSC(runner, func() bool { return cfg.OSC.Enabled })
 
 	v1 := r.Group("/api/v1")
 
@@ -202,6 +211,19 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/exec-windows", menu("execwindow"), h.CreateExecWindow)
 		a.PUT("/exec-windows/:id", menu("execwindow"), h.UpdateExecWindow)
 		a.DELETE("/exec-windows/:id", menu("execwindow"), h.DeleteExecWindow)
+		// MySQL 在线表结构变更(ADR 0011)。
+		//
+		// 读(状态、列表、单条)对进得来的人开放:一次半途失败留下的影子表和一段
+		// 没追平的 binlog,是**关掉开关之后**最需要被看见的东西,把列表一起锁上
+		// 等于把残局藏起来。发起和中止限管理员 —— 它改的是生产表结构。
+		//
+		// 特性开关不在路由这一层挡:挡在这里,关着时 POST 会返回 404,看起来像
+		// 路由写错了。拒绝发生在 handler 里,带自己的业务码和一句说清原因的话。
+		a.GET("/osc/status", h.OSCStatus)
+		a.GET("/osc/jobs", h.OSCJobs)
+		a.GET("/osc/jobs/:id", h.OSCJob)
+		a.POST("/osc/jobs", admin, h.OSCStart)
+		a.POST("/osc/jobs/:id/abort", admin, h.OSCAbort)
 		a.GET("/environments", h.ListEnvironments)
 		a.GET("/environments/usage", menu("envtier"), h.EnvironmentUsage)
 		a.POST("/environments", menu("envtier"), admin, h.CreateEnvironment)
@@ -411,4 +433,18 @@ func accessLogger() gin.HandlerFunc {
 			p.TimeStamp.Format("2006/01/02 - 15:04:05"), p.StatusCode, p.Latency,
 			p.ClientIP, p.Method, path, p.ErrorMessage)
 	})
+}
+
+// oscConnect 把「实例 ID」翻成在线变更要的那对东西:连接池和它的 DSN。
+//
+// 它在**每次发起时**重新查库并取连接,而不是启动时缓存一份:实例的地址和凭据是
+// 能在控制台里改的,而一次拿着过期凭据跑到一半的迁移,残留要人去收。
+func oscConnect(repo *repository.Repo) osc.ConnectFunc {
+	return func(connectionID int64) (*sql.DB, string, error) {
+		conn, err := repo.GetConnection(connectionID)
+		if err != nil {
+			return nil, "", fmt.Errorf("实例 %d 不存在", connectionID)
+		}
+		return gateway.OpenOSCTarget(conn)
+	}
 }

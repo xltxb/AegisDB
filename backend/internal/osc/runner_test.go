@@ -149,6 +149,17 @@ func TestRunner_UnfinishedJobsAreVisibleAfterRestart(t *testing.T) {
 	if !found {
 		t.Error("重启之后看不到那条死在 copying 的记录")
 	}
+
+	// 光看状态分不出「正在跑」和「死在半路」—— 两者的 status 都是 copying。
+	//
+	// 这不是文字游戏:界面按状态判断要不要给「中止」按钮,也按它判断要不要把这条
+	// 列进「需要人工收拾」。判错的后果是残局被当成正常进行中的任务,那张影子表
+	// 一直躺在库里,直到磁盘报警才被发现。
+	//
+	// 能分清的只有进程自己:它手上有没有这条任务的取消钩子。
+	if r2.IsRunning(stale.ID) {
+		t.Error("新进程声称自己在跑一条它从没启动过的任务")
+	}
 }
 
 type testDeps struct {

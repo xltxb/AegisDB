@@ -670,3 +670,25 @@ func cellString(v any) string {
 		return fmt.Sprintf("%v", x)
 	}
 }
+
+// OpenOSCTarget 给在线表结构变更(ADR 0011)拿一个 MySQL 目标:连接池 + 它的 DSN。
+//
+// DSN 要单独返回一份,是因为 binlog 订阅走的是**复制协议**而不是 database/sql,
+// 它得自己拆出 host/port/user/pass 去当一个伪从库。
+//
+// 非 MySQL 一律拒绝,而且是在这里拒绝而不是等到建影子表时报一句语法错误:整套
+// 影子表 + binlog 回放的做法是 MySQL 专有的,PostgreSQL / Oracle 上没有对应物。
+func OpenOSCTarget(conn *model.Connection) (*sql.DB, string, error) {
+	if engineFamily(strings.ToLower(conn.Engine)) != familyMySQL {
+		return nil, "", fmt.Errorf("在线表结构变更只支持 MySQL,该实例是 %q", conn.Engine)
+	}
+	_, dsn, ok := engineDriver(conn)
+	if !ok {
+		return nil, "", fmt.Errorf("实例 %q 的连接凭据不完整", conn.Name)
+	}
+	db, _, err := openConn(conn) // MySQL 走连接池,release 是空操作
+	if err != nil {
+		return nil, "", err
+	}
+	return db, dsn, nil
+}
