@@ -77,7 +77,24 @@ func TestNewDB_RunsBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count tables: %v", err)
 	}
-	if n != 36 {
-		t.Fatalf("表数 = %d, want 36", n)
+	// 这里守的是「迁移真的被应用了」,不是「恰好 N 张表」。写死一个数字的话,
+	// 每加一张表都要回来改它,而那次改动里没有人再想一遍这条断言想说什么。
+	//
+	// 下限取得足够低,低到任何一次「迁移根本没跑」都会掉到它下面(那时是 0 张)。
+	if n < 30 {
+		t.Fatalf("只建出 %d 张 tbl_* 表 —— 迁移多半没被应用", n)
+	}
+
+	// 再点名几张分属不同迁移文件的表:光看数量,少了哪一张是看不出来的。
+	for _, want := range []string{"tbl_user", "tbl_connection", "tbl_osc_job"} {
+		var k int64
+		if err := db.Raw(`SELECT count(*) FROM information_schema.tables
+		                  WHERE table_schema = current_schema() AND table_name = ?`, want).
+			Scan(&k).Error; err != nil {
+			t.Fatalf("查表 %s: %v", want, err)
+		}
+		if k != 1 {
+			t.Errorf("表 %s 不存在 —— 它所在的那个迁移文件没被应用", want)
+		}
 	}
 }

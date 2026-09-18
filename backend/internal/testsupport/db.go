@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -82,12 +83,28 @@ func NewDB(t *testing.T) *gorm.DB {
 	//    这个包再 import bootstrap 就成了循环导入,编译不过。
 	// 2. RunSQLMigrations 会抢 advisory lock。测试库里每个 schema 都是独占的,
 	//    没有并发迁移可言,而那把锁会把所有测试的建库串成一条队。
-	sqlBytes, err := fs.ReadFile(migrations.FS, "0001_init.sql")
+	// 按文件名顺序应用**全部**迁移,而不是只跑 0001。原先这里硬编码了 baseline
+	// 一个文件 —— 那在只有一个迁移时是对的,但第二个迁移加进来时,症状是用到新表的
+	// 测试报 "relation does not exist",而指向的是被测代码,不是这里。
+	entries, err := fs.ReadDir(migrations.FS, ".")
 	if err != nil {
-		t.Fatalf("read baseline: %v", err)
+		t.Fatalf("列出迁移: %v", err)
 	}
-	if err := scoped.Exec(string(sqlBytes)).Error; err != nil {
-		t.Fatalf("baseline 建表失败 (schema %s):%v", schema, err)
+	var names []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".sql") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names) // 与 RunSQLMigrations 一样按字典序
+	for _, n := range names {
+		sqlBytes, err := fs.ReadFile(migrations.FS, n)
+		if err != nil {
+			t.Fatalf("读迁移 %s: %v", n, err)
+		}
+		if err := scoped.Exec(string(sqlBytes)).Error; err != nil {
+			t.Fatalf("迁移 %s 建表失败 (schema %s):%v", n, schema, err)
+		}
 	}
 
 	return scoped
