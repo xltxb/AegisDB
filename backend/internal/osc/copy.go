@@ -5,17 +5,66 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
-// CopyOptions 控制拷贝的节奏。留成结构体是因为阶段五的限流要往这里加旋钮,
-// 而那时改的应该是这里,不是每个调用点的参数表。
+// CopyOptions 控制拷贝的节奏 —— ADR 0011 开篇说这套东西买的第一件事就是
+// 「可限流、可暂停、可中止」,这些字段就是那些旋钮。
 type CopyOptions struct {
 	// ChunkSize 是一块搬多少行。它同时是两件事的旋钮:一次事务写多少(太大占锁久),
 	// 以及多久检查一次中止信号(太大就迟迟停不下来)。
 	ChunkSize int
+
+	// Resume 从上一次停下的游标接着跑。中止之后能续跑是中止本身可用的前提 ——
+	// 停一次就前功尽弃的话,那个中止键没人敢按。
+	Resume any
+
+	// OnProgress 每搬完一块调一次。
+	OnProgress func(Progress)
+
+	// ---- 限流 ----
+	// ReplicaLag 报告从库此刻落后多少。为空 = 不限流。
+	//
+	// 做成可注入的函数而不是在这里读 SHOW REPLICA STATUS:读延迟与「该不该等」是
+	// 两件事,分开之后限流逻辑不必搭一套主从复制就能测。
+	ReplicaLag func(context.Context) (time.Duration, error)
+	// MaxLag 是能容忍的延迟上限。0 = 不限流。
+	MaxLag time.Duration
+	// ThrottleInterval 是被限住时每轮等多久,默认 1 秒。
+	ThrottleInterval time.Duration
 }
 
-const defaultChunkSize = 1000
+// Progress 是一次拷贝走到哪了。
+type Progress struct {
+	Copied int64 // 到此刻为止写进影子表的行数
+	Cursor any   // 这一块的末尾键值 —— 也是续跑要用的那个
+}
+
+// CopyResult 是一次拷贝的结果。
+//
+// Interrupted 让调用方分得清「跑完了」和「被停了」—— 两者都没有报错的话,一次被
+// 中断的迁移会被当成完成的,而它的影子表里少着一截数据。
+type CopyResult struct {
+	Copied      int64
+	Cursor      any
+	Interrupted bool
+}
+
+const (
+	defaultChunkSize        = 1000
+	defaultThrottleInterval = time.Second
+)
+
+// shouldPause 判断此刻该不该让拷贝等一等。
+//
+// 阈值为 0 表示没开限流 —— 把它当成「一有延迟就停」会让拷贝永远动不了。
+// 正好等于阈值不算超,否则一个恰好卡在线上的稳定延迟会让它一直等下去。
+func shouldPause(lag, max time.Duration) bool {
+	if max <= 0 {
+		return false
+	}
+	return lag > max
+}
 
 // CopyAll 把原表的存量行分块搬进影子表,返回实际写入的行数。
 //
@@ -31,7 +80,7 @@ const defaultChunkSize = 1000
 //
 // 分块按主键范围走而不是 LIMIT OFFSET:OFFSET 每一块都要从头扫一遍,在大表上是
 // O(n²);更要紧的是它对并发写入不稳定 —— 中间插进来一行,后面每一块的边界都会错位。
-func CopyAll(ctx context.Context, db *sql.DB, schema, table, shadow string, opt CopyOptions) (int64, error) {
+func CopyAll(ctx context.Context, db *sql.DB, schema, table, shadow string, opt CopyOptions) (CopyResult, error) {
 	chunk := opt.ChunkSize
 	if chunk <= 0 {
 		chunk = defaultChunkSize
@@ -39,22 +88,32 @@ func CopyAll(ctx context.Context, db *sql.DB, schema, table, shadow string, opt 
 
 	cols, err := columnNames(ctx, db, schema, table)
 	if err != nil {
-		return 0, err
+		return CopyResult{}, err
 	}
 	if len(cols) == 0 {
-		return 0, fmt.Errorf("表 %s.%s 没有列", schema, table)
+		return CopyResult{}, fmt.Errorf("表 %s.%s 没有列", schema, table)
 	}
 	key, err := chunkKey(ctx, db, schema, table)
 	if err != nil {
-		return 0, err
+		return CopyResult{}, err
 	}
 
 	colList := quoteCols(cols)
 	var total int64
-	// 游标是「上一块搬到哪个键值」。从 NULL 起步,用 `> ?` 往前推 —— 这样中断之后
-	// 拿着游标续跑就是天然可重入的,不必记住已经搬了多少块。
-	var cursor any
+	// 游标是「上一块搬到哪个键值」。从 NULL 起步(或从 Resume 给的那个接着),用 `> ?`
+	// 往前推 —— 这样中断之后拿着游标续跑就是天然可重入的,不必记住已经搬了多少块。
+	cursor := opt.Resume
 	for {
+		// 中止检查放在每块之前:块越大停得越迟,这也是 ChunkSize 的另一重含义。
+		if err := ctx.Err(); err != nil {
+			return CopyResult{Copied: total, Cursor: cursor, Interrupted: true},
+				fmt.Errorf("拷贝被中止(已拷 %d 行,可从游标续跑): %w", total, err)
+		}
+		// 限流:从库落后太多时先等一等。等待本身也要能被中止,否则一个被限住的
+		// 迁移会对中止信号无动于衷。
+		if err := waitForReplica(ctx, opt); err != nil {
+			return CopyResult{Copied: total, Cursor: cursor, Interrupted: true}, err
+		}
 		q := fmt.Sprintf(
 			"INSERT IGNORE INTO %s (%s) SELECT %s FROM %s WHERE %s ORDER BY %s LIMIT ?",
 			quoteName(schema, shadow), colList, colList, quoteName(schema, table),
@@ -67,11 +126,11 @@ func CopyAll(ctx context.Context, db *sql.DB, schema, table, shadow string, opt 
 			res, err = db.ExecContext(ctx, q, cursor, chunk)
 		}
 		if err != nil {
-			return total, fmt.Errorf("拷贝一块: %w", err)
+			return CopyResult{Copied: total, Cursor: cursor}, fmt.Errorf("拷贝一块: %w", err)
 		}
 		n, err := res.RowsAffected()
 		if err != nil {
-			return total, fmt.Errorf("读写入行数: %w", err)
+			return CopyResult{Copied: total, Cursor: cursor}, fmt.Errorf("读写入行数: %w", err)
 		}
 		total += n
 
@@ -79,12 +138,47 @@ func CopyAll(ctx context.Context, db *sql.DB, schema, table, shadow string, opt 
 		// 拿写入数判断会在重放先到过的那一块上原地打转。
 		next, more, err := advanceCursor(ctx, db, schema, table, key, cursor, chunk)
 		if err != nil {
-			return total, err
+			return CopyResult{Copied: total, Cursor: cursor}, err
+		}
+		if next != nil {
+			cursor = next
+		}
+		if opt.OnProgress != nil {
+			opt.OnProgress(Progress{Copied: total, Cursor: cursor})
 		}
 		if !more {
-			return total, nil
+			return CopyResult{Copied: total, Cursor: cursor}, nil
 		}
-		cursor = next
+	}
+}
+
+// waitForReplica 在从库落后超过阈值时把拷贝按住,直到追回来或调用方叫停。
+//
+// 等待要能被中止 —— 否则一个被限住的迁移对中止信号无动于衷,而"能中止"正是这套
+// 东西相对原生 DDL 的卖点之一。
+func waitForReplica(ctx context.Context, opt CopyOptions) error {
+	if opt.ReplicaLag == nil || opt.MaxLag <= 0 {
+		return nil
+	}
+	interval := opt.ThrottleInterval
+	if interval <= 0 {
+		interval = defaultThrottleInterval
+	}
+	for {
+		lag, err := opt.ReplicaLag(ctx)
+		if err != nil {
+			// 读不到延迟不等于从库健康,但也不该让迁移就此卡死。放行并把判断留给
+			// 调用方的监控 —— 与 Preflight 对「拿不到磁盘余量」的立场一致。
+			return nil
+		}
+		if !shouldPause(lag, opt.MaxLag) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("限流等待被中止: %w", ctx.Err())
+		case <-time.After(interval):
+		}
 	}
 }
 

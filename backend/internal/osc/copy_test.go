@@ -36,12 +36,12 @@ func TestCopy_MovesEveryRow(t *testing.T) {
 	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+sh+"`") })
 
 	// 分块大小故意小于总行数,逼出多轮 —— 一轮就搬完的话,分块逻辑等于没测。
-	copied, err := CopyAll(ctx, db, "osc_test", name, sh, CopyOptions{ChunkSize: 60})
+	res, err := CopyAll(ctx, db, "osc_test", name, sh, CopyOptions{ChunkSize: 60})
 	if err != nil {
 		t.Fatalf("拷贝失败: %v", err)
 	}
-	if copied != total {
-		t.Errorf("拷了 %d 行,原表有 %d 行", copied, total)
+	if res.Copied != total {
+		t.Errorf("拷了 %d 行,原表有 %d 行", res.Copied, total)
 	}
 
 	var n int

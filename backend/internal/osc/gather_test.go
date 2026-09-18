@@ -66,8 +66,11 @@ func makeTable(t *testing.T, db *sql.DB, ddl string) string {
 	t.Helper()
 	name := fmt.Sprintf("t_%s_%d", t.Name(), tableSeq.Add(1))
 	name = strings.NewReplacer("/", "_", " ", "_").Replace(name)
-	if len(name) > 60 {
-		name = name[:60]
+	// MySQL 的标识符上限是 64。影子表名还要在两头加 `_` 和 `_gho`(4 字符),
+	// 所以夹具表名必须留出余量 —— 否则长用例名会在建影子表那一步才炸,
+	// 而报错指向的是被测代码,不是夹具。
+	if len(name) > 56 {
+		name = name[:56]
 	}
 	ctx := context.Background()
 	if _, err := db.ExecContext(ctx, "DROP TABLE IF EXISTS `"+name+"`"); err != nil {
