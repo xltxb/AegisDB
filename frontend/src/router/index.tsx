@@ -59,6 +59,9 @@ export const router = createBrowserRouter([
       { path: 'permissions', loader: requireMenu('perms', { adminOnly: true }), lazy: () => page(() => import('@/pages/permissions')) },
       { path: 'users', loader: requireMenu('perms', { adminOnly: true }), lazy: () => page(() => import('@/pages/users')) },
       { path: 'pipelines', loader: requireMenu('pipeline', { adminOnly: true }), lazy: () => page(() => import('@/pages/pipelines')) },
+      // 在线表结构变更(ADR 0011)挂 db 菜单:它改的是实例上的表结构,和连接管理
+      // 是同一件事的两面。adminOnly —— 发起在后端也只对平台管理员开放。
+      { path: 'osc', loader: requireMenu('db', { adminOnly: true }), lazy: () => page(() => import('@/pages/osc')) },
       { path: 'audit', loader: requireMenu('audit', { adminOnly: true }), lazy: () => page(() => import('@/pages/audit')) },
       { path: 'settings', loader: requireMenu('settings', { adminOnly: true }), lazy: () => page(() => import('@/pages/settings')) },
     ],
