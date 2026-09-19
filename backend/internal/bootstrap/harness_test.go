@@ -285,6 +285,18 @@ type riskCheckResult struct {
 	MatchedRuleRef   *model.RuleRef `json:"matchedRuleRef"`
 }
 
+// lastRelease returns the most recently created release row, read straight from
+// the repo (not the HTTP envelope) — for tests that need to assert on a field
+// (like OSCMode) that a create response never echoes back.
+func (a *testApp) lastRelease(t *testing.T) *model.Release {
+	t.Helper()
+	var rel model.Release
+	if err := a.repo.DB().Order("id DESC").First(&rel).Error; err != nil {
+		t.Fatalf("lastRelease: %v", err)
+	}
+	return &rel
+}
+
 // riskCheck runs the pure three-layer pre-check for a (connection, sql) pair.
 func (a *testApp) riskCheck(token string, connID int64, sql string) riskCheckResult {
 	return a.riskCheckIn(token, connID, sql, "")

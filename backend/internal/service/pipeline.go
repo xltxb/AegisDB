@@ -327,6 +327,14 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		}
 	}
 
+	// 拼错的值当场拒掉,不静默当成"按策略" —— 一个以为自己选了"强制直发"的人,
+	// 会看着一次走了 OSC 的执行不知所以。
+	switch req.OSCMode {
+	case "", "force", "skip":
+	default:
+		return nil, fmt.Errorf("oscMode 只能是 force / skip 或留空,收到 %q", req.OSCMode)
+	}
+
 	// 归属项目按提交这一刻的目标库快照下来 —— 库以后改挂别的项目,历史单据不改账。
 	projectID, projectName := s.projectOf(conn, req.Database)
 	rel := &model.Release{
@@ -337,7 +345,8 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
-		Reason: clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
+		OSCMode: req.OSCMode,
+		Reason:  clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
 		Source:   orDefault(origin.Source, model.ReleaseSourceConsole),
 		ClientID: origin.ClientID, ClientName: origin.ClientName,
