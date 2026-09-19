@@ -88,6 +88,14 @@ done
 
 On an otherwise untouched database these land as **id 1 `demo-dev` (dev)** and **id 2 `demo-prod` (prod)**. The risk dictionary is `off` on dev, so a DROP that sails through on id 1 is gated on id 2 — measured, not assumed:
 
+```bash
+curl -s -X POST http://localhost:8080/api/v1/risk/check \
+  -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d '{"connectionId":2,"sql":"DROP TABLE t;"}'
+```
+
+The statement goes in **`sql`**, not `statement` (`dto.RiskCheckReq`, `internal/dto/dto.go`). Guess the name wrong and the only symptom is a bare `code: 40001` — the envelope never says which field it wanted, so it reads like the endpoint is broken.
+
 | `POST /risk/check` with `DROP TABLE t;` | result |
 |---|---|
 | `connectionId: 1` (dev) | `risk: low`, `action: allow` |

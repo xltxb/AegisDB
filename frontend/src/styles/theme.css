@@ -55,6 +55,12 @@ a { color: inherit; text-decoration: none; }
   width: 74px; flex: 0 0 74px;
   display: flex; flex-direction: column; align-items: center;
   padding: 14px 0;
+  /* 菜单项多于视口高度时(管理后台约 888px,笔记本可用高度常常不足),
+     不加这两行会被 .shell 的 overflow:hidden 直接裁掉,且滚不动 ——
+     底部的"用户/审计/设置"和头像就彻底点不到了。
+     min-height:0 不能省:flex 子项默认 min-height:auto,不收缩,overflow 也就不生效。 */
+  overflow-y: auto;
+  min-height: 0;
   background: var(--surface-sunken);
   border-right: 1px solid var(--border-subtle);
 }
@@ -72,6 +78,12 @@ a { color: inherit; text-decoration: none; }
   display: flex; flex-direction: column; gap: 4px;
   border: 1px solid var(--border-subtle); border-radius: 12px;
   background: var(--surface-card);
+  /* 侧栏会滚(见 .rail 的 overflow-y),但换门户和头像是随时要够得到的入口,
+     不能跟着菜单一起滚走 —— 钉在两端。
+     外扩的 box-shadow 是在补两侧的缝:切换器只有 56px,侧栏 74px,不铺上容器
+     底色的话,滚动的菜单项会从它左右两边穿过去。 */
+  position: sticky; top: 0; z-index: 2;
+  box-shadow: 0 -14px 0 9px var(--surface-sunken);
 }
 .portal-sw-item {
   height: 32px; border: 0; border-radius: 8px; cursor: pointer;
@@ -95,7 +107,16 @@ a { color: inherit; text-decoration: none; }
   color: var(--accent-text);
   border-color: var(--accent-subtle-border);
 }
-.rail-foot { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.rail-foot {
+  margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px;
+  /* 同上,钉在底部。整宽 + 底色,让滚上来的菜单项从它下面过去而不是透出来;
+     外扩的 box-shadow 铺的是 .rail 自己那 14px 内边距 —— sticky 停在内边距
+     里侧,不铺的话菜单项会从头像下方那道缝里露出来。 */
+  position: sticky; bottom: 0; z-index: 2;
+  width: 100%; padding: 14px 0 0;
+  background: var(--surface-sunken);
+  box-shadow: 0 14px 0 0 var(--surface-sunken);
+}
 .rail-logout { width: 58px; height: 46px; }
 .rail-avatar {
   width: 34px; height: 34px; border-radius: 50%;
@@ -204,7 +225,9 @@ a { color: inherit; text-decoration: none; }
 .c-card-titles { min-width: 0; }
 .c-card-title { font: 600 14px var(--font-display); color: var(--text-strong); }
 .c-card-sub { margin-top: 2px; font: 400 12px var(--font-body); color: var(--text-faint); }
-.c-card-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+/* min-width: 0 同 .c-seg 那条:这一格是卡片头右侧的操作区,里面常放分段控件。
+   它自己留着 min-width: auto 的话,子元素肯收缩也传不上来,整张卡片照样被撑破。 */
+.c-card-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .c-card-row { display: flex; align-items: center; gap: 16px; padding: 14px 20px; }
 .c-card-row + .c-card-row { border-top: 1px solid var(--border-subtle); }
 .c-row-title { font: 600 13px var(--font-body); color: var(--text-body); }
@@ -229,7 +252,19 @@ a { color: inherit; text-decoration: none; }
 .c-badge.t-danger { background: var(--danger-subtle); color: var(--danger-text); }
 
 /* ---- 分段控件 ---- */
-.c-seg { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
+/* overflow 分轴写:纵向仍然裁(圆角要裁掉子项的方形背景),横向改成可滚。
+   原来两轴一起 hidden,窄屏下装不下的档位就被永久裁掉了 —— 实测 /sql-review
+   在 390px 裁掉 213px,终端实例树在 1024px 就裁掉 191px,够不到也滚不到。
+   子项是 nowrap 的,压不小,所以除了滚没有别的出路。 */
+.c-seg {
+  display: flex; border: 1px solid var(--border-default); border-radius: 10px;
+  overflow-x: auto; overflow-y: hidden;
+  /* 光有 overflow-x 还不够:分段控件常常是 flex 子项(如 .c-card-actions),
+     min-width: auto 让它按内容算最小宽度,于是不收缩、不触发滚动,继续把父容器
+     撑破 —— /risk-rules 那五档 PROD/GLI/STAGING/UAT/DEV 就是这么把卡片顶出
+     86px 的。min-width: 0 之后才轮得到上面那行 overflow-x 起作用。 */
+  min-width: 0;
+}
 .c-seg-item {
   height: 32px; padding: 0 13px; border: 0; cursor: pointer;
   background: transparent; color: var(--text-muted);
@@ -256,7 +291,12 @@ a { color: inherit; text-decoration: none; }
 .c-switch:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---- 表格(grid) ---- */
-.c-table { border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card); overflow: hidden; }
+/* 同上:表头/表行是 grid,列宽合计超出容器时(390px 下 /connections 超 48px)
+   两轴 hidden 会把右边的列直接吃掉。横向放开成可滚。 */
+.c-table {
+  border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card);
+  overflow-x: auto; overflow-y: hidden;
+}
 .c-thead, .c-trow { display: grid; gap: 12px; align-items: center; }
 .c-thead {
   padding: 12px 18px; background: var(--surface-sunken);
@@ -1950,7 +1990,23 @@ a { color: inherit; text-decoration: none; }
 .tv-bar {
   display: flex; align-items: center; gap: 8px; height: 40px; flex: 0 0 40px;
   padding: 0 12px; border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-raised); overflow-x: auto; scrollbar-width: none;
+  overflow-x: auto; scrollbar-width: none;
+  /* 这一条能横滚,但滚动条是藏起来的(下面那行 ::-webkit-scrollbar),于是"右边还有
+     按钮"这件事没有任何线索 —— 390px 下「快捷脚本 / 导出日志 / 表格视图」就滑在
+     外面,看上去像是不存在。
+     这里用渐隐代替滚动条:前两层 local 跟着内容走,后两层 scroll 钉在容器两端,
+     滚到哪一头,那一头的渐隐就被 local 层盖住。好处是它自己知道该不该出现 ——
+     内容放得下时两端都被盖住,一点痕迹都没有;也不像滚动条那样占高度,把 40px
+     的条挤变形。 */
+  background:
+    linear-gradient(to right, var(--surface-raised) 34%, transparent) 0 0,
+    linear-gradient(to left,  var(--surface-raised) 34%, transparent) 100% 0,
+    radial-gradient(farthest-side at 0 50%,   var(--scroll-edge-shadow), transparent) 0 0,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-edge-shadow), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 42px 100%, 42px 100%, 13px 100%, 13px 100%;
+  background-attachment: local, local, scroll, scroll;
+  background-color: var(--surface-raised);
 }
 .tv-bar::-webkit-scrollbar { display: none; }
 .tv-bar .grow, .tv-status .grow, .tv-panel-head .grow { margin-left: auto; }
@@ -1959,7 +2015,15 @@ a { color: inherit; text-decoration: none; }
 .tv-dot.connecting { background: var(--warning); }
 .tv-dot.closed { background: var(--danger); }
 .tv-target { font: 600 12.5px var(--font-mono); color: var(--text-strong); white-space: nowrap; }
-.tv-curdb { font: 500 11.5px var(--font-mono); color: var(--accent-text); white-space: nowrap; }
+/* min-width: 0 是关键:flex 子项默认 min-width: auto,对 nowrap 的长文本等于
+   "按整条文本的宽度算最小宽度",于是它一步都不肯收缩。一条数据库绝对路径实测
+   897px,把 800px 的工具条撑成 1379px,后面的粘贴 SQL / 快捷脚本 / 导出日志 /
+   表格视图 全被顶到可视区外 —— 而 .tv-bar 把滚动条藏了,看不出那里还能滚。
+   收缩 + 省略号之后,路径截断,按钮回到原位;完整路径在右侧执行上下文里有。 */
+.tv-curdb {
+  font: 500 11.5px var(--font-mono); color: var(--accent-text); white-space: nowrap;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
 .tv-act {
   display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
   border: 1px solid var(--border-default); border-radius: 8px; background: transparent;
@@ -2004,8 +2068,26 @@ a { color: inherit; text-decoration: none; }
 .tv-status {
   display: flex; align-items: center; gap: 12px; height: 34px; flex: 0 0 34px;
   padding: 0 14px; border-top: 1px solid var(--border-subtle);
-  font: 500 11px var(--font-mono); color: var(--text-faint); overflow: hidden;
+  font: 500 11px var(--font-mono); color: var(--text-faint);
+  /* 窄屏下这一行(连接态 + 一串快捷键提示)放不下:390px 实测溢出 330px。
+     两轴 hidden 会把右半截连同"审计 ON"一起吃掉,横向放开成可滚。
+     渐隐提示同 .tv-bar —— 同一屏上两条都能滚,只给一条线索会更让人困惑。
+     底色取 --surface-page:这一条自己没有背景,透的就是 .tv-main 那层。 */
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  /* nowrap 是横向可滚的配套:不加的话 390px 下"已连接"会折成竖排,再被 34px 的
+     固定高度裁掉半截 —— 既没横着滚,也没竖着让开。 */
+  white-space: nowrap;
+  background:
+    linear-gradient(to right, var(--surface-page) 34%, transparent) 0 0,
+    linear-gradient(to left,  var(--surface-page) 34%, transparent) 100% 0,
+    radial-gradient(farthest-side at 0 50%,   var(--scroll-edge-shadow), transparent) 0 0,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-edge-shadow), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 42px 100%, 42px 100%, 13px 100%, 13px 100%;
+  background-attachment: local, local, scroll, scroll;
+  background-color: var(--surface-page);
 }
+.tv-status::-webkit-scrollbar { display: none; }
 .tv-status .hl { color: var(--accent-text); }
 .tv-status .dim { color: var(--text-faint); white-space: nowrap; }
 .tv-status .keyhint { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
