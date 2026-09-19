@@ -389,6 +389,29 @@ func TestParseIndexDDL_RejectsNonIndexDDL(t *testing.T) {
 	}
 }
 
+func TestParseIndexDDL_RejectsTwoIndexClausesInOneAlter(t *testing.T) {
+	// 两条各自合法的索引子句并在一条 ALTER 里。OSC 的 StartRequest 一次只收一个
+	// alter 子句,整串交过去,第二条会被当成第一条的一部分。
+	//
+	// **这条用例是 insideParens 唯一的守卫。** 隔壁那条混合子句的用例在正则阶段
+	// 就失配了,走不到它 —— 去掉那个函数,它照样绿。
+	if _, ok := ParseIndexDDL("ALTER TABLE t_order ADD INDEX i1 (a), ADD INDEX i2 (b)"); ok {
+		t.Error("认下了一条带两个索引子句的 ALTER")
+	}
+}
+
+func TestParseIndexDDL_AcceptsACompositeIndex(t *testing.T) {
+	// 括号**里**的逗号是列的分隔,不是子句的分隔。分不开这两者的话,最常见的
+	// 复合索引就再也走不到 OSC 了 —— 而那种静默的退化没有人会发现。
+	got, ok := ParseIndexDDL("ALTER TABLE t_order ADD INDEX idx_ab (a, b)")
+	if !ok {
+		t.Fatal("没认出复合索引 —— 括号里的逗号被当成了子句分隔")
+	}
+	if got.Alter != "ADD INDEX idx_ab (a, b)" {
+		t.Errorf("alter 子句是 %q,期望 ADD INDEX idx_ab (a, b)", got.Alter)
+	}
+}
+
 func TestParseIndexDDL_RejectsAddPrimaryKey(t *testing.T) {
 	// 加主键不是加二级索引:它会重建整张表的聚簇索引,而 OSC 的影子表方案对它
 	// 有另一套语义要考虑(空值、去重)。不在这次的范围里。
@@ -522,7 +545,11 @@ Expected: 全部 PASS。
 - [ ] **Step 5: 变异验证**
 
 把 `insideParens` 的调用去掉（即不再拒绝多子句 ALTER），跑
-`TestParseIndexDDL_RejectsMixedClauses`，确认它红；改回来。
+`TestParseIndexDDL_RejectsTwoIndexClausesInOneAlter`，确认它红；改回来。
+
+**不要用 `TestParseIndexDDL_RejectsMixedClauses` 做这次变异** —— 它的输入
+（`ADD COLUMN c INT, ADD INDEX i (c)`）在正则阶段就失配了，走不到 `insideParens`，
+去掉那个函数它照样绿。执行中发现并修正过一次。
 
 - [ ] **Step 6: 提交**
 
