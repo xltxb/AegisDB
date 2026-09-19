@@ -68,6 +68,26 @@ func TestStageExecute_AdvancesTheCursorAsItGoes(t *testing.T) {
 	}
 }
 
+// 影响行数要跨恢复累计。从 0 重新起算的话,一次跨了几小时、分几段跑完的执行,
+// 界面上显示的行数会比真实值小 —— 而那个数字是人判断"这次变更动了多少东西"
+// 的唯一依据。
+func TestStageExecute_KeepsCountingRowsAcrossAResume(t *testing.T) {
+	fx := newExecFixture(t, "UPDATE t SET a=1; UPDATE t SET b=2; UPDATE t SET c=3")
+	fx.stage.ExecCursor = 2
+	fx.stage.Rows = 20 // 前两条一共影响了 20 行
+	fx.saveStage()
+
+	out := fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	if out.status != model.RunSuccess {
+		t.Fatalf("状态 = %s,日志:%s", out.status, out.log)
+	}
+	// 假执行器每条报 1 行,所以第三条加 1。
+	if out.rows != 21 {
+		t.Errorf("影响行数 = %d,期望 21(历史 20 + 本次 1) —— 跨恢复的累计被重置了", out.rows)
+	}
+}
+
 // "边走边记"这句话本身要有一条测试专门守住它,而不是只看跑完之后的游标值:
 // 把落库挪到循环外、跑完一起写一次,TestStageExecute_AdvancesTheCursorAsItGoes
 // 一样是绿的(两条都成功时,结果本就是 2)。真正能分开两者的,是**中途失败**时

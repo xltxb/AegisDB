@@ -76,10 +76,13 @@ func newExecFixture(t *testing.T, sql string) *execFixture {
 	return fx
 }
 
+// saveStage 把夹具在内存里改过的阶段字段落库。row_count 也在其中(列名是
+// row_count —— rows 是 MySQL 保留字,见 ADR 0016 §二):影响行数跨恢复要累计,
+// 不带上它的话,任何一条"恢复时 Rows 不是从 0 起算"的用例都存不进前提条件。
 func (f *execFixture) saveStage() {
 	f.t.Helper()
 	if err := f.repo.UpdateReleaseStage(f.stage.ID, map[string]any{
-		"exec_cursor": f.stage.ExecCursor, "log": f.stage.Log,
+		"exec_cursor": f.stage.ExecCursor, "log": f.stage.Log, "row_count": f.stage.Rows,
 	}); err != nil {
 		f.t.Fatalf("写阶段失败: %v", err)
 	}
