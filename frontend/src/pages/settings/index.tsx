@@ -148,6 +148,9 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     // ---- 在线表结构变更(OSC) ----
     // 默认 true:这是**急停**开关,不是启用开关。没写过它时不该额外拦。
     oscEnabled: parseSetting(g['osc.enabled'], true),
+    // 自动路由索引变更的开关与阈值。当表行数超过阈值时自动改走 OSC。
+    oscAutoRoute: parseSetting(g['osc.autoRoute.enabled'], true),
+    oscMinRows: Number(parseSetting(g['osc.autoRoute.minRows'], 2000000)) || 2000000,
 
     // ---- 通知 ----
     lark: parseSetting(g['notify.lark'], true),
@@ -234,6 +237,8 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'meta.sync.intervalHours': clampInt(f.metaIntervalHrs, 1, 720, 24),
         'meta.sync.concurrency': clampInt(f.metaConcurrency, 1, 8, 2),
         'osc.enabled': f.oscEnabled,
+        'osc.autoRoute.enabled': f.oscAutoRoute,
+        'osc.autoRoute.minRows': clampInt(f.oscMinRows, 10000, 1000000000, 2000000),
         'notify.lark': f.lark,
         'notify.email': f.email,
         'notify.push': f.push,
@@ -484,6 +489,15 @@ function SettingsForm({ data }: { data: SettingsResp }) {
           <CardRow title={t('setOscEnabled')} hint={t('setOscEnabledD')}>
             <Switch checked={f.oscEnabled} onChange={(v) => set({ oscEnabled: v })} />
           </CardRow>
+          <CardRow title={t('setOscAuto')} hint={t('setOscAutoD')}>
+            <Switch checked={f.oscAutoRoute} onChange={(v) => set({ oscAutoRoute: v })} />
+          </CardRow>
+          {f.oscAutoRoute && (
+            <CardRow title={t('setOscMinRows')} hint={t('setOscMinRowsD')}>
+              <input className="set-in w160" type="number" min={10000} step={100000}
+                     value={f.oscMinRows} onChange={(e) => set({ oscMinRows: Number(e.target.value) })} />
+            </CardRow>
+          )}
         </Card></section>
 
         {/* ---------------- 开放接口 ---------------- */}

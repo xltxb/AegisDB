@@ -870,6 +870,10 @@ export const zh = {
   setOscSub: '大表加索引时用影子表 + 分块拷贝代替原生 DDL(ADR 0011)',
   setOscEnabled: '允许发起在线变更',
   setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。它打不开这个功能 —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
+  setOscAuto: '大表索引变更自动走 OSC',
+  setOscAutoD: '发布流水线执行到一条索引变更时,若目标表超过下面的行数,自动改用在线变更。OSC 用不了时(未启用、非 MySQL、前置检查不通过)照常直发,并把原因写进阶段日志。',
+  setOscMinRows: '判定为大表的行数',
+  setOscMinRowsD: '行数取自 information_schema,是估算值,可能与实际相差可观 —— 边界附近的表会时走时不走。正好等于这个数不算超过。',
 
   setOpenApi: '开放接口',
   setOpenApiSub: '外部系统调用网关所用的凭据',

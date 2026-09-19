@@ -850,6 +850,10 @@ export const en: Dict = {
   setOscSub: 'Shadow table + chunked copy instead of native DDL on big tables (ADR 0011)',
   setOscEnabled: 'Allow starting online changes',
   setOscEnabledD: 'A kill switch: turning it off blocks new migrations immediately. It cannot turn the feature ON — that requires osc.enabled in the backend config, which in turn requires one rehearsal against an instance that has a replica.',
+  setOscAuto: 'Route big-table index changes through OSC',
+  setOscAutoD: 'When a pipeline executes an index change on a table larger than the row count below, it switches to the online change. If OSC is unavailable (disabled, not MySQL, preflight refused) the statement runs directly and the reason is written into the stage log.',
+  setOscMinRows: 'Rows that count as a big table',
+  setOscMinRowsD: 'The row count comes from information_schema and is an ESTIMATE — it can be off by a lot, so tables near the boundary will sometimes route and sometimes not. Exactly equal does not count as over.',
 
   setOpenApi: 'Open API',
   setOpenApiSub: 'Credentials external systems use to call the gateway',
