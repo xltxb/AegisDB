@@ -2459,7 +2459,7 @@ a { color: inherit; text-decoration: none; }
 
 /* 被拦下的那条命令,原样摆出来 —— 审批人和提交人看到的必须是同一份字节。 */
 .cmd {
-  margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+  margin: 0 0 10px; padding: 10px 12px; border-radius: 10px;
   border: 1px solid var(--border-subtle); background: var(--surface-sunken);
   font: 500 12.5px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-all;
 }
@@ -2488,23 +2488,37 @@ a { color: inherit; text-decoration: none; }
 /* flex 让分段按内容收缩。直接放在块级容器里,.c-seg 会被拉满整行,右边挂着
    一大片空白边框。 */
 .ap-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.ap-list { display: flex; flex-direction: column; gap: 12px; }
+.ap-list { display: flex; flex-direction: column; gap: 10px; }
 .ap-card {
   padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: 13px;
   background: var(--surface-card);
 }
-.ap-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ap-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .ap-no { font: 600 11.5px var(--font-mono); color: var(--accent-text); }
 
-/* 键值表。dt 定宽,值才对得齐;而命令与库名可能很长,所以允许换行不允许溢出。 */
-.ap-kv { margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.ap-kv > div { display: flex; gap: 12px; }
+/* 键值表排成一行。
+ *
+ * 原来是三行(发起人 / 目标 / 原因),占掉 72px —— 一张卡片 187px 里最肥的一块,
+ * 一屏只剩 3.5 条。可这三样都是短值,竖着排是在用一整行装一个名字。横排之后
+ * 卡片降到 120px 上下,而真正要读的东西(上面那条 SQL)一点没动。
+ *
+ * 标签留着,只是缩小:去掉的话"验证分页 #22"单独摆在那里,看不出它是原因。
+ * 装不下时按 div 换行,不会把标签和值拆散。 */
+.ap-kv { margin: 0; display: flex; flex-wrap: wrap; gap: 3px 16px; }
+.ap-kv > div { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .ap-kv dt {
-  flex-shrink: 0; width: 64px; font: 500 11.5px/1.7 var(--font-body); color: var(--text-faint);
+  flex-shrink: 0; font: 600 10.5px var(--font-mono); color: var(--text-faint);
+  letter-spacing: .04em;
 }
 .ap-kv dd {
   margin: 0; min-width: 0; font: 500 11.5px/1.7 var(--font-body); color: var(--text-body);
   word-break: break-all;
+}
+/* 目标是这三条里唯一可能很长的(库名可以是一条绝对路径):单行省略,全文在 title。
+   其余两条仍然允许换行 —— 人名和原因断在中间比截掉更难读。 */
+.ap-target {
+  max-width: 420px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; word-break: normal;
 }
 
 /* 「等待发起人执行」那一行。通过 ≠ 执行(ADR 0010),所以这不是一句提示,
