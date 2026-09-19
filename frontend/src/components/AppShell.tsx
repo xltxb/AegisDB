@@ -262,12 +262,13 @@ export default function AppShell() {
         <main className="content"><Outlet /></main>
       </div>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        pages={items.map((i) => ({ to: i.to, label: t(i.labelKey), icon: i.icon }))}
-        instanceTo={instanceTo}
-      />
+      {paletteOpen && (
+        <CommandPalette
+          onClose={() => setPaletteOpen(false)}
+          pages={items.map((i) => ({ to: i.to, label: t(i.labelKey), icon: i.icon }))}
+          instanceTo={instanceTo}
+        />
+      )}
     </div>
   )
 }

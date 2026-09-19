@@ -27,7 +27,7 @@ import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import { DbTree } from './DbTree'
 import { ResultGrid, type GridResult } from './ResultGrid'
-import { SourceViewer, type SourceTarget } from './SourceViewer'
+import { SourceViewer, sourceKey, type SourceTarget } from './SourceViewer'
 import { SnippetModal } from './SnippetModal'
 import { PasteModal } from './PasteModal'
 import { Completion, META_COMMANDS, type AcItem } from './Completion'
@@ -725,6 +725,18 @@ export default function TerminalPage() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
+  /*
+   * 下面两个 effect 的依赖数组都是**有意写窄**的:开场白按实例打一次,默认实例只挑
+   * 一次。它们要读的东西放进这个 ref,依赖里就只剩真正决定"要不要重跑"的那几个值
+   * —— 否则换个主题、拖一下分栏这类与会话无关的重渲染,都会把开场白再打一遍。
+   *
+   * 和 `useTerminalSession` 里那个 `cb` 是同一个手法,也同样安全:写入的 effect 声明在
+   * 前,同一次 commit 里先跑,所以下面读到的就是这一轮渲染的值 —— 与直接闭包捕获
+   * 的是同一批,只是 lint 现在能静态看懂依赖了。
+   */
+  const latest = useRef({ conn, me, tr, noticeLines, session, list, envtier })
+  useEffect(() => { latest.current = { conn, me, tr, noticeLines, session, list, envtier } })
+
   /**
    * 开场白:这条会话连的是谁、以什么角色、按什么策略,以及怎么求助。
    *
@@ -736,26 +748,32 @@ export default function TerminalPage() {
    * 恰恰是越往后越需要提醒的。
    */
   const banneredFor = useRef(0)
+  const connKey = conn?.id ?? 0
   useEffect(() => {
-    if (!conn || banneredFor.current === conn.id) return
+    if (!connKey || banneredFor.current === connKey) return
+    const { conn, me, tr, noticeLines, session } = latest.current
+    // connKey 非 0 就意味着 conn 非空 —— 它就是从 conn 算出来的。这一句是给类型看的。
+    if (!conn) return
     const ed = session.editor.current
     if (!ed) return
-    banneredFor.current = conn.id
+    banneredFor.current = connKey
     // 换了实例就是换了一次会话:上一台的记录不该混进这一台导出的文件里。
     //
     // 屏幕跟着一起清。只清日志会留下一个**看得见却导不出**的落差 —— 屏幕上还挂着
     // 上一台的输出,而导出的文件从这条开场白才开始,头部却只写着当前这台实例。
     // 两者必须说同一件事。
+    //
+    // 不必在这里把导出按钮先关掉:紧接着的 noticeLines 会把开场白写进刚清空的日志,
+    // 那一刻日志就又非空了 —— 关掉再打开,屏幕上没有任何一帧看得见。
     transcript.current.clear()
     session.term.current?.clear()
-    setCanExportLog(false)
     noticeLines([
       c(ANSI.gray, tr('termConnected', {
         conn: `${conn.env}-${conn.name}`, role: conn.defaultRole, policy: conn.policy, user: me?.name || '',
       })),
       c(ANSI.gray, tr('termHelpLine', { bs: '\\' })),
     ])
-  }, [conn?.id])
+  }, [connKey])
 
   // 快捷键的定时器要还回去 —— StrictMode 下这个 effect 会跑两遍,而一个挂在那里
   // 的 4 秒定时器足以让"上膛"状态跨过组件的一生。
@@ -766,13 +784,16 @@ export default function TerminalPage() {
   // 只挑**一次**。不加这道闸的话,在生产确认弹窗上点「走错了,退出」会把 connId
   // 清成 0,而这个 effect 立刻又把同一台选回来 —— 那个按钮就永远按不动。
   const autoPicked = useRef(false)
+  const listLen = list.length
+  const tierLoading = envtier.loading
   useEffect(() => {
-    if (autoPicked.current || connId || !list.length || envtier.loading) return
+    if (autoPicked.current || connId || !listLen || tierLoading) return
+    const { list, envtier } = latest.current
     autoPicked.current = true
     const first = list.find((x) => envtier.tierOf(x.env)?.dangerBanner) ?? list[0]
     setConnId(first.id)
     setDatabase(first.database || '')
-  }, [list.length, envtier.loading, connId])
+  }, [connId, listLen, tierLoading])
 
   const gridVars: CSSProperties = {}
   if (treeW) (gridVars as Record<string, string>)['--tree-w'] = `${treeW}px`
@@ -1045,7 +1066,7 @@ export default function TerminalPage() {
       />
 
       <SnippetModal open={snipOpen} onClose={() => { setSnipOpen(false); session.focus() }} />
-      <SourceViewer target={src} onClose={() => setSrc(null)} />
+      {src && <SourceViewer key={sourceKey(src).join('|')} target={src} onClose={() => setSrc(null)} />}
     </div>
   )
 }
