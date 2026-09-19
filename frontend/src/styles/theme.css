@@ -1990,7 +1990,23 @@ a { color: inherit; text-decoration: none; }
 .tv-bar {
   display: flex; align-items: center; gap: 8px; height: 40px; flex: 0 0 40px;
   padding: 0 12px; border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-raised); overflow-x: auto; scrollbar-width: none;
+  overflow-x: auto; scrollbar-width: none;
+  /* 这一条能横滚,但滚动条是藏起来的(下面那行 ::-webkit-scrollbar),于是"右边还有
+     按钮"这件事没有任何线索 —— 390px 下「快捷脚本 / 导出日志 / 表格视图」就滑在
+     外面,看上去像是不存在。
+     这里用渐隐代替滚动条:前两层 local 跟着内容走,后两层 scroll 钉在容器两端,
+     滚到哪一头,那一头的渐隐就被 local 层盖住。好处是它自己知道该不该出现 ——
+     内容放得下时两端都被盖住,一点痕迹都没有;也不像滚动条那样占高度,把 40px
+     的条挤变形。 */
+  background:
+    linear-gradient(to right, var(--surface-raised) 34%, transparent) 0 0,
+    linear-gradient(to left,  var(--surface-raised) 34%, transparent) 100% 0,
+    radial-gradient(farthest-side at 0 50%,   var(--scroll-edge-shadow), transparent) 0 0,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-edge-shadow), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 42px 100%, 42px 100%, 13px 100%, 13px 100%;
+  background-attachment: local, local, scroll, scroll;
+  background-color: var(--surface-raised);
 }
 .tv-bar::-webkit-scrollbar { display: none; }
 .tv-bar .grow, .tv-status .grow, .tv-panel-head .grow { margin-left: auto; }
@@ -2054,9 +2070,24 @@ a { color: inherit; text-decoration: none; }
   padding: 0 14px; border-top: 1px solid var(--border-subtle);
   font: 500 11px var(--font-mono); color: var(--text-faint);
   /* 窄屏下这一行(连接态 + 一串快捷键提示)放不下:390px 实测溢出 330px。
-     两轴 hidden 会把右半截连同"审计 ON"一起吃掉,横向放开成可滚。 */
-  overflow-x: auto; overflow-y: hidden;
+     两轴 hidden 会把右半截连同"审计 ON"一起吃掉,横向放开成可滚。
+     渐隐提示同 .tv-bar —— 同一屏上两条都能滚,只给一条线索会更让人困惑。
+     底色取 --surface-page:这一条自己没有背景,透的就是 .tv-main 那层。 */
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  /* nowrap 是横向可滚的配套:不加的话 390px 下"已连接"会折成竖排,再被 34px 的
+     固定高度裁掉半截 —— 既没横着滚,也没竖着让开。 */
+  white-space: nowrap;
+  background:
+    linear-gradient(to right, var(--surface-page) 34%, transparent) 0 0,
+    linear-gradient(to left,  var(--surface-page) 34%, transparent) 100% 0,
+    radial-gradient(farthest-side at 0 50%,   var(--scroll-edge-shadow), transparent) 0 0,
+    radial-gradient(farthest-side at 100% 50%, var(--scroll-edge-shadow), transparent) 100% 0;
+  background-repeat: no-repeat;
+  background-size: 42px 100%, 42px 100%, 13px 100%, 13px 100%;
+  background-attachment: local, local, scroll, scroll;
+  background-color: var(--surface-page);
 }
+.tv-status::-webkit-scrollbar { display: none; }
 .tv-status .hl { color: var(--accent-text); }
 .tv-status .dim { color: var(--text-faint); white-space: nowrap; }
 .tv-status .keyhint { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
