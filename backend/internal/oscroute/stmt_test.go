@@ -81,6 +81,21 @@ func TestParseIndexDDL_StripsSchemaPrefix(t *testing.T) {
 	if got.Table != "t_order" {
 		t.Errorf("表名是 %q,库名前缀没有被剥掉", got.Table)
 	}
+	// I1:剥掉的前缀不能凭空消失 —— Decide 要靠它判断这条语句实际指向的库和发布单
+	// 目标库是不是同一个,剥了不留痕就没法做这个判断了。
+	if got.Schema != "app" {
+		t.Errorf("Schema 是 %q,期望 app —— 剥下来的前缀丢了", got.Schema)
+	}
+}
+
+func TestParseIndexDDL_SchemaIsEmptyWhenThereIsNoPrefix(t *testing.T) {
+	got, ok := ParseIndexDDL("ALTER TABLE t_order ADD INDEX idx_memo (memo)")
+	if !ok {
+		t.Fatal("没认出最常见的那一种写法")
+	}
+	if got.Schema != "" {
+		t.Errorf("没有前缀的语句,Schema 却是 %q", got.Schema)
+	}
 }
 
 func TestParseIndexDDL_RejectsMixedClauses(t *testing.T) {

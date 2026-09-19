@@ -87,7 +87,7 @@ func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sq
 		return 0, "直发:在线变更已被关闭(配置或急停开关)"
 	}
 	// 行数是懒查的:Decide 只在认出这是索引 DDL、且没被覆盖或策略拦下时才回调它。
-	d := oscroute.Decide(sql, conn.Engine, s.oscPolicy(), oscroute.Override(rel.OSCMode),
+	d := oscroute.Decide(sql, conn.Engine, rel.Database, s.oscPolicy(), oscroute.Override(rel.OSCMode),
 		func(table string) int64 {
 			if s.tableRowsFn == nil {
 				return 0

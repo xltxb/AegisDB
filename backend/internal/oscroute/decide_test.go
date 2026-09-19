@@ -18,7 +18,7 @@ func policy() Policy { return Policy{AutoRoute: true, MinRows: 2_000_000} }
 func rowsFn(n int64) func(string) int64 { return func(string) int64 { return n } }
 
 func TestDecide_RoutesABigTableIndexChange(t *testing.T) {
-	d := Decide("ALTER TABLE t_order ADD INDEX idx_memo (memo)", "mysql", policy(), OverrideNone, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX idx_memo (memo)", "mysql", "", policy(), OverrideNone, rowsFn(bigTable))
 
 	if !d.UseOSC {
 		t.Fatalf("八百万行的表上加索引没有走 OSC:%s", d.Reason)
@@ -32,7 +32,7 @@ func TestDecide_RoutesABigTableIndexChange(t *testing.T) {
 }
 
 func TestDecide_SkipsASmallTable(t *testing.T) {
-	d := Decide("ALTER TABLE t_order ADD INDEX idx_memo (memo)", "mysql", policy(), OverrideNone, rowsFn(1_000))
+	d := Decide("ALTER TABLE t_order ADD INDEX idx_memo (memo)", "mysql", "", policy(), OverrideNone, rowsFn(1_000))
 
 	if d.UseOSC {
 		t.Error("一千行的表也走了 OSC —— 影子表和 binlog 订阅的开销远大于收益")
@@ -46,7 +46,7 @@ func TestDecide_SkipsASmallTable(t *testing.T) {
 func TestDecide_ThresholdItselfIsNotOver(t *testing.T) {
 	// 正好等于阈值不算超。与 osc.shouldPause 对限流阈值的立场一致:一个恰好卡在
 	// 线上的值反复触发,会让行为看起来随机。
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", policy(), OverrideNone, rowsFn(2_000_000))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", "", policy(), OverrideNone, rowsFn(2_000_000))
 
 	if d.UseOSC {
 		t.Error("行数正好等于阈值时走了 OSC")
@@ -54,7 +54,7 @@ func TestDecide_ThresholdItselfIsNotOver(t *testing.T) {
 }
 
 func TestDecide_SkipOverrideWinsOverEverything(t *testing.T) {
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", policy(), OverrideSkip, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", "", policy(), OverrideSkip, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("发起人明确选了直发,却仍然走了 OSC")
@@ -66,7 +66,7 @@ func TestDecide_SkipOverrideWinsOverEverything(t *testing.T) {
 
 func TestDecide_ForceOverrideSkipsTheRowCheck(t *testing.T) {
 	// 估算行数可能偏得很离谱(InnoDB 的 TABLE_ROWS)。force 是人对这件事的纠正。
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", policy(), OverrideForce, rowsFn(10))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", "", policy(), OverrideForce, rowsFn(10))
 
 	if !d.UseOSC {
 		t.Errorf("发起人强制走 OSC,却没有走:%s", d.Reason)
@@ -76,7 +76,7 @@ func TestDecide_ForceOverrideSkipsTheRowCheck(t *testing.T) {
 func TestDecide_ForceStillRefusesWhatOSCCannotDo(t *testing.T) {
 	// force 是"跳过行数判断",不是"把任何语句都塞给 OSC"。一条改列语句交过去,
 	// 会在 Preflight 那里失败,而人看到的是一张失败的发布单。
-	d := Decide("ALTER TABLE t_order MODIFY COLUMN memo VARCHAR(128)", "mysql", policy(), OverrideForce, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order MODIFY COLUMN memo VARCHAR(128)", "mysql", "", policy(), OverrideForce, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("强制模式把一条改列语句交给了 OSC")
@@ -87,7 +87,7 @@ func TestDecide_AutoRouteOffMeansNever(t *testing.T) {
 	p := policy()
 	p.AutoRoute = false
 
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", p, OverrideNone, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", "", p, OverrideNone, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("自动路由关着却仍然走了 OSC")
@@ -97,7 +97,7 @@ func TestDecide_AutoRouteOffMeansNever(t *testing.T) {
 func TestDecide_NonMySQLNeverRoutes(t *testing.T) {
 	// OSC 是 MySQL 专属的(binlog + 影子表)。对着 PostgreSQL 讨论这件事没有意义,
 	// 而理由要说得出是引擎的原因 —— 否则人会去查自己的阈值配置。
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", policy(), OverrideNone, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", "", policy(), OverrideNone, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("在 PostgreSQL 上走了 OSC")
@@ -113,8 +113,8 @@ func TestDecide_DoesNotCountRowsForStatementsItWillNotRoute(t *testing.T) {
 	called := 0
 	rows := func(string) int64 { called++; return bigTable }
 
-	Decide("UPDATE t_order SET memo = 'x'", "mysql", policy(), OverrideNone, rows)
-	Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", policy(), OverrideNone, rows)
+	Decide("UPDATE t_order SET memo = 'x'", "mysql", "", policy(), OverrideNone, rows)
+	Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", "", policy(), OverrideNone, rows)
 
 	if called != 0 {
 		t.Errorf("为不会路由的语句查了 %d 次行数", called)
@@ -122,7 +122,7 @@ func TestDecide_DoesNotCountRowsForStatementsItWillNotRoute(t *testing.T) {
 }
 
 func TestDecide_NonIndexDDLNeverRoutes(t *testing.T) {
-	d := Decide("UPDATE t_order SET memo = 'x'", "mysql", policy(), OverrideNone, rowsFn(bigTable))
+	d := Decide("UPDATE t_order SET memo = 'x'", "mysql", "", policy(), OverrideNone, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("把一条 UPDATE 交给了 OSC")
@@ -138,10 +138,51 @@ func TestDecide_ForceWinsOverTheAutoRouteSwitch(t *testing.T) {
 	p := policy()
 	p.AutoRoute = false
 
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", p, OverrideForce, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", "", p, OverrideForce, rowsFn(bigTable))
 
 	if !d.UseOSC {
 		t.Errorf("自动路由关着时 force 失效了:%s", d.Reason)
+	}
+}
+
+// I1:带库名前缀的语句若指向的库和发布单目标库不同,不能被认下来 —— OSC 的
+// StartRequest 拿目标库当 schema,认下的话会在目标库里找一张同名表加索引,而人
+// 真正想改的那张表一个字没动。两个库都有同名表时(常见),这是一次静默的"错认"、
+// 这条分支最贵的那类失败,比"认不出、照常直发"糟得多。
+func TestDecide_RefusesWhenStatementTargetsADifferentSchema(t *testing.T) {
+	d := Decide("ALTER TABLE app_archive.t_order ADD INDEX idx_memo (memo)", "mysql", "app", policy(), OverrideNone, rowsFn(bigTable))
+
+	if d.UseOSC {
+		t.Error("语句指向 app_archive,却被当成了发布单目标库 app 里的表,交给了 OSC")
+	}
+	if !strings.Contains(d.Reason, "app_archive") || !strings.Contains(d.Reason, "app") {
+		t.Errorf("理由 %q 没有说清是哪两个库不匹配", d.Reason)
+	}
+}
+
+func TestDecide_AcceptsWhenSchemaPrefixMatchesTheTarget(t *testing.T) {
+	d := Decide("ALTER TABLE app.t_order ADD INDEX idx_memo (memo)", "mysql", "app", policy(), OverrideNone, rowsFn(bigTable))
+
+	if !d.UseOSC {
+		t.Errorf("前缀与目标库相同,却没有走 OSC:%s", d.Reason)
+	}
+}
+
+func TestDecide_AcceptsWhenStatementHasNoSchemaPrefix(t *testing.T) {
+	d := Decide("ALTER TABLE t_order ADD INDEX idx_memo (memo)", "mysql", "app", policy(), OverrideNone, rowsFn(bigTable))
+
+	if !d.UseOSC {
+		t.Errorf("没有前缀的语句本该沿用发布单目标库,却没有走 OSC:%s", d.Reason)
+	}
+}
+
+func TestDecide_ForceDoesNotOverrideASchemaMismatch(t *testing.T) {
+	// force 跳过的是行数判断,不是"把任何语句都塞给 OSC"——这条原则已经被
+	// TestDecide_ForceStillRefusesWhatOSCCannotDo 钉住,这里补上 schema 不符时的版本。
+	d := Decide("ALTER TABLE app_archive.t_order ADD INDEX idx_memo (memo)", "mysql", "app", policy(), OverrideForce, rowsFn(bigTable))
+
+	if d.UseOSC {
+		t.Error("强制模式把一条指向别的库的语句交给了 OSC")
 	}
 }
 
@@ -149,7 +190,7 @@ func TestDecide_ForceStillRefusesANonMySQLTarget(t *testing.T) {
 	// force 跳过的是**行数判断**,不是引擎。OSC 是 MySQL 专属的(影子表 + binlog),
 	// 把一条 PostgreSQL 上的索引 DDL 塞进去,要到 Preflight 才失败 ——
 	// 而人看到的是一张失败的发布单,不是"这条语句不该走这条路"。
-	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", policy(), OverrideForce, rowsFn(bigTable))
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", "", policy(), OverrideForce, rowsFn(bigTable))
 
 	if d.UseOSC {
 		t.Error("强制模式把一条 PostgreSQL 上的变更交给了 OSC")

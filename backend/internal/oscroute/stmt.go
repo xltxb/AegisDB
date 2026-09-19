@@ -14,8 +14,16 @@ import (
 // Alter 是**交给 osc.StartRequest 的子句**,不是原句:CREATE INDEX / DROP INDEX
 // 会被翻译成等价的 ALTER 形式,因为 OSC 收的是子句。
 type IndexDDL struct {
-	Table string
-	Alter string
+	// Schema 是语句里带的库名前缀(剥之前的那个),没带前缀时是空字符串。
+	//
+	// 留着它是因为 Decide 要拿它和发布单的目标库比:cleanIdent 剥前缀是给 OSC 的
+	// StartRequest 准备的(它分开收 schema 与 table,schema 来自发布单目标库),
+	// 但"剥掉"不等于"这个前缀不重要"——一条 `app_archive.t_order` 若被当成目标库
+	// `app` 里的 `t_order`,OSC 会在错误的库里认出一张同名表、加错索引,而语句真正
+	// 想改的那张表一个字没动。这是错认,比"认不出、照常直发"贵得多。
+	Schema string
+	Table  string
+	Alter  string
 }
 
 // identPat 匹配 `db`.`t` / db.t / t 三种形态。
@@ -49,20 +57,23 @@ func ParseIndexDDL(sql string) (IndexDDL, bool) {
 		if !isSingleIndexClause(clause) {
 			return IndexDDL{}, false
 		}
-		return IndexDDL{Table: cleanIdent(m[1]), Alter: normalizeSpace(clause)}, true
+		schema, table := splitIdent(m[1])
+		return IndexDDL{Schema: schema, Table: table, Alter: normalizeSpace(clause)}, true
 	}
 	if m := reCreateIndex.FindStringSubmatch(s); m != nil {
 		kind := strings.ToUpper(strings.TrimSpace(m[1]))
 		if kind != "" {
 			kind += " "
 		}
+		schema, table := splitIdent(m[3])
 		return IndexDDL{
-			Table: cleanIdent(m[3]),
+			Schema: schema, Table: table,
 			Alter: normalizeSpace("ADD " + kind + "INDEX " + stripQuotes(m[2]) + " " + m[4]),
 		}, true
 	}
 	if m := reDropIndex.FindStringSubmatch(s); m != nil {
-		return IndexDDL{Table: cleanIdent(m[2]), Alter: "DROP INDEX " + stripQuotes(m[1])}, true
+		schema, table := splitIdent(m[2])
+		return IndexDDL{Schema: schema, Table: table, Alter: "DROP INDEX " + stripQuotes(m[1])}, true
 	}
 	return IndexDDL{}, false
 }
@@ -121,16 +132,19 @@ func stripQuotes(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// cleanIdent 去掉反引号/双引号与库名前缀。只用于**表名**。
+// splitIdent 去掉反引号/双引号,并把库名前缀从表名里分离出来,两半都返回。
+// 只用于**表名**(索引名走 stripQuotes,见该函数注释)。
 //
-// 库名前缀必须剥掉:OSC 的 StartRequest 分开收 schema 与 table,schema 来自发布单
-// 的目标库。带着前缀会拼出 `app`.`app.t_order` 这样的名字。
-func cleanIdent(s string) string {
+// 库名前缀必须从 Table 里剥掉:OSC 的 StartRequest 分开收 schema 与 table,schema
+// 来自发布单的目标库。带着前缀会拼出 `app`.`app.t_order` 这样的名字。但剥掉不等于
+// 丢弃 —— Decide 要拿这个前缀去和发布单的目标库比对(I1),两个库都有同名表时,
+// 不比对的后果是在错误的库里加错索引,而语句真正想改的那张表一个字没动。
+func splitIdent(s string) (schema, table string) {
 	s = stripQuotes(s)
 	if i := strings.LastIndex(s, "."); i >= 0 {
-		s = s[i+1:]
+		return strings.TrimSpace(s[:i]), strings.TrimSpace(s[i+1:])
 	}
-	return strings.TrimSpace(s)
+	return "", strings.TrimSpace(s)
 }
 
 func normalizeSpace(s string) string {
