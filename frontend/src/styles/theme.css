@@ -54,7 +54,11 @@ a { color: inherit; text-decoration: none; }
 .rail {
   width: 74px; flex: 0 0 74px;
   display: flex; flex-direction: column; align-items: center;
-  padding: 14px 0;
+  /* 上内边距挪到 .rail-logo 的 margin 上。留在这里的话,sticky 的门户切换器只能
+     吸附到内边距的内沿,顶上那 14px 就成了一道缝,滚动的内容会从缝里露出来 ——
+     原先是拿切换器向上外扩的阴影去糊那道缝的,可那圈阴影在没滚动的时候也一直
+     画着,正好把 logo 的下半截平切掉(圆角方块看着像被削平了)。 */
+  padding: 0 0 14px;
   /* 菜单项多于视口高度时(管理后台约 888px,笔记本可用高度常常不足),
      不加这两行会被 .shell 的 overflow:hidden 直接裁掉,且滚不动 ——
      底部的"用户/审计/设置"和头像就彻底点不到了。
@@ -72,6 +76,7 @@ a { color: inherit; text-decoration: none; }
  * 该滚的滚,子项保持自己的尺寸。 */
 .rail > *, .rail-nav > * { flex-shrink: 0; }
 .rail-logo {
+  margin-top: 14px;
   width: 36px; height: 36px; border-radius: 10px;
   display: grid; place-items: center; color: #fff;
   /* 品牌渐变:token 表里没有对应物,原型里也是写死的两个色标。 */
@@ -90,7 +95,9 @@ a { color: inherit; text-decoration: none; }
      外扩的 box-shadow 是在补两侧的缝:切换器只有 56px,侧栏 74px,不铺上容器
      底色的话,滚动的菜单项会从它左右两边穿过去。 */
   position: sticky; top: 0; z-index: 2;
-  box-shadow: 0 -14px 0 9px var(--surface-sunken);
+  /* 只向两侧铺(切换器 56px,栏 74px,不铺的话滚动的菜单项会从它左右穿过去)。
+     不再向上偏移:吸附点已经在栏顶,上面没有缝要补,而向上的阴影会切掉 logo。 */
+  box-shadow: 0 0 0 9px var(--surface-sunken);
 }
 /* 图标下面补一行字。
  *
