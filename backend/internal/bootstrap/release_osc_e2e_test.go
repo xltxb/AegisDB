@@ -148,10 +148,14 @@ func seedBigTable(t *testing.T, app *testApp, targetDB string, n int) string {
 		}
 	}
 
-	// gatherRows 读的是 information_schema.STATISTICS 的 TABLE_ROWS 估算值,而它
-	// 只在 ANALYZE(或达到 InnoDB 内部的变更比例)之后才刷新。批量插入之后不主动
-	// ANALYZE 的话,这个估算值可能仍然是 0 或旧值,于是路由判定会把这张刚灌满
-	// 的大表当成小表,直接直发 —— 而不是走 OSC,这条用例的核心断言就会落空。
+	// gatherRows(经 osc.Gather → gatherTable)读的是 information_schema.TABLES
+	// 的 TABLE_ROWS 估算值,而它只在 ANALYZE(或达到 InnoDB 内部的变更比例)之后
+	// 才刷新。批量插入之后不主动 ANALYZE 的话,这个估算值可能仍然是 0 或旧值,
+	// 于是路由判定会把这张刚灌满的大表当成小表,直接直发 —— 而不是走 OSC,
+	// 这条用例的核心断言就会落空。
+	//
+	// ANALYZE TABLE 是同步阻塞语句:执行完,统计值立即可见,不依赖任何后台刷新
+	// 窗口或延迟——这一步让用例在不同机器上是确定性的,不是在赌时机。
 	if _, err := db.ExecContext(ctx, "ANALYZE TABLE `"+name+"`"); err != nil {
 		t.Fatalf("ANALYZE 失败: %v", err)
 	}
@@ -292,6 +296,15 @@ func TestReleaseE2E_TheIndexChangeIsMadeByOSCAndTheReleaseCompletes(t *testing.T
 	if !indexExists(t, targetDB, table, "idx_memo") {
 		t.Error("发布单报告成功,索引却不在")
 	}
+	// osc.Job 没有 ReleaseID 字段,单看 Where("table_name = ?", table) 这一条查询
+	// 本身是可能命中历史任务行的——它的安全性靠的是这个文件之外的两条前提:
+	//   1. newTestApp → testsupport.NewDB(t) 给每个用例分配全新的 Postgres schema,
+	//      t.Cleanup 里 DROP SCHEMA ... CASCADE,tbl_osc_job 在这条用例开始时必然
+	//      是空的,不存在别的用例留下的同名历史行;
+	//   2. seedBigTable 的表名带纳秒时间戳,同一进程内的其他用例不会造出同名表。
+	// 这两条一旦被打破(比如为了提速 CI 把测试库换成跨用例共享的),这条断言会
+	// 在没有任何报错的情况下变得不可靠:一次真正的"路由没生效"可能被别的用例
+	// 留下的同名任务行悄悄掩盖成通过。
 	var jobs int64
 	app.repo.DB().Model(&osc.Job{}).Where("table_name = ?", table).Count(&jobs)
 	if jobs == 0 {
