@@ -54,7 +54,17 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	runner := osc.NewRunner(repo.DB(), oscConnect(repo))
 	runner.ChunkSize = cfg.OSC.ChunkSize
 	runner.MaxLag = cfg.OSCMaxLag()
-	h.AttachOSC(runner, func() bool { return cfg.OSC.Enabled })
+	// 开关是**两道闸相与**,方向不对称:
+	//
+	//   配置文件里的 osc.enabled —— **前提**。打开它的条件是一次对着有从库的实例的
+	//     演练(ADR 0011),那是人做的事,界面上点一下不构成那个前提。
+	//   tbl_setting 里的 osc.enabled —— **急停**。一次迁移正在把从库拖垮时,人要
+	//     立刻挡住后续发起,而不是先去重启网关。
+	//
+	// 所以后台那个开关只关得掉、打不开。默认 true = 不额外拦,没写过它的部署行为不变。
+	h.AttachOSC(runner, func() bool {
+		return cfg.OSC.Enabled && repo.SettingBool("osc.enabled", true)
+	})
 
 	v1 := r.Group("/api/v1")
 
