@@ -10,6 +10,16 @@ import { APPROVAL_STATUS_TABS } from '@/lib/approvals'
 import type { ApprovalScope, ApprovalStatus } from '@/api/modules/approvals'
 import type { Approval } from '@/types'
 
+/**
+ * 目标库的显示名 —— 长了只留末段。
+ *
+ * sqlite 的"库名"就是一条绝对路径。整条摆进去会挤掉同一行的发起人和原因,而交给
+ * CSS 截又只能截尾:留下的恰好是每条单子都一样的 /private/tmp/... 头部,唯一有
+ * 区分度的文件名被截掉了。完整路径挂在 title 上。
+ */
+const shortDb = (db: string) =>
+  db.length > 32 && db.includes('/') ? db.slice(db.lastIndexOf('/') + 1) : db
+
 const STATUS_KEY: Record<string, string> = {
   pending: 'apPending', approved: 'apApproved', rejected: 'apRejected',
   expired: 'apExpired', cancelled: 'apCancelled',
@@ -104,7 +114,11 @@ export default function ApprovalsPage() {
                     <div><dt>{t('apInitiator')}</dt><dd>{a.initiator}</dd></div>
                     <div>
                       <dt>{t('apTarget')}</dt>
-                      <dd>{a.instance}{a.database ? ` · ${a.database}` : ''}</dd>
+                      {/* 库名可能是一条绝对路径(sqlite 的"库名"就是),任其换行会让这一条
+                          独占整行。单行省略,全文挂在 title 上。 */}
+                      <dd className="ap-target" title={`${a.instance}${a.database ? ` · ${a.database}` : ''}`}>
+                        {a.instance}{a.database ? ` · ${shortDb(a.database)}` : ''}
+                      </dd>
                     </div>
                     {a.reason && <div><dt>{t('apReason')}</dt><dd>{a.reason}</dd></div>}
                   </dl>
