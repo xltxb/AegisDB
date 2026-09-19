@@ -193,3 +193,41 @@ test('每张表的 grid 轨道数都等于它每行的单元格数', async ({ pa
     expect(sharedSeen[route], `${route} 在共用 <Table> 组件上一次 .c-thead 都没渲染出来 —— 共用表头可能整批消失了`).toBeGreaterThan(0)
   }
 })
+
+// 左侧栏装不下的时候该滚,不该把里面的东西压扁。
+//
+// flex 子项默认 flex-shrink: 1,容器一装不下就把超出量摊派给每个子项。这条栏
+// 常常装不下(菜单项多、门户切换器带字),于是 36×36 的 logo 被压成 36×20 ——
+// 看上去像是图标不见了。这类错只在浏览器排完版之后才存在:CSS 里 height 明明
+// 写着 36px,类型检查、单测、快照都看不出。
+//
+// 挑 708 是因为它就是那台 1512×708 机器的高度,菜单项最多的管理后台在这个高度
+// 下超出 230px —— 压缩量足够大,压扁了一眼就能量出来。
+test('左侧栏装不下时滚动,不把 logo 和菜单项压扁', async ({ page }) => {
+  await stubAll(page)
+  await page.setViewportSize({ width: 1512, height: 708 })
+  await loginAs(page, '管理后台')
+  // 等它真的挂上来:loginAs 只等 URL 落到 /dashboard,那一刻外壳还可能没渲染完。
+  await expect(page.locator('.rail .rail-item').first()).toBeVisible()
+
+  const m = await page.evaluate(() => {
+    const rail = document.querySelector('.rail')!
+    const logo = rail.querySelector('.rail-logo')!.getBoundingClientRect()
+    const avatar = rail.querySelector('.rail-avatar')?.getBoundingClientRect()
+    const items = [...rail.querySelectorAll('.rail-item')].map((i) => Math.round(i.getBoundingClientRect().height))
+    return {
+      logoH: Math.round(logo.height), logoW: Math.round(logo.width),
+      avatarH: avatar ? Math.round(avatar.height) : 0,
+      itemHeights: [...new Set(items)],
+      overflowing: rail.scrollHeight - rail.clientHeight,
+    }
+  })
+
+  // 前提:这个高度下它确实装不下 —— 不然这条规格什么都没验到。
+  expect(m.overflowing, '708px 下左侧栏没有超出,这条规格失去了前提').toBeGreaterThan(0)
+  // CSS 声明的尺寸必须原样活下来。
+  expect(m.logoH, 'logo 被压扁了').toBe(36)
+  expect(m.logoW).toBe(36)
+  expect(m.avatarH, '底部头像被压扁了').toBe(34)
+  expect(m.itemHeights, '菜单项高度被压出了不止一种').toEqual([52])
+})

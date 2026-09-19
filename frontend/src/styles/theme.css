@@ -64,6 +64,13 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface-sunken);
   border-right: 1px solid var(--border-subtle);
 }
+/* 装不下的时候滚,不是把里面的东西压扁。
+ *
+ * flex 子项默认 flex-shrink: 1:内容一超出容器,超出的量就摊派给每个子项。这条栏
+ * 本来就常常装不下(上面那行 overflow-y 就是为此加的),于是 22px 的超出被摊下去,
+ * 36×36 的 logo 被压成 36×20 —— 看着像图标不见了,其实是被挤扁的。
+ * 该滚的滚,子项保持自己的尺寸。 */
+.rail > *, .rail-nav > * { flex-shrink: 0; }
 .rail-logo {
   width: 36px; height: 36px; border-radius: 10px;
   display: grid; place-items: center; color: #fff;
