@@ -57,8 +57,38 @@ var dict = []dictRow{
 	{"GRANT", "mid", "mid", "off"}, {"REVOKE", "mid", "mid", "off"},
 }
 
-// 无 WHERE 拦截的分层开关。内置五分层里只有 dev 关掉它。
-var strictNoWhere = map[string]bool{"prod": true, "gli": true, "staging": true, "uat": true, "dev": false}
+// 分层属性位。与 internal/bootstrap/seed.go 的 builtinTiers 逐字段对齐。
+//
+// 导出的不只是 strictNoWhere：官网的分层徽章要能说出「强制 MFA」「终端红色警告」
+// 这些话，而它们和无 WHERE 拦截一样长在分层上，不是判定链里另一个地方的东西。
+// 少导一个，官网就只能把它硬写进文案 —— 那正是这个程序存在的理由的反面。
+type tierProp struct {
+	DisplayName     string `json:"displayName"`
+	SortOrder       int    `json:"sortOrder"`
+	RequireMFA      bool   `json:"requireMfa"`
+	DangerBanner    bool   `json:"dangerBanner"`
+	CountsInPending bool   `json:"countsInPending"`
+	ScanBaseline    bool   `json:"scanBaseline"`
+	StrictNoWhere   bool   `json:"strictNoWhere"`
+}
+
+var tierProps = map[string]tierProp{
+	"prod":    {DisplayName: "生产环境 · PROD", SortOrder: 0, RequireMFA: true, DangerBanner: true, CountsInPending: true, ScanBaseline: true, StrictNoWhere: true},
+	"gli":     {DisplayName: "法务环境 · GLI", SortOrder: 1, StrictNoWhere: true},
+	"staging": {DisplayName: "预发布环境 · STAGING", SortOrder: 2, StrictNoWhere: true},
+	"uat":     {DisplayName: "演练环境 · UAT", SortOrder: 3, StrictNoWhere: true},
+	"dev":     {DisplayName: "开发环境 · DEV", SortOrder: 4, StrictNoWhere: false},
+}
+
+// 无 WHERE 拦截的分层开关 —— 从 tierProps 派生，不另写一份。内置五分层里只有 dev
+// 关掉它。两份手写的表迟早分叉，而分叉的那一天没人会发现。
+var strictNoWhere = func() map[string]bool {
+	m := make(map[string]bool, len(tierProps))
+	for code, p := range tierProps {
+		m[code] = p.StrictNoWhere
+	}
+	return m
+}()
 
 // 分层克隆：gli 按 prod 判（法务），uat 按 staging 判（演练）。
 // 种子只种了 prod/staging/dev 三层，这两层是导出时补的 —— 与产品「新分层必须从
@@ -360,6 +390,7 @@ func main() {
 		"capabilityMatrix": capMatrix,
 		"riskDictionary":   dictOut,
 		"strictNoWhere":    strictNoWhere,
+		"tierProps":        tierProps,
 		"menuKeys":         menuKeys,
 		"menuMatrix":       menuOut,
 	}
