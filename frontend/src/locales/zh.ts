@@ -277,7 +277,7 @@ export const zh = {
   chgModeScheduledHint: '排期不在这里:要在维护车次里连跑多条,先去「执行窗口」申请一个班车',
   chgModeGitHint: '由 CI 用开放接口凭据建单,不从这个表单发起',
   chgOscWaiting: '正在等在线变更任务 #{{id}} 完成 —— 点此查看进度',
-  chgOscOrphan: '网关重启过,迁移任务 #{{id}} 已经没有进程在推进它 —— 它不会自己走完。到在线变更页收拾它留下的影子表,再决定这张单怎么办。',
+  chgOscOrphan: '这台网关没有在推进迁移任务 #{{id}}(多副本部署下也可能是别的副本正在跑它)—— 先到在线变更页确认它的状态,再决定这张单怎么办。',
   chgOscMode: '大表索引变更',
   chgOscModeAuto: '按平台策略',
   chgOscModeForce: '强制走在线变更',

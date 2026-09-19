@@ -270,7 +270,7 @@ export const en: Dict = {
   chgModeScheduledHint: 'Scheduling lives elsewhere: request an execution window for a maintenance run',
   chgModeGitHint: 'CI raises these through an open-API credential, not from this form',
   chgOscWaiting: 'Waiting for online change job #{{id}} — open it to see progress',
-  chgOscOrphan: 'The gateway restarted; no process is driving migration #{{id}} any more — it will not finish on its own. Clean up the shadow table it left on the online-change page, then decide what to do with this release.',
+  chgOscOrphan: 'This gateway is not driving migration #{{id}} (with multiple replicas, another one may still be running it) — check its status on the online-change page first, then decide what to do with this release.',
   chgOscMode: 'Big-table index change',
   chgOscModeAuto: 'Follow platform policy',
   chgOscModeForce: 'Force the online change',
