@@ -7,7 +7,7 @@ import {
   LayoutDashboard, SquareTerminal, ClipboardCheck, GitPullRequestArrow, FileCode2, FileDown, ListChecks,
   BusFront, BookOpen, Database, ShieldAlert, ScanLine, VenetianMask, ShieldCheck,
   Workflow, UsersRound, ScrollText, Settings, SlidersHorizontal, Lock,
-  Activity, Hourglass, Languages, Search, Moon, Sun, Stamp,
+  Activity, Hourglass, Languages, Search, Moon, Sun, Stamp, TableProperties,
 } from 'lucide-react'
 import { meQueryOptions } from '@/api/modules/auth'
 import { inboxPendingQueryOptions, pendingApprovalsQueryOptions } from '@/api/modules/approvals'
@@ -65,6 +65,7 @@ const FRONT_NAV: NavItem[] = [
 const BACK_NAV: NavItem[] = [
   { to: '/dashboard', key: '*', shortKey: 'navDashboardShort', labelKey: 'navDashboard', icon: LayoutDashboard },
   { to: '/connections', key: 'db', shortKey: 'navConnectionsShort', labelKey: 'navConnections', icon: Database },
+  { to: '/osc', key: 'db', shortKey: 'navOscShort', labelKey: 'navOsc', icon: TableProperties },
   { to: '/risk-rules', key: 'rules', shortKey: 'navRiskRulesShort', labelKey: 'navRiskRules', icon: ShieldAlert },
   { to: '/sql-review', key: 'rules', shortKey: 'navSqlReviewShort', labelKey: 'navSqlReview', icon: ScanLine },
   { to: '/gov', key: 'settings', shortKey: 'navGovShort', labelKey: 'navGov', icon: VenetianMask },

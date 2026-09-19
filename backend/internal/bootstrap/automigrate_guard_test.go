@@ -26,7 +26,10 @@ func TestSchemaHasOneSourceOfTruth(t *testing.T) {
 	}
 }
 
-// Migrate 跑完,36 张表都在。
+// Migrate 跑完,37 张表都在(baseline 36 张 + 0002 的 tbl_osc_job)。
+//
+// 这里守的是**确切的张数**,所以加一张表就要回来改这个数字 —— 那是故意的:
+// 顺手多建一张表、或者少建一张,两种都会让它红。
 func TestMigrate_CreatesEverySchemaTable(t *testing.T) {
 	db := testsupport.NewDB(t) // NewDB 已经跑过 baseline
 	var n int64
@@ -35,8 +38,11 @@ func TestMigrate_CreatesEverySchemaTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	if n != 36 {
-		t.Fatalf("表数 = %d, want 36", n)
+	// 期望值只写一次。刚才改这个数字时,条件改了而报错文案没改,于是它红着却说
+	// 「表数 = 37, want 37」—— 一句自相矛盾的话会让下一个人去怀疑数据库。
+	const want = 37
+	if n != want {
+		t.Fatalf("表数 = %d, want %d", n, want)
 	}
 }
 
@@ -45,8 +51,8 @@ func TestMigrate_CreatesEverySchemaTable(t *testing.T) {
 // 挡住重复执行的其实有两道闸,而这条用例走的是**第二道**:
 //
 //	一、账本(schema_migrations):记着哪个版本应用过,`migrate` 跑第二遍时整份文件都跳过。
-//	二、baseline 自身整体幂等:36 条 CREATE TABLE IF NOT EXISTS + 48 条
-//	    CREATE [UNIQUE] INDEX IF NOT EXISTS,重跑只出 NOTICE。
+//	二、每份迁移自身整体幂等:baseline 是 36 条 CREATE TABLE IF NOT EXISTS + 48 条
+//	    CREATE [UNIQUE] INDEX IF NOT EXISTS,0002 再加 1 张表 2 个索引,重跑只出 NOTICE。
 //
 // testsupport.NewDB 直接 Exec baseline,**不写账本**。所以这里第一道闸是空的,Migrate
 // 看到「0001 还没应用」,把整份 baseline 又完整跑了一遍 —— 于是这条用例实际压的是第二道闸。

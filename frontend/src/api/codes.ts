@@ -8,3 +8,5 @@ export const CODE_MFA_REQUIRED = 42800
 export const CODE_LOGIN_THROTTLED = 42900
 export const CODE_FORBIDDEN = 40300
 export const CODE_IP_NOT_ALLOWED = 40301
+/** 在线表结构变更(ADR 0011)未启用 —— 它还没做完,被有意关着。 */
+export const CODE_OSC_DISABLED = 42700

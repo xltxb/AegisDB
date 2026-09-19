@@ -78,7 +78,7 @@ export const OPS_ROUTES = [
   'scripts', 'export', 'async-jobs', 'exec-windows', 'catalog',
 ]
 export const ADMIN_ROUTES = [
-  'connections', 'risk-rules', 'sql-review', 'gov',
+  'connections', 'osc', 'risk-rules', 'sql-review', 'gov',
   'permissions', 'pipelines', 'users', 'audit', 'settings',
 ]
 

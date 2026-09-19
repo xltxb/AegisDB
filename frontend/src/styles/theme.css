@@ -2550,3 +2550,57 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface-card); box-shadow: var(--shadow-overlay, 0 8px 24px rgb(0 0 0 / .28));
 }
 .pa-item > * { width: 100%; justify-content: flex-start; }
+
+/* ---- 在线表结构变更(ADR 0011) ---- */
+
+/* 警告块在按钮**旁边**,不是在文档里 —— 这套东西还缺从库延迟限流,而要按下
+   "开始迁移"的那个人不会去翻 ADR。所以它占一整行,而不是一个可以忽略的角标。 */
+.osc-caveats { align-items: flex-start; gap: 10px; }
+.osc-caveats strong { display: block; font: 600 12.5px var(--font-body); }
+.osc-caveats ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.osc-caveats li { font: 400 12px var(--font-body); line-height: 1.55; }
+
+.osc-stranded { border-color: var(--warning-border, var(--border-strong)); padding: 14px 16px; }
+.osc-stranded-head { display: flex; gap: 10px; align-items: flex-start; color: var(--warning-text); }
+.osc-stranded-head strong { font: 600 13px var(--font-body); }
+.osc-stranded-head p { margin: 3px 0 0; font: 400 11.5px var(--font-body); color: var(--text-muted); line-height: 1.5; }
+.osc-stranded ul { margin: 10px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.osc-stranded li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.osc-stranded code { font: 600 12px var(--font-mono); color: var(--text-strong); }
+.osc-stranded li span { font: 500 11.5px var(--font-mono); color: var(--text-faint); }
+.osc-stranded li em { font: 400 11.5px var(--font-body); font-style: normal; color: var(--danger-text); }
+
+.osc-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.osc-item {
+  padding: 13px 16px; border: 1px solid var(--border-subtle); border-radius: 14px;
+  background: var(--surface-card);
+}
+.osc-item.on { border-color: var(--accent); }
+.osc-top { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.osc-no { font: 600 11.5px var(--font-mono); color: var(--text-faint); }
+.osc-tbl { font: 600 12.5px var(--font-mono); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.osc-when { margin-left: auto; font: 500 11px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.osc-top .c-btn { height: 28px; padding: 0 9px; }
+.osc-alter { margin-top: 8px; font: 500 12.5px var(--font-mono); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.osc-shadow { margin-top: 5px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
+.osc-throttle { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
+.osc-throttle.warn { color: var(--warning-text); }
+.osc-err { margin-top: 5px; font: 500 11.5px var(--font-mono); color: var(--danger-text); }
+
+/* 确定进度条 —— 这里**有**行数,和后台执行那条来回扫的不同。 */
+.osc-prog { margin-top: 9px; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.osc-bar { flex: 1; min-width: 0; height: 4px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.osc-bar > span {
+  display: block; height: 100%; border-radius: 999px; background: var(--accent);
+  transition: width var(--dur-slow, .4s) var(--ease-out, ease);
+}
+.osc-prog > span { font: 500 11px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.osc-unknown { font: 500 11px var(--font-mono); color: var(--warning-text); }
+
+/* 窄屏:时间戳不再右靠(那会把表名挤没),整块换行。 */
+@media (max-width: 768px) {
+  .osc-when { margin-left: 0; }
+  .osc-prog { flex-direction: column; align-items: stretch; gap: 6px; }
+  .osc-bar { width: 100%; }
+}
+.osc-orphan { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--warning-text); }

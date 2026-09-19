@@ -16,7 +16,11 @@ const (
 	CodeMFARequired     = 42800 // prod op needs a valid TOTP step-up code
 	CodeIPBlocked       = 40301 // source IP not in the allowlist
 	CodeTooManyReqs     = 42900 // too many failed login attempts (rate limited)
-	CodeInternalError   = 50000
+	// CodeOscDisabled:在线变更(ADR 0011)未启用。单独给一个码,而不是复用 403 或
+	// 404 —— 界面要凭它说出「这套东西还没做完,被有意关着」,而不是让人去查权限
+	// 或者怀疑路由写错了。
+	CodeOscDisabled   = 42700
+	CodeInternalError = 50000
 )
 
 // R is the response envelope. swagger: resp.R

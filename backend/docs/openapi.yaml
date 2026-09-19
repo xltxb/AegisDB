@@ -86,6 +86,8 @@ tags:
     description: 防篡改审计链
   - name: settings
     description: 系统设置、Webhook、开放接口凭据
+  - name: osc
+    description: MySQL 在线表结构变更(ADR 0011,默认关闭)
   - name: open-api
     description: 外部系统提交 SQL 升级单(key/secret 鉴权)
 
@@ -1082,6 +1084,54 @@ paths:
       tags: [tiers]
       summary: '[envtier · admin] 删除分层(仍有环境挂靠时拒绝)'
       parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/status:
+    get:
+      tags: [osc]
+      summary: 在线表结构变更现在能提供什么
+      description: >
+        返回 enabled(特性开关)与 caveats(这套东西**当前还做不到**的事,例如限流
+        装不装得起来要看目标实例当时的样子)。caveats 由服务端给、界面原样渲染在
+        发起按钮旁边 —— 要按下"开始迁移"的人不会去读 ADR,而两边各写一份警告迟早
+        会各说各话。读不受开关影响。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/jobs:
+    get:
+      tags: [osc]
+      summary: 迁移任务列表(含已结束的)
+      description: >
+        **关着的时候也读得到**。一次半途失败留下的影子表和一段没追平的 binlog,恰恰是
+        在人关掉开关之后最需要被看见的东西;把列表一起锁上等于把残局藏起来。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [osc]
+      summary: '[admin] 发起一次在线表结构变更'
+      description: >
+        影子表 → 分块拷贝 → binlog 回放 → 原子改名。只支持 MySQL。
+
+        拷贝受从库延迟限流(心跳表 + 主库自报从库)。装不装得起来取决于目标实例:
+        装不起来时迁移**照跑,但不限流**,而那件事记在任务的 throttle / throttled
+        两个字段里 —— 记的是这一次的事实,不是 /osc/status 里那份能力清单。
+
+        特性开关关闭时返回业务码 **42700**(不是 404 也不是 500):它还没做完,被有意
+        关着,界面据此说明原因。前置检查同步进行,不通过时返回 42200 并在 data.blockers
+        里带上**全部**阻塞项 —— 一条条试出来,在生产上就是一个个变更窗口;被拒绝的变更
+        不会留下任务记录,也不会建出影子表。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/jobs/{id}:
+    get:
+      tags: [osc]
+      summary: 单条迁移任务(界面轮询进度用)
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/jobs/{id}/abort:
+    post:
+      tags: [osc]
+      summary: '[admin] 中止一个正在跑的迁移'
+      description: >
+        中止不是"当没发生过":影子表可能已经建了、拷了一半。网关在退出路径上清理,
+        但清理本身也可能失败 —— 所以任务停在 aborted 而不是消失,残留由人按列表去收。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /exec-windows:
     get:
