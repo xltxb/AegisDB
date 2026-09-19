@@ -25,6 +25,16 @@ import type {
 /** 执行入口。后端只认「立即建单」,另外两条在别处,选中时由提示说清楚去哪。 */
 type ExecMode = 'now' | 'scheduled' | 'git'
 
+/**
+ * 库名的显示形式 —— 长了只留末段。
+ *
+ * sqlite 的"库名"就是一条绝对路径,列表项里会折成两行、占掉卡片三分之一的高。
+ * 交给 CSS 截又只能截尾,留下的恰好是每张单子都一样的路径头部。与 /approvals
+ * 同一个处理,完整值仍在 title 上。
+ */
+const shortDb = (db: string) =>
+  db.length > 32 && db.includes('/') ? db.slice(db.lastIndexOf('/') + 1) : db
+
 export default function ChangesPage() {
   const { t } = useTranslation()
   const [scope, setScope] = useState<ReleaseScope>('mine')
@@ -47,7 +57,20 @@ export default function ChangesPage() {
   const stages: StageNode[] = (open?.stages ?? []).map((s) => ({
     key: s.id, name: s.name, type: s.type, status: s.status, meta: duration(s),
   }))
-  const openStage = open?.stages.find((s) => s.id === openStageId) ?? null
+  /**
+   * 详情区默认落在**当前阶段**上。
+   *
+   * 原来 openStageId 初值是 0,于是进页面主区只有一句"点上面的阶段" —— 666px
+   * 的主区空着,而右边 280px 的栏里塞满了 SQL 与审查结果。可这张单最该先看的
+   * 那个阶段是确定的:正在跑的,或者卡着等人处理的那个。
+   *
+   * 找不到在跑的(整条线都完了或还没开始)就退到最后一个有结果的阶段,再不行取
+   * 第一个 —— 任何时候都比空着强。手点过之后仍然以手点的为准。
+   */
+  const liveStage = open?.stages.find((s) => s.status === 'running' || s.status === 'waiting')
+    ?? [...(open?.stages ?? [])].reverse().find((s) => s.status !== 'pending')
+    ?? open?.stages[0]
+  const openStage = (openStageId ? open?.stages.find((s) => s.id === openStageId) : liveStage) ?? null
 
   function select(r: Release) {
     setOpenId(r.id)
@@ -97,7 +120,7 @@ export default function ChangesPage() {
               <span className="chg-item-meta">
                 <span className="chg-tag">{r.env}</span>
                 <span>{r.instance}</span>
-                {r.database && <span className="dim">/ {r.database}</span>}
+                {r.database && <span className="dim" title={r.database}>/ {shortDb(r.database)}</span>}
               </span>
               <span className="chg-item-meta">
                 <span className="dim">{r.pipelineName}</span>
@@ -124,7 +147,10 @@ export default function ChangesPage() {
               <div className="chg-dtitles">
                 <div className="chg-dt">{open.relNo} · {open.title}</div>
                 <div className="chg-ds">
-                  {open.instance}{open.database ? ` / ${open.database}` : ''} · {open.pipelineName} · {fmt(open.createdAt)}
+                  <span title={open.database || undefined}>
+                    {open.instance}{open.database ? ` / ${shortDb(open.database)}` : ''}
+                  </span>
+                  {' · '}{open.pipelineName} · {fmt(open.createdAt)}
                   {open.source === 'api' && ` · ${t('chgFromApi', { name: open.clientName || 'API' })}`}
                 </div>
               </div>
@@ -155,8 +181,12 @@ export default function ChangesPage() {
               <div className="chg-main">
                 <StageStrip
                   stages={stages}
-                  selectedKey={openStageId || undefined}
-                  onSelect={(s) => setOpenStageId(openStageId === s.key ? 0 : Number(s.key))}
+                  // 高亮跟着真正展开的那个走,不是跟着 openStageId —— 默认态下
+                  // 后者是 0,阶段条会一个都不亮,而下面明明展开着一个。
+                  selectedKey={openStage?.id ?? undefined}
+                  // 不再"点同一个收起":收起只会回到那句提示语,而这一版本来就是
+                  // 为了不让主区空着。点阶段 = 换一个看。
+                  onSelect={(s) => setOpenStageId(Number(s.key))}
                 />
 
                 {open.error && (

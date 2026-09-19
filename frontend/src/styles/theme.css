@@ -594,7 +594,12 @@ a { color: inherit; text-decoration: none; }
 .chg-item-meta, .pl-item-meta {
   display: flex; align-items: center; gap: 7px; margin-top: 6px;
   font: 500 11.5px var(--font-body); color: var(--text-muted);
+  min-width: 0;
 }
+/* 库名(sqlite 下是一条绝对路径)在列表项里会折成两行,占掉卡片三分之一的高,
+   还跟标题抢分量。取末段由 TSX 做(截尾会把唯一有区分度的文件名截掉),这里
+   只兜底:万一末段自己也长,省略号收在一行里。 */
+.chg-item-meta .dim { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chg-when { margin-left: auto; }
 .dim { color: var(--text-faint); }
 .chg-tag {
@@ -613,7 +618,9 @@ a { color: inherit; text-decoration: none; }
 .chg-dtitles { flex: 1; min-width: 0; }
 .chg-dt { font: 600 14.5px var(--font-display); color: var(--text-strong); }
 .chg-ds { margin-top: 3px; font: 500 12px var(--font-body); color: var(--text-muted); }
-.chg-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+/* 右栏 280 → 360:那一栏装的是 SQL 差异和审查结果,280px 下一条
+   UPDATE ... WHERE ... 要折三行,而左边的主区还空着几百像素。 */
+.chg-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .chg-body { grid-template-columns: 1fr; } }
 .chg-main { min-width: 0; }
 .chg-side { display: flex; flex-direction: column; gap: 12px; }
