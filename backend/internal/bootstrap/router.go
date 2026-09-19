@@ -73,6 +73,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// 发布流水线也要接上同一个 Runner:执行阶段命中判定的那条语句由它发起,
 	// 阶段挂起等它跑完。共用上面那个 oscEnabled —— 见其注释。
 	svc.AttachOSC(runner, oscConnect(repo), oscEnabled)
+	// 任务结束时把等着它的发布单推下去。osc 包不认识 pipeline —— 这条线在这里接。
+	runner.OnFinish = svc.OnOSCJobFinished
 
 	v1 := r.Group("/api/v1")
 

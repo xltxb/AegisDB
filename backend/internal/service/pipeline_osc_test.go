@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"velagateway/internal/model"
+	"velagateway/internal/osc"
 )
 
 // 命中阈值的索引变更要改走 OSC,而这件事必须**在阶段日志里说出来** ——
@@ -135,5 +136,86 @@ func TestStageExecute_StopsAtTheFirstOSCStatementAndLeavesTheRestAlone(t *testin
 	}
 	if got := fx.reloadStage(); got.ExecCursor != 1 {
 		t.Errorf("游标是 %d,期望 1(第一条已完成,第二条正在 OSC 里跑)", got.ExecCursor)
+	}
+}
+
+func TestOnOSCJobFinished_ResumesTheReleaseAfterASuccessfulMigration(t *testing.T) {
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c); UPDATE t SET b=2")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 31
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage) // 第一条挂起在任务 31 上
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 31, Status: osc.JobDone})
+
+	got := fx.reloadStage()
+	if got.OSCJobID != 0 {
+		t.Errorf("任务结束了,阶段还挂着 %d", got.OSCJobID)
+	}
+	// 两条都完成了:走 OSC 的那条由回调算完成,第二条由 driveRelease 续跑。
+	if got.ExecCursor != 2 {
+		t.Errorf("游标是 %d,期望 2(两条都已完成)", got.ExecCursor)
+	}
+	// **下发的必须是第二条,不是第一条。** 这才是"走 OSC 的那条被算作完成"的证据:
+	// 游标没推上去的话,driveRelease 会把那条 ALTER 再执行一遍 —— 而它已经由
+	// OSC 做完了,重跑会撞上一个已经存在的索引。
+	if fx.exec.count() != 1 {
+		t.Fatalf("下发了 %d 条,期望 1 条(只有第二条)", fx.exec.count())
+	}
+	if last := fx.exec.last(); !strings.Contains(last, "b=2") {
+		t.Errorf("下发的是 %q,期望第二条 —— 走 OSC 的那条被重跑了", last)
+	}
+}
+
+func TestOnOSCJobFinished_FailsTheStageWhenTheMigrationFailed(t *testing.T) {
+	// 迁移失败不能当作"这一条做完了"往下走:那条索引根本没加上,而后面的语句
+	// 可能正依赖它。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c); UPDATE t SET b=2")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 32
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 32, Status: osc.JobFailed, Err: "拷贝:连接中断"})
+
+	got := fx.reloadStage()
+	if got.Status != model.RunFailed {
+		t.Errorf("迁移失败了,阶段状态却是 %s", got.Status)
+	}
+	if !strings.Contains(got.Log, "32") {
+		t.Errorf("日志里没有点名那个任务:\n%s", got.Log)
+	}
+	if fx.exec.count() != 0 {
+		t.Error("迁移失败之后,后面的语句仍然被执行了")
+	}
+}
+
+func TestOnOSCJobFinished_AFailedMigrationDoesNotEndUpAsASuccessfulRelease(t *testing.T) {
+	// driveRelease 的循环把已经是 failed 的阶段当成"处理过了"跳过,然后落到
+	// finishRelease(success)。所以失败分支不能无条件交回 driveRelease ——
+	// 那样迁移失败的发布单最后会显示成功,而那条索引根本没加上。
+	//
+	// 比"永远等下去"更糟:等着的单子看得见,说成功的单子没人再去看。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c)")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 51
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 51, Status: osc.JobFailed, Err: "拷贝:连接中断"})
+
+	if got := fx.reloadRelease(); got.Status != model.RunFailed {
+		t.Errorf("迁移失败了,发布单状态却是 %s", got.Status)
+	}
+}
+
+func TestOnOSCJobFinished_IgnoresAJobNobodyIsWaitingOn(t *testing.T) {
+	// 绝大多数任务是从 OSC 控制台手工发起的,不属于任何发布单。反查不到不是错误。
+	fx := newExecFixture(t, "UPDATE t SET a=1")
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 999, Status: osc.JobDone}) // 不该 panic
+
+	if fx.exec.count() != 0 {
+		t.Error("一个与发布单无关的任务推进了某张单")
 	}
 }

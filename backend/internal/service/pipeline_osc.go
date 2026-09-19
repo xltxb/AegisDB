@@ -8,6 +8,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"velagateway/internal/model"
 	"velagateway/internal/osc"
@@ -108,4 +109,63 @@ func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sq
 		return 0, fmt.Sprintf("直发:本该走 OSC(%s),但发起失败 —— %v", d.Reason, err)
 	}
 	return job.ID, fmt.Sprintf("%s · 任务 #%d", d.Reason, job.ID)
+}
+
+// OnOSCJobFinished 是挂给 Runner.OnFinish 的那个回调(见 bootstrap/router.go 的接线)。
+//
+// 它只做一件事:把等着这个任务的那个阶段推下去。反查不到就直接返回 —— 绝大多数
+// 迁移是从 OSC 控制台手工发起的,不属于任何发布单,这是正常情况而不是错误。
+//
+// Runner 在自己的退出路径上**同步**调它(见 osc.Runner.OnFinish 的注释):这里做的
+// 每一步都要快,顶多几次 map 形式的 Updates 加一次按主键的 First/读取。
+func (s *Services) OnOSCJobFinished(j *osc.Job) {
+	if j == nil {
+		return
+	}
+	st, err := s.Repo.StageWaitingOnOSCJob(j.ID)
+	if err != nil || st == nil {
+		return
+	}
+	if j.Status != osc.JobDone {
+		s.failStageForFinishedOSCJob(st, j)
+		return
+	}
+	// 走 OSC 的那一条到此算执行完毕,游标往前推一格,交回给 driveRelease 重新认领。
+	_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+		"osc_job_id":  0,
+		"exec_cursor": st.ExecCursor + 1,
+		"status":      model.RunPending,
+		"log":         st.Log + fmt.Sprintf("· 迁移任务 #%d 完成\n", j.ID),
+	})
+	s.driveRelease(st.ReleaseID)
+}
+
+// failStageForFinishedOSCJob 处理迁移失败/被中止的那一条路。
+//
+// 那条索引根本没加上,不能当作"这一条做完了"往下走 —— 后面的语句可能正依赖它,
+// 所以阶段判 failed,日志里点名是哪个任务。
+//
+// 只把阶段写成 failed 是不够的:driveRelease 重新进入时,对一个**已经**是 failed
+// 的阶段只会 continue 过去(它假定这个状态是 onFailure=continue 的产物 —— 见
+// driveRelease 同一段注释),不会替我们把"这次失败其实该终止整张单"这件事想清楚。
+// 默认的 onFailure=abort 下,这里要像 driveRelease 处理阶段失败时那样直接收尾
+// 发布单;只有显式配置成 onFailure=continue 时才把它交回 driveRelease 继续跑
+// 后面的阶段。
+func (s *Services) failStageForFinishedOSCJob(st *model.ReleaseStage, j *osc.Job) {
+	note := fmt.Sprintf("· 迁移任务 #%d %s:%s\n", j.ID, j.Status, j.Err)
+	_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+		"status":      model.RunFailed,
+		"osc_job_id":  0,
+		"log":         st.Log + note,
+		"finished_at": time.Now(),
+	})
+	if st.OnFailure == model.OnFailureContinue {
+		s.driveRelease(st.ReleaseID)
+		return
+	}
+	rel, err := s.Repo.GetRelease(st.ReleaseID)
+	if err != nil {
+		return
+	}
+	s.finishRelease(rel, model.RunFailed, fmt.Sprintf("阶段「%s」失败: %s", st.Name, clip(note, 300)))
 }
