@@ -69,6 +69,24 @@ func TestStageExecute_FallsBackToDirectExecutionWhenOSCIsOff(t *testing.T) {
 	}
 }
 
+func TestStageExecute_DoesNotAnnotatePlainDML(t *testing.T) {
+	// 一条 UPDATE 旁边写"不是索引变更"没有信息量,而阶段日志有 20000 字的上限。
+	// 真正要占这点额度的是"走了 OSC"和"本该走却没走"。
+	fx := newExecFixture(t, "UPDATE t SET a=1")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+
+	out := fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	if strings.Contains(out.log, "不是一条纯粹的索引变更") {
+		t.Errorf("给一条普通 DML 写了判定说明:\n%s", out.log)
+	}
+	// 执行结果那一行还在。
+	if !strings.Contains(out.log, "[1/1]") {
+		t.Errorf("执行结果那一行丢了:\n%s", out.log)
+	}
+}
+
 func TestStageExecute_StopsAtTheFirstOSCStatementAndLeavesTheRestAlone(t *testing.T) {
 	// 逐条串行:命中的那条把阶段挂起,**后面的语句一条都不能先跑** ——
 	// 顺序是发起人写下的,乱序执行的后果由数据承担。

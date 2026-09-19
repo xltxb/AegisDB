@@ -62,6 +62,12 @@ func gatherRows(connect osc.ConnectFunc, connID int64, schema, table string) int
 // 让一个本来能跑的发布单卡死,理由却是"我们本想用个更温和的办法",不成立。
 func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sql string) (jobID int64, note string) {
 	if s.osc == nil {
+		// 只有索引 DDL 才值得解释"为什么没走 OSC"。一条 UPDATE 旁边写"本部署没有
+		// 接入 OSC"是噪音,而阶段日志有 20000 字的上限 —— 一次跨几小时、分几段
+		// 恢复的执行,这点额度要留给真正说明了什么的行。
+		if _, isIndexDDL := oscroute.ParseIndexDDL(sql); !isIndexDDL {
+			return 0, ""
+		}
 		return 0, "直发:本部署没有接入 OSC"
 	}
 	// 行数是懒查的:Decide 只在认出这是索引 DDL、且没被覆盖或策略拦下时才回调它。
@@ -73,6 +79,11 @@ func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sq
 			return s.tableRowsFn(conn, rel.Database, table)
 		})
 	if !d.UseOSC {
+		// 同上:只有索引 DDL 才值得解释"为什么没走 OSC"。一条 UPDATE 旁边写
+		// "不是索引变更"是噪音——它本来就不该走 OSC,这不是新闻。
+		if _, isIndexDDL := oscroute.ParseIndexDDL(sql); !isIndexDDL {
+			return 0, ""
+		}
 		return 0, d.Reason
 	}
 	job, err := s.osc.Start(context.Background(), osc.StartRequest{

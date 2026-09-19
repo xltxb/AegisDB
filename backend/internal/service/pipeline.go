@@ -798,9 +798,13 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 	// 生产变更,而且不一定报错(一条 ALTER 重跑会报 1061,但一条 UPDATE 不会)。
 	for i := st.ExecCursor; i < len(stmts); i++ {
 		one := stmts[i]
-		// 这一条该不该改走 OSC?
+		// 这一条该不该改走 OSC?note 为空表示"与 OSC 无关,不值得占日志的额度"
+		// (见 routeStatement)——阶段日志落库前会被截断,这点额度要留给真正说明了
+		// 什么的行:走了 OSC(哪张表、任务号),或者本该走却走不了。
 		jobID, note := s.routeStatement(rel, conn, one)
-		fmt.Fprintf(&b, "· [%d/%d] %s\n", i+1, len(stmts), note)
+		if note != "" {
+			fmt.Fprintf(&b, "· [%d/%d] %s\n", i+1, len(stmts), note)
+		}
 		if jobID > 0 {
 			// 挂起:后面的语句一条都不能先跑 —— 顺序是发起人写下的,
 			// 乱序执行的后果由数据承担。游标停在 i(这一条已经交给 OSC,
