@@ -13,6 +13,9 @@ export const zh = {
   loginPortal: '登录入口',
   portalFrontend: '运维前台',
   portalBackend: '管理后台',
+  // 切换器只有 56px 宽,放不下完整的门户名;全称仍在 title 与登录页上。
+  portalFrontendShort: '前台',
+  portalBackendShort: '后台',
   portalFrontendHint: '终端、审批、变更与导出',
   portalBackendHint: '连接、规则、权限与设置',
   loginFailed: '登录失败',

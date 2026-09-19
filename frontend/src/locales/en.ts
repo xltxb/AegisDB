@@ -12,6 +12,8 @@ export const en: Dict = {
   loginPortal: 'Portal',
   portalFrontend: 'Operations',
   portalBackend: 'Administration',
+  portalFrontendShort: 'Ops',
+  portalBackendShort: 'Admin',
   portalFrontendHint: 'Terminal, approvals, changes and exports',
   portalBackendHint: 'Connections, rules, permissions and settings',
   loginFailed: 'Sign-in failed',

@@ -190,6 +190,7 @@ export default function AppShell() {
               onClick={() => switchPortal('frontend')}
             >
               <SquareTerminal size={15} />
+              <span>{t('portalFrontendShort')}</span>
             </button>
             <button
               className={clsx('portal-sw-item', isBackend && 'on')}
@@ -197,6 +198,7 @@ export default function AppShell() {
               onClick={() => switchPortal('backend')}
             >
               <SlidersHorizontal size={15} />
+              <span>{t('portalBackendShort')}</span>
             </button>
           </div>
         )}
