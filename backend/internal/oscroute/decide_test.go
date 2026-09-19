@@ -128,3 +128,33 @@ func TestDecide_NonIndexDDLNeverRoutes(t *testing.T) {
 		t.Error("把一条 UPDATE 交给了 OSC")
 	}
 }
+
+func TestDecide_ForceWinsOverTheAutoRouteSwitch(t *testing.T) {
+	// 平台把自动路由关了,发起人仍然可以对这一单说"走 OSC"。
+	//
+	// 这是判定顺序的直接后果(覆盖排在策略前面):策略是对一类情况的默认,
+	// 而覆盖是人对这一次的明确指令。有人日后把条件简化成 !p.AutoRoute,
+	// 现场那个想强制走 OSC 的人会被判成"不走",而没有任何测试会红。
+	p := policy()
+	p.AutoRoute = false
+
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "mysql", p, OverrideForce, rowsFn(bigTable))
+
+	if !d.UseOSC {
+		t.Errorf("自动路由关着时 force 失效了:%s", d.Reason)
+	}
+}
+
+func TestDecide_ForceStillRefusesANonMySQLTarget(t *testing.T) {
+	// force 跳过的是**行数判断**,不是引擎。OSC 是 MySQL 专属的(影子表 + binlog),
+	// 把一条 PostgreSQL 上的索引 DDL 塞进去,要到 Preflight 才失败 ——
+	// 而人看到的是一张失败的发布单,不是"这条语句不该走这条路"。
+	d := Decide("ALTER TABLE t_order ADD INDEX i (c)", "postgres", policy(), OverrideForce, rowsFn(bigTable))
+
+	if d.UseOSC {
+		t.Error("强制模式把一条 PostgreSQL 上的变更交给了 OSC")
+	}
+	if !strings.Contains(d.Reason, "MySQL") {
+		t.Errorf("理由 %q 没有点出引擎 —— 人会去查自己的阈值配置", d.Reason)
+	}
+}
