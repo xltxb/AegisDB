@@ -14,10 +14,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
+	"velagateway/pkg/sqlutil"
 )
 
 // ---- 规则集（与 internal/bootstrap/seed.go 对齐）----
@@ -179,16 +179,131 @@ var cases = []caseIn{
 	{"postgresql", "prod", "audit", "EXPLAIN SELECT * FROM t"},
 }
 
+// ---- 多语句用例：取最严 ----
+//
+// 设计文档把「多语句取最严」列进了期望表必须覆盖的项目，而上面那批全是单语句 ——
+// 于是官网那边整个 batch.ts 只有手写期望在守：后端把 maxBatchHits 从 8 改掉、或者
+// 调一下排序，保险一声不吭。
+//
+// 聚合循环（下面的 rawVerdict）是从 internal/service/gateway.go 内联过来的，不是
+// 调 service 层 —— 那要数据库。它依赖的只有 eng.EvaluateFor 的逐条结果，加上
+// actionRank / riskRank / batchHitRef / batchRef 这几段纯逻辑。
+var batchCases = []caseIn{
+	// 取最严，不是取第一条
+	{"mysql", "prod", "l2", "SELECT 1; DROP TABLE t"},
+	// 同为 approve 时取风险更高的（GRANT 在 prod 是 mid，DROP 是 high）
+	{"mysql", "prod", "admin", "GRANT SELECT ON db.* TO u; DROP TABLE t"},
+	// deny 胜过 approve（ro 在 prod 上 write = deny）
+	{"mysql", "prod", "ro", "SELECT 1; INSERT INTO t VALUES (1)"},
+	// 两条命中 → batch 规则，两条 parts
+	{"mysql", "prod", "l2", "DROP TABLE a; TRUNCATE TABLE b"},
+	// 三条 DROP 报三条，不合并 —— 合并会把数量藏起来
+	{"mysql", "prod", "l2", "DROP TABLE a; DROP TABLE b; DROP TABLE c"},
+	// 超过 maxBatchHits：截断到 8 条 + batchMore{n:2}
+	{"mysql", "prod", "l2", "DROP TABLE t0; DROP TABLE t1; DROP TABLE t2; DROP TABLE t3; DROP TABLE t4; DROP TABLE t5; DROP TABLE t6; DROP TABLE t7; DROP TABLE t8; DROP TABLE t9"},
+	// 全放行：不带 batch 规则
+	{"mysql", "prod", "l2", "SELECT 1; SELECT 2"},
+	// 批量里嵌的是**那一条**自己的规则，含它的参数（这里是无 WHERE 提级，且分层是 UAT）
+	{"mysql", "uat", "l2", "DELETE FROM orders; SELECT 1"},
+}
+
+// maxBatchHits：一批命令里最多点名几条。与 service/gateway.go 的同名常量一致。
+const maxBatchHits = 8
+
+// batchHitRef / batchRef / actionRank / riskRank 逐字抄自 internal/service/gateway.go。
+// 抄而不是 import，因为它们在 service 包里不导出，而把它们提到公共包只为了喂一个
+// 导出程序，是让产品代码迁就工具。抄一份的代价是要跟着改 —— 期望表本来就是为了
+// 在没跟上时炸出来。
+
+func batchHitRef(pos int, v gateway.Verdict) *model.RuleRef {
+	code := model.RuleBatchHit
+	if v.Command == "" {
+		code = model.RuleBatchHitBare
+	}
+	r := model.NewRuleRef(code, "pos", model.Itoa(pos), "command", v.Command)
+	r.Parts = []model.RuleRef{*v.Ref}
+	return r
+}
+
+func batchRef(hits []model.RuleRef) *model.RuleRef {
+	r := model.NewRuleRef(model.RuleBatch)
+	if len(hits) <= maxBatchHits {
+		r.Parts = hits
+		return r
+	}
+	r.Parts = append(append([]model.RuleRef{}, hits[:maxBatchHits]...),
+		*model.NewRuleRef(model.RuleBatchMore, "n", model.Itoa(len(hits)-maxBatchHits)))
+	return r
+}
+
+func riskRank(r string) int {
+	switch r {
+	case model.RiskHigh:
+		return 2
+	case model.RiskMid:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func actionRank(a string) int {
+	switch a {
+	case gateway.ActionDeny:
+		return 2
+	case gateway.ActionApprove:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// rawVerdict 内联自 Services.rawVerdict：逐条判定，交回要求把关最多的那一条
+// （deny > approve > allow，同一动作里取风险更高的），并在多语句且有命中时把规则
+// 换成逐条点名的 batch。
+func rawVerdict(eng *gateway.RiskEngine, roleIDs []int64, engine, tier, sql string) gateway.Verdict {
+	stmts := sqlutil.SplitStatements(sql)
+	strict := gateway.Verdict{Action: gateway.ActionAllow, Risk: model.RiskLow}
+	var hits []model.RuleRef
+	for i, st := range stmts {
+		v := eng.EvaluateFor(roleIDs, engine, tier, st)
+		if v.Action != gateway.ActionAllow && v.Ref != nil {
+			hits = append(hits, *batchHitRef(i+1, v))
+		}
+		if actionRank(v.Action) > actionRank(strict.Action) ||
+			(actionRank(v.Action) == actionRank(strict.Action) && riskRank(v.Risk) > riskRank(strict.Risk)) {
+			strict = v
+		}
+	}
+	if len(stmts) > 1 && len(hits) > 0 {
+		strict.Ref = batchRef(hits)
+		strict.Rule = model.RenderRule(strict.Ref)
+	}
+	return strict
+}
+
+// expectOut 是 Go 引擎对一条用例给出的答案。
+//
+// Ref 是**整个** RuleRef，不只是它的 code。只记 code 时，规则参数出的错一条都抓
+// 不到：dictDeny 带的 tier 一度硬写成 PROD，于是 UAT 上被拦的人读到「PROD 禁止
+// 直接执行」—— 那个 bug 全长在 args 里，而 args 被丢掉了。批量规则更是如此，
+// 它的全部内容就是 parts。
+//
+// Ref 为 nil 时整个字段不出现在 JSON 里（omitempty），官网那边读成 undefined。
 type expectOut struct {
-	Action   string `json:"action"`
-	Risk     string `json:"risk"`
-	Command  string `json:"command"`
-	RuleCode string `json:"ruleCode,omitempty"`
+	Action  string         `json:"action"`
+	Risk    string         `json:"risk"`
+	Command string         `json:"command"`
+	Ref     *model.RuleRef `json:"ref,omitempty"`
 }
 
 type caseOut struct {
 	caseIn
 	Expect expectOut `json:"expect"`
+}
+
+func expectOf(v gateway.Verdict) expectOut {
+	return expectOut{Action: v.Action, Risk: v.Risk, Command: v.Command, Ref: v.Ref}
 }
 
 func roleID(code string) int64 {
@@ -252,23 +367,29 @@ func main() {
 
 	// ---- fixtures.json：用真引擎跑 ----
 	eng := gateway.NewRiskEngine(memStore{})
+
 	results := make([]caseOut, 0, len(cases))
 	for _, c := range cases {
 		v := eng.EvaluateFor([]int64{roleID(c.Role)}, c.Engine, c.Tier, c.SQL)
-		e := expectOut{Action: v.Action, Risk: v.Risk, Command: v.Command}
-		if v.Ref != nil {
-			e.RuleCode = v.Ref.Code
-		}
-		results = append(results, caseOut{caseIn: c, Expect: e})
+		results = append(results, caseOut{caseIn: c, Expect: expectOf(v)})
 	}
+
+	batchResults := make([]caseOut, 0, len(batchCases))
+	for _, c := range batchCases {
+		v := rawVerdict(eng, []int64{roleID(c.Role)}, c.Engine, c.Tier, c.SQL)
+		batchResults = append(batchResults, caseOut{caseIn: c, Expect: expectOf(v)})
+	}
+
 	writeJSON(filepath.Join(*out, "fixtures.json"), map[string]any{
-		"note":        "由 db-gateway/backend/cmd/exportrules 用真 RiskEngine 跑出，勿手改。",
-		"generatedAt": time.Now().UTC().Format(time.RFC3339),
-		"cases":       results,
+		"note": "由 db-gateway/backend/cmd/exportrules 用真 RiskEngine 跑出，勿手改。" +
+			"cases 是单语句（EvaluateFor），batchCases 是多语句取最严（rawVerdict）。" +
+			"刻意不带时间戳：导出必须幂等，否则 `git diff --exit-code src/data` 这道漂移闸永远是红的，等于没有。",
+		"cases":      results,
+		"batchCases": batchResults,
 	})
 
-	fmt.Printf("wrote rules.json (%d commands) and fixtures.json (%d cases) to %s\n",
-		len(dict), len(results), *out)
+	fmt.Printf("wrote rules.json (%d commands) and fixtures.json (%d cases + %d batch cases) to %s\n",
+		len(dict), len(results), len(batchResults), *out)
 }
 
 func writeJSON(path string, v any) {
