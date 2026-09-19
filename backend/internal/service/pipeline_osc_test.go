@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -247,5 +248,47 @@ func TestOnOSCJobFinished_IgnoresAJobNobodyIsWaitingOn(t *testing.T) {
 
 	if fx.exec.count() != 0 {
 		t.Error("一个与发布单无关的任务推进了某张单")
+	}
+}
+
+// errNotRunningHere 模拟"这台网关叫不停它" —— ADR 0011:Abort 只叫得停本进程
+// 手上的任务,多副本部署下另一台副本跑着的那个任务,本进程的 Abort 天然够不着。
+var errNotRunningHere = errors.New("osc: 这个任务不在本进程手上(模拟)")
+
+func TestAbortRelease_AlsoStopsTheMigrationItIsWaitingOn(t *testing.T) {
+	// 否则单子停了、迁移还在拷全表 —— 而人以为自己已经把它按停了。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c)")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 41
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+	fx.markReleaseWaiting()
+
+	if err := fx.svc.AbortRelease(fx.user, fx.rel.ID); err != nil {
+		t.Fatalf("终止失败: %v", err)
+	}
+
+	if !fx.osc.aborted(41) {
+		t.Error("发布单停了,它挂着的迁移任务还在跑")
+	}
+}
+
+func TestAbortRelease_StillAbortsWhenTheMigrationCannotBeStopped(t *testing.T) {
+	// Abort 只叫得停**本进程**手上的任务(ADR 0011)。多副本下另一台副本跑着的
+	// 那个停不掉 —— 此时发布单照常中止,那个任务留成残局被列出来。
+	// 谎称已经停掉它,比留着它更糟。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c)")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 42
+	fx.osc.abortErr = errNotRunningHere
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+	fx.markReleaseWaiting()
+
+	if err := fx.svc.AbortRelease(fx.user, fx.rel.ID); err != nil {
+		t.Fatalf("迁移停不掉不该让终止本身失败: %v", err)
+	}
+	if got := fx.reloadRelease(); got.Status != model.RunAborted {
+		t.Errorf("发布单状态 = %s,期望 aborted", got.Status)
 	}
 }

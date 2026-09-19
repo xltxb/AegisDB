@@ -26,12 +26,15 @@ var errOSCDisabled = errors.New("osc: 发起被拒(模拟)")
 
 // fakeOSC **只替换"把一次迁移发起出去/叫停"这一步**。startID 是 Start 成功时
 // 回填的任务号,startErr 非空则 Start 失败 —— 两者互斥,由调用方按用例需要挑一个。
+// abortErr 同理:非空模拟"这台网关叫不停它"(ADR 0011——多副本下另一台副本
+// 跑着的那个任务,本进程的 Abort 本来就够不着)。
 type fakeOSC struct {
-	mu       sync.Mutex
-	startID  int64
-	startErr error
-	started  []osc.StartRequest
-	aborted  []int64
+	mu         sync.Mutex
+	startID    int64
+	startErr   error
+	abortErr   error
+	started    []osc.StartRequest
+	abortedIDs []int64
 }
 
 func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, error) {
@@ -47,8 +50,23 @@ func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, erro
 func (f *fakeOSC) Abort(_ context.Context, id int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.aborted = append(f.aborted, id)
+	if f.abortErr != nil {
+		return f.abortErr
+	}
+	f.abortedIDs = append(f.abortedIDs, id)
 	return nil
+}
+
+// aborted 报告某个任务号是否被(成功地)叫停过。
+func (f *fakeOSC) aborted(id int64) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, got := range f.abortedIDs {
+		if got == id {
+			return true
+		}
+	}
+	return false
 }
 
 // 假执行器**只替换"把 SQL 发给数据库"这一步**。判定、审计、日志、游标都走真代码 ——
@@ -173,6 +191,18 @@ func (f *execFixture) reloadRelease() *model.Release {
 		f.t.Fatalf("读发布单失败: %v", err)
 	}
 	return rel
+}
+
+// markReleaseWaiting 把发布单标记成 waiting。
+//
+// 直接调用 stageExecute(跳过 driveRelease)不会顺带落这个状态 —— 而 AbortRelease
+// 只受理 pending/waiting 的单子,种出一张挂着 OSC 任务、又能被 AbortRelease 接受
+// 的单子,少不了这一步。
+func (f *execFixture) markReleaseWaiting() {
+	f.t.Helper()
+	if err := f.repo.UpdateRelease(f.rel.ID, map[string]any{"status": model.RunWaiting}); err != nil {
+		f.t.Fatalf("标记发布单为 waiting 失败: %v", err)
+	}
 }
 
 // seedFixtureConnection 建一台 engine=mysql 的连接,并把它挂到一个分层与环境上。

@@ -178,6 +178,29 @@ func (s *Services) failStageForFinishedOSCJob(st *model.ReleaseStage, j *osc.Job
 	s.finishRelease(rel, model.RunFailed, fmt.Sprintf("阶段「%s」失败: %s", st.Name, clip(st.Log+note, 300)))
 }
 
+// abortOSCOfRelease 叫停这张单挂着的迁移,返回写进终止原因的一句话。
+//
+// **停不掉不是错误。** Abort 只叫得停本进程手上的任务(ADR 0011:IsRunning 说的是
+// "这台网关没在推进它",不是"没有人在推进它")。多副本下另一台副本跑着的那个停不掉,
+// 此时发布单照常中止,那个任务留成残局被列出来 —— 谎称已经停掉它比留着它更糟:
+// 人会以为事情了结了,而那个迁移还在生产库上拷全表。所以叫停失败时要把这件事
+// 写进终止原因,让人知道去哪儿收拾。
+func (s *Services) abortOSCOfRelease(id int64) string {
+	if s.osc == nil {
+		return ""
+	}
+	for _, st := range s.stagesOf(id) {
+		if st.OSCJobID == 0 {
+			continue
+		}
+		if err := s.osc.Abort(context.Background(), st.OSCJobID); err != nil {
+			return fmt.Sprintf(";挂着的迁移任务 #%d 未能叫停(%v),请到在线变更页确认它的残留", st.OSCJobID, err)
+		}
+		return fmt.Sprintf(";已连带叫停迁移任务 #%d", st.OSCJobID)
+	}
+	return ""
+}
+
 // resumeReleaseAsync 把"接着跑这张发布单"扔到另一条 goroutine 上。
 //
 // **不能在 OnOSCJobFinished 里同步调 driveRelease**:它会把这张单剩下的全部阶段

@@ -1267,8 +1267,12 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 		return ErrAlreadyDecided
 	}
 	now := time.Now()
+	// 单子停下来的同时,把它挂着的那个迁移也叫停 —— 否则单子已经显示「已终止」,
+	// 迁移还在生产库上拷全表,而人以为自己已经把它按停了。oscNote 把结果(叫停了/
+	// 叫不停,叫不停就说明原因)写进终止说明,而不是悄悄地什么都不做。
+	oscNote := s.abortOSCOfRelease(rel.ID)
 	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
-		"error": "已由 " + u.Name + " 终止", "finished_at": now,
+		"error": "已由 " + u.Name + " 终止" + oscNote, "finished_at": now,
 	})
 	// The pending approval a parked run raised is voided WITH the run: leaving
 	// it in the approvers' queue invites a decision on a change that no longer
