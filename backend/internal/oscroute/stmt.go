@@ -46,7 +46,7 @@ func ParseIndexDDL(sql string) (IndexDDL, bool) {
 	// 不是加一个二级索引。两者都超出 ADR 0011 给这套东西划的范围。
 	if m := reAlterIndex.FindStringSubmatch(s); m != nil {
 		clause := strings.TrimSpace(m[2])
-		if strings.Contains(clause, ",") && !insideParens(clause) {
+		if !isSingleIndexClause(clause) {
 			return IndexDDL{}, false
 		}
 		return IndexDDL{Table: cleanIdent(m[1]), Alter: normalizeSpace(clause)}, true
@@ -58,21 +58,45 @@ func ParseIndexDDL(sql string) (IndexDDL, bool) {
 		}
 		return IndexDDL{
 			Table: cleanIdent(m[3]),
-			Alter: normalizeSpace("ADD " + kind + "INDEX " + cleanIdent(m[2]) + " " + m[4]),
+			Alter: normalizeSpace("ADD " + kind + "INDEX " + stripQuotes(m[2]) + " " + m[4]),
 		}, true
 	}
 	if m := reDropIndex.FindStringSubmatch(s); m != nil {
-		return IndexDDL{Table: cleanIdent(m[2]), Alter: "DROP INDEX " + cleanIdent(m[1])}, true
+		return IndexDDL{Table: cleanIdent(m[2]), Alter: "DROP INDEX " + stripQuotes(m[1])}, true
 	}
 	return IndexDDL{}, false
 }
 
-// insideParens 报告这个子句里的逗号是不是全都在括号内 —— `ADD INDEX i (a, b)` 是
-// 一个子句,`ADD INDEX i (a), ADD INDEX j (b)` 是两个。
-func insideParens(clause string) bool {
+// isSingleIndexClause 报告这个 ADD/DROP 子句是不是**一个**子句,而不是逗号拼起来的
+// 好几个。
+//
+// 单双引号(字符串字面量)一律不认,不是"跳过它扫描" —— 那需要一个完整的引号+转义
+// 状态机(转义引号、反斜杠……),而 ParseIndexDDL 的注释已经说清楚不引入 SQL parser。
+// 字符串字面量里可以裸着放一个没有配对的 `(`(比如 COMMENT 里的 'see (spec'),
+// 那样的裸括号会让下面的括号计数永久偏移,把真正分隔两个子句的顶层逗号误判成
+// "在括号里"—— 这正是这条函数存在的理由被打穿的地方。宁可把带字符串字面量的索引
+// 变更整体降级成"认不出来、照常直发"(原生加索引本来就是在线的),也不去猜引号
+// 什么时候结束。
+//
+// 反引号不在此列,单独处理:它是标识符定界符,不是字符串字面量,`ADD INDEX i (`col`)`
+// 是最常见的写法,拒掉它等于挡住大多数真实的 DDL。反引号成对出现、不支持转义,
+// 配对规则简单可靠,扫描时把它包住的区间整段跳过(不数括号、不数逗号)就够了 ——
+// 不要把这套"跳过"逻辑也套到单双引号上,那正是要避免的引号状态机。
+func isSingleIndexClause(clause string) bool {
 	depth := 0
+	inBacktick := false
 	for _, r := range clause {
+		if inBacktick {
+			if r == '`' {
+				inBacktick = false
+			}
+			continue
+		}
 		switch r {
+		case '`':
+			inBacktick = true
+		case '\'', '"':
+			return false
 		case '(':
 			depth++
 		case ')':
@@ -86,13 +110,23 @@ func insideParens(clause string) bool {
 	return true
 }
 
-// cleanIdent 去掉反引号/双引号与库名前缀。
+// stripQuotes 去掉反引号/双引号,不碰前缀。
+//
+// 只用于**索引名**:索引名里的 "." 是名字的一部分(比如 `idx.v2`),不是库名前缀,
+// 和表名的剥离规则不能共用 cleanIdent 那把剪刀 —— 共用的话 CREATE INDEX 会建出一个
+// 改了名的索引,DROP INDEX 会找错对象,而且都不报错。
+func stripQuotes(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.NewReplacer("`", "", `"`, "").Replace(s)
+	return strings.TrimSpace(s)
+}
+
+// cleanIdent 去掉反引号/双引号与库名前缀。只用于**表名**。
 //
 // 库名前缀必须剥掉:OSC 的 StartRequest 分开收 schema 与 table,schema 来自发布单
 // 的目标库。带着前缀会拼出 `app`.`app.t_order` 这样的名字。
 func cleanIdent(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.NewReplacer("`", "", `"`, "").Replace(s)
+	s = stripQuotes(s)
 	if i := strings.LastIndex(s, "."); i >= 0 {
 		s = s[i+1:]
 	}

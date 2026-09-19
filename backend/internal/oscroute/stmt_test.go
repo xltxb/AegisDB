@@ -119,9 +119,10 @@ func TestParseIndexDDL_RejectsTwoIndexClausesInOneAlter(t *testing.T) {
 	// 两条各自合法的索引子句并在一条 ALTER 里。OSC 的 StartRequest 一次只收一个
 	// alter 子句,整串交过去,第二条会被当成第一条的一部分。
 	//
-	// **这条用例是 insideParens 唯一的守卫。** 隔壁那条混合子句的用例
-	// (ADD COLUMN c INT, ADD INDEX i (c))在正则阶段就失配了,走不到 insideParens ——
-	// 去掉那个函数,它照样绿。
+	// **这条用例是 isSingleIndexClause 的括号计数唯一的守卫。**(该函数原名
+	// insideParens,后来因为要一并处理字符串字面量而改名。)隔壁那条混合子句的
+	// 用例(ADD COLUMN c INT, ADD INDEX i (c))在正则阶段就失配了,走不到这个函数——
+	// 去掉括号计数那段,它照样绿。
 	if _, ok := ParseIndexDDL("ALTER TABLE t_order ADD INDEX i1 (a), ADD INDEX i2 (b)"); ok {
 		t.Error("认下了一条带两个索引子句的 ALTER")
 	}
@@ -136,5 +137,42 @@ func TestParseIndexDDL_AcceptsACompositeIndex(t *testing.T) {
 	}
 	if got.Alter != "ADD INDEX idx_ab (a, b)" {
 		t.Errorf("alter 子句是 %q,期望 ADD INDEX idx_ab (a, b)", got.Alter)
+	}
+}
+
+func TestParseIndexDDL_RefusesWhenAClauseCarriesAStringLiteral(t *testing.T) {
+	// 字符串字面量里的括号会骗过括号计数:'see (spec' 里那个裸括号让深度永久偏移,
+	// 后面真正分隔子句的顶层逗号就被当成"在括号里",于是整条混合 ALTER 被认下来。
+	//
+	// 不去写引号状态机(那是这个包明确不要的复杂度),而是**看见引号就不认** ——
+	// 带 COMMENT 的索引变更从此照常直发,那是安全的那一边。
+	if _, ok := ParseIndexDDL(
+		"ALTER TABLE t_order ADD INDEX idx_memo (memo) COMMENT 'see (spec', ADD COLUMN evil INT"); ok {
+		t.Error("字符串字面量里的括号骗过了子句计数,混合 ALTER 被当成纯索引变更")
+	}
+}
+
+func TestParseIndexDDL_StillAcceptsBacktickedColumns(t *testing.T) {
+	// 反引号是标识符,不是字符串字面量,而用反引号包列名是最常见的写法 ——
+	// 把它和单引号一起拒掉,等于把大多数真实的 DDL 挡在外面。
+	got, ok := ParseIndexDDL("ALTER TABLE `t_order` ADD INDEX `idx_memo` (`memo`)")
+	if !ok {
+		t.Fatal("拒掉了用反引号包标识符的写法")
+	}
+	if got.Table != "t_order" {
+		t.Errorf("表名认成了 %q", got.Table)
+	}
+}
+
+func TestParseIndexDDL_KeepsADottedIndexNameIntact(t *testing.T) {
+	// 剥库名前缀是给**表名**准备的。同一把剪刀用在索引名上,交给 OSC 的名字就和
+	// 库里真实的索引名对不上 —— DROP 找错对象、CREATE 建出一个改了名的索引,
+	// 而且一声不响。
+	got, ok := ParseIndexDDL("DROP INDEX `idx.v2` ON t_order")
+	if !ok {
+		t.Fatal("没认出 DROP INDEX")
+	}
+	if got.Alter != "DROP INDEX idx.v2" {
+		t.Errorf("alter 子句是 %q,索引名被截断了", got.Alter)
 	}
 }
