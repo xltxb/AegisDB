@@ -2,20 +2,54 @@ package service
 
 // 执行阶段的测试夹具。
 //
-// 只造 fakeExecutor 这一半 —— OSC 那一半（fakeOSC、svc.osc、svc.tableRowsFn）在
-// Task 8 才引入，这里抄它们会编译不过。后面几个任务会往这个文件里加 OSC 那半。
+// fakeExecutor 换掉「把 SQL 发给数据库」这一步,fakeOSC 换掉「把一次迁移发起出去」
+// 这一步 —— 两者都只替换最外层的一次调用,判定、审计、日志、游标全走真代码。
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
+	"velagateway/internal/osc"
 	"velagateway/internal/repository"
 	"velagateway/internal/testsupport"
 )
+
+// errOSCDisabled 是 fakeOSC.Start 用来模拟"发起被拒"的哨兵错误 —— 具体原因
+// 不重要(真实场景可能是前置检查不通过、也可能是配置开关关着),这几条用例
+// 只关心"发起失败之后阶段怎么办"。
+var errOSCDisabled = errors.New("osc: 发起被拒(模拟)")
+
+// fakeOSC **只替换"把一次迁移发起出去/叫停"这一步**。startID 是 Start 成功时
+// 回填的任务号,startErr 非空则 Start 失败 —— 两者互斥,由调用方按用例需要挑一个。
+type fakeOSC struct {
+	mu       sync.Mutex
+	startID  int64
+	startErr error
+	started  []osc.StartRequest
+	aborted  []int64
+}
+
+func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.startErr != nil {
+		return nil, f.startErr
+	}
+	f.started = append(f.started, req)
+	return &osc.Job{ID: f.startID}, nil
+}
+
+func (f *fakeOSC) Abort(_ context.Context, id int64) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.aborted = append(f.aborted, id)
+	return nil
+}
 
 // 假执行器**只替换"把 SQL 发给数据库"这一步**。判定、审计、日志、游标都走真代码 ——
 // 换掉更多的话,测的是夹具不是实现。
@@ -55,6 +89,10 @@ type execFixture struct {
 	conn  *model.Connection
 	user  *model.User
 	exec  *fakeExecutor
+	osc   *fakeOSC
+	// rowsOfTable 是 svc.tableRowsFn 的假答案,换掉真的 information_schema 查询。
+	// 用例在 newExecFixture 之后再赋值 —— 闭包按引用读它,读到的永远是当下的值。
+	rowsOfTable int64
 }
 
 // newExecFixture 造一张停在执行阶段、人工闸已经点过的发布单。
@@ -67,8 +105,12 @@ func newExecFixture(t *testing.T, sql string) *execFixture {
 	repo := repository.New(db)
 	svc := New(repo, gateway.NewRiskEngine(repo), nil)
 
-	fx := &execFixture{t: t, svc: svc, repo: repo, exec: &fakeExecutor{}}
+	fx := &execFixture{t: t, svc: svc, repo: repo, exec: &fakeExecutor{}, osc: &fakeOSC{}}
 	svc.Executor = fx.exec
+	svc.osc = fx.osc
+	// 闭包捕获 fx,不是此刻的值:用例在 newExecFixture 返回之后才设置
+	// fx.rowsOfTable(阈值判定要等语句先过完 DDL 识别才会用到它)。
+	svc.tableRowsFn = func(*model.Connection, string, string) int64 { return fx.rowsOfTable }
 
 	fx.conn = seedFixtureConnection(t, repo)
 	fx.user = seedFixtureUser(t, repo)

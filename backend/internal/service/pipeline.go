@@ -798,6 +798,19 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 	// 生产变更,而且不一定报错(一条 ALTER 重跑会报 1061,但一条 UPDATE 不会)。
 	for i := st.ExecCursor; i < len(stmts); i++ {
 		one := stmts[i]
+		// 这一条该不该改走 OSC?
+		jobID, note := s.routeStatement(rel, conn, one)
+		fmt.Fprintf(&b, "· [%d/%d] %s\n", i+1, len(stmts), note)
+		if jobID > 0 {
+			// 挂起:后面的语句一条都不能先跑 —— 顺序是发起人写下的,
+			// 乱序执行的后果由数据承担。游标停在 i(这一条已经交给 OSC,
+			// 还没算完成),不是 i+1:恢复时靠它认出"正在等的是哪一条"。
+			_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+				"osc_job_id": jobID, "exec_cursor": i,
+			})
+			return stageOutcome{status: model.RunWaiting, rows: total,
+				log: fmt.Sprintf("%s· 等待迁移任务 #%d 完成\n", b.String(), jobID)}
+		}
 		res := s.Executor.Run(context.Background(), conn, one, timeout)
 		if res.Err != nil {
 			fmt.Fprintf(&b, "· 第 %d/%d 条失败: %s\n", i+1, len(stmts), clip(res.Output, 300))

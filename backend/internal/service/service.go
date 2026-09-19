@@ -12,6 +12,7 @@ import (
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/model"
+	"velagateway/internal/osc"
 	"velagateway/internal/repository"
 	"velagateway/pkg/crypto"
 	"velagateway/pkg/jwt"
@@ -27,6 +28,15 @@ type sqlExecutor interface {
 	Test(conn *model.Connection) (bool, string)
 }
 
+// oscExecutor 是发起和叫停一次在线变更。
+//
+// 是接口不是 *osc.Runner —— 真 Runner 要连 MySQL 才发起得了,而这一层测的是**接缝**:
+// 交出去了没有、挂起了没有、结束之后接着往下走没有。
+type oscExecutor interface {
+	Start(ctx context.Context, req osc.StartRequest) (*osc.Job, error)
+	Abort(ctx context.Context, id int64) error
+}
+
 // Services is the application service container wired in bootstrap.
 type Services struct {
 	Repo     *repository.Repo
@@ -34,6 +44,15 @@ type Services struct {
 	Executor sqlExecutor
 	JWT      *jwt.Manager
 	Webhook  *Dispatcher
+
+	// osc 是在线变更的执行器,可能为 nil(没接的部署照旧直发)。
+	//
+	// 类型是接口不是 *osc.Runner:真 Runner 要连 MySQL 才发起得了,而这一层的用例
+	// 测的是**接缝** —— 交出去了没有、挂起了没有、结束之后接着往下走没有。
+	osc oscExecutor
+	// tableRowsFn 是表的估算行数从哪来。AttachOSC 把它设成真实现(osc.Gather),
+	// 用例覆盖它 —— 采集本身在 osc 包里已经对着真 MySQL 测透了,不必在这里再测一遍。
+	tableRowsFn func(conn *model.Connection, schema, table string) int64
 
 	apCounter    atomic.Int64
 	auditCounter atomic.Int64

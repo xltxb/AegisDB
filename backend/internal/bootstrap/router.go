@@ -65,6 +65,10 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	h.AttachOSC(runner, func() bool {
 		return cfg.OSC.Enabled && repo.SettingBool("osc.enabled", true)
 	})
+	// 发布流水线也要接上同一个 Runner:执行阶段命中判定的那条语句由它发起,
+	// 阶段挂起等它跑完。接口层的开关(上面那个)管的是控制台手动发起,这里
+	// 不受它约束 —— 自动路由自己的开关是 osc.autoRoute.enabled(oscPolicy)。
+	svc.AttachOSC(runner, oscConnect(repo))
 
 	v1 := r.Group("/api/v1")
 
