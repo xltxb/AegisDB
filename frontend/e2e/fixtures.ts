@@ -81,3 +81,51 @@ export const ADMIN_ROUTES = [
   'connections', 'risk-rules', 'sql-review', 'gov',
   'permissions', 'pipelines', 'users', 'audit', 'settings',
 ]
+
+// ---------------------------------------------------------------- 终端会话
+
+const conn = (id: number, name: string, env: string, engine = 'mysql', database = 'appdb') => ({
+  id, name, env, engine, host: '10.0.0.1', port: 3306, policy: 'strict',
+  defaultRole: 'ro', layer: 'core', tags: '', database, status: 'online',
+})
+
+export const DEV_TIERS = [
+  { code: 'dev', displayName: '测试 · DEV', sortOrder: 0, requireMfa: false, dangerBanner: false, countsInPending: false, scanBaseline: false, connLayer: 'L4', defaultRole: 'developer' },
+]
+export const DEV_ENVS = [{ code: 'dev', displayName: '测试 · DEV', tierCode: 'dev', sortOrder: 0 }]
+/** 两台实例:切实例那条规格要有地方可切。 */
+export const DEV_CONNS = [conn(1, 'sandbox', 'dev'), conn(2, 'staging', 'dev', 'mysql', 'shopdb')]
+
+/**
+ * 终端页开一条会话要喂的全部 HTTP。
+ *
+ * e2e 不起后端,所以这些全部由规格自己描述。WebSocket 不在这里 —— 它由
+ * `wsFake.ts` 的替身顶掉。
+ */
+export async function stubTerminal(
+  page: Page,
+  conns: unknown[] = DEV_CONNS,
+  tiers: unknown[] = DEV_TIERS,
+  envs: unknown[] = DEV_ENVS,
+) {
+  await seedSession(page)
+  await stubShell(page, ADMIN)
+  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(conns)))
+  await page.route('**/api/v1/env-tiers', (r) => r.fulfill(envelope(tiers)))
+  await page.route('**/api/v1/environments', (r) => r.fulfill(envelope(envs)))
+  await page.route('**/api/v1/environments/usage', (r) => r.fulfill(envelope({})))
+  await page.route('**/api/v1/connections/*/schema**', (r) =>
+    r.fulfill(envelope({ connectionId: 1, databases: [] })))
+  await page.route('**/api/v1/approval-chain', (r) => r.fulfill(envelope({ chain: [] })))
+  await page.route('**/api/v1/tags', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/projects', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/snippets**', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/script-uploads**', (r) => r.fulfill(envelope([])))
+  // 预检默认放行。要验拦截的规格自己覆盖这一条。
+  await page.route('**/api/v1/risk/check', (r) =>
+    r.fulfill(envelope({ action: 'allow', requiresApproval: false, matchedRule: '', matchedRuleRef: null })))
+  // 补全的词典与导出日志的审计。不打桩它们会去打真实后端,在 e2e 里就是一条
+  // ECONNREFUSED,让规格的失败信息里混进一堆与它无关的噪声。
+  await page.route('**/api/v1/risk-commands**', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/terminal/transcript-export', (r) => r.fulfill(envelope({})))
+}

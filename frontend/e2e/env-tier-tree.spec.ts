@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { ADMIN, envelope, seedSession, stubShell } from './fixtures'
+import { envelope, stubTerminal } from './fixtures'
 
 // The instance tree groups environment → database type → instance. Several
 // production environments can sit on one prod tier, each holding more than one
@@ -37,21 +37,8 @@ const CONNS = [
   defaultRole: 'ro', layer: 'core', tags: '', database: 'appdb', status: 'online',
 }))
 
-async function stubCommon(page: Page) {
-  await seedSession(page)
-  await stubShell(page, ADMIN)
-  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(CONNS)))
-  await page.route('**/api/v1/env-tiers', (r) => r.fulfill(envelope(TIERS)))
-  await page.route('**/api/v1/environments', (r) => r.fulfill(envelope(ENVIRONMENTS)))
-  await page.route('**/api/v1/environments/usage', (r) => r.fulfill(envelope({})))
-  await page.route('**/api/v1/connections/*/schema**', (r) =>
-    r.fulfill(envelope({ connectionId: 1, databases: [] })))
-  await page.route('**/api/v1/approval-chain', (r) => r.fulfill(envelope({ chain: [] })))
-  await page.route('**/api/v1/tags', (r) => r.fulfill(envelope([])))
-  await page.route('**/api/v1/projects', (r) => r.fulfill(envelope([])))
-  await page.route('**/api/v1/snippets**', (r) => r.fulfill(envelope([])))
-  await page.route('**/api/v1/script-uploads**', (r) => r.fulfill(envelope([])))
-}
+// 这一套打桩和终端会话那组规格是同一份 —— 见 fixtures.ts 的 stubTerminal。
+const stubCommon = (page: Page) => stubTerminal(page, CONNS, TIERS, ENVIRONMENTS)
 
 async function openTerminal(page: Page) {
   await stubCommon(page)
