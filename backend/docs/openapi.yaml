@@ -1085,6 +1085,10 @@ paths:
       summary: '[envtier · admin] 删除分层(仍有环境挂靠时拒绝)'
       parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  # 发布单的 oscMode(单次覆盖)与阶段的 oscJobId / oscRunning 见 ADR 0011
+  # 「第二个入口:发布流水线」。前者是发起人对这一单的明确指令(""/force/skip,
+  # 拼错的值当场拒),后两者让界面分得清两种 waiting:等人点确认执行,还是等一个
+  # 迁移跑完(而它可能已经没有进程在推进了)。
   /osc/status:
     get:
       tags: [osc]
@@ -1112,6 +1116,10 @@ paths:
         拷贝受从库延迟限流(心跳表 + 主库自报从库)。装不装得起来取决于目标实例:
         装不起来时迁移**照跑,但不限流**,而那件事记在任务的 throttle / throttled
         两个字段里 —— 记的是这一次的事实,不是 /osc/status 里那份能力清单。
+
+        **这不是发起迁移的唯一入口**:发布流水线执行到一条索引变更、而目标表超过
+        osc.autoRoute.minRows 时,会自己发起一次(ADR 0011「第二个入口」)。两条路
+        共用同一个急停开关。
 
         特性开关关闭时返回业务码 **42700**(不是 404 也不是 500):它还没做完,被有意
         关着,界面据此说明原因。前置检查同步进行,不通过时返回 42200 并在 data.blockers

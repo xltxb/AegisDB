@@ -20,7 +20,7 @@ import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 import type { SettingsResp } from '@/types'
 
 /**
- * 子导航的八个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
+ * 子导航的九个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
  */
 const SECTIONS = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
@@ -28,6 +28,7 @@ const SECTIONS = [
   { id: 'security', icon: Lock, label: 'setSec' },
   { id: 'sensitive', icon: EyeOff, label: 'setSens' },
   { id: 'meta', icon: DatabaseZap, label: 'setMeta' },
+  { id: 'osc', icon: DatabaseZap, label: 'setOsc' },
   { id: 'openapi', icon: KeyRound, label: 'setOpenApi' },
   { id: 'notify', icon: Bell, label: 'setNotify' },
   { id: 'appearance', icon: Palette, label: 'setAppearance' },
@@ -144,6 +145,13 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     metaIntervalHrs: Number(parseSetting(g['meta.sync.intervalHours'], 24)) || 24,
     metaConcurrency: Number(parseSetting(g['meta.sync.concurrency'], 2)) || 2,
 
+    // ---- 在线表结构变更(OSC) ----
+    // 默认 true:这是**急停**开关,不是启用开关。没写过它时不该额外拦。
+    oscEnabled: parseSetting(g['osc.enabled'], true),
+    // 自动路由索引变更的开关与阈值。当表行数超过阈值时自动改走 OSC。
+    oscAutoRoute: parseSetting(g['osc.autoRoute.enabled'], true),
+    oscMinRows: Number(parseSetting(g['osc.autoRoute.minRows'], 2000000)) || 2000000,
+
     // ---- 通知 ----
     lark: parseSetting(g['notify.lark'], true),
     email: parseSetting(g['notify.email'], false),
@@ -228,6 +236,9 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'meta.sync.enabled': f.metaEnabled,
         'meta.sync.intervalHours': clampInt(f.metaIntervalHrs, 1, 720, 24),
         'meta.sync.concurrency': clampInt(f.metaConcurrency, 1, 8, 2),
+        'osc.enabled': f.oscEnabled,
+        'osc.autoRoute.enabled': f.oscAutoRoute,
+        'osc.autoRoute.minRows': clampInt(f.oscMinRows, 10000, 1000000000, 2000000),
         'notify.lark': f.lark,
         'notify.email': f.email,
         'notify.push': f.push,
@@ -470,6 +481,23 @@ function SettingsForm({ data }: { data: SettingsResp }) {
           >
             <Link className="set-link" to="/catalog">{t('setMetaGo')}</Link>
           </CardRow>
+        </Card></section>
+
+        {/* ---------------- 在线表结构变更 ---------------- */}
+        <section id="set-osc" className="set-sec"><Card>
+          <CardHead icon={<DatabaseZap size={17} />} title={t('setOsc')} sub={t('setOscSub')} />
+          <CardRow title={t('setOscEnabled')} hint={t('setOscEnabledD')}>
+            <Switch checked={f.oscEnabled} onChange={(v) => set({ oscEnabled: v })} />
+          </CardRow>
+          <CardRow title={t('setOscAuto')} hint={t('setOscAutoD')}>
+            <Switch checked={f.oscAutoRoute} onChange={(v) => set({ oscAutoRoute: v })} />
+          </CardRow>
+          {f.oscAutoRoute && (
+            <CardRow title={t('setOscMinRows')} hint={t('setOscMinRowsD')}>
+              <input className="set-in w160" type="number" min={10000} step={100000}
+                     value={f.oscMinRows} onChange={(e) => set({ oscMinRows: Number(e.target.value) })} />
+            </CardRow>
+          )}
         </Card></section>
 
         {/* ---------------- 开放接口 ---------------- */}

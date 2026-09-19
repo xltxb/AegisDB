@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -36,6 +37,18 @@ type Runner struct {
 	// 限流要护的是从库:拷贝是普通 DML,但一张大表的全量拷贝仍然能把从库拖出
 	// 可观的延迟 —— 而"从库跟得上"正是这套东西相对原生 DDL 的卖点之一。
 	MaxLag time.Duration
+
+	// OnFinish 在一个任务走到终态(done/failed/aborted)时被调用,可为 nil。
+	//
+	// 做成注入点而不是让这个包去调用谁:osc 的职责是把一次迁移做完,它不该知道
+	// 有人在等它。发布流水线要靠它接着往下走,而那是 service 层的事。
+	//
+	// 回调在 finish 的调用者那条 goroutine 上同步执行,所以它必须**快**:
+	// 里面做的事越多,越可能拖住 run() 的返回。也就是说,回调慢时这个任务在 IsRunning()
+	// 眼里就一直是 running —— 哪怕库里状态已经是 done,IsRunning() 和 Abort() 对它
+	// 的答复也会延迟。收尾阶段包括:把自己从 running 表里摘掉、让 IsRunning 和 Abort
+	// 恢复说真话、释放 binlog syncer。实现回调的人要知道自己拖的是这个。
+	OnFinish func(*Job)
 
 	mu      sync.Mutex
 	running map[int64]context.CancelFunc // 正在跑的任务 → 它的取消钩子
@@ -331,9 +344,27 @@ func (r *Runner) advance(id int64, to JobStatus) bool {
 
 func (r *Runner) finish(id int64, status JobStatus, errMsg string) {
 	now := time.Now()
-	r.store.Model(&Job{}).Where("id = ?", id).Updates(map[string]any{
+	if err := r.store.Model(&Job{}).Where("id = ?", id).Updates(map[string]any{
 		"status": status, "err": errMsg, "updated_at": now, "finished_at": now,
-	})
+	}).Error; err != nil {
+		// 落库失败时跳过通知。原因:r.Get 读到的是更新前的旧状态,
+		// 回调会据此推进发布单,而库里的任务状态是另一个值,两边从此对不上。
+		// 宁可不通知:上层有残局机制(一个挂着却没人推进的任务会被列出来让人收拾),
+		// 那是这个仓库对付这类情况的既定方式。
+		slog.Warn("osc: finish: 写入任务终态失败,将跳过 OnFinish 通知", "id", id, "status", status, "err", err)
+		return
+	}
+	// 先落库再通知:回调多半要去读这一行(比如发布单要按状态决定继续还是失败),
+	// 顺序反了它读到的是上一个状态。
+	if r.OnFinish == nil {
+		return
+	}
+	j, err := r.Get(context.Background(), id)
+	if err != nil {
+		slog.Warn("osc: finish: 读取已写入的任务失败,将跳过 OnFinish 通知", "id", id, "err", err)
+		return
+	}
+	r.OnFinish(j)
 }
 
 // cleanupShadow 收走影子表。

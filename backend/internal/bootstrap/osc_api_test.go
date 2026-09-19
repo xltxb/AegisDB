@@ -101,3 +101,64 @@ func TestOscAPI_OnlyAdminsCanReachIt(t *testing.T) {
 			resp.CodeForbidden, r.Code, r.Msg)
 	}
 }
+
+// 急停开关:改配置文件加重启关不掉一个正在出事的特性。
+//
+// 方向是**不对称**的,这是有意的:打开它的前提是一次对着有从库的实例的演练
+// (ADR 0011),那是人做的事,界面上点一下不构成那个前提;而关要快 —— 一次迁移正在
+// 把从库拖垮时,人要挡住后续发起,而不是先去重启网关。
+func TestOscAPI_TheKillSwitchClosesItWithoutTouchingTheConfigFile(t *testing.T) {
+	app := newTestApp(t)
+	app.cfg.OSC.Enabled = true // 配置里开着
+	if err := app.repo.SetSetting("osc.enabled", "false"); err != nil {
+		t.Fatalf("写设置失败: %v", err)
+	}
+	token := app.login("linwei@vela.io", "vela123")
+
+	r := app.do(http.MethodPost, "/api/v1/osc/jobs", token, map[string]any{
+		"connectionId": 1, "schema": "app", "table": "t_order",
+		"alter": "ADD INDEX idx_memo (memo)",
+	})
+
+	if r.Code != resp.CodeOscDisabled {
+		t.Fatalf("后台急停之后应当返回 %d,实际 code=%d msg=%q", resp.CodeOscDisabled, r.Code, r.Msg)
+	}
+}
+
+// 反方向不成立:配置里关着时,后台这个开关怎么拨都打不开。
+//
+// 少了这条,"急停开关"会悄悄变成"启用开关" —— 任何平台管理员在界面上点一下就能
+// 打开一个会在生产库上改表的功能,而 ADR 0011 要求的那次演练没有发生。
+func TestOscAPI_TheKillSwitchCannotTurnItOn(t *testing.T) {
+	app := newTestApp(t)
+	app.cfg.OSC.Enabled = false // 配置里关着 —— 这是前提,不是偏好
+	if err := app.repo.SetSetting("osc.enabled", "true"); err != nil {
+		t.Fatalf("写设置失败: %v", err)
+	}
+	token := app.login("linwei@vela.io", "vela123")
+
+	r := app.do(http.MethodPost, "/api/v1/osc/jobs", token, map[string]any{
+		"connectionId": 1, "schema": "app", "table": "t_order",
+		"alter": "ADD INDEX idx_memo (memo)",
+	})
+
+	if r.Code != resp.CodeOscDisabled {
+		t.Fatalf("配置关着时后台开关不该能打开它,实际 code=%d msg=%q", r.Code, r.Msg)
+	}
+}
+
+// 没写过这个设置的部署(绝大多数)行为不变:配置说了算。
+func TestOscAPI_UnsetKillSwitchMeansTheConfigDecides(t *testing.T) {
+	app := newTestApp(t)
+	app.cfg.OSC.Enabled = true // 没有写过 osc.enabled 这个设置
+	token := app.login("linwei@vela.io", "vela123")
+
+	r := app.do(http.MethodPost, "/api/v1/osc/jobs", token, map[string]any{
+		"connectionId": 1, "schema": "app", "table": "t_order",
+		"alter": "ADD INDEX idx_memo (memo)",
+	})
+
+	if r.Code == resp.CodeOscDisabled {
+		t.Fatal("没写过急停设置时不该被拦 —— 默认值把一个开着的部署关掉了")
+	}
+}
