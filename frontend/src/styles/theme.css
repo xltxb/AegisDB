@@ -54,7 +54,11 @@ a { color: inherit; text-decoration: none; }
 .rail {
   width: 74px; flex: 0 0 74px;
   display: flex; flex-direction: column; align-items: center;
-  padding: 14px 0;
+  /* 上内边距挪到 .rail-logo 的 margin 上。留在这里的话,sticky 的门户切换器只能
+     吸附到内边距的内沿,顶上那 14px 就成了一道缝,滚动的内容会从缝里露出来 ——
+     原先是拿切换器向上外扩的阴影去糊那道缝的,可那圈阴影在没滚动的时候也一直
+     画着,正好把 logo 的下半截平切掉(圆角方块看着像被削平了)。 */
+  padding: 0 0 14px;
   /* 菜单项多于视口高度时(管理后台约 888px,笔记本可用高度常常不足),
      不加这两行会被 .shell 的 overflow:hidden 直接裁掉,且滚不动 ——
      底部的"用户/审计/设置"和头像就彻底点不到了。
@@ -64,7 +68,15 @@ a { color: inherit; text-decoration: none; }
   background: var(--surface-sunken);
   border-right: 1px solid var(--border-subtle);
 }
+/* 装不下的时候滚,不是把里面的东西压扁。
+ *
+ * flex 子项默认 flex-shrink: 1:内容一超出容器,超出的量就摊派给每个子项。这条栏
+ * 本来就常常装不下(上面那行 overflow-y 就是为此加的),于是 22px 的超出被摊下去,
+ * 36×36 的 logo 被压成 36×20 —— 看着像图标不见了,其实是被挤扁的。
+ * 该滚的滚,子项保持自己的尺寸。 */
+.rail > *, .rail-nav > * { flex-shrink: 0; }
 .rail-logo {
+  margin-top: 14px;
   width: 36px; height: 36px; border-radius: 10px;
   display: grid; place-items: center; color: #fff;
   /* 品牌渐变:token 表里没有对应物,原型里也是写死的两个色标。 */
@@ -83,29 +95,59 @@ a { color: inherit; text-decoration: none; }
      外扩的 box-shadow 是在补两侧的缝:切换器只有 56px,侧栏 74px,不铺上容器
      底色的话,滚动的菜单项会从它左右两边穿过去。 */
   position: sticky; top: 0; z-index: 2;
-  box-shadow: 0 -14px 0 9px var(--surface-sunken);
+  /* 只向两侧铺(切换器 56px,栏 74px,不铺的话滚动的菜单项会从它左右穿过去)。
+     不再向上偏移:吸附点已经在栏顶,上面没有缝要补,而向上的阴影会切掉 logo。 */
+  box-shadow: 0 0 0 9px var(--surface-sunken);
 }
+/* 图标下面补一行字。
+ *
+ * 两个没有文字的图标,不 hover 出 tooltip 认不出这是"切换门户" —— 而它是全站
+ * 导航的总开关,按错一次要绕一圈才发现自己在另一半应用里。字只放得下两个,
+ * 全称仍在 title 和登录页上。 */
 .portal-sw-item {
-  height: 32px; border: 0; border-radius: 8px; cursor: pointer;
-  display: grid; place-items: center;
+  min-height: 42px; padding: 5px 0; border: 0; border-radius: 8px; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   background: transparent; color: var(--text-muted);
   transition: all var(--dur-fast, .15s) var(--ease-out, ease);
 }
-.portal-sw-item.on { background: var(--accent-subtle); color: var(--accent-text); }
+.portal-sw-item span { font: 600 9.5px var(--font-body); letter-spacing: .02em; line-height: 1; }
+.portal-sw-item:hover:not(.on) { color: var(--text-body); background: var(--surface-sunken); }
+/* 当前门户用实色块,不是淡背景:淡蓝底挨着白底,差别小到要盯着看 —— 而"我在
+   哪一半"是这个控件唯一要回答的问题。 */
+.portal-sw-item.on { background: var(--accent); color: var(--text-on-accent); }
 
 .rail-nav { margin-top: 22px; display: flex; flex-direction: column; gap: 6px; }
 .rail-item {
-  width: 58px; height: 52px; border-radius: 12px;
+  /* 58 → 64:栏宽 74,两边原本各空 8px,而英文最长的标签(Connections)在 9px 下
+     要 57px,58px 的项差 1px 就要省略成 Connection…。加宽 6px 之后两边仍各留
+     5px,中文标签(20px)完全不受影响。 */
+  width: 64px; height: 52px; border-radius: 12px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
   color: var(--text-muted); border: 1px solid transparent; background: transparent; cursor: pointer;
   transition: all var(--dur-fast, .15s) var(--ease-out, ease);
 }
-.rail-item span { font: 600 9px var(--font-mono); letter-spacing: .02em; }
+/* 标签用正文字体而不是 mono:中文在 mono 字体里没有字形,渲染时回退到系统字体
+   —— 等宽的只有那层声明。字号 9 → 10px,9px 的中文在这个字重下笔画已经粘连。
+ *
+ * 但 10px 只给中文。英文的 Connections / Permissions / Governance 在 10px 下
+ * 左右各只剩 2px 就顶到 74px 的栏边(实测,截图才看得出来 —— span 没有宽度约束,
+ * scrollWidth 等于内容宽,程序化的溢出检查抓不到它)。英文维持 9px。
+ * <html lang> 本来就跟着语言走(见 stores/ui.ts,原生日期控件靠的也是它)。
+ *
+ * max-width + 省略号是兜底:将来再长的词也不会画到栏外面去。 */
+.rail-item span {
+  font: 600 10px var(--font-body); letter-spacing: .02em;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html[lang="en"] .rail-item span { font-size: 9px; }
 .rail-item:hover { color: var(--text-body); }
 .rail-item.on {
   background: var(--accent-subtle);
   color: var(--accent-text);
   border-color: var(--accent-subtle-border);
+  /* 与终端实例树的选中态同一个做法:深色主题下淡背景和 hover 几乎分不出来。
+     用 inset 阴影不用 border —— border 会把这一项往右挤 3px,选中时整项跳一下。 */
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 .rail-foot {
   margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px;
@@ -594,7 +636,12 @@ a { color: inherit; text-decoration: none; }
 .chg-item-meta, .pl-item-meta {
   display: flex; align-items: center; gap: 7px; margin-top: 6px;
   font: 500 11.5px var(--font-body); color: var(--text-muted);
+  min-width: 0;
 }
+/* 库名(sqlite 下是一条绝对路径)在列表项里会折成两行,占掉卡片三分之一的高,
+   还跟标题抢分量。取末段由 TSX 做(截尾会把唯一有区分度的文件名截掉),这里
+   只兜底:万一末段自己也长,省略号收在一行里。 */
+.chg-item-meta .dim { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chg-when { margin-left: auto; }
 .dim { color: var(--text-faint); }
 .chg-tag {
@@ -613,7 +660,9 @@ a { color: inherit; text-decoration: none; }
 .chg-dtitles { flex: 1; min-width: 0; }
 .chg-dt { font: 600 14.5px var(--font-display); color: var(--text-strong); }
 .chg-ds { margin-top: 3px; font: 500 12px var(--font-body); color: var(--text-muted); }
-.chg-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+/* 右栏 280 → 360:那一栏装的是 SQL 差异和审查结果,280px 下一条
+   UPDATE ... WHERE ... 要折三行,而左边的主区还空着几百像素。 */
+.chg-body { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .chg-body { grid-template-columns: 1fr; } }
 .chg-main { min-width: 0; }
 .chg-side { display: flex; flex-direction: column; gap: 12px; }
@@ -1299,6 +1348,23 @@ a { color: inherit; text-decoration: none; }
 .set-in.w160 { width: 160px; }
 .set-in.w180 { width: 180px; }
 .set-in.w320 { width: 320px; max-width: 100%; }
+
+/* 设置页的行:控件列定宽,左边缘对齐。
+ *
+ * 通用的 .c-card-row 是 flex + margin-left:auto,控件一律贴右。宽度一样时看不出
+ * 问题,而这一页的控件有 160 / 180 / 320 三档 —— 右边缘齐了,左边缘落在三个位置
+ * 上(实测 1041 / 1021 / 881),一列扫下来是锯齿状的。
+ *
+ * 只在设置页作用域内换成两列 grid:控件列固定 320px,列内左对齐。窄输入仍然窄
+ * (数字框没必要拉成 320),但它们从同一条线开始。
+ * 768 以下沿用通用规则的上下堆叠,这里跟着退回单列。 */
+@media (min-width: 769px) {
+  .set-body .c-card-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: center; gap: 16px;
+  }
+  .set-body .c-row-ctl { margin-left: 0; justify-content: flex-start; }
+}
 .set-ta { min-height: 84px; resize: vertical; font-family: var(--font-mono); }
 .set-link {
   font: 600 12px var(--font-body); color: var(--accent-text);
@@ -1743,8 +1809,9 @@ a { color: inherit; text-decoration: none; }
 /* rail 上的待审批红点。做成 ring 是为了让它读作"贴在图标上",而不是"挨着图标"。 */
 .rail-item { position: relative; }
 .rail-dot {
-  position: absolute; top: 4px; right: 8px;
-  min-width: 16px; height: 16px; padding: 0 4px;
+  /* 往外挪一点:两位数已经快撑满这个圆角块并压在图标上,三位数会盖掉图标本身。 */
+  position: absolute; top: 2px; right: 4px;
+  min-width: 16px; height: 16px; padding: 0 4.5px;
   display: grid; place-items: center; border-radius: 999px;
   background: var(--danger); color: #fff;
   font: 700 9.5px var(--font-mono);
@@ -2463,6 +2530,26 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--border-subtle); background: var(--surface-sunken);
   font: 500 12.5px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-all;
 }
+/* 弹窗里的命令块:吃掉剩余空间,不是吃掉整张卡。
+ *
+ * 拦截卡只做三件事:说清命中了什么规则、收一个原因、把单子提上去。命令块不封顶
+ * 时,一条 30 行的批量 DROP 就有 622px —— 比整张卡的可视区(实测 615px)还高,
+ * 规则与原因框双双落到折叠之下。卡片自己是能滚的(.c-modal-body 是 overflow:auto,
+ * 实测需滚 336px),所以这不是滚不动,是"要滚才知道下面还有东西" —— 在一个必须
+ * 填字才能提交的卡片上,这个差别就是提不提得上去。
+ *
+ * 先试过 max-height: 38vh,不行:720 高的屏上命中规则那一条会换行成 133px(不是
+ * 估的 50px),38vh 的命令块加上它仍然把原因框顶出去 102px。与其猜一个数,不如让
+ * 命令块**收缩**:body 排成一列,命令块 flex: 0 1 auto + min-height: 0,其余(规则、
+ * 原因框)保持自然高度,剩多少给命令块多少。矮屏、长规则、多行原因,都不用重算。
+ * min-height 兜一个底(64px,约两行),免得规则特别长时命令块被压成一条缝。取 64
+ * 而不是更大,是为了让 600px 高的视口(1366×768 的屏配上工具栏就是这个数)也还能
+ * 把原因框留在可视区里。
+ *
+ * 只对含命令块的弹窗生效,别的弹窗保持原来的块级流。 */
+.c-modal-body:has(> .cmd) { display: flex; flex-direction: column; min-height: 0; }
+.c-modal-body:has(> .cmd) > * { flex: 0 0 auto; }
+.c-modal-body > .cmd { flex: 0 1 auto; min-height: 64px; overflow: auto; }
 
 /* ============ 补全浮层(原型 v2 规格) ============ */
 .ac {
