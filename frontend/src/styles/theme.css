@@ -2516,6 +2516,26 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   border: 1px solid var(--border-subtle); background: var(--surface-sunken);
   font: 500 12.5px/1.6 var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-all;
 }
+/* 弹窗里的命令块:吃掉剩余空间,不是吃掉整张卡。
+ *
+ * 拦截卡只做三件事:说清命中了什么规则、收一个原因、把单子提上去。命令块不封顶
+ * 时,一条 30 行的批量 DROP 就有 622px —— 比整张卡的可视区(实测 615px)还高,
+ * 规则与原因框双双落到折叠之下。卡片自己是能滚的(.c-modal-body 是 overflow:auto,
+ * 实测需滚 336px),所以这不是滚不动,是"要滚才知道下面还有东西" —— 在一个必须
+ * 填字才能提交的卡片上,这个差别就是提不提得上去。
+ *
+ * 先试过 max-height: 38vh,不行:720 高的屏上命中规则那一条会换行成 133px(不是
+ * 估的 50px),38vh 的命令块加上它仍然把原因框顶出去 102px。与其猜一个数,不如让
+ * 命令块**收缩**:body 排成一列,命令块 flex: 0 1 auto + min-height: 0,其余(规则、
+ * 原因框)保持自然高度,剩多少给命令块多少。矮屏、长规则、多行原因,都不用重算。
+ * min-height 兜一个底(64px,约两行),免得规则特别长时命令块被压成一条缝。取 64
+ * 而不是更大,是为了让 600px 高的视口(1366×768 的屏配上工具栏就是这个数)也还能
+ * 把原因框留在可视区里。
+ *
+ * 只对含命令块的弹窗生效,别的弹窗保持原来的块级流。 */
+.c-modal-body:has(> .cmd) { display: flex; flex-direction: column; min-height: 0; }
+.c-modal-body:has(> .cmd) > * { flex: 0 0 auto; }
+.c-modal-body > .cmd { flex: 0 1 auto; min-height: 64px; overflow: auto; }
 
 /* ============ 补全浮层(原型 v2 规格) ============ */
 .ac {
