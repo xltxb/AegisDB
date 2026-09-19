@@ -1470,6 +1470,7 @@ export const zh = {
   oscCopied: '已拷 {{n}} / 约 {{total}} 行 · {{pct}}%',
   oscCopiedUnknown: '已拷 {{n}} 行 · 总行数未知(统计信息没更新,进度无法估算)',
   oscShadow: '影子表:{{name}}',
+  oscThrottle: '限流:{{note}}',
   oscOrphan: '网关重启过,这条任务已经没有进程在推进它 —— 它不会自己走完。',
   oscLeftoverTitle: '{{n}} 处残留需要人工确认',
   oscLeftoverHint: '这些任务没有走完,库里可能还留着影子表。网关不会自己再动它们 —— 确认之后手工删除。多副本部署时,先确认不是另一台网关正在推进它。',

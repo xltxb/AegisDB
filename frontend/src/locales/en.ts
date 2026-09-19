@@ -1431,6 +1431,7 @@ export const en: Dict = {
   oscCopied: '{{n}} of ~{{total}} rows copied · {{pct}}%',
   oscCopiedUnknown: '{{n}} rows copied · total unknown (stale statistics, so no progress estimate)',
   oscShadow: 'Shadow table: {{name}}',
+  oscThrottle: 'Throttling: {{note}}',
   oscOrphan: 'The gateway restarted; no process is driving this job any more — it will not finish on its own.',
   oscLeftoverTitle: '{{n}} leftover(s) need a human',
   oscLeftoverHint: 'These jobs never finished, so a shadow table may still be sitting in the database. The gateway will not touch them again — drop them by hand once verified. On a multi-replica deployment, first make sure another gateway is not still driving it.',

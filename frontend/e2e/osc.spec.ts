@@ -7,7 +7,8 @@ import { envelope, seedSession, stubShell } from './fixtures'
 // 它们各自对应一种真实的坏法:
 //   · 开关关着但按钮能点 —— 半成品被点起来,在生产库上建了影子表;
 //   · 警告只写在 ADR 里 —— 发起的人从来不会读到"没有从库限流";
-//   · 残局不显示 —— 一张影子表在库里躺到磁盘报警才被发现。
+//   · 残局不显示 —— 一张影子表在库里躺到磁盘报警才被发现;
+//   · 一次没限流的迁移看起来和限了流的一模一样 —— 事后没人答得出从库当时被护着没有。
 
 const JOBS = {
   live: {
@@ -16,6 +17,7 @@ const JOBS = {
     copiedRows: 4000, totalRows: 10000, err: '', createdBy: 'Lin Wei',
     createdAt: '2026-09-18T10:00:00Z', updatedAt: '2026-09-18T10:01:00Z', finishedAt: null,
     running: true,
+    throttle: '未启用:主库上没有发现从库(单机实例,或从库没配 report_host)', throttled: false,
   },
   stranded: {
     id: 11, connectionId: 1, schema: 'app', table: 't_user',
@@ -23,6 +25,7 @@ const JOBS = {
     copiedRows: 120, totalRows: 900, err: '回放中断:binlog 位点丢失',
     createdBy: 'Lin Wei', createdAt: '2026-09-17T22:00:00Z',
     updatedAt: '2026-09-17T22:10:00Z', finishedAt: '2026-09-17T22:10:00Z', running: false,
+    throttle: '已启用:2 个从库,阈值 30s', throttled: true,
   },
 }
 
@@ -33,7 +36,7 @@ async function openOsc(page: Page, opts: { enabled: boolean; jobs?: unknown[] })
   await page.route('**/api/v1/osc/status', (r) =>
     r.fulfill(envelope({
       enabled: opts.enabled,
-      caveats: ['没有从库延迟限流:MaxLag 目前没有数据源。'],
+      caveats: ['限流装不装得起来,要看目标实例当时的样子:主库报不出从库时照跑,但不限流。'],
     })))
   await page.route('**/api/v1/osc/jobs', (r) => {
     if (r.request().method() === 'POST') {
@@ -147,4 +150,16 @@ test('总行数未知时写"未知",不画进度条', async ({ page }) => {
   })
   await expect(page.locator('.osc-unknown')).toContainText('777')
   await expect(page.locator('.osc-bar')).toHaveCount(0)
+})
+
+test('限流没开起来的任务,页面上挂着那句留痕', async ({ page }) => {
+  // 这句话不能只落在库里。事后追查"那次把从库拖垮的迁移,当时限流开着吗",
+  // 人是到这张页面上来看的 —— 而限流开没开,两种任务长得一模一样。
+  await openOsc(page, { enabled: true, jobs: [JOBS.live, JOBS.stranded] })
+
+  const warned = page.locator('.osc-throttle.warn')
+  await expect(warned).toHaveCount(1)
+  await expect(warned).toContainText('未启用')
+  // 限流开着的那条不该也被标成警示 —— 警示一旦乱响就没人看了。
+  await expect(page.locator('.osc-throttle:not(.warn)')).toContainText('已启用')
 })

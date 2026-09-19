@@ -72,6 +72,10 @@ services:
       - --log-bin=mysql-bin
       - --binlog-format=ROW
       - --binlog-row-image=FULL
+      # GTID so the replica below can use SOURCE_AUTO_POSITION=1 — without it,
+      # wiring replication means pinning an exact file/offset by hand.
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+08:00
@@ -89,7 +93,85 @@ services:
       timeout: 3s
       retries: 30
 
+  # A replica OF mysql-target, so the throttling half of internal/osc can be
+  # exercised for real: the copy is throttled by how far a replica has fallen
+  # behind, and "a replica that is behind" does not exist on a standalone
+  # instance. ADR 0011 asks for one run against an instance that HAS a replica
+  # before the feature's switch is turned on; this pair is that run, automated
+  # in internal/osc/replica_replication_test.go.
+  #
+  # NOTE: report-host is 127.0.0.1:3308, not the container name. The address the
+  # master reports is the one the GATEWAY dials to read the heartbeat, not one
+  # the master dials itself — and the gateway (or `go test`) runs on the host,
+  # where the replica is 127.0.0.1:3308. Using `mysql-replica` here resolves
+  # inside the compose network only, and throttling would silently degrade to
+  # "off" for anything running on the host.
+  #
+  # Both ends need GTID for SOURCE_AUTO_POSITION=1 (mysql-target enables it too).
+  mysql-replica:
+    image: mysql:8.0
+    container_name: vela-mysql-replica
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: velaroot
+      MYSQL_DATABASE: osc_test
+      MYSQL_USER: vela
+      MYSQL_PASSWORD: velapass
+    command:
+      - --server-id=2
+      - --report-host=127.0.0.1
+      - --report-port=3308
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+08:00
+    ports:
+      - "127.0.0.1:3308:3306"
+    volumes:
+      - vela_mysql_replica:/var/lib/mysql
+    depends_on:
+      mysql-target:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-pvelaroot"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: create the replication account on the master and point the replica
+  # at it. Runs to completion and exits — `docker compose up` shows it as exited,
+  # which is expected. Re-running it is harmless (both statements are idempotent).
+  mysql-replica-setup:
+    image: mysql:8.0
+    container_name: vela-mysql-replica-setup
+    restart: "no"
+    depends_on:
+      mysql-target:
+        condition: service_healthy
+      mysql-replica:
+        condition: service_healthy
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        mysql -h mysql-target -uroot -pvelaroot -e "
+          CREATE USER IF NOT EXISTS 'repl'@'%' IDENTIFIED BY 'replpass';
+          GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';"
+        mysql -h mysql-replica -uroot -pvelaroot -e "
+          STOP REPLICA;
+          CHANGE REPLICATION SOURCE TO SOURCE_HOST='mysql-target', SOURCE_PORT=3306,
+            SOURCE_USER='repl', SOURCE_PASSWORD='replpass', SOURCE_AUTO_POSITION=1,
+            GET_SOURCE_PUBLIC_KEY=1;
+          START REPLICA;"
+        echo "replication wired: mysql-target -> mysql-replica"
+
 volumes:
   vela_pg:
   vela_redis:
   vela_mysql_target:
+  vela_mysql_replica:

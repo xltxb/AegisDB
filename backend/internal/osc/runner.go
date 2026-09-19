@@ -31,6 +31,12 @@ type Runner struct {
 	// 大表上该调小,而不是图一次少发几条 SQL。
 	ChunkSize int
 
+	// MaxLag 是能容忍的从库延迟上限,来自配置 osc.max_lag_seconds。0 = 不限流。
+	//
+	// 限流要护的是从库:拷贝是普通 DML,但一张大表的全量拷贝仍然能把从库拖出
+	// 可观的延迟 —— 而"从库跟得上"正是这套东西相对原生 DDL 的卖点之一。
+	MaxLag time.Duration
+
 	mu      sync.Mutex
 	running map[int64]context.CancelFunc // 正在跑的任务 → 它的取消钩子
 }
@@ -220,12 +226,26 @@ func (r *Runner) run(ctx context.Context, id int64, target *sql.DB, dsn string) 
 		})
 	}()
 
+	// ---- 装限流:心跳写进主库,从库把它读回来 ----
+	//
+	// 装不起来不是失败 —— 单机实例上根本没有从库要护。但**装没装起来必须落库**:
+	// 事后从库被拖垮时,这一列是唯一答得上"当时限流开着吗"的地方。
+	th := newThrottle(ctx, throttleConfig{
+		Master: target, MasterDSN: dsn, Schema: job.Schema, Table: job.Table,
+		MaxLag: r.MaxLag,
+	})
+	defer th.Close()
+	r.store.Model(&Job{}).Where("id = ?", id).
+		Updates(map[string]any{"throttle": th.Note(), "throttled": th.Enabled()})
+
 	// ---- 分块拷贝 ----
 	if !r.advance(id, JobCopying) {
 		return
 	}
 	res, err := CopyAll(ctx, target, job.Schema, job.Table, shadow, CopyOptions{
-		ChunkSize: r.ChunkSize,
+		ChunkSize:  r.ChunkSize,
+		ReplicaLag: th.LagFunc(),
+		MaxLag:     r.MaxLag,
 		OnProgress: func(p Progress) {
 			r.store.Model(&Job{}).Where("id = ?", id).Update("copied_rows", p.Copied)
 		},

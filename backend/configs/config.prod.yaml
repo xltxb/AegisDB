@@ -46,8 +46,12 @@ webhook:
   # services and the cloud metadata endpoint. Overridable via VELA_WEBHOOK_ALLOW_PRIVATE.
   allow_private: false
 
-# 在线表结构变更(ADR 0011)。生产上保持关闭:它还缺少从库延迟限流,
-# 一次全表拷贝不会因为从库追不上而自己减速。详见 configs/config.yaml 的注释。
+# 在线表结构变更(ADR 0011)。生产上保持关闭,直到你在一套有从库的实例上演练过
+# 一次 —— 限流已经接上(心跳表 + 主库自报从库),但装不装得起来取决于目标实例
+# 当时的样子:单机、从库没配 report_host、复制断着,都会让迁移照跑但不限流。
+# 那件事任务记录里的 throttle 一列会写明。详见 configs/config.yaml 的注释。
 osc:
   enabled: false
   chunk_size: 0
+  # 从库延迟上限(秒)。不写 = 30;要关限流写负数,别写 0。
+  max_lag_seconds: 30

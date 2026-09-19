@@ -4,6 +4,7 @@ import {
   isLive,
   leftovers,
   startRefusal,
+  throttleWarning,
   type OscJob,
   type OscStatus,
 } from '../../src/lib/osc'
@@ -12,6 +13,7 @@ const job = (over: Partial<OscJob>): OscJob => ({
   id: 1, connectionId: 1, schema: 'app', table: 't_order', alter: 'ADD INDEX i (c)',
   status: 'copying', shadow: '', copiedRows: 0, totalRows: 0, err: '',
   createdBy: 'Lin Wei', createdAt: '', updatedAt: '', finishedAt: null, running: false,
+  throttle: '', throttled: false,
   ...over,
 })
 
@@ -96,4 +98,24 @@ test('失败但影子表还在的任务也算残局', () => {
 // 已经上位的新表。把它列成待清理会诱导人去删掉刚刚换上去的表。
 test('已完成的任务不算残局,即使记着影子表名', () => {
   expect(leftovers([job({ id: 12, status: 'done', shadow: 't_order_gho' })])).toEqual([])
+})
+
+// ---- 限流留痕 ----
+
+// 一次没有限流保护的迁移,事后要能一眼看出来。这条判断决定界面上那句警示出不出现,
+// 而它错向任一边都有代价:该警示不警示,人会以为从库被护着;不该警示乱警示,
+// 警示很快就没人看了。
+
+test('限流没开起来时给出警示', () => {
+  expect(throttleWarning(job({ throttled: false, throttle: '未启用:主库上没有发现从库' }))).toBe(true)
+})
+
+test('限流开着时不警示', () => {
+  expect(throttleWarning(job({ throttled: true, throttle: '已启用:2 个从库,阈值 30s' }))).toBe(false)
+})
+
+// 限流这件事本身是后来才有的。更早那些任务的这一列是空的 —— 那是「不知道」,
+// 不是「没限流」。把不知道显示成警示,等于凭空指控一次可能好好的迁移。
+test('留痕为空的老任务不警示', () => {
+  expect(throttleWarning(job({ throttled: false, throttle: '' }))).toBe(false)
 })

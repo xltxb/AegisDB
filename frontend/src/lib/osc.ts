@@ -36,6 +36,15 @@ export interface OscJob {
    * 所以它只能说「这台网关没在推进它」,不能说「没有人在推进它」。
    */
   running: boolean
+  /**
+   * 这一次到底限没限流,以及为什么 —— 后端给的一句人话,界面原样显示。
+   *
+   * 空字符串是**不知道**,不是"没限流":限流这件事比一部分任务记录来得晚,
+   * 更早那些行的这一列本来就是空的。
+   */
+  throttle: string
+  /** 同一件事的布尔面。界面按它上色,不去解析上面那句话的措辞。 */
+  throttled: boolean
 }
 
 export interface OscStatus {
@@ -95,4 +104,15 @@ export function leftovers(jobs: OscJob[]): OscJob[] {
     if (isLive(j)) return !j.running
     return (j.status === 'failed' || j.status === 'aborted') && j.shadow !== ''
   })
+}
+
+/**
+ * 这次迁移要不要挂一句"没限流"的警示。
+ *
+ * 判据是**留痕存在但限流没开**。空留痕不警示:那是限流这件事出现之前的老任务,
+ * 它当时限没限流没人知道 —— 把不知道显示成警示,等于凭空指控一次可能好好的迁移,
+ * 而警示一旦开始乱响就没人看了。
+ */
+export function throttleWarning(job: OscJob): boolean {
+  return job.throttle !== '' && !job.throttled
 }

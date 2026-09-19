@@ -53,6 +53,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// 拒绝的话术和业务码在 handler 里。
 	runner := osc.NewRunner(repo.DB(), oscConnect(repo))
 	runner.ChunkSize = cfg.OSC.ChunkSize
+	runner.MaxLag = cfg.OSCMaxLag()
 	h.AttachOSC(runner, func() bool { return cfg.OSC.Enabled })
 
 	v1 := r.Group("/api/v1")

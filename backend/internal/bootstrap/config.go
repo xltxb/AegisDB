@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -85,18 +86,45 @@ type Config struct {
 	} `yaml:"webhook"`
 	// OSC 是 MySQL 在线表结构变更(ADR 0011)。
 	//
-	// **默认关闭,而且应当保持关闭**:它会在生产库上建影子表、成块拷贝全表、订阅
-	// binlog 回放增量,最后原子改名。整条链路已经跑通并有真实 MySQL 上的测试,但还
-	// 缺一件要紧的东西 —— 真实从库延迟的读取。也就是说 `MaxLag` 目前没有数据源,
-	// 限流形同虚设。一次不会自己减速的全表拷贝,在主从架构下能把从库拖垮。
+	// **默认关闭**:它会在生产库上建影子表、成块拷贝全表、订阅 binlog 回放增量,
+	// 最后原子改名。整条链路已经跑通,并有真实 MySQL 上的测试;从库延迟限流也已经
+	// 接上(心跳表 + 主库自报从库,见 osc/throttle.go)。
 	//
-	// 补上从库延迟采集之前,这个开关只该在你清楚自己在做什么的环境里打开。
+	// 还差的是**一次对着有从库的真实例的演练** —— 那件事代码替不了。打开它之前,
+	// 先在一套自己的主从上跑一次,并确认任务记录里的 throttle 那一列写着「已启用」:
+	// 限流装不起来时(单机、从库没配 report_host、复制断着)迁移照跑,只是不限流。
 	OSC struct {
 		Enabled bool `yaml:"enabled"`
 		// ChunkSize 是每批拷贝的行数,0 表示用 osc 包的默认值。调小它能让中止更快
 		// 生效,也让拷贝对主库更温和。
 		ChunkSize int `yaml:"chunk_size"`
+		// MaxLagSeconds 是能容忍的从库延迟上限。读它用 OSCMaxLag(),别直接用这个数:
+		// **没写**(0)与**写了要关**(负数)是两件事,而这里分不开。
+		MaxLagSeconds int `yaml:"max_lag_seconds"`
 	} `yaml:"osc"`
+}
+
+// defaultOSCMaxLag 是没有配置时的从库延迟上限。
+//
+// 30 秒:比一次分块拷贝造成的抖动宽,又远小于"从库掉队到影响业务"的量级。
+const defaultOSCMaxLag = 30 * time.Second
+
+// OSCMaxLag 是这次部署能容忍的从库延迟上限,0 表示不限流。
+//
+// 默认值落在**安全**的那一边:一份 0002 时代写下的 config.yaml 里没有这一项,
+// 把"没写"解释成不限流,意味着升级上来的部署在打开开关之后跑的是没有限流的迁移,
+// 而没有人改过配置,也不会有人知道。
+//
+// 要关就得**说出来** —— 负数是那句话。0 说不了,因为 0 同时也是"这一段根本不存在"。
+func (c *Config) OSCMaxLag() time.Duration {
+	switch {
+	case c.OSC.MaxLagSeconds == 0:
+		return defaultOSCMaxLag
+	case c.OSC.MaxLagSeconds < 0:
+		return 0
+	default:
+		return time.Duration(c.OSC.MaxLagSeconds) * time.Second
+	}
 }
 
 // LoadConfig reads YAML config from path, applying env overrides for secrets/DSN.

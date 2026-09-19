@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { oscApi, oscJobsQueryOptions, oscStatusQueryOptions } from '@/api/modules/osc'
 import { connectionsQueryOptions } from '@/api/modules/connections'
-import { copyPercent, isLive, leftovers, startRefusal, type OscJob } from '@/lib/osc'
+import { copyPercent, isLive, leftovers, startRefusal, throttleWarning, type OscJob } from '@/lib/osc'
 import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Card } from '@/components/common/Card'
@@ -224,6 +224,15 @@ function JobRow({
       )}
 
       {live && !job.running && <div className="osc-orphan">{t('oscOrphan')}</div>}
+      {/*
+        限流留痕。记的是**这一次**的事实,而不是发起页面上那段"这套东西能做什么" ——
+        两者会不一致:限流的前提是主库自己报得出从库,而那取决于目标实例当时的样子。
+      */}
+      {job.throttle && (
+        <div className={clsx('osc-throttle', throttleWarning(job) && 'warn')}>
+          {t('oscThrottle', { note: job.throttle })}
+        </div>
+      )}
       {job.shadow && <div className="osc-shadow">{t('oscShadow', { name: job.shadow })}</div>}
       {job.err && <div className="osc-err">{job.err}</div>}
     </article>

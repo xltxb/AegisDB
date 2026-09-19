@@ -36,8 +36,9 @@ func (h *Handler) AttachOSC(runner *osc.Runner, enabled func() bool) {
 // 这里每加一条,发起页面上就多一行警告。做完一件就删一条 —— 别让它变成没人看的样板。
 func oscCaveats() []string {
 	return []string{
-		"没有从库延迟限流:MaxLag 目前没有数据源,全表拷贝不会因为从库追不上而自己减速。" +
-			"主从架构下,一张大表可能把从库拖出可观的延迟。",
+		"限流装不装得起来,要看目标实例当时的样子:主库报不出从库(单机,或从库没配 " +
+			"report_host)、复制断着、心跳到不了从库,这次迁移都会照跑,但不限流。" +
+			"发起之后看任务的「限流」一列 —— 它记的是当时的事实,不是这里的能力。",
 		"只验过 ADD INDEX 一类不改变行内容的变更;改列类型、改字符集的语义没有覆盖。",
 		"切换会保留原表(改名成 _del 后缀),磁盘空间不会立刻释放,需要人工确认后再删。",
 	}
@@ -93,8 +94,8 @@ func (h *Handler) OSCJob(c *gin.Context) {
 func (h *Handler) OSCStart(c *gin.Context) {
 	if h.osc == nil || !h.osc.enabled() {
 		resp.Fail(c, resp.CodeOscDisabled,
-			"在线表结构变更尚未启用。它还缺少从库延迟限流,在主从环境下可能把从库拖垮;"+
-				"确认风险后由管理员在配置里打开 osc.enabled。")
+			"在线表结构变更尚未启用。整条链路(含从库延迟限流)已经就绪,但还欠一次"+
+				"对着有从库的实例的演练;确认之后由管理员在配置里打开 osc.enabled。")
 		return
 	}
 	var req struct {

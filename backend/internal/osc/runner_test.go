@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -213,4 +214,69 @@ func waitForFinish(t *testing.T, r *Runner, id int64, d time.Duration) *Job {
 	}
 	t.Fatalf("%v 内读不到任务 %d", d, id)
 	return nil
+}
+
+// 限流开没开起来,必须跟着这次迁移落库。
+//
+// 这是 ADR 0011 里「缺限流这件事写在按钮旁边」那条原则的下半段:发起前说的是
+// **能力**(这套东西有没有限流),事后要留下的是**事实**(这一次到底限没限流)。
+// 一次把从库拖垮的迁移,事后总要能回答"当时限流开着吗" —— 而这个问题只有当时
+// 那个进程知道答案。
+func TestRunner_RecordsWhetherThrottlingWasOn(t *testing.T) {
+	r, d := newRunner(t)
+	ctx := context.Background()
+	name := makeTable(t, d.target, "CREATE TABLE `%s` (id BIGINT PRIMARY KEY, memo VARCHAR(64))")
+	for i := 1; i <= 20; i++ {
+		mustExec(t, d.target, fmt.Sprintf("INSERT INTO `%s` (id, memo) VALUES (%d, 'x')", name, i))
+	}
+	t.Cleanup(func() {
+		for _, x := range []string{ShadowName(name), "_" + name + DelSuffix, HeartbeatName(name)} {
+			_, _ = d.target.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+x+"`")
+		}
+	})
+
+	r.MaxLag = 30 * time.Second
+	job, err := r.Start(ctx, StartRequest{
+		ConnectionID: 1, Schema: "osc_test", Table: name,
+		Alter: "ADD INDEX idx_memo (memo)", CreatedBy: "linwei@vela.io",
+	})
+	if err != nil {
+		t.Fatalf("发起失败: %v", err)
+	}
+
+	final := waitForFinish(t, r, job.ID, 60*time.Second)
+	if final.Status != JobDone {
+		t.Fatalf("最终状态 = %s(err=%q),想要 done", final.Status, final.Err)
+	}
+	if final.Throttle == "" {
+		t.Fatal("这次迁移没有留下任何限流留痕 —— 事后没人答得出它当时限没限流")
+	}
+	// **限流该不该装起来,由这台实例的拓扑说了算**,不由这条用例假设。
+	//
+	// 早先这里写死了"单机实例上必然装不起来" —— 直到有人在同一台 MySQL 上挂了
+	// 一个从库来跑 TestReplication,这条用例就红了,而代码是对的。测试实例的拓扑
+	// 不归它管,它要钉的是**记录与事实一致**。
+	addrs, err := discoverReplicas(ctx, d.target)
+	if err != nil {
+		t.Fatalf("问从库列表失败: %v", err)
+	}
+	hasReplica := len(addrs) > 0
+	if final.Throttled != hasReplica {
+		t.Errorf("这台实例上有 %d 个从库,落库的 Throttled 却是 %v(留痕:%q)",
+			len(addrs), final.Throttled, final.Throttle)
+	}
+	// 开没开是一个布尔值,原因是一句人话 —— 两者必须说同一件事。分开落库是为了让
+	// 界面按布尔值上色,不去解析那句话的措辞;而分开之后,它们就可能各说各话。
+	if said := strings.Contains(final.Throttle, "已启用"); said != final.Throttled {
+		t.Errorf("留痕说的是 %q,布尔面却是 %v —— 两列各说各话,界面会照着错的那个上色",
+			final.Throttle, final.Throttled)
+	}
+	// 心跳表是迁移期间的临时物件,不该活过这次迁移。
+	exists, err := tableExists(context.Background(), d.target, "osc_test", HeartbeatName(name))
+	if err != nil {
+		t.Fatalf("查心跳表失败: %v", err)
+	}
+	if exists {
+		t.Error("迁移结束了,心跳表还留在库里")
+	}
 }

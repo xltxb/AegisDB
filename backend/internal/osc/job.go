@@ -76,6 +76,19 @@ type Job struct {
 	// 而不是等成功了再记。
 	Shadow string `gorm:"size:64;not null;default:''" json:"shadow"`
 
+	// Throttle 是这一次的限流留痕:开着(几个从库、什么阈值),或者没开起来(为什么)。
+	//
+	// 记的是事实,不是能力。同一套代码在单机实例上跑就是不限流的,而那件事只有
+	// 当时那个进程知道 —— 事后从库被拖垮时,这一列是唯一答得上"当时限流开着吗"的
+	// 地方。
+	Throttle string `gorm:"size:255;not null;default:''" json:"throttle"`
+
+	// Throttled 是同一件事的**布尔面**:这次到底限没限流。
+	//
+	// 与 Throttle 分开落库,是为了不让界面去解析那句人话。按中文前缀判断"未启用"
+	// 的话,后端改一次文案,界面上的警示就悄悄没了 —— 而它恰恰是最不该丢的那一条。
+	Throttled bool `gorm:"not null;default:false" json:"throttled"`
+
 	CopiedRows int64  `gorm:"not null;default:0" json:"copiedRows"`
 	TotalRows  int64  `gorm:"not null;default:0" json:"totalRows"`
 	Err        string `gorm:"size:1024;not null;default:''" json:"err"`
