@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -43,7 +44,10 @@ type Runner struct {
 	// 有人在等它。发布流水线要靠它接着往下走,而那是 service 层的事。
 	//
 	// 回调在 finish 的调用者那条 goroutine 上同步执行,所以它必须**快**:
-	// 里面做的事越多,越可能把一次迁移的收尾拖住。
+	// 里面做的事越多,越可能拖住 run() 的返回。也就是说,回调慢时这个任务在 IsRunning()
+	// 眼里就一直是 running —— 哪怕库里状态已经是 done,IsRunning() 和 Abort() 对它
+	// 的答复也会延迟。收尾阶段包括:把自己从 running 表里摘掉、让 IsRunning 和 Abort
+	// 恢复说真话、释放 binlog syncer。实现回调的人要知道自己拖的是这个。
 	OnFinish func(*Job)
 
 	mu      sync.Mutex
@@ -340,17 +344,27 @@ func (r *Runner) advance(id int64, to JobStatus) bool {
 
 func (r *Runner) finish(id int64, status JobStatus, errMsg string) {
 	now := time.Now()
-	r.store.Model(&Job{}).Where("id = ?", id).Updates(map[string]any{
+	if err := r.store.Model(&Job{}).Where("id = ?", id).Updates(map[string]any{
 		"status": status, "err": errMsg, "updated_at": now, "finished_at": now,
-	})
+	}).Error; err != nil {
+		// 落库失败时跳过通知。原因:r.Get 读到的是更新前的旧状态,
+		// 回调会据此推进发布单,而库里的任务状态是另一个值,两边从此对不上。
+		// 宁可不通知:上层有残局机制(一个挂着却没人推进的任务会被列出来让人收拾),
+		// 那是这个仓库对付这类情况的既定方式。
+		slog.Warn("osc: finish: 写入任务终态失败,将跳过 OnFinish 通知", "id", id, "status", status, "err", err)
+		return
+	}
 	// 先落库再通知:回调多半要去读这一行(比如发布单要按状态决定继续还是失败),
 	// 顺序反了它读到的是上一个状态。
 	if r.OnFinish == nil {
 		return
 	}
-	if j, err := r.Get(context.Background(), id); err == nil {
-		r.OnFinish(j)
+	j, err := r.Get(context.Background(), id)
+	if err != nil {
+		slog.Warn("osc: finish: 读取已写入的任务失败,将跳过 OnFinish 通知", "id", id, "err", err)
+		return
 	}
+	r.OnFinish(j)
 }
 
 // cleanupShadow 收走影子表。
