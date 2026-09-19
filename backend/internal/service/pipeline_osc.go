@@ -15,8 +15,13 @@ import (
 )
 
 // AttachOSC 把在线变更接进来。不接的话自动路由整个不存在,执行阶段照旧直发。
-func (s *Services) AttachOSC(r *osc.Runner, connect osc.ConnectFunc) {
+//
+// enabled 是**和控制台那道闸同一个闭包** —— 急停开关(ADR 0011)要挡住的是"发起",
+// 而流水线是发起的另一条路。各写一份判断的话,两条路迟早会分叉,而分叉的那一刻
+// 没有人会发现:界面上写着"已挡住",任务却还在一个个地起来。
+func (s *Services) AttachOSC(r *osc.Runner, connect osc.ConnectFunc, enabled func() bool) {
 	s.osc = r
+	s.oscEnabled = enabled
 	s.tableRowsFn = func(conn *model.Connection, schema, table string) int64 {
 		return gatherRows(connect, conn.ID, schema, table)
 	}
@@ -69,6 +74,15 @@ func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sq
 			return 0, ""
 		}
 		return 0, "直发:本部署没有接入 OSC"
+	}
+	if s.oscEnabled == nil || !s.oscEnabled() {
+		// 急停开关(配置里的 osc.enabled 前提 + tbl_setting 里的 osc.enabled 急停)
+		// 关着,和控制台那道闸走的是同一个闭包 —— 见 AttachOSC。同上,只有索引
+		// DDL 才值得解释,普通 DML 不写这一行。
+		if _, isIndexDDL := oscroute.ParseIndexDDL(sql); !isIndexDDL {
+			return 0, ""
+		}
+		return 0, "直发:在线变更已被关闭(配置或急停开关)"
 	}
 	// 行数是懒查的:Decide 只在认出这是索引 DDL、且没被覆盖或策略拦下时才回调它。
 	d := oscroute.Decide(sql, conn.Engine, s.oscPolicy(), oscroute.Override(rel.OSCMode),

@@ -45,6 +45,12 @@ func TestStageExecute_SmallTableGoesStraightThrough(t *testing.T) {
 	if fx.exec.count() != 1 {
 		t.Errorf("下发了 %d 条,期望 1 条(小表直发)", fx.exec.count())
 	}
+	// "小表直发"和"路由被整个短路(routeStatement 恒答直发)"在上面两条断言下
+	// 长得一模一样 —— 都是状态 success、下发 1 条。这里钉住 rowsOfTable 真的被
+	// 读过、Decide 真的按行数判过:日志里要能看到这次判定用的具体行数和阈值。
+	if !strings.Contains(out.log, "未超过阈值") {
+		t.Errorf("日志里没有行数判定的痕迹 —— 路由是不是被短路了?\n%s", out.log)
+	}
 }
 
 func TestStageExecute_FallsBackToDirectExecutionWhenOSCIsOff(t *testing.T) {
@@ -84,6 +90,30 @@ func TestStageExecute_DoesNotAnnotatePlainDML(t *testing.T) {
 	// 执行结果那一行还在。
 	if !strings.Contains(out.log, "[1/1]") {
 		t.Errorf("执行结果那一行丢了:\n%s", out.log)
+	}
+}
+
+func TestStageExecute_RespectsTheKillSwitch(t *testing.T) {
+	// 急停开关要挡住的是"发起",而流水线是发起的另一条路。只拦住控制台那道门,
+	// 等于让扳动开关的人以为自己挡住了,而任务还在一个个地起来。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX idx_memo (memo)")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.oscEnabled = false // 运维刚扳下急停
+
+	out := fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	if out.status != model.RunSuccess {
+		t.Fatalf("状态 = %s —— 急停不该让发布单失败,它该回落直发。日志:%s", out.status, out.log)
+	}
+	if fx.exec.count() != 1 {
+		t.Error("没有回落到直发")
+	}
+	if got := fx.reloadStage(); got.OSCJobID != 0 {
+		t.Errorf("急停开关关着,却仍然发起了迁移任务 #%d", got.OSCJobID)
+	}
+	if !strings.Contains(out.log, "关闭") {
+		t.Errorf("日志里没说清为什么没走 OSC:\n%s", out.log)
 	}
 }
 

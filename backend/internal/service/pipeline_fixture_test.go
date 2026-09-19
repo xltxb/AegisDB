@@ -93,6 +93,9 @@ type execFixture struct {
 	// rowsOfTable 是 svc.tableRowsFn 的假答案,换掉真的 information_schema 查询。
 	// 用例在 newExecFixture 之后再赋值 —— 闭包按引用读它,读到的永远是当下的值。
 	rowsOfTable int64
+	// oscEnabled 是 svc.oscEnabled 的假答案 —— 换掉配置开关 + 急停开关那一对
+	// 真实设置读取。默认 true(没打开急停时的常态),用例按需要拨成 false。
+	oscEnabled bool
 }
 
 // newExecFixture 造一张停在执行阶段、人工闸已经点过的发布单。
@@ -105,12 +108,13 @@ func newExecFixture(t *testing.T, sql string) *execFixture {
 	repo := repository.New(db)
 	svc := New(repo, gateway.NewRiskEngine(repo), nil)
 
-	fx := &execFixture{t: t, svc: svc, repo: repo, exec: &fakeExecutor{}, osc: &fakeOSC{}}
+	fx := &execFixture{t: t, svc: svc, repo: repo, exec: &fakeExecutor{}, osc: &fakeOSC{}, oscEnabled: true}
 	svc.Executor = fx.exec
 	svc.osc = fx.osc
 	// 闭包捕获 fx,不是此刻的值:用例在 newExecFixture 返回之后才设置
 	// fx.rowsOfTable(阈值判定要等语句先过完 DDL 识别才会用到它)。
 	svc.tableRowsFn = func(*model.Connection, string, string) int64 { return fx.rowsOfTable }
+	svc.oscEnabled = func() bool { return fx.oscEnabled }
 
 	fx.conn = seedFixtureConnection(t, repo)
 	fx.user = seedFixtureUser(t, repo)

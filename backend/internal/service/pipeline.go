@@ -809,9 +809,18 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 			// 挂起:后面的语句一条都不能先跑 —— 顺序是发起人写下的,
 			// 乱序执行的后果由数据承担。游标停在 i(这一条已经交给 OSC,
 			// 还没算完成),不是 i+1:恢复时靠它认出"正在等的是哪一条"。
-			_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+			//
+			// 这次落库不能被静默吞掉:Start 已经成功、迁移 goroutine 已经跑起来,
+			// osc_job_id 写不进去的话,这条发布单就在等一个它再也找不到的任务
+			// (下一个任务的 OnFinish 回调正是靠 osc_job_id 反查阶段)。不让阶段
+			// 失败 —— 任务已经在跑了,把单子判失败只会让两边的状态更对不上;
+			// 但必须留下 job id/release id/stage id,那是人工排查时唯一的线索。
+			if err := s.Repo.UpdateReleaseStage(st.ID, map[string]any{
 				"osc_job_id": jobID, "exec_cursor": i,
-			})
+			}); err != nil {
+				slog.Error("osc: 挂起阶段时写入 osc_job_id 失败,任务已在运行但阶段找不到它",
+					"jobID", jobID, "releaseID", rel.ID, "stageID", st.ID, "err", err)
+			}
 			return stageOutcome{status: model.RunWaiting, rows: total,
 				log: fmt.Sprintf("%s· 等待迁移任务 #%d 完成\n", b.String(), jobID)}
 		}

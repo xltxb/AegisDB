@@ -62,13 +62,17 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	//     立刻挡住后续发起,而不是先去重启网关。
 	//
 	// 所以后台那个开关只关得掉、打不开。默认 true = 不额外拦,没写过它的部署行为不变。
-	h.AttachOSC(runner, func() bool {
+	//
+	// 这个闭包在控制台发起和流水线自动路由之间**共用**,不是各写一份:急停开关
+	// 挡的是"发起"本身,不管发起来自哪条路。各写一份判断迟早会分叉,而分叉的
+	// 那一刻没有人会发现 —— 界面上写着"已挡住",流水线的任务却还在一个个地起来。
+	oscEnabled := func() bool {
 		return cfg.OSC.Enabled && repo.SettingBool("osc.enabled", true)
-	})
+	}
+	h.AttachOSC(runner, oscEnabled)
 	// 发布流水线也要接上同一个 Runner:执行阶段命中判定的那条语句由它发起,
-	// 阶段挂起等它跑完。接口层的开关(上面那个)管的是控制台手动发起,这里
-	// 不受它约束 —— 自动路由自己的开关是 osc.autoRoute.enabled(oscPolicy)。
-	svc.AttachOSC(runner, oscConnect(repo))
+	// 阶段挂起等它跑完。共用上面那个 oscEnabled —— 见其注释。
+	svc.AttachOSC(runner, oscConnect(repo), oscEnabled)
 
 	v1 := r.Group("/api/v1")
 

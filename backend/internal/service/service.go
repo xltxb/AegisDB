@@ -50,6 +50,11 @@ type Services struct {
 	// 类型是接口不是 *osc.Runner:真 Runner 要连 MySQL 才发起得了,而这一层的用例
 	// 测的是**接缝** —— 交出去了没有、挂起了没有、结束之后接着往下走没有。
 	osc oscExecutor
+	// oscEnabled 和控制台那道闸(handler.oscGate.enabled)是**同一个闭包** ——
+	// 急停开关(ADR 0011)要挡住的是"发起",而流水线是发起的另一条路。各写一份
+	// 判断的话,两条路迟早会分叉,而分叉的那一刻没有人会发现:界面上写着
+	// "已挡住",任务却还在一个个地起来。见 AttachOSC。
+	oscEnabled func() bool
 	// tableRowsFn 是表的估算行数从哪来。AttachOSC 把它设成真实现(osc.Gather),
 	// 用例覆盖它 —— 采集本身在 osc 包里已经对着真 MySQL 测透了,不必在这里再测一遍。
 	tableRowsFn func(conn *model.Connection, schema, table string) int64
