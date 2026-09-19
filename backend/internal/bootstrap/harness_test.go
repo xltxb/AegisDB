@@ -285,6 +285,24 @@ type riskCheckResult struct {
 	MatchedRuleRef   *model.RuleRef `json:"matchedRuleRef"`
 }
 
+// lastRelease returns the most recently created release row, read straight from
+// the repo (not the HTTP envelope) — for tests that need to assert on a field
+// (like OSCMode) that a create response never echoes back.
+//
+// 按 id 降序,不是按 created_at:id 是 BIGSERIAL,在一个 schema 内严格递增;
+// 而 created_at 是时间戳,同一秒内建的两条会并列,排序反而不稳。
+//
+// 这里的前提是每个用例都跑在自己的独占 schema 上(testsupport.NewDB),序列从 1
+// 起,没有"被重置过"的历史 —— 换到共享库上跑就不成立了。
+func (a *testApp) lastRelease(t *testing.T) *model.Release {
+	t.Helper()
+	var rel model.Release
+	if err := a.repo.DB().Order("id DESC").First(&rel).Error; err != nil {
+		t.Fatalf("lastRelease: %v", err)
+	}
+	return &rel
+}
+
 // riskCheck runs the pure three-layer pre-check for a (connection, sql) pair.
 func (a *testApp) riskCheck(token string, connID int64, sql string) riskCheckResult {
 	return a.riskCheckIn(token, connID, sql, "")

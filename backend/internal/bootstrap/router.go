@@ -54,7 +54,27 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	runner := osc.NewRunner(repo.DB(), oscConnect(repo))
 	runner.ChunkSize = cfg.OSC.ChunkSize
 	runner.MaxLag = cfg.OSCMaxLag()
-	h.AttachOSC(runner, func() bool { return cfg.OSC.Enabled })
+	// 开关是**两道闸相与**,方向不对称:
+	//
+	//   配置文件里的 osc.enabled —— **前提**。打开它的条件是一次对着有从库的实例的
+	//     演练(ADR 0011),那是人做的事,界面上点一下不构成那个前提。
+	//   tbl_setting 里的 osc.enabled —— **急停**。一次迁移正在把从库拖垮时,人要
+	//     立刻挡住后续发起,而不是先去重启网关。
+	//
+	// 所以后台那个开关只关得掉、打不开。默认 true = 不额外拦,没写过它的部署行为不变。
+	//
+	// 这个闭包在控制台发起和流水线自动路由之间**共用**,不是各写一份:急停开关
+	// 挡的是"发起"本身,不管发起来自哪条路。各写一份判断迟早会分叉,而分叉的
+	// 那一刻没有人会发现 —— 界面上写着"已挡住",流水线的任务却还在一个个地起来。
+	oscEnabled := func() bool {
+		return cfg.OSC.Enabled && repo.SettingBool("osc.enabled", true)
+	}
+	h.AttachOSC(runner, oscEnabled)
+	// 发布流水线也要接上同一个 Runner:执行阶段命中判定的那条语句由它发起,
+	// 阶段挂起等它跑完。共用上面那个 oscEnabled —— 见其注释。
+	svc.AttachOSC(runner, oscConnect(repo), oscEnabled)
+	// 任务结束时把等着它的发布单推下去。osc 包不认识 pipeline —— 这条线在这里接。
+	runner.OnFinish = svc.OnOSCJobFinished
 
 	v1 := r.Group("/api/v1")
 

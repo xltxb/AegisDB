@@ -274,6 +274,17 @@ func (r *Repo) PendingReleases() ([]model.Release, error) {
 	return rels, err
 }
 
+// StageWaitingOnOSCJob 反查"哪个阶段在等这个迁移任务"。
+//
+// 查不到是**正常情况**:绝大多数任务是从 OSC 控制台手工发起的,不属于任何发布单。
+func (r *Repo) StageWaitingOnOSCJob(jobID int64) (*model.ReleaseStage, error) {
+	var s model.ReleaseStage
+	if err := r.db.Where("osc_job_id = ?", jobID).First(&s).Error; err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 // CountReleases counts runs in a status (empty = all), for the console header.
 func (r *Repo) CountReleases(status string) int64 {
 	q := r.db.Model(&model.Release{})

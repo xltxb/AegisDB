@@ -50,6 +50,8 @@ export interface CreateReleaseBody {
   changeType?: string
   reason?: string
   mfaCode?: string
+  /** 对这一单的单次覆盖:'' 按策略,force 强制走 OSC,skip 强制直发。 */
+  oscMode?: string
 }
 
 /**

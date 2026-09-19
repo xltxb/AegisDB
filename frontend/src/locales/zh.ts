@@ -276,6 +276,12 @@ export const zh = {
   chgModeNowHint: '现在就排进流程,走到执行闸时等人确认',
   chgModeScheduledHint: '排期不在这里:要在维护车次里连跑多条,先去「执行窗口」申请一个班车',
   chgModeGitHint: '由 CI 用开放接口凭据建单,不从这个表单发起',
+  chgOscWaiting: '正在等在线变更任务 #{{id}} 完成 —— 点此查看进度',
+  chgOscOrphan: '这台网关没有在推进迁移任务 #{{id}}(多副本部署下也可能是别的副本正在跑它)—— 先到在线变更页确认它的状态,再决定这张单怎么办。',
+  chgOscMode: '大表索引变更',
+  chgOscModeAuto: '按平台策略',
+  chgOscModeForce: '强制走在线变更',
+  chgOscModeSkip: '强制直接执行',
 
   // ---- 变更流程配置 ----
   plTitle: '变更流程',
@@ -865,6 +871,15 @@ export const zh = {
   setMetaNoteSkip: '连不上或没权限的实例会被跳过,那台实例看起来就是空的',
   setMetaNoteStale: '副本可能过期。判定、执行、导出一律仍然走实时的目标库',
   setMetaGo: '去数据资产',
+
+  setOsc: '在线表结构变更',
+  setOscSub: '大表加索引时用影子表 + 分块拷贝代替原生 DDL(ADR 0011)',
+  setOscEnabled: '允许发起在线变更',
+  setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。它打不开这个功能 —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
+  setOscAuto: '大表索引变更自动走 OSC',
+  setOscAutoD: '发布流水线执行到一条索引变更时,若目标表超过下面的行数,自动改用在线变更。OSC 用不了时(未启用、非 MySQL、前置检查不通过)照常直发,并把原因写进阶段日志。',
+  setOscMinRows: '判定为大表的行数',
+  setOscMinRowsD: '行数取自 information_schema,是估算值,可能与实际相差可观 —— 边界附近的表会时走时不走。正好等于这个数不算超过。',
 
   setOpenApi: '开放接口',
   setOpenApiSub: '外部系统调用网关所用的凭据',

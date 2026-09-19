@@ -40,6 +40,7 @@ export const pipelineApi = {
   createRelease: (body: {
     title: string; pipelineId: number; connectionId: number; database?: string
     sql?: string; changeType?: string; scriptUploadId?: number; reason?: string; mfaCode?: string
+    oscMode?: string
   }) => http.post<any, Envelope<Release>>('/releases', body),
   abortRelease: (id: number) => http.post<any, Envelope<any>>(`/releases/${id}/abort`),
   continueStage: (releaseId: number, stageId: number) =>

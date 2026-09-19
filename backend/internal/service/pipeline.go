@@ -327,6 +327,14 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		}
 	}
 
+	// 拼错的值当场拒掉,不静默当成"按策略" —— 一个以为自己选了"强制直发"的人,
+	// 会看着一次走了 OSC 的执行不知所以。
+	switch req.OSCMode {
+	case "", "force", "skip":
+	default:
+		return nil, fmt.Errorf("oscMode 只能是 force / skip 或留空,收到 %q", req.OSCMode)
+	}
+
 	// 归属项目按提交这一刻的目标库快照下来 —— 库以后改挂别的项目,历史单据不改账。
 	projectID, projectName := s.projectOf(conn, req.Database)
 	rel := &model.Release{
@@ -337,7 +345,8 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
-		Reason: clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
+		OSCMode: req.OSCMode,
+		Reason:  clip(req.Reason, 400), CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
 		Source:   orDefault(origin.Source, model.ReleaseSourceConsole),
 		ClientID: origin.ClientID, ClientName: origin.ClientName,
@@ -789,14 +798,47 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 
 	timeout := s.asyncExecTimeout()
 	var b strings.Builder
-	total := 0
-	for i, one := range stmts {
+	// 接上已经写下的日志。driveRelease 每次都用 out.log **覆盖**阶段的 log 字段,
+	// 从空 builder 开始的话,这个阶段在暂停之前记下的每一条都会消失 —— 而那正是
+	// 一次跨了几小时的执行(下一个任务接上 OSC 之后)最需要留下的东西。
+	b.WriteString(st.Log)
+	total := st.Rows
+	// 从游标停的地方续跑,不是从头:前面这些语句已经执行过了,重跑是一次重复的
+	// 生产变更,而且不一定报错(一条 ALTER 重跑会报 1061,但一条 UPDATE 不会)。
+	for i := st.ExecCursor; i < len(stmts); i++ {
+		one := stmts[i]
+		// 这一条该不该改走 OSC?note 为空表示"与 OSC 无关,不值得占日志的额度"
+		// (见 routeStatement)——阶段日志落库前会被截断,这点额度要留给真正说明了
+		// 什么的行:走了 OSC(哪张表、任务号),或者本该走却走不了。
+		jobID, note := s.routeStatement(rel, conn, one)
+		if note != "" {
+			fmt.Fprintf(&b, "· [%d/%d] %s\n", i+1, len(stmts), note)
+		}
+		if jobID > 0 {
+			// 挂起:后面的语句一条都不能先跑 —— 顺序是发起人写下的,
+			// 乱序执行的后果由数据承担。游标停在 i(这一条已经交给 OSC,
+			// 还没算完成),不是 i+1:恢复时靠它认出"正在等的是哪一条"。
+			//
+			// 这次落库不能被静默吞掉:Start 已经成功、迁移 goroutine 已经跑起来,
+			// osc_job_id 写不进去的话,这条发布单就在等一个它再也找不到的任务
+			// (下一个任务的 OnFinish 回调正是靠 osc_job_id 反查阶段)。不让阶段
+			// 失败 —— 任务已经在跑了,把单子判失败只会让两边的状态更对不上;
+			// 但必须留下 job id/release id/stage id,那是人工排查时唯一的线索。
+			if err := s.Repo.UpdateReleaseStage(st.ID, map[string]any{
+				"osc_job_id": jobID, "exec_cursor": i,
+			}); err != nil {
+				slog.Error("osc: 挂起阶段时写入 osc_job_id 失败,任务已在运行但阶段找不到它",
+					"jobID", jobID, "releaseID", rel.ID, "stageID", st.ID, "err", err)
+			}
+			return stageOutcome{status: model.RunWaiting, rows: total,
+				log: fmt.Sprintf("%s· 等待迁移任务 #%d 完成\n", b.String(), jobID)}
+		}
 		res := s.Executor.Run(context.Background(), conn, one, timeout)
 		if res.Err != nil {
 			fmt.Fprintf(&b, "· 第 %d/%d 条失败: %s\n", i+1, len(stmts), clip(res.Output, 300))
 			s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultWarn, rel.RelNo, "exec")
 			return stageOutcome{status: model.RunFailed, rows: total,
-				log: fmt.Sprintf("· 已执行 %d/%d 条后中止\n%s", i, len(stmts), b.String())}
+				log: fmt.Sprintf("%s· 已执行 %d/%d 条后中止\n", b.String(), i, len(stmts))}
 		}
 		total += res.Rows
 		fmt.Fprintf(&b, "· [%d/%d] %s (%dms)\n", i+1, len(stmts), clip(res.Output, 200), res.Ms)
@@ -807,9 +849,12 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 		// Every statement is audited individually: the chain must show what ran,
 		// not that "a release ran".
 		s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultExecuted, rel.RelNo, "exec")
+		// 游标边走边记:进程在下一条之前挂掉时,库里写着的必须是"已经做完 i+1 条"。
+		// 挪到循环外、跑完一起写的话,一次中途的崩溃会让恢复从头再来。
+		_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{"exec_cursor": i + 1})
 	}
 	return stageOutcome{status: model.RunSuccess, rows: total,
-		log: fmt.Sprintf("· 执行完成 · %d 条语句 · 影响 %d 行\n%s", len(stmts), total, b.String())}
+		log: fmt.Sprintf("%s· 执行完成 · %d 条语句 · 影响 %d 行\n", b.String(), len(stmts), total)}
 }
 
 // execLogPreviewRows bounds how many result rows an execute log echoes. The
@@ -1160,7 +1205,16 @@ func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) 
 	if err != nil || st.ReleaseID != releaseID {
 		return ErrNotFound
 	}
-	if st.Type != model.StageExecute || st.Status != model.RunWaiting {
+	// C1:挂着 OSC 任务的执行阶段和"等人点确认执行"共用同一个 status ——
+	// 判据是 OSCJobID(ADR 0011「界面:两种 waiting 长得一模一样」)。这道闸原来
+	// 只长在前端(isGate/waitingGate),没有它的话,同一条已经在跑迁移的语句能被
+	// 再点一次「确认执行」,把这个阶段迄今的全部日志(包括"走 OSC · 任务 #N"那
+	// 一行)整个覆盖掉,再对同一条语句发起第二次 OSC 任务 —— 正撞上设计文档明写
+	// 的"不做多个 OSC 任务并行"。
+	if st.Type != model.StageExecute || st.Status != model.RunWaiting || st.OSCJobID != 0 {
+		if st.Type == model.StageExecute && st.Status == model.RunWaiting && st.OSCJobID != 0 {
+			return fmt.Errorf("该阶段正在等待迁移任务 #%d,不是在等人确认执行", st.OSCJobID)
+		}
 		return fmt.Errorf("该阶段当前不在等待执行确认")
 	}
 	// 默认允许发起人,是因为"何时执行"归发起人;一旦显式指定了角色,那正是要把
@@ -1180,7 +1234,10 @@ func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) 
 	}
 	_ = s.Repo.UpdateReleaseStage(stageID, map[string]any{
 		"confirmed_by": u.Name,
-		"log":          "· 已由 " + u.Name + " 确认执行",
+		// M1:结尾要带换行 —— stageExecute 恢复时会把 st.Log 原样当前缀接上
+		// (b.WriteString(st.Log)),缺一个换行的话,这一行会和后面第一条执行
+		// 记录粘成一行,读起来像"已由 X 确认执行· [1/3] ..."。
+		"log": "· 已由 " + u.Name + " 确认执行\n",
 	})
 	// 决策入链:actor = 变更归属人,operator = 点击的人,pending = 放行非执行
 	// (真正的执行由 execute 阶段逐条记账)。
@@ -1231,8 +1288,12 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 		return ErrAlreadyDecided
 	}
 	now := time.Now()
+	// 单子停下来的同时,把它挂着的那个迁移也叫停 —— 否则单子已经显示「已终止」,
+	// 迁移还在生产库上拷全表,而人以为自己已经把它按停了。oscNote 把结果(叫停了/
+	// 叫不停,叫不停就说明原因)写进终止说明,而不是悄悄地什么都不做。
+	oscNote := s.abortOSCOfRelease(rel.ID)
 	_ = s.Repo.UpdateRelease(rel.ID, map[string]any{
-		"error": "已由 " + u.Name + " 终止", "finished_at": now,
+		"error": "已由 " + u.Name + " 终止" + oscNote, "finished_at": now,
 	})
 	// The pending approval a parked run raised is voided WITH the run: leaving
 	// it in the approvers' queue invites a decision on a change that no longer

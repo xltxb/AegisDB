@@ -735,6 +735,24 @@ export interface ReleaseStage {
   approvalId: number
   approvalNo: string
   rows: number
+  /** 这个执行阶段已经执行完的语句条数。跨 waiting 恢复时靠它不重跑。 */
+  execCursor: number
+  /**
+   * 此刻挂着的 OSC 迁移任务(0 = 没挂)。
+   *
+   * 它是界面区分两种 waiting 的**唯一**判据:一种在等人点「确认执行」,一种在等
+   * 一个迁移跑完,而两者的 status 一模一样。给后者画上按钮,按下去只会让人以为
+   * 自己推进了什么。
+   */
+  oscJobId: number
+  /**
+   * 本进程此刻有没有在推进 oscJobId 挂着的那个迁移(后端不落库的派生字段,
+   * 与 osc.Job.Running 同一个做法)。
+   *
+   * 只有 oscJobId > 0 时才有意义:false 说明网关重启后没有任何进程在推进它,
+   * 它不会自己走完 —— 与 status 分不开这件事,只有这个字段分得开。
+   */
+  oscRunning: boolean
   startedAt: string | null
   finishedAt: string | null
 }
@@ -767,6 +785,8 @@ export interface Release {
   source: 'console' | 'api'
   clientName?: string
   externalRef?: string
+  /** 发起人对这一单的单次覆盖:'' 按策略,force 强制走 OSC,skip 强制直发。 */
+  oscMode: '' | 'force' | 'skip'
   status: RunStatus
   risk: string
   error: string

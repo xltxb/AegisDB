@@ -65,8 +65,15 @@ func (h *Handler) ListReleases(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
 	// 按项目跟进升级单:projectId 缺省/0 = 全部项目。
 	projectID, _ := strconv.ParseInt(c.Query("projectId"), 10, 64)
-	resp.OK(c, h.Svc.ListReleases(middleware.CurrentUser(c),
-		c.DefaultQuery("scope", "mine"), c.Query("status"), page, pageSize, projectID))
+	pg := h.Svc.ListReleases(middleware.CurrentUser(c),
+		c.DefaultQuery("scope", "mine"), c.Query("status"), page, pageSize, projectID)
+	// 列表也要填 oscRunning——阶段的 oscJobId 一样会序列化出去,漏填的话每一个
+	// 挂着任务的阶段在这条路径上都会被 oscJobId>0 && !oscRunning 判成"已经没人
+	// 推进",而其实只是没人回填过。见 GetRelease 同名注释。
+	for i := range pg.Items {
+		h.fillOSCRunning(pg.Items[i].Stages)
+	}
+	resp.OK(c, pg)
 }
 
 // GetRelease returns one run with its stages — the pipeline view's data source.
@@ -76,7 +83,25 @@ func (h *Handler) GetRelease(c *gin.Context) {
 		resp.Fail(c, errCode(err), "发布单不存在或无权查看")
 		return
 	}
+	h.fillOSCRunning(v.Stages)
 	resp.OK(c, v)
+}
+
+// fillOSCRunning 不落库,是本进程此刻的事实(与 handler/osc.go 给 OSCJobs/OSCJob 填
+// Running 同一个做法):一个 waiting 的执行阶段挂着的迁移,可能真的在跑,也可能是
+// 网关重启之后留下的空等 —— 两者的 osc_job_id/status 一模一样,分不清就分不清。
+//
+// 列表接口与详情接口共用这一个函数——漏填的那条路径上,oscJobId>0 的阶段的
+// oscRunning 会停在零值 false,而前端拿它去判"已经没人推进"会全部误判。
+func (h *Handler) fillOSCRunning(stages []model.ReleaseStage) {
+	if h.osc == nil {
+		return
+	}
+	for i := range stages {
+		if stages[i].OSCJobID > 0 {
+			stages[i].OSCRunning = h.osc.runner.IsRunning(stages[i].OSCJobID)
+		}
+	}
 }
 
 // CreateRelease submits a change and queues the flow.

@@ -1162,6 +1162,9 @@ type Release struct {
 	// 内容推断,两类语句不得同单 —— 审批人按类型评估风险(DDL 锁表、DML 影响
 	// 行数),混装让两种评估都失效。见 service.releaseChangeType 的分类口径。
 	ChangeType string `gorm:"size:8" json:"changeType"`
+	// OSCMode 是发起人对这一单的单次覆盖:"" 按策略,force 强制走 OSC,skip 强制直发。
+	// 它进审计 —— 一次例外要说得出是谁定的。
+	OSCMode string `gorm:"column:osc_mode;size:8;not null;default:''" json:"oscMode"`
 	// 归属项目,提交时从目标库快照 —— 库以后改挂别的项目,历史单据不跟着改账。
 	ProjectID   int64  `gorm:"not null;default:0;index:idx_release_project" json:"projectId"`
 	ProjectName string `gorm:"size:64" json:"projectName"`
@@ -1227,12 +1230,29 @@ type ReleaseStage struct {
 	// ConfirmedBy 是 execute 阶段人工闸的放行人(空 = 未确认,阶段到达即停)。
 	// 审批回答"可不可以做",这里回答"现在做" —— 见 migrations/0024。
 	ConfirmedBy string `gorm:"size:64;not null;default:''" json:"confirmedBy"`
-	ApprovalID  int64  `gorm:"index:idx_rstage_approval" json:"approvalId"`
-	ApprovalNo  string `gorm:"size:32" json:"approvalNo"`
+	// ExecCursor 是这个执行阶段**已经执行完的语句条数**。
+	//
+	// 一条走 OSC 的语句要跑几小时,阶段在那期间停在 waiting。恢复时必须知道前面
+	// 几条已经做过了 —— 不记的话,恢复会把已经执行过的语句再执行一遍,而那是一次
+	// 重复的生产变更。
+	ExecCursor int `gorm:"not null;default:0" json:"execCursor"`
+	// OSCJobID 是此刻挂着的那个 OSC 任务(0 = 没挂)。
+	//
+	// 它同时是界面的判据:waiting 现在有两种意思 —— "等人点确认执行"和"等一个迁移
+	// 跑完"。后者给出「确认执行」按钮毫无意义,按下去只会让人以为自己推进了什么。
+	OSCJobID   int64  `gorm:"column:osc_job_id;index:idx_release_stage_osc_job;not null;default:0" json:"oscJobId"`
+	ApprovalID int64  `gorm:"index:idx_rstage_approval" json:"approvalId"`
+	ApprovalNo string `gorm:"size:32" json:"approvalNo"`
 	// 列名是 row_count:`rows` 是 MySQL 保留字(ADR 0016 §二)。JSON 名不变。
 	Rows       int        `gorm:"column:row_count" json:"rows"`
 	StartedAt  *time.Time `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
+	// OSCRunning 不落库(`gorm:"-"`):**本进程此刻**有没有在推进它挂着的那个迁移。
+	//
+	// 它回答 status 回答不了的问题:一个 waiting 的执行阶段,可能正等着一个真的在跑
+	// 的迁移,也可能是网关重启之后留下的空等 —— 两者的 status 一模一样,而后者永远
+	// 不会自己走完。与 osc.Job.Running 完全同一个做法(见 osc/runner.go 的 IsRunning)。
+	OSCRunning bool `gorm:"-" json:"oscRunning"`
 }
 
 func (ReleaseStage) TableName() string { return "tbl_release_stage" }

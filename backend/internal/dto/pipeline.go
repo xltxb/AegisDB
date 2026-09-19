@@ -85,6 +85,8 @@ type ReleaseReq struct {
 	ScriptUploadID int64  `json:"scriptUploadId"`
 	Reason         string `json:"reason"`
 	MfaCode        string `json:"mfaCode"`
+	// OSCMode 是对这一单的单次覆盖:"" 按策略,force 强制走 OSC,skip 强制直发。
+	OSCMode string `json:"oscMode"`
 }
 
 // ReleaseView is one run with the stages the pipeline view draws.
