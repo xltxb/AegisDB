@@ -149,21 +149,24 @@ export default function AuditPage() {
   }
   function clearAbsolute() { setFrom(''); setTo(''); setPage(1) }
 
+  // 除命令外都是定长内容(时间戳、人名、实例名、徽章、单号),按 px 给死;命令列
+  // 用 minmax(0, 1fr) 吃掉剩下的全部宽度 —— 它是这张表唯一"越宽越有用"的一列。
+  // 0 不能省:写成 1fr 的话长 SQL 会把这列的 min-content 撑开,反过来压扁固定列。
   const columns: Column<AuditRow>[] = [
     {
-      key: 'time', head: t('colTime'), width: '0.9fr', mono: true,
+      key: 'time', head: t('colTime'), width: '158px', mono: true,
       cell: (r) => fmtTime(r.occurredAt),
     },
     {
-      key: 'who', head: t('colWho'), width: '1fr', priority: 2,
+      key: 'who', head: t('colWho'), width: '110px', priority: 2,
       cell: (r) => r.actor,
     },
     {
-      key: 'inst', head: t('colInstance'), width: '1.1fr', mono: true, priority: 3,
+      key: 'inst', head: t('colInstance'), width: '150px', mono: true, priority: 3,
       cell: (r) => <>{r.instance}{r.database && <span className="aud-db"> / {r.database}</span>}</>,
     },
     {
-      key: 'cmd', head: t('colCmd'), width: '2.2fr',
+      key: 'cmd', head: t('colCmd'), width: 'minmax(0, 1fr)',
       cell: (r) => (
         <div className="aud-cmd" title={r.command}>
           <span className={clsx('aud-kw', `k-${r.risk}`)}>{keywordOf(r.command)}</span>
@@ -172,20 +175,20 @@ export default function AuditPage() {
       ),
     },
     {
-      key: 'risk', head: t('colRisk'), width: '0.8fr', priority: 2,
+      key: 'risk', head: t('colRisk'), width: '72px', priority: 2,
       cell: (r) => (
         <Badge tone={RISK_TONE[r.risk] ?? 'accent'}>{t(RISK_LABEL[r.risk] ?? 'audRiskLow')}</Badge>
       ),
     },
     {
-      key: 'result', head: t('colResult'), width: '1fr',
+      key: 'result', head: t('colResult'), width: '96px',
       cell: (r) => {
         const m = RESULT_META[r.result] ?? RESULT_FALLBACK
         return <span className={clsx('aud-res', m.cls)}><m.Icon size={12} />{t(m.key)}</span>
       },
     },
     {
-      key: 'ap', head: t('colAp'), width: '0.9fr', priority: 3,
+      key: 'ap', head: t('colAp'), width: '104px', priority: 3,
       cell: (r) => (
         <span
           className={clsx('aud-ap', r.approvalNo && canOpenApproval && 'link', !r.approvalNo && 'none')}
@@ -199,7 +202,7 @@ export default function AuditPage() {
   ]
 
   return (
-    <div className="page">
+    <div className="page page-wide">
       <header className="page-head">
         <div>
           <h1>{t('audTitle')}</h1>

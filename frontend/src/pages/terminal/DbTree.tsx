@@ -298,7 +298,13 @@ export function DbTree({
           <div key={g.key}>
             {/* 第一层是环境。圆点/徽章带的是它所属**分层**的颜色 —— 分层不再单占一层,
                 而"这些里面哪个是生产"这条线索是这个布局唯一不能丢的。 */}
-            <div className={clsx('tv-env', g.dot !== 'danger' && 'muted')} title={g.hint} onClick={() => toggle(g.key)}>
+            {/* 一台实例都没有的环境仍然列出来(它证明"这一层是空的",而不是漏了),
+                但压暗一档 —— 让有实例的那几行先被看见。 */}
+            <div
+              className={clsx('tv-env', g.dot !== 'danger' && 'muted', !g.count && 'vacant')}
+              title={g.hint}
+              onClick={() => toggle(g.key)}
+            >
               {isOpen(g.key) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               {g.tierCode
                 ? <span className={clsx('tv-envbadge', g.dot)}>{g.tierCode.toUpperCase()}</span>

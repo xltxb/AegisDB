@@ -192,6 +192,10 @@ a { color: inherit; text-decoration: none; }
    这道多余的缩进去掉。上限值本身不变 —— 它们是排版决定,不是自适应问题。 */
 .page { max-width: 1120px; }
 .page-narrow { max-width: 960px; }
+/* 表格型页面的宽版:列多的表(审计日志 7 列)在 1120px 里,命令列只分得到 281px,
+   一条 SQL 只看得到开头。不做成 100%:2560px 的屏上一行拉满整个桌面,视线从命令
+   扫到结果要横跨一屏,比窄更难看。 */
+.page-wide { max-width: 1600px; }
 
 @media (max-width: 768px) {
   /* .page-head 在窄屏折成两行:标题独占一行,.grow(动作区)让到下一行。
@@ -323,6 +327,9 @@ a { color: inherit; text-decoration: none; }
   height: 36px; padding: 0 16px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--border-default); background: var(--surface-card); color: var(--text-body);
   font: 600 12.5px var(--font-body); display: inline-flex; align-items: center; gap: 7px;
+  /* 动作区挤的时候,按钮该被推窄或被挤出可视区,而不是把"全部风险"折成两行 ——
+     36px 的固定高度装不下两行,折了就是上下各切掉一截。 */
+  white-space: nowrap;
   transition: all var(--dur-fast, .15s) var(--ease-out, ease);
 }
 .c-btn:hover:not(:disabled) { border-color: var(--accent-subtle-border); color: var(--accent-text); }
@@ -1166,15 +1173,39 @@ a { color: inherit; text-decoration: none; }
 .is-muted { opacity: .5; }
 
 /* ============ 审计日志 ============ */
+
+/* 这张表是往回翻着扫的:一屏能看到多少条,直接决定"某人某时动了什么"要翻几屏。
+   默认的 13px 行距一屏只放得下 12 条,这里压到 22 条左右。只覆盖审计页,别的
+   表格该松还是松 —— 它们一屏本来就放得下。 */
+.page-wide .c-trow { padding: 7px 18px; }
+.page-wide .c-thead { padding: 9px 18px; }
+/* 行一密,横向扫就容易串行。斑马纹压到几乎看不见:它是给余光用的,不是给眼睛看的,
+   重了会把表面搅得很吵。 */
+.page-wide .c-trow:nth-child(even) { background: var(--surface-sunken); }
+.page-wide .c-trow.clickable:hover { background: var(--accent-subtle); }
+/* 时间是定长的,没有任何理由折行 —— 折了行高就白压了。 */
+.page-wide .c-td.mono { white-space: nowrap; }
+
 /* 绝对起止时间。两个原生控件挤在一个描边框里,读起来才像"一段区间"而不是两项设置。 */
 .aud-range {
-  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px;
+  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px;
   border: 1px solid var(--border-default); border-radius: 10px;
+  background: var(--surface-card);
 }
+/* 原生 datetime-local 自带一套和设计系统无关的外观(浅色底、系统字体、宽得离谱的
+   占位 mm/dd/yyyy --:-- --)。这里不另造一个日期选择器,只把它按 token 重画:
+   字体、颜色、宽度收进来,日历图标跟着主题走。 */
 .aud-range input {
   border: 0; outline: none; background: transparent; color: var(--text-body);
-  font: 500 12px var(--font-mono); padding: 0; cursor: pointer;
+  font: 500 11.5px var(--font-mono); padding: 0; cursor: pointer;
+  width: 142px; color-scheme: light dark;
 }
+.aud-range input::-webkit-calendar-picker-indicator {
+  opacity: .45; cursor: pointer; padding: 0; margin: 0;
+  transition: opacity var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.aud-range input:hover::-webkit-calendar-picker-indicator { opacity: .8; }
+.aud-range input:focus-visible { color: var(--accent-text); }
 .aud-range .dash { color: var(--text-faint); }
 .aud-range .clr {
   display: grid; place-items: center; border: 0; background: transparent;
@@ -2110,6 +2141,40 @@ a { color: inherit; text-decoration: none; }
 .tv-collapse:hover { color: var(--accent-text); }
 .tv-insp .c-badge { margin: 0 16px 14px; align-self: flex-start; }
 .tv-insp .term-kv dd { display: flex; align-items: center; gap: 5px; }
+/* 字段之间收紧一档:这一栏是"扫一眼确认自己在哪"的,不是读的。
+   标签与值的层级靠字重和颜色拉开,不靠间距。 */
+.tv-insp .term-kv { gap: 9px; }
+
+/* ---- 预检 ----
+   面板标题里"风险检查"那半句的落点。和上面的执行上下文用一条分隔线隔开:
+   上半是"我在哪",下半是"这条能不能跑",两件事。 */
+.tv-preview {
+  /* 不用 margin-top: auto 顶到底:那会在执行上下文和预检之间豁开一片 400px 的空,
+     两块本来该是连着读的。留白留在整栏下方,不留在中间。 */
+  padding: 13px 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.tv-preview-head {
+  font: 600 10.5px var(--font-mono); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+/* 待命/判定中/预检失败共用:都是"现在还没有结论"的状态,不该长得像结论。 */
+.tv-preview-idle { margin: 0; font: 400 11.5px/1.6 var(--font-body); color: var(--text-faint); }
+.tv-preview-verdict { display: flex; align-items: center; gap: 8px; }
+.tv-preview-act { font: 600 12px var(--font-body); color: var(--text-muted); }
+.tv-preview-act.a-approve { color: var(--warning-text); }
+.tv-preview-act.a-deny { color: var(--danger-text); }
+.tv-preview-act.a-allow { color: var(--success-text); }
+.tv-preview-rule {
+  margin: 0; font: 500 11.5px/1.65 var(--font-body); color: var(--text-body);
+  padding: 8px 10px; border-radius: 9px; background: var(--surface-sunken);
+}
+.tv-preview-rule .k {
+  display: block; margin-bottom: 2px;
+  font: 600 10px var(--font-mono); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em;
+}
 
 /* 进入生产的确认里那一行目标:环境 / 实例 / 库 —— 弹窗问的就是这三样。 */
 .tv-dtarget { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
@@ -2178,6 +2243,10 @@ a { color: inherit; text-decoration: none; }
 }
 .tv-env:hover { background: var(--surface-card); }
 .tv-env.muted { color: var(--text-muted); }
+/* 0 台的环境:留着,但让位。整行压到 .55,连它的徽章和计数一起 —— 只压文字的话
+   徽章仍然是满色的,反而更跳。 */
+.tv-env.vacant { opacity: .55; }
+.tv-env.vacant:hover { opacity: 1; }
 .tv-envbadge {
   padding: 1px 6px; border-radius: 5px; font: 700 9.5px var(--font-mono);
   background: var(--surface-card); color: var(--text-muted);
@@ -2209,7 +2278,13 @@ a { color: inherit; text-decoration: none; }
   font: 500 12.5px var(--font-body); color: var(--text-body); cursor: pointer;
 }
 .tv-inst:hover { background: var(--surface-card); }
-.tv-inst.active { background: var(--accent-subtle); color: var(--accent-text); }
+/* 当前会话所在的实例。淡背景在深色主题下跟 hover 几乎分不出来,而"我正连着哪一台"
+   是这一栏最该一眼看到的事 —— 再给一道左侧强调条。用 inset 阴影不用 border:
+   border 会把这一行往右挤 3px,选中时整行跳一下。 */
+.tv-inst.active {
+  background: var(--accent-subtle); color: var(--accent-text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .tv-tag { margin-left: auto; padding: 1px 6px; border-radius: 5px; font: 600 9.5px var(--font-mono); }
 .tv-tag.danger { background: var(--danger-subtle); color: var(--danger-text); }
 .tv-tag.warn { background: var(--warning-subtle); color: var(--warning-text); }
