@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
@@ -33,13 +33,27 @@ interface CompileReport {
 }
 
 /**
+ * 一个对象在查询缓存里的身份。
+ *
+ * 调用方拿同一个函数当组件的 `key`(见 `pages/terminal/index.tsx`),于是"换一个对象"
+ * 就是"换一个组件实例" —— 上一个的编译结论和复制状态跟着旧实例一起走,不必在
+ * effect 里一样样擦干净。两处必须用同一个函数:缓存的身份和组件的身份说的是同一
+ * 件事,各写一份就会有"换了对象、编译结论还挂在屏幕上"这种谁也说不清的错位。
+ */
+export const sourceKey = (t: SourceTarget) =>
+  ['object-source', t.cid, t.scope, t.type, t.name, t.database ?? ''] as const
+
+/**
  * 一个对象的定义,只读。
  *
  * 表看的是建表 DDL,函数/存储过程/包/触发器看的是源码 —— 两者走的是同一个接口,
  * 区别只在 type。高亮用的是把每个字符都转义过再套 span 的 `highlightSqlHtml`,
  * 所以服务端返回的 DDL 走 dangerouslySetInnerHTML 是安全的。
+ *
+ * **由调用方在有对象时才挂载,并以 `sourceKey` 为 key**。"当前在看哪一个"因此是
+ * 调用方的状态,不是这个组件要额外应付的一种空态。
  */
-export function SourceViewer({ target, onClose }: { target: SourceTarget | null; onClose: () => void }) {
+export function SourceViewer({ target, onClose }: { target: SourceTarget; onClose: () => void }) {
   const { t } = useTranslation()
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
@@ -47,29 +61,18 @@ export function SourceViewer({ target, onClose }: { target: SourceTarget | null;
   const [report, setReport] = useState<CompileReport | null>(null)
   const [compileErr, setCompileErr] = useState('')
 
-  const key = target
-    ? (['object-source', target.cid, target.scope, target.type, target.name, target.database ?? ''] as const)
-    : (['object-source', 'none'] as const)
+  const key = sourceKey(target)
 
   const q = useQuery({
     queryKey: key,
-    queryFn: () => connectionsApi.objectSource(target!.cid, target!.scope, target!.type, target!.name, target!.database ?? ''),
-    enabled: !!target,
+    queryFn: () => connectionsApi.objectSource(target.cid, target.scope, target.type, target.name, target.database ?? ''),
     retry: false,
     staleTime: 60_000,
   })
 
-  // 换一个对象就把上一个的编译结论丢掉 —— 留着它会让人以为这一个刚编译过。
-  useEffect(() => {
-    setReport(null)
-    setCompileErr('')
-    setCopied(false)
-    setCopyErr(false)
-  }, [key.join('|')])
-
   const compile = useMutation({
-    mutationFn: () => connectionsApi.compileObject(target!.cid, {
-      scope: target!.scope, type: target!.type, name: target!.name, database: target!.database ?? '',
+    mutationFn: () => connectionsApi.compileObject(target.cid, {
+      scope: target.scope, type: target.type, name: target.name, database: target.database ?? '',
     }),
     onSuccess: (env) => {
       if (env.code !== CODE_OK) { setCompileErr(env.msg || t('objCompileFail')); return }
@@ -79,8 +82,6 @@ export function SourceViewer({ target, onClose }: { target: SourceTarget | null;
     },
     onError: (e: Error) => setCompileErr(e.message || t('objCompileFail')),
   })
-
-  if (!target) return null
 
   const text = q.data?.source ?? ''
   const canCompile = target.oracle && COMPILABLE.includes(target.type)

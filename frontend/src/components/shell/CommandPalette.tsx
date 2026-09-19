@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
@@ -33,11 +33,13 @@ export interface PalettePage {
  * 刻意**不**做全局全文检索:后端没有那样一个接口,凑一个出来只能在前端已经拉到的
  * 几页数据里翻 —— 那会变成一个"搜得到的东西取决于你刚才打开过哪一页"的搜索框,
  * 比没有搜索更坏。
+ *
+ * **由外壳在打开时才挂载**(`{open && <CommandPalette …/>}`)。上一次搜的词因此不会
+ * 留在框里 —— 下一次打开是一次新的挂载,看见的不会是一份过期的结果。
  */
 export default function CommandPalette({
-  open, onClose, pages, instanceTo,
+  onClose, pages, instanceTo,
 }: {
-  open: boolean
   onClose: () => void
   pages: PalettePage[]
   /** 选中一台实例后去哪一页;空字符串 = 这个人没有能落脚的实例页,不收实例。 */
@@ -50,16 +52,8 @@ export default function CommandPalette({
 
   const { data: conns } = useQuery({
     ...connectionsQueryOptions(),
-    enabled: open && !!instanceTo,
+    enabled: !!instanceTo,
   })
-
-  // 每次打开都从空开始:上一次搜的词留在框里,下一次打开看见的是一份过期的结果。
-  useEffect(() => {
-    setQ('')
-    setCursor(0)
-  }, [open])
-
-  if (!open) return null
 
   const needle = q.trim().toLowerCase()
 

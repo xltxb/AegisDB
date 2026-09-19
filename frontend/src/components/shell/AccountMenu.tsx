@@ -68,7 +68,7 @@ export default function AccountMenu() {
         </>
       )}
 
-      <MfaModal open={mfaOpen} bound={bound} onClose={() => setMfaOpen(false)} />
+      {mfaOpen && <MfaModal bound={bound} onClose={() => setMfaOpen(false)} />}
     </>
   )
 }

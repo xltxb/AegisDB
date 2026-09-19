@@ -14,36 +14,41 @@ import { useUIStore } from '@/stores/ui'
  * 三样东西一起给:二维码、明文密钥、一个 6 位码输入框。二维码扫不了(远程桌面、
  * 摄像头被公司策略关掉)的人照样能把密钥手打进验证器 —— 只给二维码等于把一部分
  * 人挡在门外,而这道门后面是生产库。
+ *
+ * **由调用方在打开时才挂载**(`{open && <MfaModal …/>}`)。上一次输错的码和上一次的
+ * 报错因此不会留到下一次 —— 那是一次新的挂载,而不是同一个组件被人手动擦干净。
  */
 export default function MfaModal({
-  open, bound, onClose,
-}: { open: boolean; bound: boolean; onClose: () => void }) {
+  bound, onClose,
+}: { bound: boolean; onClose: () => void }) {
   const { t } = useTranslation()
   const notify = useUIStore((s) => s.notify)
-  const setup = useMfaSetup(open && !bound)
+  const setup = useMfaSetup(!bound)
   const enable = useEnableMfa()
   const disable = useDisableMfa()
 
   const [code, setCode] = useState('')
-  const [qr, setQr] = useState('')
+  const [qr, setQr] = useState<{ uri: string; png: string } | null>(null)
   const [err, setErr] = useState('')
 
-  // 每次开合都从头开始:上一次输错的码和上一次的报错不该留到下一次。
-  useEffect(() => {
-    setCode('')
-    setErr('')
-  }, [open])
+  const otpauthUri = setup.data?.otpauthUri
 
-  /** otpauth URI → 二维码图。渲染是异步的,组件先关掉就把结果丢掉。 */
+  /**
+   * otpauth URI → 二维码图。渲染是异步的,组件先关掉就把结果丢掉。
+   *
+   * 渲染结果连着**它是为哪个 URI 画的**一起存,屏幕上那张图按当前 URI 认领。换了
+   * URI 时认领不上,自然就什么也不显示 —— 不必先同步清一次 state 再等异步填回来。
+   */
   useEffect(() => {
-    const uri = setup.data?.otpauthUri
-    if (!uri) { setQr(''); return }
+    if (!otpauthUri) return
     let alive = true
-    toDataURL(uri, { margin: 1, width: 176 })
-      .then((d) => { if (alive) setQr(d) })
-      .catch(() => { if (alive) setQr('') })
+    toDataURL(otpauthUri, { margin: 1, width: 176 })
+      .then((d) => { if (alive) setQr({ uri: otpauthUri, png: d }) })
+      .catch(() => { if (alive) setQr({ uri: otpauthUri, png: '' }) })
     return () => { alive = false }
-  }, [setup.data?.otpauthUri])
+  }, [otpauthUri])
+
+  const qrPng = qr && qr.uri === otpauthUri ? qr.png : ''
 
   const busy = enable.isPending || disable.isPending
 
@@ -66,7 +71,7 @@ export default function MfaModal({
 
   return (
     <Modal
-      open={open}
+      open
       width={420}
       title={bound ? t('mfaEnabledTitle') : t('mfaModalTitle')}
       sub={bound ? t('mfaEnabledDesc') : t('mfaScan')}
@@ -82,7 +87,7 @@ export default function MfaModal({
         <div className="mfa-enroll">
           <div className="mfa-qr">
             {setup.isLoading && <Loading />}
-            {qr && <img src={qr} alt="" />}
+            {qrPng && <img src={qrPng} alt="" />}
           </div>
           <div className="mfa-key">
             <div className="mfa-key-l">{t('mfaSecretLabel')}</div>
