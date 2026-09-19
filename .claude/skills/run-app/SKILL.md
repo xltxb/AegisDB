@@ -77,13 +77,25 @@ Every response is enveloped as `{code, msg, data}`; `code: 0` is success, and an
 **The seed creates no connections** — on a fresh database `/connections` returns `data: []`. Create them yourself, one per tier, because **judgement depends on the tier**:
 
 ```bash
+mkdir -p ~/.aegisdb-demo
 for E in dev prod; do
   curl -s -X POST http://localhost:8080/api/v1/connections \
     -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
     -d "{\"name\":\"demo-$E\",\"engine\":\"sqlite\",\"host\":\"local\",\"port\":0,
          \"env\":\"$E\",\"policy\":\"audit-only\",\"defaultRole\":\"dba_l2\",
-         \"database\":\"$SCRATCH/demo-$E.db\"}"
+         \"database\":\"$HOME/.aegisdb-demo/demo-$E.db\"}"
 done
+```
+
+**Put the fixture files in `~/.aegisdb-demo/`, not in the scratchpad.** The connection row outlives the session — it is stored in `vela_gateway`, not on disk next to the run — so a `database` under `$SCRATCH` points into a directory that gets cleaned up, and the next session inherits two connections that look perfectly healthy in the list and fail the moment a session opens on them. Write `$HOME/...`, not `~/...`: the value is stored verbatim and handed to the sqlite driver, which does not expand a tilde and will happily create a directory literally named `~`.
+
+Already have connections pointing somewhere temporary? `PUT /connections/:id` moves them (`PATCH` only takes `tags` / `policy` / `status`). It needs the whole `ConnectionUpdateReq` — `name`, `engine`, `host`, `env`, `policy` are all required — but `port`, `defaultRole` and `status` are preserved across the update:
+
+```bash
+curl -s -X PUT http://localhost:8080/api/v1/connections/2 \
+  -H "Authorization: Bearer $TOK" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"demo-prod\",\"engine\":\"sqlite\",\"host\":\"local\",\"env\":\"prod\",
+       \"policy\":\"audit-only\",\"database\":\"$HOME/.aegisdb-demo/demo-prod.db\"}"
 ```
 
 On an otherwise untouched database these land as **id 1 `demo-dev` (dev)** and **id 2 `demo-prod` (prod)**. The risk dictionary is `off` on dev, so a DROP that sails through on id 1 is gated on id 2 — measured, not assumed:
@@ -182,6 +194,6 @@ dropdb vela_gateway && createdb vela_gateway   # next launch migrates and seeds 
 
 Only when `vela_gateway` is yours to destroy. If you launched an isolated instance because :8080 was busy (§1), drop **that** database instead — the one on :8080 has someone's work in it.
 
-Two things in `backend/` are **not** gateway state and must survive that: `target.db` is the demo *target* database (managed data, not the store), and `uploads/` / `export/` hold whatever a run wrote there.
+Two things in `backend/` are **not** gateway state and must survive that: `target.db` is the demo *target* database (managed data, not the store), and `uploads/` / `export/` hold whatever a run wrote there. `~/.aegisdb-demo/` is the same kind of thing — target data, not store — and dropping `vela_gateway` does not touch it. What a drop *does* remove is the connection rows pointing at those files, so after a re-seed you recreate the two connections (§3) against the fixtures still sitting there.
 
 Leave `vela_test` alone — that is the test suite's database, not this one's.
