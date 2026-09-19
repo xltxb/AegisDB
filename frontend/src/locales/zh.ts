@@ -869,7 +869,7 @@ export const zh = {
   setOsc: '在线表结构变更',
   setOscSub: '大表加索引时用影子表 + 分块拷贝代替原生 DDL(ADR 0011)',
   setOscEnabled: '允许发起在线变更',
-  setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。**它打不开这个功能** —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
+  setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。它打不开这个功能 —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
 
   setOpenApi: '开放接口',
   setOpenApiSub: '外部系统调用网关所用的凭据',

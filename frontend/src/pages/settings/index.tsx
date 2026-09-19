@@ -20,7 +20,7 @@ import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 import type { SettingsResp } from '@/types'
 
 /**
- * 子导航的八个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
+ * 子导航的九个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
  */
 const SECTIONS = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
