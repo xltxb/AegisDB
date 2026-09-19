@@ -143,6 +143,29 @@ func (f *execFixture) reloadStage() *model.ReleaseStage {
 	return st
 }
 
+// waitForCursor 轮询直到阶段的 exec_cursor 达到 want,或者超时。
+//
+// resumeReleaseAsync 把"续跑"扔到另一条 goroutine 上(见 pipeline_osc.go 的注释:
+// 不能在 OnFinish 的同步调用链里等 driveRelease 跑完剩下的阶段,否则 IsRunning/
+// Abort 会对一个已经结束的任务说谎)。测这一段只能等它,而不是假设一次固定的
+// 睡眠一定够 —— 等法和 osc/runner_test.go 的 waitForStatus/waitForFinish 是同一
+// 个套路:等不到就带着最后一次读到的值失败,方便看出它卡在哪,而不是用一个
+// sleep 赌时间赌够了。
+func (f *execFixture) waitForCursor(want int, timeout time.Duration) *model.ReleaseStage {
+	f.t.Helper()
+	deadline := time.Now().Add(timeout)
+	var last *model.ReleaseStage
+	for time.Now().Before(deadline) {
+		last = f.reloadStage()
+		if last.ExecCursor == want {
+			return last
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	f.t.Fatalf("%v 内游标没有到 %d,卡在 %d", timeout, want, last.ExecCursor)
+	return nil
+}
+
 func (f *execFixture) reloadRelease() *model.Release {
 	f.t.Helper()
 	rel, err := f.repo.GetRelease(f.rel.ID)

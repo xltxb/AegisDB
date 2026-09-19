@@ -115,11 +115,15 @@ func (s *Services) routeStatement(rel *model.Release, conn *model.Connection, sq
 //
 // 它只做一件事:把等着这个任务的那个阶段推下去。反查不到就直接返回 —— 绝大多数
 // 迁移是从 OSC 控制台手工发起的,不属于任何发布单,这是正常情况而不是错误。
+// jobID <= 0 同样直接返回:0 是 osc_job_id 列的默认值,绝大多数阶段都是 0,
+// 按它反查会命中"随便一个没在等待的阶段",而不是"没人在等"。
 //
-// Runner 在自己的退出路径上**同步**调它(见 osc.Runner.OnFinish 的注释):这里做的
-// 每一步都要快,顶多几次 map 形式的 Updates 加一次按主键的 First/读取。
+// Runner 在自己的退出路径上**同步**调它(见 osc.Runner.OnFinish 的注释),它的
+// defer(把任务从 running 表里摘掉、cancel())要等这里返回才轮到。这里只做
+// 几次 map 形式的 Updates 加一次按主键的读取,快;但**推进发布单不能算在
+// 这笔账里** —— 见下面 driveRelease 那一行的注释。
 func (s *Services) OnOSCJobFinished(j *osc.Job) {
-	if j == nil {
+	if j == nil || j.ID <= 0 {
 		return
 	}
 	st, err := s.Repo.StageWaitingOnOSCJob(j.ID)
@@ -137,7 +141,7 @@ func (s *Services) OnOSCJobFinished(j *osc.Job) {
 		"status":      model.RunPending,
 		"log":         st.Log + fmt.Sprintf("· 迁移任务 #%d 完成\n", j.ID),
 	})
-	s.driveRelease(st.ReleaseID)
+	s.resumeReleaseAsync(st.ReleaseID)
 }
 
 // failStageForFinishedOSCJob 处理迁移失败/被中止的那一条路。
@@ -160,12 +164,39 @@ func (s *Services) failStageForFinishedOSCJob(st *model.ReleaseStage, j *osc.Job
 		"finished_at": time.Now(),
 	})
 	if st.OnFailure == model.OnFailureContinue {
-		s.driveRelease(st.ReleaseID)
+		s.resumeReleaseAsync(st.ReleaseID)
 		return
 	}
+	// 收尾是终结动作,不会再往下级联到别的阶段,同步做就够了 —— 摘要要和
+	// driveRelease 自己遇到阶段失败时给的同等信息量:st.Log 是这个阶段暂停前
+	// 已经写下的全部历史,note 是这一次新追加的一行,只传 note 会让人看到一句
+	// 没头没尾的失败摘要。
 	rel, err := s.Repo.GetRelease(st.ReleaseID)
 	if err != nil {
 		return
 	}
-	s.finishRelease(rel, model.RunFailed, fmt.Sprintf("阶段「%s」失败: %s", st.Name, clip(note, 300)))
+	s.finishRelease(rel, model.RunFailed, fmt.Sprintf("阶段「%s」失败: %s", st.Name, clip(st.Log+note, 300)))
+}
+
+// resumeReleaseAsync 把"接着跑这张发布单"扔到另一条 goroutine 上。
+//
+// **不能在 OnOSCJobFinished 里同步调 driveRelease**:它会把这张单剩下的全部阶段
+// 跑一遍 —— 剩下的语句若没到 OSC 阈值,走 Executor.Run(超时默认 asyncExecTimeout
+// 的 5400 秒);若还有一条命中阈值,routeStatement 会再同步做一次连接、Gather、
+// Preflight。而这个回调正挂在迁移的退出路径上(osc.Runner.finish 同步调用它,
+// run() 的 defer —— 把任务从 running 表里摘掉、cancel() —— 要等它返回才轮到)。
+// 同步调用的话,回调阻塞多久,IsRunning(jobID) 和 Abort(jobID) 就对一个已经在库里
+// 写成终态的任务说多久的谎:运维那段时间看不出它已经结束,Abort 也叫不停一个
+// 早就跑完的东西。这正是 osc.Runner.OnFinish 字段注释警告过的情况,而把它接上的
+// 正是这次的 wiring,所以必须在这里断开。
+//
+// 用 guardRelease 包一层(而不是裸 `go s.driveRelease(...)`):driveRelease 本身
+// 没有 panic 恢复,裸起一个 goroutine 的话,里面一次 panic 会直接打倒整个进程。
+// dispatchReleaseJob 恢复运行也是同一层包装,这里沿用而不是另起一套。
+//
+// driveRelease 本来就是可重入的(审批回调、超时巡检都在调它),异步跑它不引入
+// 新的竞争;进程中途退出时未跑完的那次会丢,而那与"网关重启后发布单停在中间态"
+// 是同一种残局,由残局机制负责被看见。
+func (s *Services) resumeReleaseAsync(releaseID int64) {
+	go s.guardRelease(releaseID, func() { s.driveRelease(releaseID) })
 }

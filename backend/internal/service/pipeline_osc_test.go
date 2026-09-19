@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"velagateway/internal/model"
 	"velagateway/internal/osc"
@@ -139,7 +140,39 @@ func TestStageExecute_StopsAtTheFirstOSCStatementAndLeavesTheRestAlone(t *testin
 	}
 }
 
+func TestOnOSCJobFinished_MarksTheOSCStatementDoneSynchronously(t *testing.T) {
+	// 这条只钉 OnOSCJobFinished 自己在返回之前同步写下的那部分,不依赖
+	// resumeReleaseAsync 那个 goroutine 有没有跑完 —— 后半段("续跑第二条")
+	// 是另一条用例的事,见 TestOnOSCJobFinished_ResumesTheReleaseAfterASuccessfulMigration。
+	//
+	// 拆成两条是因为续跑被挪到了异步的 goroutine 里(见 pipeline_osc.go 的
+	// resumeReleaseAsync 注释:同步调用会让 IsRunning/Abort 在回调阻塞期间对一个
+	// 已经结束的任务说谎),这条要断言的状态在 OnOSCJobFinished 返回的那一刻就已经
+	// 落地,不该被下一条用例里"等 driveRelease 跑完"的轮询拖着一起变得不确定。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c); UPDATE t SET b=2")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 33
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage) // 第一条挂起在任务 33 上
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 33, Status: osc.JobDone})
+
+	got := fx.reloadStage()
+	if got.OSCJobID != 0 {
+		t.Errorf("任务结束了,阶段还挂着 %d", got.OSCJobID)
+	}
+	if got.ExecCursor != 1 {
+		t.Errorf("游标是 %d,期望 1 —— 走 OSC 的那条要立刻算完成,不用等 driveRelease 续跑", got.ExecCursor)
+	}
+	if !strings.Contains(got.Log, "33") {
+		t.Errorf("日志里没有点名完成的那个任务:\n%s", got.Log)
+	}
+}
+
 func TestOnOSCJobFinished_ResumesTheReleaseAfterASuccessfulMigration(t *testing.T) {
+	// 续跑发生在 resumeReleaseAsync 起的另一条 goroutine 上(同步调 driveRelease
+	// 会让这个回调阻塞到剩下的阶段全部跑完 —— 见 pipeline_osc.go 的注释),所以这里
+	// 只能等,用轮询直到超时,而不是假设它在某个固定的睡眠之后一定跑完。
 	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c); UPDATE t SET b=2")
 	fx.conn.Engine = "mysql"
 	fx.rowsOfTable = 8_000_000
@@ -148,13 +181,10 @@ func TestOnOSCJobFinished_ResumesTheReleaseAfterASuccessfulMigration(t *testing.
 
 	fx.svc.OnOSCJobFinished(&osc.Job{ID: 31, Status: osc.JobDone})
 
-	got := fx.reloadStage()
+	// 两条都完成了:走 OSC 的那条由回调算完成,第二条由 driveRelease 异步续跑。
+	got := fx.waitForCursor(2, 2*time.Second)
 	if got.OSCJobID != 0 {
 		t.Errorf("任务结束了,阶段还挂着 %d", got.OSCJobID)
-	}
-	// 两条都完成了:走 OSC 的那条由回调算完成,第二条由 driveRelease 续跑。
-	if got.ExecCursor != 2 {
-		t.Errorf("游标是 %d,期望 2(两条都已完成)", got.ExecCursor)
 	}
 	// **下发的必须是第二条,不是第一条。** 这才是"走 OSC 的那条被算作完成"的证据:
 	// 游标没推上去的话,driveRelease 会把那条 ALTER 再执行一遍 —— 而它已经由
