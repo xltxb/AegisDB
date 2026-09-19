@@ -11,6 +11,7 @@ import { connectionsQueryOptions, connectionSchemaQueryOptions } from '@/api/mod
 import { terminalApi } from '@/api/modules/terminal'
 import { CODE_MFA_REQUIRED } from '@/api/codes'
 import { translateMetaSql, translateDescribe, type NoticeRef } from '@/lib/metaCommand'
+import { clipWidth, dispWidth } from '@/lib/textWidth'
 import { classifyExecEnvelope, type ExecEnvelope } from '@/lib/execOutcome'
 import { renderRule as renderRuleIn, renderOutText } from '@/lib/ruleText'
 import { ANSI, c, isSelect, synthTable, buildTable, renderTable, renderVertical } from '@/lib/sqlResult'
@@ -22,7 +23,7 @@ import { useEnvTier } from '@/hooks/useEnvTier'
 import { useSnippets, snippetsBySlot } from '@/hooks/useSnippets'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
-import { Badge } from '@/components/common/Badge'
+import { Badge, type BadgeTone } from '@/components/common/Badge'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
 import { DbTree } from './DbTree'
@@ -69,6 +70,22 @@ type Side = 'tree' | 'insp'
  * 单会话(每次连一台实例),不是多标签 —— 判断"进入生产要不要再问一次"因此按
  * **实例**算,这是 Vue 版"每个标签页问一次"在这个结构下的等价物。
  */
+/**
+ * 提示符里库名的显示上限(终端列数)。
+ *
+ * 38 格的 sqlite 路径 + 连接名,提示符本身就吃掉半行;留 28 格,常见的
+ * MySQL/PG 库名(orders、order_center_2025)仍然是原样显示,不触发截断。
+ */
+const PROMPT_DB_MAX = 28
+
+/** 预检结果的呈现:档位色、档位名、判定名。与审计页各自一份 —— 两张表的口径
+ *  相同但命名空间不同(aud* / term*),合并会让其中一页的文案被另一页牵着走。 */
+const PREVIEW_TONE: Record<string, BadgeTone> = { high: 'danger', mid: 'warning' }
+const PREVIEW_RISK: Record<string, string> = { high: 'termRiskHigh', mid: 'termRiskMid', low: 'termRiskLow' }
+const PREVIEW_ACTION: Record<string, string> = {
+  allow: 'termPreviewAllow', approve: 'termPreviewApprove', deny: 'termPreviewDeny',
+}
+
 export default function TerminalPage() {
   const { t, i18n } = useTranslation()
   // 动态 key(服务端给的 notice id、分层代码)要一个宽松签名的 t。
@@ -129,6 +146,37 @@ export default function TerminalPage() {
   const [zen, setZen] = useState(false)
   // ≤1280 时检查器变成覆盖层,默认收着 —— 宽屏下它是第三栏,这个状态用不上。
   const [inspOpen, setInspOpen] = useState(false)
+
+  // ---------------------------------------------------------------- 预检
+  //
+  // 面板标题一直写着"执行上下文 · 风险检查",但在这之前只有前半句:判定要等命令
+  // 真的发出去、被拦下来了才知道。生产实例上这个落差不太好 —— 人是照着这块面板
+  // 判断"这条能不能直接跑"的。
+  //
+  // 这里在输入的同时先问一次同一个接口(/risk/check,与提交时走的是同一条判定),
+  // 但它只是预告:真正作数的仍然是 handleSubmit 里那一次 —— 中间可能切了库、
+  // 改了规则,或者执行窗口刚好开了。
+  const [typedLine, setTypedLine] = useState('')
+  const [previewSql, setPreviewSql] = useState('')
+  useEffect(() => {
+    // 防抖:不防的话每按一个键就是一次判定请求。350ms 是"打完一个词停顿一下"的
+    // 量级 —— 再短了在连续输入时纯属浪费,再长了人已经在等它说话。
+    const id = setTimeout(() => setPreviewSql(typedLine.trim()), 350)
+    return () => clearTimeout(id)
+  }, [typedLine])
+  const previewReady = previewSql.replace(/;+$/, '').trim()
+  const preview = useQuery({
+    // sql 进 queryKey,于是竞态由 TanStack 自己解决:慢回来的旧请求属于旧 key,
+    // 不会盖掉新判定。面板收起时不查 —— 那时没人看得见它。
+    queryKey: ['risk-preview', connId, database, previewReady] as const,
+    queryFn: () => terminalApi.riskCheck(connId, previewReady, database),
+    // 收起面板(或 zen 全屏)就不查:那时没人看得见它,再发请求纯属浪费。不拿
+    // 屏宽判断 —— 检查器的常驻档是 1281,和 lib/breakpoints 统一的 1080 不是
+    // 同一条线,引第三套口径不如直接问"它现在收着没有"。
+    enabled: !inspCollapsed && !zen && connId > 0 && previewReady.length >= 3,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
   const [resizing, setResizing] = useState<Side | null>(null)
   const [gridView, setGridView] = useState(localStorage.getItem(GRID_VIEW_KEY) === '1')
   const [gridH, setGridH] = useState(clampH(Number(localStorage.getItem(GRID_H_KEY)) || GRID_H_DEFAULT))
@@ -175,14 +223,33 @@ export default function TerminalPage() {
 
   // ---------------------------------------------------------------- 提示符
   // 提示符里写着当前的库,于是回滚里的每一条命令都记着它是对哪个库跑的。
+  //
+  // 但库名长起来是没有上限的:sqlite 的"库名"就是一条绝对路径,
+  // /Users/abiu/.aegisdb-demo/demo-prod.db 占 38 格,每条命令前重复一遍,后面的
+  // 语句于是必然折行 —— 为了记住是哪个库,反倒看不清命令本身。超过 PROMPT_DB_MAX
+  // 就只留末段:同一目录下的库本来就靠文件名区分,而完整路径在顶部工具条和右侧
+  // 执行上下文里都写着。
+  const promptDb = () => {
+    if (!database) return ''
+    if (dispWidth(database) <= PROMPT_DB_MAX) return database
+    const base = database.slice(database.lastIndexOf('/') + 1)
+    if (dispWidth(base) <= PROMPT_DB_MAX) return base
+    return clipWidth(base, PROMPT_DB_MAX - 1) + '…'
+  }
   const promptText = () => {
     const name = conn?.name ?? 'aegis'
-    const head = database
-      ? c(ANSI.green, name) + c(ANSI.gray, '/') + c(ANSI.cyan, database)
+    const db = promptDb()
+    const head = db
+      ? c(ANSI.green, name) + c(ANSI.gray, '/') + c(ANSI.cyan, db)
       : c(ANSI.green, name)
     return head + ' ' + ANSI.bold + c(ANSI.green, '❯') + ANSI.reset + ' '
   }
-  const promptLen = () => (conn?.name ?? 'aegis').length + (database ? database.length + 1 : 0) + 3
+  // 按显示宽度算,不是按字符数 —— lineEditor 拿这个值定位光标和算折行,而中文库名
+  // 一个字占两格。原先用 .length,中文库名下光标从第一个字起就偏。
+  const promptLen = () => {
+    const db = promptDb()
+    return dispWidth(conn?.name ?? 'aegis') + (db ? dispWidth(db) + 1 : 0) + 3
+  }
 
   // ---------------------------------------------------------------- 执行
   function execRest(sql: string, rsn: string, code = '') {
@@ -592,6 +659,7 @@ export default function TerminalPage() {
     contPromptLen: promptLen,
     onSubmit: handleSubmit,
     onChange: (line, cur) => {
+      setTypedLine(line)
       const word = wordAt(line, cur)
       const items = buildCandidates(word)
       setAc((prev) => ({ items, index: items.length ? Math.min(prev.index, items.length - 1) : 0, top: caretTop(), word }))
@@ -972,6 +1040,42 @@ export default function TerminalPage() {
             <div><dt>{t('wsStatusLabel')}</dt><dd><Activity size={12} /> {t(`ws_${session.status}`)}</dd></div>
           </dl>
           {danger && <Badge tone="danger">{t('termDangerTier')}</Badge>}
+
+          {/* 预检:标题里"风险检查"那半句,到这里才算兑现。 */}
+          <div className="tv-preview">
+            <div className="tv-preview-head">{t('termPreview')}</div>
+            {previewReady.length < 3 ? (
+              <p className="tv-preview-idle">{t('termPreviewIdle')}</p>
+            ) : preview.isFetching ? (
+              // 只认 isFetching:v5 里被 enabled 关掉的查询 isPending 同样是 true,
+              // 拿它当"正在查"会让面板永远停在"判定中"上 —— 一个不会结束的谎。
+              <p className="tv-preview-idle">{t('termPreviewChecking')}</p>
+            ) : preview.isError ? (
+              // 预检失败不拦人,也不假装没事:说清楚以执行时的判定为准。
+              <p className="tv-preview-idle">{t('termPreviewFailed')}</p>
+            ) : preview.data ? (
+              <>
+                <div className="tv-preview-verdict">
+                  <Badge tone={PREVIEW_TONE[preview.data.risk] ?? 'accent'}>
+                    {t(PREVIEW_RISK[preview.data.risk] ?? 'termRiskLow')}
+                  </Badge>
+                  <span className={clsx('tv-preview-act', `a-${preview.data.action}`)}>
+                    {t(PREVIEW_ACTION[preview.data.action] ?? 'termPreviewAllow')}
+                  </span>
+                </div>
+                {(() => {
+                  // 规则用 ref 按界面语言重讲一遍,认不出的 code 回落到服务端那句
+                  // 中文 —— 与终端里打的那条走同一套(见 lib/ruleText)。
+                  const rule = renderRule(preview.data.matchedRuleRef, preview.data.matchedRule)
+                  return rule ? (
+                    <p className="tv-preview-rule">
+                      <span className="k">{t('termPreviewRule')}</span>{rule}
+                    </p>
+                  ) : null
+                })()}
+              </>
+            ) : null}
+          </div>
         </aside>
       )}
 

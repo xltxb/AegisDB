@@ -2141,6 +2141,40 @@ a { color: inherit; text-decoration: none; }
 .tv-collapse:hover { color: var(--accent-text); }
 .tv-insp .c-badge { margin: 0 16px 14px; align-self: flex-start; }
 .tv-insp .term-kv dd { display: flex; align-items: center; gap: 5px; }
+/* 字段之间收紧一档:这一栏是"扫一眼确认自己在哪"的,不是读的。
+   标签与值的层级靠字重和颜色拉开,不靠间距。 */
+.tv-insp .term-kv { gap: 9px; }
+
+/* ---- 预检 ----
+   面板标题里"风险检查"那半句的落点。和上面的执行上下文用一条分隔线隔开:
+   上半是"我在哪",下半是"这条能不能跑",两件事。 */
+.tv-preview {
+  /* 不用 margin-top: auto 顶到底:那会在执行上下文和预检之间豁开一片 400px 的空,
+     两块本来该是连着读的。留白留在整栏下方,不留在中间。 */
+  padding: 13px 16px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.tv-preview-head {
+  font: 600 10.5px var(--font-mono); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+/* 待命/判定中/预检失败共用:都是"现在还没有结论"的状态,不该长得像结论。 */
+.tv-preview-idle { margin: 0; font: 400 11.5px/1.6 var(--font-body); color: var(--text-faint); }
+.tv-preview-verdict { display: flex; align-items: center; gap: 8px; }
+.tv-preview-act { font: 600 12px var(--font-body); color: var(--text-muted); }
+.tv-preview-act.a-approve { color: var(--warning-text); }
+.tv-preview-act.a-deny { color: var(--danger-text); }
+.tv-preview-act.a-allow { color: var(--success-text); }
+.tv-preview-rule {
+  margin: 0; font: 500 11.5px/1.65 var(--font-body); color: var(--text-body);
+  padding: 8px 10px; border-radius: 9px; background: var(--surface-sunken);
+}
+.tv-preview-rule .k {
+  display: block; margin-bottom: 2px;
+  font: 600 10px var(--font-mono); color: var(--text-faint);
+  text-transform: uppercase; letter-spacing: .06em;
+}
 
 /* 进入生产的确认里那一行目标:环境 / 实例 / 库 —— 弹窗问的就是这三样。 */
 .tv-dtarget { display: flex; align-items: baseline; gap: 8px; margin-bottom: 12px; }
@@ -2209,6 +2243,10 @@ a { color: inherit; text-decoration: none; }
 }
 .tv-env:hover { background: var(--surface-card); }
 .tv-env.muted { color: var(--text-muted); }
+/* 0 台的环境:留着,但让位。整行压到 .55,连它的徽章和计数一起 —— 只压文字的话
+   徽章仍然是满色的,反而更跳。 */
+.tv-env.vacant { opacity: .55; }
+.tv-env.vacant:hover { opacity: 1; }
 .tv-envbadge {
   padding: 1px 6px; border-radius: 5px; font: 700 9.5px var(--font-mono);
   background: var(--surface-card); color: var(--text-muted);
@@ -2240,7 +2278,13 @@ a { color: inherit; text-decoration: none; }
   font: 500 12.5px var(--font-body); color: var(--text-body); cursor: pointer;
 }
 .tv-inst:hover { background: var(--surface-card); }
-.tv-inst.active { background: var(--accent-subtle); color: var(--accent-text); }
+/* 当前会话所在的实例。淡背景在深色主题下跟 hover 几乎分不出来,而"我正连着哪一台"
+   是这一栏最该一眼看到的事 —— 再给一道左侧强调条。用 inset 阴影不用 border:
+   border 会把这一行往右挤 3px,选中时整行跳一下。 */
+.tv-inst.active {
+  background: var(--accent-subtle); color: var(--accent-text);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .tv-tag { margin-left: auto; padding: 1px 6px; border-radius: 5px; font: 600 9.5px var(--font-mono); }
 .tv-tag.danger { background: var(--danger-subtle); color: var(--danger-text); }
 .tv-tag.warn { background: var(--warning-subtle); color: var(--warning-text); }

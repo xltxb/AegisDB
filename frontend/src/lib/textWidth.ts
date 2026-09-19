@@ -32,6 +32,25 @@ export function dispWidth(s: string): number {
   return w
 }
 
+/**
+ * 从头截到最多 max 格,按码点走,不切开半个字符。
+ *
+ * 和 dispWidth 同一个口径,所以住在同一个文件里:按 slice(0, n) 截中文,截出来的
+ * 列数是字数的两倍,调用方按 n 算位置就全错了 —— 这正是本文件开头说的那种分叉。
+ * 宽字符跨过边界时宁可少一格(返回的串窄 1 格),也不吐出半个字符。
+ */
+export function clipWidth(s: string, max: number): string {
+  let w = 0
+  let out = ''
+  for (const ch of s) {
+    const cw = isWideChar(ch.codePointAt(0) || 0) ? 2 : 1
+    if (w + cw > max) break
+    w += cw
+    out += ch
+  }
+  return out
+}
+
 // 光标该怎么在字符串里挪一格 —— 按**字符**(码点),不是按 UTF-16 单元。
 //
 // 这两个函数和 dispWidth 住在一起不是凑巧:基本平面之外的字符(emoji、生僻字)在 JS
