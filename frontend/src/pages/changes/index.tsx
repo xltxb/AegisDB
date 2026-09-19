@@ -220,6 +220,11 @@ function StageBox({
   const findings = parseFindings(stage)
   const isGate = (stage.type === 'manual' || stage.type === 'execute')
     && stage.status === 'waiting' && stage.oscJobId === 0
+  // 挂着任务时到底是哪一种,是且仅是这一处判断——下面头部与正文各画各的一半,
+  // 但共用同一个值,保证两种说法不会同时出现在同一张卡片上(见下方大注释)。
+  const oscState: 'running' | 'orphan' | null = stage.oscJobId === 0
+    ? null
+    : stage.oscRunning ? 'running' : 'orphan'
 
   return (
     <div className="chg-stage">
@@ -233,11 +238,11 @@ function StageBox({
           一模一样,而判据是 oscJobId —— 画上按钮的话,按下去只会让人以为自己推进了
           什么。与 ADR 0011 里「中止按钮跟着 running 走而不是跟着 status 走」同一类。
         */}
-        {stage.oscJobId > 0 ? (
+        {oscState === 'running' ? (
           <Link className="stage-osc-wait" to="/osc">
             {t('chgOscWaiting', { id: stage.oscJobId })}
           </Link>
-        ) : isGate && (
+        ) : oscState === null && isGate && (
           <Button variant="primary" disabled={busy} onClick={onAdvance}>
             <Play size={13} />{stage.type === 'execute' ? t('chgConfirmExec') : t('chgAdvance')}
           </Button>
@@ -246,11 +251,14 @@ function StageBox({
       {stage.log ? <pre className="chg-log">{stage.log}</pre> : <div className="chg-hint">{t('chgNoLog')}</div>}
       {findings && <FindingList result={findings} />}
       {/*
-        「任务已经没人推进」的残局:网关重启后,阶段停在 waiting、它挂的任务已经死了。
-        oscRunning 由后端按 Runner.IsRunning 现填,不落库 —— 分的是"此刻有没有进程在
-        推进",不是"任务状态"。不自动重试也不自动失败,交给人去在线变更页收拾。
+        oscState 与上面头部那个 Link 互斥,不并列 —— 与 pages/osc/index.tsx 的进度条
+        同一个做法(`job.status === 'copying' && job.running` 才画进度条,孤儿状态下
+        只画 `.osc-orphan`)。两句话不能同时出现在同一张卡片上:先读到"点此查看进度"、
+        再读到"已经没人推进它",人会先当它正常在跑,扫一眼头部就走开的人根本读不到
+        第二句。oscRunning 由后端按 Runner.IsRunning 现填,不落库,分的是"此刻有没有
+        进程在推进",不是"任务状态"——不自动重试也不自动失败,交给人去在线变更页收拾。
       */}
-      {stage.oscJobId > 0 && !stage.oscRunning && (
+      {oscState === 'orphan' && (
         <div className="stage-osc-orphan notice warn">{t('chgOscOrphan', { id: stage.oscJobId })}</div>
       )}
     </div>
