@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { envelope, stubTerminal } from './fixtures'
+import { installWsFake } from './wsFake'
 
 // The instance tree groups environment → database type → instance. Several
 // production environments can sit on one prod tier, each holding more than one
@@ -38,7 +39,13 @@ const CONNS = [
 }))
 
 // 这一套打桩和终端会话那组规格是同一份 —— 见 fixtures.ts 的 stubTerminal。
-const stubCommon = (page: Page) => stubTerminal(page, CONNS, TIERS, ENVIRONMENTS)
+//
+// 一并顶掉终端那条 socket:这一口验的是树,但它开的是终端页,而 Vite 会把那条 ws
+// 转发给并不存在的 Go 后端 —— 每跑一次刷一串 ECONNREFUSED,盖住的正是自己的失败信息。
+async function stubCommon(page: Page) {
+  await installWsFake(page)
+  await stubTerminal(page, CONNS, TIERS, ENVIRONMENTS)
+}
 
 async function openTerminal(page: Page) {
   await stubCommon(page)
