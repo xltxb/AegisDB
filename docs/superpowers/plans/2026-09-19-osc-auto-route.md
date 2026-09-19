@@ -858,7 +858,7 @@ EOF
 **Files:**
 - Create: `backend/migrations/0004_release_osc.sql`
 - Modify: `backend/internal/model/model.go:1213-1236`（`ReleaseStage`）、`:1149-1204`（`Release`）
-- Test: `backend/internal/bootstrap/migrate_test.go`（表数断言所在处，确认不受影响）
+- Test: `backend/internal/bootstrap/automigrate_guard_test.go`（表数断言 `const want = 37` 所在处，确认不受影响）
 
 **Interfaces:**
 - Produces: `model.ReleaseStage.ExecCursor int`、`model.ReleaseStage.OSCJobID int64`、`model.Release.OSCMode string`
@@ -1733,11 +1733,37 @@ func TestOnOSCJobFinished_ResumesTheReleaseAfterASuccessfulMigration(t *testing.
 	if got.OSCJobID != 0 {
 		t.Errorf("任务结束了,阶段还挂着 %d", got.OSCJobID)
 	}
-	if got.ExecCursor != 1 {
-		t.Errorf("游标是 %d,期望 1 —— 走 OSC 的那一条要算已完成", got.ExecCursor)
+	// 两条都完成了:走 OSC 的那条由回调算完成,第二条由 driveRelease 续跑。
+	// (这里读的是**整条链路跑完之后**的终值,不是回调刚做完那一刻的中间值。)
+	if got.ExecCursor != 2 {
+		t.Errorf("游标是 %d,期望 2(两条都已完成)", got.ExecCursor)
 	}
+	// **下发的必须是第二条。** 这才是"走 OSC 的那条被算作完成"的证据:游标没推上去
+	// 的话,driveRelease 会把那条 ALTER 再执行一遍 —— 而它已经由 OSC 做完了。
 	if fx.exec.count() != 1 {
-		t.Errorf("第二条语句没有在迁移完成后被执行(下发了 %d 条)", fx.exec.count())
+		t.Fatalf("下发了 %d 条,期望 1 条(只有第二条)", fx.exec.count())
+	}
+	if last := fx.exec.last(); !strings.Contains(last, "b=2") {
+		t.Errorf("下发的是 %q,期望第二条 —— 走 OSC 的那条被重跑了", last)
+	}
+}
+
+func TestOnOSCJobFinished_AFailedMigrationDoesNotEndUpAsASuccessfulRelease(t *testing.T) {
+	// driveRelease 的循环把已经是 failed 的阶段当成"处理过了"跳过,然后落到
+	// finishRelease(success)。所以失败分支**不能无条件交回 driveRelease** ——
+	// 那样迁移失败的发布单最后会显示成功,而那条索引根本没加上。
+	//
+	// 比"永远等下去"更糟:等着的单子看得见,说成功的单子没人再去看。
+	fx := newExecFixture(t, "ALTER TABLE t_order ADD INDEX i (c)")
+	fx.conn.Engine = "mysql"
+	fx.rowsOfTable = 8_000_000
+	fx.osc.startID = 51
+	fx.svc.stageExecute(fx.rel, fx.conn, fx.stage)
+
+	fx.svc.OnOSCJobFinished(&osc.Job{ID: 51, Status: osc.JobFailed, Err: "拷贝:连接中断"})
+
+	if got := fx.reloadRelease(); got.Status != model.RunFailed {
+		t.Errorf("迁移失败了,发布单状态却是 %s", got.Status)
 	}
 }
 
@@ -1821,7 +1847,21 @@ func (s *Services) OnOSCJobFinished(j *osc.Job) {
 			"osc_job_id": 0,
 			"log":        st.Log + fmt.Sprintf("· 迁移任务 #%d %s:%s\n", j.ID, j.Status, j.Err),
 		})
-		s.driveRelease(st.ReleaseID)
+		// **不能无条件交回 driveRelease。** 它的循环把已经是 failed 的阶段当成
+		// "处理过了"跳过(那是为 onFailure=continue 准备的),循环走完就落到
+		// finishRelease(success) —— 迁移失败的发布单最后会显示成功。
+		//
+		// 按阶段自己的 OnFailure 分流,与 driveRelease 处理阶段失败的写法一致。
+		rel, err := s.Repo.GetRelease(st.ReleaseID)
+		if err != nil {
+			return
+		}
+		if st.OnFailure == model.OnFailureContinue {
+			s.driveRelease(st.ReleaseID)
+			return
+		}
+		s.finishRelease(rel, model.RunFailed,
+			fmt.Sprintf("阶段「%s」失败:迁移任务 #%d %s", st.Name, j.ID, j.Status))
 		return
 	}
 	// 走 OSC 的那一条到此算执行完毕,游标往前推一格。
