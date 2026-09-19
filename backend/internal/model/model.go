@@ -1247,6 +1247,12 @@ type ReleaseStage struct {
 	Rows       int        `gorm:"column:row_count" json:"rows"`
 	StartedAt  *time.Time `json:"startedAt"`
 	FinishedAt *time.Time `json:"finishedAt"`
+	// OSCRunning 不落库(`gorm:"-"`):**本进程此刻**有没有在推进它挂着的那个迁移。
+	//
+	// 它回答 status 回答不了的问题:一个 waiting 的执行阶段,可能正等着一个真的在跑
+	// 的迁移,也可能是网关重启之后留下的空等 —— 两者的 status 一模一样,而后者永远
+	// 不会自己走完。与 osc.Job.Running 完全同一个做法(见 osc/runner.go 的 IsRunning)。
+	OSCRunning bool `gorm:"-" json:"oscRunning"`
 }
 
 func (ReleaseStage) TableName() string { return "tbl_release_stage" }

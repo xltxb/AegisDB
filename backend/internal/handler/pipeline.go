@@ -76,6 +76,16 @@ func (h *Handler) GetRelease(c *gin.Context) {
 		resp.Fail(c, errCode(err), "发布单不存在或无权查看")
 		return
 	}
+	// oscRunning 不落库,是本进程此刻的事实(与 handler/osc.go 给 OSCJobs/OSCJob 填
+	// Running 同一个做法):一个 waiting 的执行阶段挂着的迁移,可能真的在跑,也可能是
+	// 网关重启之后留下的空等 —— 两者的 osc_job_id/status 一模一样,分不清就分不清。
+	if h.osc != nil {
+		for i := range v.Stages {
+			if v.Stages[i].OSCJobID > 0 {
+				v.Stages[i].OSCRunning = h.osc.runner.IsRunning(v.Stages[i].OSCJobID)
+			}
+		}
+	}
 	resp.OK(c, v)
 }
 

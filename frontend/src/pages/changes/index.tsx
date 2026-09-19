@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Ban, CircleAlert, GitBranch, Play, Plus, Rocket, ShieldCheck, Clock,
@@ -217,7 +218,8 @@ function StageBox({
 }: { stage: ReleaseStage; busy: boolean; onAdvance: () => void }) {
   const { t } = useTranslation()
   const findings = parseFindings(stage)
-  const isGate = (stage.type === 'manual' || stage.type === 'execute') && stage.status === 'waiting'
+  const isGate = (stage.type === 'manual' || stage.type === 'execute')
+    && stage.status === 'waiting' && stage.oscJobId === 0
 
   return (
     <div className="chg-stage">
@@ -226,7 +228,16 @@ function StageBox({
         <span className="chg-stage-name">{stage.name || t(`stType_${stage.type}`)}</span>
         <Badge tone={runTone(stage.status)}>{t(`stRun_${stage.status}`)}</Badge>
         {stage.approvalNo && <span className="chg-apno">{stage.approvalNo}</span>}
-        {isGate && (
+        {/*
+          挂着迁移任务的执行阶段**不是一道人工闸**。它的 status 和"等人点确认执行"
+          一模一样,而判据是 oscJobId —— 画上按钮的话,按下去只会让人以为自己推进了
+          什么。与 ADR 0011 里「中止按钮跟着 running 走而不是跟着 status 走」同一类。
+        */}
+        {stage.oscJobId > 0 ? (
+          <Link className="stage-osc-wait" to="/osc">
+            {t('chgOscWaiting', { id: stage.oscJobId })}
+          </Link>
+        ) : isGate && (
           <Button variant="primary" disabled={busy} onClick={onAdvance}>
             <Play size={13} />{stage.type === 'execute' ? t('chgConfirmExec') : t('chgAdvance')}
           </Button>
@@ -234,6 +245,14 @@ function StageBox({
       </header>
       {stage.log ? <pre className="chg-log">{stage.log}</pre> : <div className="chg-hint">{t('chgNoLog')}</div>}
       {findings && <FindingList result={findings} />}
+      {/*
+        「任务已经没人推进」的残局:网关重启后,阶段停在 waiting、它挂的任务已经死了。
+        oscRunning 由后端按 Runner.IsRunning 现填,不落库 —— 分的是"此刻有没有进程在
+        推进",不是"任务状态"。不自动重试也不自动失败,交给人去在线变更页收拾。
+      */}
+      {stage.oscJobId > 0 && !stage.oscRunning && (
+        <div className="stage-osc-orphan notice warn">{t('chgOscOrphan', { id: stage.oscJobId })}</div>
+      )}
     </div>
   )
 }
@@ -335,6 +354,7 @@ function NewChangeModal({
   const [needMfa, setNeedMfa] = useState(false)
   const [f, setF] = useState<CreateReleaseBody>({
     title: '', pipelineId: 0, connectionId: 0, database: '', sql: '', changeType: '', reason: '', mfaCode: '',
+    oscMode: '',
   })
   const set = (patch: Partial<CreateReleaseBody>) => setF((p) => ({ ...p, ...patch }))
 
@@ -455,6 +475,21 @@ function NewChangeModal({
       </div>
 
       <div className="fld">
+        {/* 平台按行数阈值自动决定大表索引变更走不走 OSC;这里是发起人对这一单的
+            单次覆盖,进审计——一次例外要说得出是谁定的(见 dto.ReleaseReq.OSCMode)。 */}
+        <label>{t('chgOscMode')}</label>
+        <Segmented<string>
+          value={f.oscMode ?? ''}
+          options={[
+            { value: '', label: t('chgOscModeAuto') },
+            { value: 'force', label: t('chgOscModeForce') },
+            { value: 'skip', label: t('chgOscModeSkip') },
+          ]}
+          onChange={(v) => set({ oscMode: v })}
+        />
+      </div>
+
+      <div className="fld">
         <label>{t('chgFormSql')}</label>
         <textarea value={f.sql ?? ''} spellCheck={false} onChange={(e) => set({ sql: e.target.value })} />
       </div>
@@ -498,7 +533,9 @@ function NewChangeModal({
  */
 function waitingGate(r: Release): ReleaseStage | null {
   return r.stages.find(
-    (s) => s.status === 'waiting' && (s.type === 'manual' || s.type === 'execute'),
+    // 挂着迁移任务的执行阶段不是一道人工闸(见 StageBox 同名注释)——排掉它,
+    // 否则页头的「确认执行」按钮会对着一个等 OSC 跑完的阶段亮起来。
+    (s) => s.status === 'waiting' && (s.type === 'manual' || s.type === 'execute') && s.oscJobId === 0,
   ) ?? null
 }
 
