@@ -26,6 +26,8 @@
 - **每条承重断言做变异验证**：改坏实现，确认那条用例真的会红，把结果写进提交信息。
 - 提交信息 subject 用英文（`feat(osc): ...`），正文中文，结尾带
   `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`。
+- **i18n 的文案是纯文本**，`CardRow` 的 `hint` 与 `caveats` 都不解析 Markdown。文案里
+  不要写 `**`——它会原样显示成两个星号。要强调就靠句子的位置和用词。
 
 ## 文件结构
 
@@ -223,7 +225,7 @@ EOF
   setOsc: '在线表结构变更',
   setOscSub: '大表加索引时用影子表 + 分块拷贝代替原生 DDL(ADR 0011)',
   setOscEnabled: '允许发起在线变更',
-  setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。**它打不开这个功能** —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
+  setOscEnabledD: '这是急停开关:关掉它立刻挡住后续发起。它打不开这个功能 —— 启用的前提是后端配置里的 osc.enabled 为 true,而那要求先在一套有从库的实例上演练过一次。',
 ```
 
 `src/locales/en.ts`：
@@ -2123,7 +2125,7 @@ EOF
   setOscAuto: '大表索引变更自动走 OSC',
   setOscAutoD: '发布流水线执行到一条索引变更时,若目标表超过下面的行数,自动改用在线变更。OSC 用不了时(未启用、非 MySQL、前置检查不通过)照常直发,并把原因写进阶段日志。',
   setOscMinRows: '判定为大表的行数',
-  setOscMinRowsD: '行数取自 information_schema,是**估算值**,可能与实际相差可观 —— 边界附近的表会时走时不走。正好等于这个数不算超过。',
+  setOscMinRowsD: '行数取自 information_schema,是估算值,可能与实际相差可观 —— 边界附近的表会时走时不走。正好等于这个数不算超过。',
 ```
 
 `en.ts`：
