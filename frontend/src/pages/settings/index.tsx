@@ -28,6 +28,7 @@ const SECTIONS = [
   { id: 'security', icon: Lock, label: 'setSec' },
   { id: 'sensitive', icon: EyeOff, label: 'setSens' },
   { id: 'meta', icon: DatabaseZap, label: 'setMeta' },
+  { id: 'osc', icon: DatabaseZap, label: 'setOsc' },
   { id: 'openapi', icon: KeyRound, label: 'setOpenApi' },
   { id: 'notify', icon: Bell, label: 'setNotify' },
   { id: 'appearance', icon: Palette, label: 'setAppearance' },
@@ -144,6 +145,10 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     metaIntervalHrs: Number(parseSetting(g['meta.sync.intervalHours'], 24)) || 24,
     metaConcurrency: Number(parseSetting(g['meta.sync.concurrency'], 2)) || 2,
 
+    // ---- 在线表结构变更(OSC) ----
+    // 默认 true:这是**急停**开关,不是启用开关。没写过它时不该额外拦。
+    oscEnabled: parseSetting(g['osc.enabled'], true),
+
     // ---- 通知 ----
     lark: parseSetting(g['notify.lark'], true),
     email: parseSetting(g['notify.email'], false),
@@ -228,6 +233,7 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'meta.sync.enabled': f.metaEnabled,
         'meta.sync.intervalHours': clampInt(f.metaIntervalHrs, 1, 720, 24),
         'meta.sync.concurrency': clampInt(f.metaConcurrency, 1, 8, 2),
+        'osc.enabled': f.oscEnabled,
         'notify.lark': f.lark,
         'notify.email': f.email,
         'notify.push': f.push,
@@ -469,6 +475,14 @@ function SettingsForm({ data }: { data: SettingsResp }) {
             </>}
           >
             <Link className="set-link" to="/catalog">{t('setMetaGo')}</Link>
+          </CardRow>
+        </Card></section>
+
+        {/* ---------------- 在线表结构变更 ---------------- */}
+        <section id="set-osc" className="set-sec"><Card>
+          <CardHead icon={<DatabaseZap size={17} />} title={t('setOsc')} sub={t('setOscSub')} />
+          <CardRow title={t('setOscEnabled')} hint={t('setOscEnabledD')}>
+            <Switch checked={f.oscEnabled} onChange={(v) => set({ oscEnabled: v })} />
           </CardRow>
         </Card></section>
 

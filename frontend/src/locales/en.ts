@@ -846,6 +846,11 @@ export const en: Dict = {
   setMetaNoteStale: 'The copy may be stale. Verdicts, execution and exports always use the live database',
   setMetaGo: 'Open data catalog',
 
+  setOsc: 'Online schema change',
+  setOscSub: 'Shadow table + chunked copy instead of native DDL on big tables (ADR 0011)',
+  setOscEnabled: 'Allow starting online changes',
+  setOscEnabledD: 'A kill switch: turning it off blocks new migrations immediately. It cannot turn the feature ON — that requires osc.enabled in the backend config, which in turn requires one rehearsal against an instance that has a replica.',
+
   setOpenApi: 'Open API',
   setOpenApiSub: 'Credentials external systems use to call the gateway',
   apiCliEmpty: 'No API credentials yet',
