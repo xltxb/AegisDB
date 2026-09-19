@@ -789,14 +789,21 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 
 	timeout := s.asyncExecTimeout()
 	var b strings.Builder
-	total := 0
-	for i, one := range stmts {
+	// 接上已经写下的日志。driveRelease 每次都用 out.log **覆盖**阶段的 log 字段,
+	// 从空 builder 开始的话,这个阶段在暂停之前记下的每一条都会消失 —— 而那正是
+	// 一次跨了几小时的执行(下一个任务接上 OSC 之后)最需要留下的东西。
+	b.WriteString(st.Log)
+	total := st.Rows
+	// 从游标停的地方续跑,不是从头:前面这些语句已经执行过了,重跑是一次重复的
+	// 生产变更,而且不一定报错(一条 ALTER 重跑会报 1061,但一条 UPDATE 不会)。
+	for i := st.ExecCursor; i < len(stmts); i++ {
+		one := stmts[i]
 		res := s.Executor.Run(context.Background(), conn, one, timeout)
 		if res.Err != nil {
 			fmt.Fprintf(&b, "· 第 %d/%d 条失败: %s\n", i+1, len(stmts), clip(res.Output, 300))
 			s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultWarn, rel.RelNo, "exec")
 			return stageOutcome{status: model.RunFailed, rows: total,
-				log: fmt.Sprintf("· 已执行 %d/%d 条后中止\n%s", i, len(stmts), b.String())}
+				log: fmt.Sprintf("%s· 已执行 %d/%d 条后中止\n", b.String(), i, len(stmts))}
 		}
 		total += res.Rows
 		fmt.Fprintf(&b, "· [%d/%d] %s (%dms)\n", i+1, len(stmts), clip(res.Output, 200), res.Ms)
@@ -807,9 +814,12 @@ func (s *Services) stageExecute(rel *model.Release, conn *model.Connection, st *
 		// Every statement is audited individually: the chain must show what ran,
 		// not that "a release ran".
 		s.recordAuditBy(creator, releaseOperator(rel), conn, one, v.Risk, model.ResultExecuted, rel.RelNo, "exec")
+		// 游标边走边记:进程在下一条之前挂掉时,库里写着的必须是"已经做完 i+1 条"。
+		// 挪到循环外、跑完一起写的话,一次中途的崩溃会让恢复从头再来。
+		_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{"exec_cursor": i + 1})
 	}
 	return stageOutcome{status: model.RunSuccess, rows: total,
-		log: fmt.Sprintf("· 执行完成 · %d 条语句 · 影响 %d 行\n%s", len(stmts), total, b.String())}
+		log: fmt.Sprintf("%s· 执行完成 · %d 条语句 · 影响 %d 行\n", b.String(), len(stmts), total)}
 }
 
 // execLogPreviewRows bounds how many result rows an execute log echoes. The

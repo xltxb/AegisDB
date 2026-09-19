@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -17,11 +18,20 @@ import (
 	"velagateway/pkg/sqlutil"
 )
 
+// sqlExecutor 是 Services 把一条语句交出去的那一步。
+//
+// 是接口不是 *gateway.Executor —— 这一层的用例要能在**没有真数据库**的情况下跑:
+// 断言"下发了几条、下发的是哪条"不该要求先搭一套目标库。
+type sqlExecutor interface {
+	Run(ctx context.Context, conn *model.Connection, sql string, timeout time.Duration) gateway.ExecResult
+	Test(conn *model.Connection) (bool, string)
+}
+
 // Services is the application service container wired in bootstrap.
 type Services struct {
 	Repo     *repository.Repo
 	Engine   *gateway.RiskEngine
-	Executor *gateway.Executor
+	Executor sqlExecutor
 	JWT      *jwt.Manager
 	Webhook  *Dispatcher
 
