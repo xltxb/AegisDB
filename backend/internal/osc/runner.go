@@ -37,6 +37,15 @@ type Runner struct {
 	// 可观的延迟 —— 而"从库跟得上"正是这套东西相对原生 DDL 的卖点之一。
 	MaxLag time.Duration
 
+	// OnFinish 在一个任务走到终态(done/failed/aborted)时被调用,可为 nil。
+	//
+	// 做成注入点而不是让这个包去调用谁:osc 的职责是把一次迁移做完,它不该知道
+	// 有人在等它。发布流水线要靠它接着往下走,而那是 service 层的事。
+	//
+	// 回调在 finish 的调用者那条 goroutine 上同步执行,所以它必须**快**:
+	// 里面做的事越多,越可能把一次迁移的收尾拖住。
+	OnFinish func(*Job)
+
 	mu      sync.Mutex
 	running map[int64]context.CancelFunc // 正在跑的任务 → 它的取消钩子
 }
@@ -334,6 +343,14 @@ func (r *Runner) finish(id int64, status JobStatus, errMsg string) {
 	r.store.Model(&Job{}).Where("id = ?", id).Updates(map[string]any{
 		"status": status, "err": errMsg, "updated_at": now, "finished_at": now,
 	})
+	// 先落库再通知:回调多半要去读这一行(比如发布单要按状态决定继续还是失败),
+	// 顺序反了它读到的是上一个状态。
+	if r.OnFinish == nil {
+		return
+	}
+	if j, err := r.Get(context.Background(), id); err == nil {
+		r.OnFinish(j)
+	}
 }
 
 // cleanupShadow 收走影子表。

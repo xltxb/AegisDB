@@ -280,3 +280,68 @@ func TestRunner_RecordsWhetherThrottlingWasOn(t *testing.T) {
 		t.Error("迁移结束了,心跳表还留在库里")
 	}
 }
+
+// 任务走到终态时要能通知外面。
+//
+// 做成注入的回调而不是让 osc 包去调 pipeline:这个包的职责是把一次迁移做完,
+// 它不该知道有人在等它。谁关心谁自己接 —— 与 CopyOptions.ReplicaLag 把"读延迟"
+// 做成注入点是同一个理由。
+func TestRunner_NotifiesWhenAJobReachesATerminalState(t *testing.T) {
+	r, d := newRunner(t)
+	ctx := context.Background()
+	name := makeTable(t, d.target, "CREATE TABLE `%s` (id BIGINT PRIMARY KEY, memo VARCHAR(64))")
+	mustExec(t, d.target, fmt.Sprintf("INSERT INTO `%s` (id, memo) VALUES (1,'x')", name))
+	t.Cleanup(func() {
+		for _, x := range []string{ShadowName(name), "_" + name + DelSuffix, HeartbeatName(name)} {
+			_, _ = d.target.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+x+"`")
+		}
+	})
+
+	done := make(chan *Job, 1)
+	r.OnFinish = func(j *Job) { done <- j }
+
+	job, err := r.Start(ctx, StartRequest{
+		ConnectionID: 1, Schema: "osc_test", Table: name,
+		Alter: "ADD INDEX idx_memo (memo)", CreatedBy: "linwei@vela.io",
+	})
+	if err != nil {
+		t.Fatalf("发起失败: %v", err)
+	}
+
+	select {
+	case got := <-done:
+		if got.ID != job.ID {
+			t.Errorf("回调拿到的是任务 %d,期望 %d", got.ID, job.ID)
+		}
+		// **终态要带在回调里。** 只通知"结束了"而不说结果,调用方还得自己再查一次,
+		// 而它此刻最需要知道的正是成功还是失败。
+		if got.Status != JobDone {
+			t.Errorf("回调里的状态是 %s,期望 done", got.Status)
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("任务已经结束,回调却没有被调用 —— 挂在它上面的发布单会永远等下去")
+	}
+}
+
+// 没有注册回调时什么都不该发生(绝大多数任务是从 OSC 控制台手工发起的)。
+func TestRunner_WorksWithoutAnyListener(t *testing.T) {
+	r, d := newRunner(t)
+	ctx := context.Background()
+	name := makeTable(t, d.target, "CREATE TABLE `%s` (id BIGINT PRIMARY KEY, memo VARCHAR(64))")
+	t.Cleanup(func() {
+		for _, x := range []string{ShadowName(name), "_" + name + DelSuffix, HeartbeatName(name)} {
+			_, _ = d.target.ExecContext(context.Background(), "DROP TABLE IF EXISTS `"+x+"`")
+		}
+	})
+
+	job, err := r.Start(ctx, StartRequest{
+		ConnectionID: 1, Schema: "osc_test", Table: name,
+		Alter: "ADD INDEX idx_memo (memo)", CreatedBy: "linwei@vela.io",
+	})
+	if err != nil {
+		t.Fatalf("发起失败: %v", err)
+	}
+	if final := waitForFinish(t, r, job.ID, 60*time.Second); final.Status != JobDone {
+		t.Fatalf("最终状态 = %s(err=%q)", final.Status, final.Err)
+	}
+}
