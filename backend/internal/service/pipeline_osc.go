@@ -29,14 +29,35 @@ func (s *Services) AttachOSC(r *osc.Runner, connect osc.ConnectFunc, enabled fun
 	}
 }
 
+// oscAutoRouteMinRowsFloor 是 minRows 的服务端下限。
+//
+// I3:设置接口是自由 key/value、没有校验 —— 下限本来只活在前端的 clampInt(10000,
+// 1e9)里。SettingInt 对存着 `0`(或负数)的值就如实返回它(它没有资格替调用方
+// 判断"这个值是不是太离谱",那是隔壁的设计:同一个字面量的另一种写法都认,不猜
+// 语义),而 Decide 的判据是 `rows <= p.MinRows`——MinRows ≤ 0 时,这个判据对任何
+// 有数据的表都不成立(真实表的行数不可能是负数,几乎不可能恰好是 0),等价于
+// "逢索引变更必 OSC"。**不能信任存进来的值**:一次 API 直调(不经过设置页,没有
+// clampInt 兜着)就能把这个功能变成这样。
+//
+// 这里只挡 ≤0,不照抄前端 10000 那条更严格的下限:后者是界面对"合理配置"的引导
+// (小于它多半是手滑),不是安全边界 —— 一次 API 直调选择一个很小但为正的阈值
+// (比如自建 MySQL 上多数表都不大,10 万行封顶),依然是一次说得清楚的明确选择,
+// 不该被后端悄悄改写成 2000000。真正危险、且没有"会不会是故意的"这层疑问的,
+// 只有 ≤0 这一段。
+const oscAutoRouteMinRowsFloor = 1
+
 // oscPolicy 读平台对自动路由的立场。
 //
 // 默认开着是安全的:OSC 的总开关默认关着,所以在没打开 OSC 的部署上它只会走到
 // "直发并说明"那条路 —— 不改变任何现有行为,只多一行日志。
 func (s *Services) oscPolicy() oscroute.Policy {
+	minRows := int64(s.Repo.SettingInt("osc.autoRoute.minRows", 2_000_000))
+	if minRows < oscAutoRouteMinRowsFloor {
+		minRows = 2_000_000
+	}
 	return oscroute.Policy{
 		AutoRoute: s.Repo.SettingBool("osc.autoRoute.enabled", true),
-		MinRows:   int64(s.Repo.SettingInt("osc.autoRoute.minRows", 2_000_000)),
+		MinRows:   minRows,
 	}
 }
 
@@ -131,6 +152,27 @@ func (s *Services) OnOSCJobFinished(j *osc.Job) {
 	if err != nil || st == nil {
 		return
 	}
+	// C3:发布单可能已经是终态。最常见的触发方式是 AbortRelease:它认领成
+	// aborted、把这个阶段标成 skipped 之后,才去调 osc.Abort —— 而 Abort 就是
+	// cancel(),它挂着的 run() 会在退出路径上**同步**走到 finish(JobAborted) →
+	// OnFinish → 这里(AbortRelease 从不清 osc_job_id,反查照样能命中)。原逻辑
+	// 对"发布单是不是已经有人处理过了"一无所知:失败分支会把刚标成 skipped 的
+	// 阶段改成 failed,再无条件 finishRelease(failed),把一张已经 aborted 的单
+	// 覆盖成 failed —— 是谁按停的、以及"叫不停请到在线变更页确认残留"那句提示,
+	// 一起被冲掉;成功分支同样会把 skipped 悄悄改回 pending,在终态单子上留一行
+	// debris。这和 driveRelease 开头那句 `if rel.Status == model.RunAborted {
+	// return }` 是同一道闸,只是这条新入口原来没接上 —— 这里补齐,判定范围放宽到
+	// 全部终态(aborted/failed/success),不止 aborted:回调迟到的时候,单子完全
+	// 可能是正常跑完或者失败收尾的,道理一样。
+	rel, err := s.Repo.GetRelease(st.ReleaseID)
+	if err != nil {
+		return
+	}
+	if isTerminalReleaseStatus(rel.Status) {
+		note := fmt.Sprintf("· 迁移任务 #%d %s(发布单此时已经是 %s,不再改动它的状态)\n", j.ID, j.Status, rel.Status)
+		_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{"log": st.Log + note})
+		return
+	}
 	if j.Status != osc.JobDone {
 		s.failStageForFinishedOSCJob(st, j)
 		return
@@ -143,6 +185,19 @@ func (s *Services) OnOSCJobFinished(j *osc.Job) {
 		"log":         st.Log + fmt.Sprintf("· 迁移任务 #%d 完成\n", j.ID),
 	})
 	s.resumeReleaseAsync(st.ReleaseID)
+}
+
+// isTerminalReleaseStatus 报告一张发布单是不是已经走到头 —— success/failed/
+// aborted 都是,不会再有任何东西替它做决定。与 driveRelease 顶部只挡 RunAborted
+// 那一句不同:这里挡的是回调这条入口,回调迟到时单子完全可能已经正常成功或
+// 失败收尾,不止被人终止那一种。
+func isTerminalReleaseStatus(status string) bool {
+	switch status {
+	case model.RunSuccess, model.RunFailed, model.RunAborted:
+		return true
+	default:
+		return false
+	}
 }
 
 // failStageForFinishedOSCJob 处理迁移失败/被中止的那一条路。
@@ -242,13 +297,25 @@ func (s *Services) abortOSCOfRelease(id int64) string {
 // 早就跑完的东西。这正是 osc.Runner.OnFinish 字段注释警告过的情况,而把它接上的
 // 正是这次的 wiring,所以必须在这里断开。
 //
-// 用 guardRelease 包一层(而不是裸 `go s.driveRelease(...)`):driveRelease 本身
-// 没有 panic 恢复,裸起一个 goroutine 的话,里面一次 panic 会直接打倒整个进程。
-// dispatchReleaseJob 恢复运行也是同一层包装,这里沿用而不是另起一套。
+// **C2:必须先认领(waiting → running),不能直接 driveRelease。** 仓库里所有
+// "把停着的单子重新驱动起来"的入口 —— continueRelease、ContinueManualStage、
+// 审批回调、ResumeReleaseApprovals —— 都先 ClaimRelease(waiting → running),
+// 而 driveRelease 自己从不写 running。原来这里裸调 driveRelease,于是"迁移结束、
+// 剩下的语句还没跑完"这段时间里,发布单的 status 一直停在 waiting:
+//   - AbortRelease 受理 waiting,会把一张**正在执行语句**的单当成"可以安全终止的
+//     waiting"接受掉,而它自己的注释写着"running 的单子不可中止,因为它可能正在
+//     语句里"——这条不变量被绕了过去;
+//   - FailStuckReleases 只对账 running 的单子,网关此刻挂掉,这张单永远停在
+//     waiting、既不前进也不被任何对账逻辑看见。
 //
-// driveRelease 本来就是可重入的(审批回调、超时巡检都在调它),异步跑它不引入
-// 新的竞争;进程中途退出时未跑完的那次会丢,而那与"网关重启后发布单停在中间态"
-// 是同一种残局,由残局机制负责被看见。
+// 所以直接复用 continueRelease:它已经是"认领 + 走 releaseWorkers 队列、队列满了
+// 再内联"这一整套,语义正是"外部事件让一张 waiting 的单继续"——不必另起一套。
+// 仍然包一层 goroutine(而不是在这里同步调用它):队列满时 continueRelease 会退化
+// 成内联调用 driveRelease,那条路径可能跑很久,必须保持在 OnFinish 的调用链之外。
+//
+// 用 guardRelease 包一层:driveRelease/continueRelease 本身没有 panic 恢复,裸起
+// 一个 goroutine 的话,里面一次 panic 会直接打倒整个进程。dispatchReleaseJob
+// 恢复运行也是同一层包装,这里沿用而不是另起一套。
 func (s *Services) resumeReleaseAsync(releaseID int64) {
-	go s.guardRelease(releaseID, func() { s.driveRelease(releaseID) })
+	go s.guardRelease(releaseID, func() { s.continueRelease(releaseID) })
 }

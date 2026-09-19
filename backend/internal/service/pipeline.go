@@ -1205,7 +1205,16 @@ func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) 
 	if err != nil || st.ReleaseID != releaseID {
 		return ErrNotFound
 	}
-	if st.Type != model.StageExecute || st.Status != model.RunWaiting {
+	// C1:挂着 OSC 任务的执行阶段和"等人点确认执行"共用同一个 status ——
+	// 判据是 OSCJobID(ADR 0011「界面:两种 waiting 长得一模一样」)。这道闸原来
+	// 只长在前端(isGate/waitingGate),没有它的话,同一条已经在跑迁移的语句能被
+	// 再点一次「确认执行」,把这个阶段迄今的全部日志(包括"走 OSC · 任务 #N"那
+	// 一行)整个覆盖掉,再对同一条语句发起第二次 OSC 任务 —— 正撞上设计文档明写
+	// 的"不做多个 OSC 任务并行"。
+	if st.Type != model.StageExecute || st.Status != model.RunWaiting || st.OSCJobID != 0 {
+		if st.Type == model.StageExecute && st.Status == model.RunWaiting && st.OSCJobID != 0 {
+			return fmt.Errorf("该阶段正在等待迁移任务 #%d,不是在等人确认执行", st.OSCJobID)
+		}
 		return fmt.Errorf("该阶段当前不在等待执行确认")
 	}
 	// 默认允许发起人,是因为"何时执行"归发起人;一旦显式指定了角色,那正是要把
@@ -1225,7 +1234,10 @@ func (s *Services) ConfirmExecuteStage(u *model.User, releaseID, stageID int64) 
 	}
 	_ = s.Repo.UpdateReleaseStage(stageID, map[string]any{
 		"confirmed_by": u.Name,
-		"log":          "· 已由 " + u.Name + " 确认执行",
+		// M1:结尾要带换行 —— stageExecute 恢复时会把 st.Log 原样当前缀接上
+		// (b.WriteString(st.Log)),缺一个换行的话,这一行会和后面第一条执行
+		// 记录粘成一行,读起来像"已由 X 确认执行· [1/3] ..."。
+		"log": "· 已由 " + u.Name + " 确认执行\n",
 	})
 	// 决策入链:actor = 变更归属人,operator = 点击的人,pending = 放行非执行
 	// (真正的执行由 execute 阶段逐条记账)。

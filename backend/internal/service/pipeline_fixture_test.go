@@ -36,6 +36,15 @@ type fakeOSC struct {
 	started           []osc.StartRequest
 	abortedIDs        []int64
 	abortAttemptedIDs []int64
+	// onAbortFinish,非 nil 时在 Abort **成功**之后同步调用,入参是被叫停的任务号。
+	//
+	// C3 需要它:真实的 osc.Runner.Abort 只是 cancel() 一个 context,而它挂着的
+	// run() 会在退出路径上**同步**走到 finish(JobAborted) → OnFinish(见
+	// osc.Runner.finish 的注释)——也就是说 AbortRelease 调用 osc.Abort 的那一刻,
+	// OnOSCJobFinished 会在同一条调用栈上被打进来。fakeOSC 平时只替换"发起/叫停"
+	// 这一步,不模拟这条同步回调链;这条用例恰恰是在测这条回调链本身,所以要有
+	// 这个钩子把它接上,而不是在测试里手动摆一个和真实时序对不上的调用顺序。
+	onAbortFinish func(id int64)
 }
 
 func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, error) {
@@ -50,12 +59,18 @@ func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, erro
 
 func (f *fakeOSC) Abort(_ context.Context, id int64) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.abortAttemptedIDs = append(f.abortAttemptedIDs, id)
 	if f.abortErr != nil {
-		return f.abortErr
+		err := f.abortErr
+		f.mu.Unlock()
+		return err
 	}
 	f.abortedIDs = append(f.abortedIDs, id)
+	cb := f.onAbortFinish
+	f.mu.Unlock() // 不能带着锁调回调:它可能重新调用 fakeOSC 的方法(比如再查一次 aborted）
+	if cb != nil {
+		cb(id)
+	}
 	return nil
 }
 
@@ -90,15 +105,42 @@ func containsID(ids []int64, id int64) bool {
 // 假执行器**只替换"把 SQL 发给数据库"这一步**。判定、审计、日志、游标都走真代码 ——
 // 换掉更多的话,测的是夹具不是实现。
 type fakeExecutor struct {
-	mu   sync.Mutex
-	sent []string
+	mu      sync.Mutex
+	sent    []string
+	blocked bool
+	// gate 非 nil 时,Run 会先卡住等它被 close —— C2 那条用例借它撑开一个观察
+	// 窗口:continuation 的 goroutine 真的跑到了第二条语句,还没跑完,这时候
+	// 发布单该是什么状态。默认 nil,不影响其余用例。
+	gate chan struct{}
 }
 
 func (f *fakeExecutor) Run(_ context.Context, _ *model.Connection, sql string, _ time.Duration) gateway.ExecResult {
+	if f.gate != nil {
+		f.mu.Lock()
+		f.blocked = true
+		f.mu.Unlock()
+		<-f.gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, sql)
 	return gateway.ExecResult{Output: "执行成功 · 1 行受影响", Rows: 1, Ms: 3}
+}
+
+// waitUntilBlocked 等到 Run 真的卡在 gate 上,或者超时。
+func (f *fakeExecutor) waitUntilBlocked(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		f.mu.Lock()
+		b := f.blocked
+		f.mu.Unlock()
+		if b {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("等超时了,Run 也没有卡在 gate 上 —— continuation 的 goroutine 没被调度到?")
 }
 
 // Test 满足 sqlExecutor 接口 —— 这几条用例不测连通性探测,恒答"可连"就够了。
