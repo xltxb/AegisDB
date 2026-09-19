@@ -271,6 +271,9 @@ func TestAbortRelease_AlsoStopsTheMigrationItIsWaitingOn(t *testing.T) {
 	if !fx.osc.aborted(41) {
 		t.Error("发布单停了,它挂着的迁移任务还在跑")
 	}
+	if got := fx.reloadRelease(); !strings.Contains(got.Error, "41") {
+		t.Errorf("终止原因里没提那个被叫停的任务:%q", got.Error)
+	}
 }
 
 func TestAbortRelease_StillAbortsWhenTheMigrationCannotBeStopped(t *testing.T) {
@@ -290,5 +293,13 @@ func TestAbortRelease_StillAbortsWhenTheMigrationCannotBeStopped(t *testing.T) {
 	}
 	if got := fx.reloadRelease(); got.Status != model.RunAborted {
 		t.Errorf("发布单状态 = %s,期望 aborted", got.Status)
+	}
+	// 确认确实调用过 Abort —— 而不是整个 OSC 集成根本没被接上(那样发布单
+	// 照样能正常中止,断言 Status == aborted 分辨不出这两种情况)。
+	if !fx.osc.abortAttempted(42) {
+		t.Error("没有尝试叫停那个任务")
+	}
+	if got := fx.reloadRelease(); !strings.Contains(got.Error, "在线变更页") {
+		t.Errorf("叫不停的时候没告诉人去哪儿收拾:%q", got.Error)
 	}
 }

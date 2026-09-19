@@ -29,12 +29,13 @@ var errOSCDisabled = errors.New("osc: 发起被拒(模拟)")
 // abortErr 同理:非空模拟"这台网关叫不停它"(ADR 0011——多副本下另一台副本
 // 跑着的那个任务,本进程的 Abort 本来就够不着)。
 type fakeOSC struct {
-	mu         sync.Mutex
-	startID    int64
-	startErr   error
-	abortErr   error
-	started    []osc.StartRequest
-	abortedIDs []int64
+	mu                sync.Mutex
+	startID           int64
+	startErr          error
+	abortErr          error
+	started           []osc.StartRequest
+	abortedIDs        []int64
+	abortAttemptedIDs []int64
 }
 
 func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, error) {
@@ -50,6 +51,7 @@ func (f *fakeOSC) Start(_ context.Context, req osc.StartRequest) (*osc.Job, erro
 func (f *fakeOSC) Abort(_ context.Context, id int64) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.abortAttemptedIDs = append(f.abortAttemptedIDs, id)
 	if f.abortErr != nil {
 		return f.abortErr
 	}
@@ -57,11 +59,27 @@ func (f *fakeOSC) Abort(_ context.Context, id int64) error {
 	return nil
 }
 
-// aborted 报告某个任务号是否被(成功地)叫停过。
+// aborted 报告某个任务号是否被**成功**叫停过。
 func (f *fakeOSC) aborted(id int64) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for _, got := range f.abortedIDs {
+	return containsID(f.abortedIDs, id)
+}
+
+// abortAttempted 报告某个任务号是否被**尝试**叫停过 —— 与 aborted 分开:
+// abortErr 那条路径下,尝试过但没成功,前者为 true、后者为 false。缺了这个
+// 区分,"叫停失败被优雅处理"和"OSC 集成根本没接上、Abort 从没被调用过"这两种
+// 情况在断言里分不清楚。
+func (f *fakeOSC) abortAttempted(id int64) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return containsID(f.abortAttemptedIDs, id)
+}
+
+// containsID 与 openapi.go 的 contains 是同一件事,换成 int64 版本 ——
+// 那边是 []string,泛型化不值得为一个测试夹具引一次改动,另起一个名字更省事。
+func containsID(ids []int64, id int64) bool {
+	for _, got := range ids {
 		if got == id {
 			return true
 		}

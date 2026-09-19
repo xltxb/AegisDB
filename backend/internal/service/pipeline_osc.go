@@ -8,6 +8,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"velagateway/internal/model"
@@ -185,20 +186,48 @@ func (s *Services) failStageForFinishedOSCJob(st *model.ReleaseStage, j *osc.Job
 // 此时发布单照常中止,那个任务留成残局被列出来 —— 谎称已经停掉它比留着它更糟:
 // 人会以为事情了结了,而那个迁移还在生产库上拷全表。所以叫停失败时要把这件事
 // 写进终止原因,让人知道去哪儿收拾。
+//
+// **遍历全部挂着任务的阶段,不是找到第一个就 return。** "一张单同时只有一个阶段
+// 挂着任务"是个隐含假设(正常路径下 OnOSCJobFinished 推进游标的同一次写里会把
+// osc_job_id 清零),但这里没有任何东西强制它,数据库那个索引也不是 unique。假设
+// 一旦被打破(比如更早的一个阶段因为某次异常没清零、恰好排在前面),只处理第一个
+// 会让真正在跑的那个既没被叫停、也不会在终止原因里被提及 —— 比不处理更糟的是,
+// 那次过期的 Abort 若碰巧成功,终止原因还会写"已连带叫停"这种谎话。
+//
+// 匹配条件只看 OSCJobID != 0 ——"这个阶段挂着任务",不看阶段状态。这不是在
+// 判断"哪个阶段还活跃",纯粹是在收集"哪些任务号还挂着没清"这件事本身。
 func (s *Services) abortOSCOfRelease(id int64) string {
 	if s.osc == nil {
 		return ""
 	}
+	var notes []string
+	failed := 0
 	for _, st := range s.stagesOf(id) {
 		if st.OSCJobID == 0 {
 			continue
 		}
 		if err := s.osc.Abort(context.Background(), st.OSCJobID); err != nil {
-			return fmt.Sprintf(";挂着的迁移任务 #%d 未能叫停(%v),请到在线变更页确认它的残留", st.OSCJobID, err)
+			failed++
+			// Release.Error 是 varchar(512),真实的 OSC 错误可能很长(同文件
+			// failStageForFinishedOSCJob 已经在用同一个 clip)。
+			notes = append(notes, fmt.Sprintf("迁移任务 #%d 未能叫停(%s)", st.OSCJobID, clip(err.Error(), 200)))
+			continue
 		}
-		return fmt.Sprintf(";已连带叫停迁移任务 #%d", st.OSCJobID)
+		notes = append(notes, fmt.Sprintf("已连带叫停迁移任务 #%d", st.OSCJobID))
 	}
-	return ""
+	if len(notes) == 0 {
+		return ""
+	}
+	msg := ";" + strings.Join(notes, ";")
+	switch {
+	case len(notes) > 1:
+		// 挂着不止一个任务本身就是不该发生的事,值得单独提示核实 —— 不管
+		// 这几个各自叫停成功还是失败。
+		msg += ";请到在线变更页确认这几个任务的残留"
+	case failed > 0:
+		msg += ";请到在线变更页确认它的残留"
+	}
+	return msg
 }
 
 // resumeReleaseAsync 把"接着跑这张发布单"扔到另一条 goroutine 上。
