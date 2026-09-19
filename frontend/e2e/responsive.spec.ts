@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { ADMIN, ADMIN_ROUTES, OPS_ROUTES, envelope, seedSession, stubShell } from './fixtures'
+import { installWsFake } from './wsFake'
 
 // 这一口盯的是排版算完之后才成立的事。改之前全站没有页面级横向溢出,
 // 问题是**挤烂**:768 下数据源页的地址列折成六行、表头断成两截;390 下外壳
@@ -9,6 +10,10 @@ const WIDTHS = [1440, 1080, 768]
 
 async function stubAll(page: Page) {
   await seedSession(page)
+  // 终端页也在这轮里被逐个打开。不顶掉那条 socket,Vite 会把它转发给并不存在的
+  // Go 后端,于是每跑一次就往输出里刷一串 ECONNREFUSED —— 与本口无关的噪声,
+  // 而它盖住的正是这一口自己的失败信息。
+  await installWsFake(page)
   // 兜底**先注册**:Playwright 后注册者优先,所以随后的 stubShell 才盖得住它。
   // 反过来写的话兜底会吃掉 /auth/me,整个会话拿不到身份。
   await page.route('**/api/v1/**', (r) => r.fulfill(envelope([])))

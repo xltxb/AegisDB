@@ -42,6 +42,9 @@ async function stubCommon(page: Page) {
   await page.route('**/api/v1/api-clients**', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/service-accounts**', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/pipelines**', (r) => r.fulfill(envelope([])))
+  // 上面那条注释说的就是这个,但角色清单当时漏了 —— 它是唯一一个还在往 dev 代理
+  // 上打的接口,每跑一次刷两条 ECONNREFUSED 堆栈。
+  await page.route('**/api/v1/roles', (r) => r.fulfill(envelope([])))
 }
 
 // ---------------------------------------------------------------- 设置页
