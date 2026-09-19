@@ -1306,6 +1306,23 @@ a { color: inherit; text-decoration: none; }
 .set-in.w160 { width: 160px; }
 .set-in.w180 { width: 180px; }
 .set-in.w320 { width: 320px; max-width: 100%; }
+
+/* 设置页的行:控件列定宽,左边缘对齐。
+ *
+ * 通用的 .c-card-row 是 flex + margin-left:auto,控件一律贴右。宽度一样时看不出
+ * 问题,而这一页的控件有 160 / 180 / 320 三档 —— 右边缘齐了,左边缘落在三个位置
+ * 上(实测 1041 / 1021 / 881),一列扫下来是锯齿状的。
+ *
+ * 只在设置页作用域内换成两列 grid:控件列固定 320px,列内左对齐。窄输入仍然窄
+ * (数字框没必要拉成 320),但它们从同一条线开始。
+ * 768 以下沿用通用规则的上下堆叠,这里跟着退回单列。 */
+@media (min-width: 769px) {
+  .set-body .c-card-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: center; gap: 16px;
+  }
+  .set-body .c-row-ctl { margin-left: 0; justify-content: flex-start; }
+}
 .set-ta { min-height: 84px; resize: vertical; font-family: var(--font-mono); }
 .set-link {
   font: 600 12px var(--font-body); color: var(--accent-text);
