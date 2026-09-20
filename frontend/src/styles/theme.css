@@ -2422,6 +2422,7 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 
 /* ============ 库表树 ============ */
 .tv-tree {
+  position: relative;
   min-height: 0; overflow: hidden; display: flex; flex-direction: column;
   border-right: 1px solid var(--border-subtle); background: var(--surface-sunken);
 }

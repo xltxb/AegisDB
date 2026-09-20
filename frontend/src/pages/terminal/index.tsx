@@ -897,6 +897,10 @@ export default function TerminalPage() {
       className={clsx('tv-grid', treeCollapsed && 'tree-collapsed', inspCollapsed && 'insp-collapsed', zen && 'zen', resizing && 'resizing')}
       style={gridVars}
     >
+      {/* 四角取景框。终端是一台分了三区的仪器,不是三张拼在一起的卡 ——
+          角标只属于这圈外框,三栏各自只拿一条顶沿高光线。
+          absolute,所以不会变成第四个网格项。 */}
+      <span className="hud-corners" aria-hidden="true" />
       {(treeCollapsed || zen)
         ? <div className="tv-rail left" title={t('treeExpand')} onClick={() => { setTreeCollapsed(false); setZen(false) }}><PanelLeftOpen size={16} /></div>
         : (

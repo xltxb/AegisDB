@@ -115,9 +115,14 @@
 }
 
 /* 卡头分隔线:左浓右淡的渐变,不是一条等浓实线。
-   骨架层要把 border-bottom 去掉(见下),否则渐变叠在实线上等于没换。 */
+   骨架层要把 border-bottom 去掉(见下),否则渐变叠在实线上等于没换。
+   .tv-panel-head 在这组里,是因为它所在的 .tv-insp 是 overflow:auto 的滚动容器
+   (伪元素会跟着内容滚走),而它自己带不透明底色,会把容器画在顶沿的
+   background-image 盖住 —— 两条路都堵死。而它本来就是那一栏的顶沿,
+   有头就用头下那条分隔线,和 .c-card 走同一条规则。 */
 .c-card-head::after,
-.dash-card > header::after {
+.dash-card > header::after,
+.tv-panel-head::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
   pointer-events: none;
   background: linear-gradient(90deg,
@@ -125,7 +130,7 @@
     var(--border-subtle) 60%,
     transparent);
 }
-.c-card-head, .dash-card > header { position: relative; }
+.c-card-head, .dash-card > header, .tv-panel-head { position: relative; }
 
 /* 卡头图标从"淡底色块"升级成"带描边的仪表位"。 */
 .c-card-icon, .dash-ico {
@@ -248,4 +253,18 @@
 [data-theme="dark"] .aj-item:hover,
 [data-theme="dark"] .osc-item:hover {
   box-shadow: var(--glow-sm);
+}
+
+/* ---- 终端:一台分了三区的仪器 ---- */
+
+/* 外框的四角取景框由 TSX 里的 .hud-corners 节点承担(同登录卡)。栏在这里只拿
+   一条顶沿高光线,不各自加角标 —— 加了一屏就是四个角标,外框那圈反而读不出来。
+   类名是 .tv-*(v2)。theme.css 里的 .term-* 是 v1 的死样式,TSX 已无引用。
+   只有这两栏在这里:.tv-tree 是 overflow:hidden(真正滚的是它的孩子
+   .tv-tree-list),.tv-main 未声明 overflow —— 两者用伪元素都安全。
+   .tv-insp 不在这组,它是 overflow:auto,见下一条。 */
+.tv-tree::before,
+.tv-main::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  pointer-events: none; background: var(--hud-edge); z-index: 1;
 }
