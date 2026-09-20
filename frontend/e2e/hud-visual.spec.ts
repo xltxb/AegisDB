@@ -633,3 +633,36 @@ test.describe('HUD 第二阶段 · 面板档', () => {
     expect(await styleOf(page, '.cat-side', 'position')).toBe('relative')
   })
 })
+
+test.describe('HUD 第二阶段 · 滚动容器', () => {
+  test('.ib-side 的高光线走 background-image,不走伪元素', async ({ page }) => {
+    await open(page, '/inbox')
+    expect(await styleOf(page, '.ib-side', 'background-image')).toContain('gradient')
+    expect(await styleOf(page, '.ib-side', 'background-image', '::before')).toBe('none')
+  })
+
+  // 这条不针对某个容器,针对一类错误:本项目已经在 .c-table 和 .rail 上各犯过
+  // 一次"给滚动容器挂绝对定位装饰"。将来任何人把某个装饰过的容器改成可滚,
+  // 这条立刻红。
+  test('凡是会滚的装饰容器,都不用绝对定位的伪元素承载装饰', async ({ page }) => {
+    await open(page, '/inbox')
+    const bad = await page.evaluate(() => {
+      const out: string[] = []
+      for (const el of document.querySelectorAll<HTMLElement>('*')) {
+        const cs = getComputedStyle(el)
+        const scrolls = ['auto', 'scroll'].includes(cs.overflowX)
+          || ['auto', 'scroll'].includes(cs.overflowY)
+        if (!scrolls) continue
+        for (const pe of ['::before', '::after']) {
+          const p = getComputedStyle(el, pe)
+          if (p.content === 'none') continue
+          if (p.position === 'absolute' && p.backgroundImage !== 'none') {
+            out.push(`${el.className || el.tagName}${pe}`)
+          }
+        }
+      }
+      return out
+    })
+    expect(bad).toEqual([])
+  })
+})

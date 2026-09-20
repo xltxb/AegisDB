@@ -2888,7 +2888,15 @@ html[lang="en"] .rail-item span { font-size: 9px; }
  */
 .ib-side {
   padding: 20px 22px; border: 1px solid var(--border-subtle); border-radius: 14px;
-  background: var(--surface-card);
+  /* 它是 overflow:auto 的滚动容器(见下面那行),绝对定位的伪元素会跟着内容滚出
+     可视区 —— 同 .c-table 和 .rail 的理由。background-attachment 默认 scroll,
+     锚在元素自己的边框盒上,不随内容滚动。
+     底色必须从 background 简写拆成 background-color,否则被 background-image 连带清掉。 */
+  background-color: var(--surface-card);
+  background-image: var(--hud-edge);
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 0;
   position: sticky; top: 0;
   max-height: calc(100vh - 102px); overflow: auto;
 }
