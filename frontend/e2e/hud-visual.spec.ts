@@ -847,3 +847,52 @@ test.describe('HUD 第二阶段 · 终端', () => {
     expect(await styleOf(page, '.tv-panel-head', 'background-image', '::after')).toContain('gradient')
   })
 })
+
+test.describe('HUD 第二阶段 · 覆盖面', () => {
+  // 防两件事:漏掉一个容器(装饰不全),以及选择器写宽了误伤别的容器(装饰过度)。
+  // 数字写死是有意的 —— 将来增删容器时这条会红,逼人回来改这份清单,
+  // 而不是让覆盖面悄悄漂移。
+  test('拿到面板档装饰的容器,正好是清单上那些', async ({ page }) => {
+    await open(page, '/settings')
+    const n = await page.evaluate(() => {
+      const list = ['.c-card', '.dash-card', '.login-card', '.perm-roles', '.set-nav',
+        '.set-save', '.cat-side', '.cat-detail', '.rr-stat', '.chg-detail',
+        '.pl-editor', '.notif-panel', '.usermenu', '.conn-bulkbar']
+      // 直接数样式表里的选择器,不数页面上的元素 —— 一个页面不会同时渲染出
+      // 这十四个,但规则是全站一份。
+      let hit = 0
+      for (const sheet of document.styleSheets) {
+        let rules: CSSRuleList
+        try { rules = sheet.cssRules } catch { continue }
+        for (const r of rules) {
+          const t = (r as CSSStyleRule).selectorText
+          if (!t) continue
+          if (t.includes('::before') && t.includes('.c-card::before')) {
+            hit = list.filter((s) => t.includes(`${s}::before`)).length
+          }
+        }
+      }
+      return hit
+    })
+    expect(n).toBe(14)
+  })
+
+  test('拿到列表行装饰的容器,正好是四个', async ({ page }) => {
+    await open(page, '/settings')
+    const n = await page.evaluate(() => {
+      const list = ['.chg-item', '.pl-item', '.aj-item', '.osc-item']
+      for (const sheet of document.styleSheets) {
+        let rules: CSSRuleList
+        try { rules = sheet.cssRules } catch { continue }
+        for (const r of rules) {
+          const t = (r as CSSStyleRule).selectorText
+          if (t && t.includes('.chg-item::after')) {
+            return list.filter((s) => t.includes(`${s}::after`)).length
+          }
+        }
+      }
+      return -1
+    })
+    expect(n).toBe(4)
+  })
+})
