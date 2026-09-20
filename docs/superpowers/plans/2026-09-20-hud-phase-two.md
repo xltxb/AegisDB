@@ -549,14 +549,26 @@ test.describe('HUD 第二阶段 · 终端', () => {
     expect(await styleOf(page, '.tv-grid > .hud-corners', 'position')).toBe('absolute')
   })
 
-  test('三栏各有顶沿高光线,但不各自加角标', async ({ page }) => {
+  test('树与终端栏各有顶沿高光线,但不各自加角标', async ({ page }) => {
     await open(page, '/terminal')
-    await page.waitForSelector('.term-main')
-    for (const sel of ['.term-tree', '.term-main', '.term-insp']) {
+    await page.waitForSelector('.tv-main')
+    // 类名是 .tv-*(终端 v2)。theme.css 里还留着一段 .term-* 是 v1 的死样式,
+    // TSX 无引用 —— 拿它当靶子会一条都匹配不到。
+    for (const sel of ['.tv-tree', '.tv-main']) {
       expect(await styleOf(page, sel, 'background-image', '::before')).toContain('gradient')
       // 角标只属于外框。三栏再各加一个,一屏就是四个角标。
       expect(parseFloat(await styleOf(page, sel, 'border-top-width', '::after'))).toBe(0)
     }
+  })
+
+  test('.tv-insp 不拿顶沿高光线,改由面板头拿渐变分隔线', async ({ page }) => {
+    await open(page, '/terminal')
+    await page.waitForSelector('.tv-insp')
+    // 它是 overflow:auto 的滚动容器(伪元素会滚走),而它的首个子元素
+    // .tv-panel-head 带不透明底色(background-image 会被盖住)。两条路都堵死,
+    // 所以改走它自己的面板头 —— 那才是这一栏真正的顶沿。
+    expect(await styleOf(page, '.tv-insp', 'background-image', '::before')).toBe('none')
+    expect(await styleOf(page, '.tv-panel-head', 'background-image', '::after')).toContain('gradient')
   })
 })
 ```
@@ -566,8 +578,8 @@ test.describe('HUD 第二阶段 · 终端', () => {
 Run: `npx playwright test e2e/hud-visual.spec.ts -g "终端" --reporter=list`
 Expected: 三条全 FAIL（节点不存在 / 高光线是 `none`）。
 
-若 `.term-tree` 或 `.term-insp` 取不到，可能是终端页在折叠态（`tree-collapsed` / `insp-collapsed`）
-下用 `.tv-rail` 替换了它们 —— 先确认默认态是展开的，必要时在测试里先展开，**不要改断言**。
+若 `.tv-tree` 取不到，是终端页在折叠态（`tree-collapsed` / `zen`）下用 `.tv-rail` 替换了它 ——
+先确认默认态是展开的，必要时在测试里先展开，**不要改断言**。
 
 - [ ] **Step 3: 加装饰节点**
 
@@ -584,8 +596,13 @@ Expected: 三条全 FAIL（节点不存在 / 高光线是 `none`）。
 
 - [ ] **Step 4: 骨架层补定位上下文**
 
-`theme.css` 给 `.term-tree, .term-insp` 与 `.term-main` 各加 `position: relative;`。
-`.tv-grid` 已经是 `relative`（≤1280 下检查器要以它为定位祖先），**不要动**。
+`theme.css` 只给 `.tv-tree` 加 `position: relative;`。
+
+**不要动这三个**：`.tv-main` 已经是 `relative`；`.tv-grid` 是 `relative`（≤1280 下
+检查器要以它为定位祖先）；`.tv-insp` 不用伪元素，不需要定位上下文。
+
+**也不要碰 `.term-tree` / `.term-main` / `.term-insp`** —— 那一段（约 615–673 行）
+是终端 v1 的死样式，TSX 里已无引用。本轮不清理它，但绝不装饰它。
 
 - [ ] **Step 5: 装饰层新增终端段**
 
@@ -594,26 +611,49 @@ Expected: 三条全 FAIL（节点不存在 / 高光线是 `none`）。
 ```css
 /* ---- 终端:一台分了三区的仪器 ---- */
 
-/* 外框的四角取景框由 TSX 里的 .hud-corners 节点承担(同登录卡)。三栏在这里
-   只拿一条顶沿高光线,不各自加角标 —— 加了一屏就是四个角标,外框那圈反而
-   读不出来了。
-   这三栏是 overflow:hidden 不是 auto(真正滚的是里面的 .term-tree-list),
-   所以可以安全用伪元素;不要套用 .ib-side 那条结论。 */
-.term-tree::before,
-.term-main::before,
-.term-insp::before {
+/* 外框的四角取景框由 TSX 里的 .hud-corners 节点承担(同登录卡)。栏在这里只拿
+   一条顶沿高光线,不各自加角标 —— 加了一屏就是四个角标,外框那圈反而读不出来。
+   类名是 .tv-*(v2)。theme.css 里的 .term-* 是 v1 的死样式,TSX 已无引用。
+   只有这两栏在这里:.tv-tree 是 overflow:hidden(真正滚的是它的孩子
+   .tv-tree-list),.tv-main 未声明 overflow —— 两者用伪元素都安全。
+   .tv-insp 不在这组,它是 overflow:auto,见下一条。 */
+.tv-tree::before,
+.tv-main::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
   pointer-events: none; background: var(--hud-edge); z-index: 1;
 }
 ```
 
-`z-index: 1` 是必要的：三栏里装着 xterm 画布与列表，高光线要浮在它们之上才看得见。
+`z-index: 1` 是必要的：这两栏里装着 xterm 画布与库表树，高光线要浮在它们之上才看得见。
 这是整套装饰里唯一需要 `z-index` 的一处 —— 其余都画在空白的容器边缘上。
+
+`.tv-insp` 改走面板头。在 `hud.css` 的**卡头分隔线**那一组里追加一个选择器：
+
+```css
+.c-card-head::after,
+.dash-card > header::after,
+.tv-panel-head::after {
+```
+
+并给同一段末尾那行加上它：
+
+```css
+.c-card-head, .dash-card > header, .tv-panel-head { position: relative; }
+```
+
+理由写进注释：
+
+```css
+/* .tv-panel-head 在这组里,是因为它所在的 .tv-insp 是 overflow:auto 的滚动容器
+   (伪元素会跟着内容滚走),而它自己带不透明底色,会把容器画在顶沿的
+   background-image 盖住 —— 两条路都堵死。而它本来就是那一栏的顶沿,
+   有头就用头下那条分隔线,和 .c-card 走同一条规则。 */
+```
 
 - [ ] **Step 6: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 93 passed。
+Expected: 94 passed。
 
 - [ ] **Step 7: 跑终端回归 —— 这一步不能跳**
 
@@ -715,7 +755,7 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
 - [ ] **Step 2: 跑测试**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 95 passed。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
+Expected: 96 passed。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
 若红，说明某一档的选择器列表和这份清单对不上，**先查列表再改数字**。
 
 - [ ] **Step 3: 全量自动化**
@@ -728,7 +768,7 @@ npm run test:unit
 npm run test:e2e
 ```
 
-Expected: build 干净、291 单测、95 e2e。任何一个数字低于此，就是回归 —— 贴出失败输出，
+Expected: build 干净、291 单测、96 e2e。任何一个数字低于此，就是回归 —— 贴出失败输出，
 不要四舍五入过去。
 
 - [ ] **Step 4: 跑起真应用**
