@@ -62,13 +62,27 @@
 
 /* ---- 卡片:顶沿高光 + 右上角标 ---- */
 
-/* .c-table 不在这组里 —— 它是横滚容器,高光线走 background-image,见 theme.css。
-   .perm-rcard 也不在 —— 它的 ::before 被选中态的左色条占着(theme.css 的
-   `.perm-rcard.on::before`),是全站唯一的伪元素冲突点。按选择器引,不按行号:
-   theme.css 会长,行号一改就成了假话。 */
+/* 不在这组里的两类:
+   一是横滚容器 —— .c-table 与 .ib-side 的高光线走 background-image,见 theme.css。
+     绝对定位的后代会跟着内容滚出可视区。
+   二是 ::before 已被选中态左色条占用的容器 —— .perm-rcard、.chg-item、.pl-item
+     三处都是这个模式(`.on::before` 画一根 3px 竖条)。第一阶段的注释说这是"全站
+     唯一"的冲突点,那是错的,实测三处。列表行整档因此改用 ::after,见下面那组。
+   按选择器引,不按行号:theme.css 会长,行号一改就成了假话。 */
 .c-card::before,
 .dash-card::before,
-.login-card::before {
+.login-card::before,
+.perm-roles::before,
+.set-nav::before,
+.set-save::before,
+.cat-side::before,
+.cat-detail::before,
+.rr-stat::before,
+.chg-detail::before,
+.pl-editor::before,
+.notif-panel::before,
+.usermenu::before,
+.conn-bulkbar::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
   pointer-events: none; background: var(--hud-edge);
 }
@@ -77,7 +91,18 @@
    background-image —— 而 .c-card 的 background 常被页面级 CSS 覆盖
    (如 .us-stat.warning)。一个角已经够给出"这是一块仪表面板"的读感。 */
 .c-card::after,
-.dash-card::after {
+.dash-card::after,
+.perm-roles::after,
+.set-nav::after,
+.set-save::after,
+.cat-side::after,
+.cat-detail::after,
+.rr-stat::after,
+.chg-detail::after,
+.pl-editor::after,
+.notif-panel::after,
+.usermenu::after,
+.conn-bulkbar::after {
   content: ''; position: absolute; top: 10px; right: 10px;
   width: var(--hud-corner-size); height: var(--hud-corner-size);
   pointer-events: none;

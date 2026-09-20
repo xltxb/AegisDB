@@ -596,3 +596,36 @@ test.describe('HUD 登录页', () => {
     expect(bg).toContain('45, 205, 230')
   })
 })
+
+test.describe('HUD 第二阶段 · 面板档', () => {
+  // 每个容器配一条能把它渲染出来的最小路径。列在一起是因为它们是同一档待遇,
+  // 一条断言重复十一遍没有意义 —— 要验的是"这一档的规则挂上了"。
+  const PANELS: Array<[string, string]> = [
+    ['.perm-roles', '/permissions'],
+    ['.set-nav', '/settings'],
+    ['.set-save', '/settings'],
+    ['.cat-side', '/catalog'],
+    ['.cat-detail', '/catalog'],
+  ]
+
+  for (const [sel, path] of PANELS) {
+    test(`${sel} 拿到顶沿高光线与右上角标`, async ({ page }) => {
+      await open(page, path)
+      expect(await styleOf(page, sel, 'background-image', '::before')).toContain('gradient')
+      expect(await styleOf(page, sel, 'height', '::before')).toBe('1px')
+      expect(await styleOf(page, sel, 'pointer-events', '::before')).toBe('none')
+      expect(parseFloat(await styleOf(page, sel, 'border-top-width', '::after'))).toBeGreaterThan(0)
+      expect(parseFloat(await styleOf(page, sel, 'border-right-width', '::after'))).toBeGreaterThan(0)
+      // L 形,不是方框
+      expect(parseFloat(await styleOf(page, sel, 'border-left-width', '::after'))).toBe(0)
+    })
+  }
+
+  test('窄屏下 .set-nav / .cat-side 仍然是装饰的定位祖先', async ({ page }) => {
+    await open(page, '/settings')
+    await page.setViewportSize({ width: 768, height: 900 })
+    // ≤768 的媒体查询把它们从 sticky 解除。解除必须落到 relative,不能落到
+    // static —— static 会让 ::before 跑到更外层祖先上定位,高光线就画到别处去了。
+    expect(await styleOf(page, '.set-nav', 'position')).toBe('relative')
+  })
+})
