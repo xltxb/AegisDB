@@ -622,10 +622,14 @@ test.describe('HUD 第二阶段 · 面板档', () => {
   }
 
   test('窄屏下 .set-nav / .cat-side 仍然是装饰的定位祖先', async ({ page }) => {
-    await open(page, '/settings')
     await page.setViewportSize({ width: 768, height: 900 })
+    await open(page, '/settings')
     // ≤768 的媒体查询把它们从 sticky 解除。解除必须落到 relative,不能落到
     // static —— static 会让 ::before 跑到更外层祖先上定位,高光线就画到别处去了。
     expect(await styleOf(page, '.set-nav', 'position')).toBe('relative')
+    // .cat-side 在 /catalog 才渲染得出来,同一条媒体查询规则,两个选择器都断言,
+    // 免得标题承诺了两个却只测了一个。
+    await open(page, '/catalog')
+    expect(await styleOf(page, '.cat-side', 'position')).toBe('relative')
   })
 })
