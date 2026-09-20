@@ -327,3 +327,39 @@ test.describe('HUD 活体状态', () => {
     expect(parseFloat(await styleOf(page, '.c-badge', 'border-top-width'))).toBeGreaterThan(0)
   })
 })
+
+test.describe('HUD 外壳', () => {
+  test('顶栏是半透明 + 背景模糊', async ({ page }) => {
+    await open(page, '/dashboard')
+    const f = await styleOf(page, '.top', 'backdrop-filter')
+    expect(f).toContain('blur')
+  })
+
+  test('侧栏边缘是渐变竖线,不是一条等浓的灰线', async ({ page }) => {
+    await open(page, '/dashboard')
+    expect(await styleOf(page, '.rail', 'background-image')).toContain('gradient')
+    expect(await styleOf(page, '.rail', 'border-right-width')).toBe('0px')
+    // 不能用伪元素:.rail 是 overflow-y:auto 的滚动容器,绝对定位的后代会跟着
+    // 内容滚 —— 菜单项一多,这条线就滚出可视区了。同 .c-table 那条。
+    expect(await styleOf(page, '.rail', 'background-image', '::after')).toBe('none')
+  })
+
+  test('侧栏边线不参与布局,不挤窄菜单项', async ({ page }) => {
+    await open(page, '/dashboard')
+    const w = await page.locator('.rail').evaluate((el) => el.getBoundingClientRect().width)
+    // 74px 是写死的栏宽(theme.css 的注释解释了为什么是 74)。装饰不能改它。
+    expect(w).toBeCloseTo(74, 0)
+  })
+
+  test('侧栏选中项在色条之外还有外溢辉光', async ({ page }) => {
+    await open(page, '/dashboard')
+    await page.waitForSelector('.rail-item.on')
+    const s = await styleOf(page, '.rail-item.on', 'box-shadow')
+    // 既有的 inset 色条 + 新加的外溢辉光 = 两段阴影。数颜色函数的个数,
+    // 不数逗号 —— 一段阴影自己就带好几个逗号。
+    expect(s).toContain('inset')
+    expect((s.match(/rgba?\(/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    // 外溢那一段不能也是 inset,否则辉光画在里面,外面看不见。
+    expect(s.replace(/inset/, '')).not.toContain('inset')
+  })
+})

@@ -65,8 +65,23 @@ a { color: inherit; text-decoration: none; }
      min-height:0 不能省:flex 子项默认 min-height:auto,不收缩,overflow 也就不生效。 */
   overflow-y: auto;
   min-height: 0;
-  background: var(--surface-sunken);
-  border-right: 1px solid var(--border-subtle);
+  /* 底色拆成 background-color:下面的 background-image 会把 background 简写
+     里的颜色一并清掉。 */
+  background-color: var(--surface-sunken);
+  /* 一条从头到尾一样浓的灰线是"隔断",渐变线才是"边缘"。
+     不用伪元素:.rail 会滚(见上面那段 overflow-y 的注释),绝对定位的后代跟着
+     内容滚,菜单一长线就滑走了 —— 同 .c-table 的做法。
+     border-right 必须去掉,不能只是盖住:74px 的栏宽是算过的(见 .rail-item
+     的注释:64px 项 + 两边各 5px),多 1px 边框就是 75px。 */
+  background-image: linear-gradient(180deg,
+    transparent,
+    var(--border-subtle) 18%,
+    color-mix(in oklch, var(--hud-hairline) 60%, transparent) 50%,
+    var(--border-subtle) 82%,
+    transparent);
+  background-repeat: no-repeat;
+  background-size: 1px 100%;
+  background-position: 100% 0;
 }
 /* 装不下的时候滚,不是把里面的东西压扁。
  *
@@ -147,7 +162,8 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   border-color: var(--accent-subtle-border);
   /* 与终端实例树的选中态同一个做法:深色主题下淡背景和 hover 几乎分不出来。
      用 inset 阴影不用 border —— border 会把这一项往右挤 3px,选中时整项跳一下。 */
-  box-shadow: inset 3px 0 0 var(--accent);
+  /* 外溢那一段是给暗色的:淡背景在深色上和 hover 几乎分不出来,色条又太细。 */
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 16px -6px var(--accent);
 }
 .rail-foot {
   margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px;
@@ -174,7 +190,10 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   height: 54px; flex: 0 0 54px;
   display: flex; align-items: center; gap: 14px; padding: 0 22px;
   border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-card);
+  /* 设计系统对顶栏的原文要求:半透明 + backdrop blur。实色顶栏把下面的
+     HUD 底座切断了,页面看着像两张拼起来的图。 */
+  background: color-mix(in oklch, var(--surface-card) 78%, transparent);
+  backdrop-filter: blur(8px);
 }
 /* 390 宽下「数据库管理网关」会竖成一列单字,压在页面标题上 —— flex 子项的
    min-width 默认是 auto,它不肯缩,于是改为逐字折行。单行省略才是对的:
