@@ -921,7 +921,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: 写失败的测试**
 
-在 `e2e/hud-visual.spec.ts` 末尾追加：
+**先做一步重构**：`AUDIT_ROWS` 与 `openAudit()` 现在定义在 Task 3 的
+`test.describe('HUD 交互态')` 块内部，本任务是第二个消费者。把这两个声明原样上提到
+模块作用域（紧跟 `styleOf()` 之后），两个 describe 块都从那里取。只移动，不改内容 ——
+Task 3 的四条测试的行为必须一个字都不变。
+
+然后在 `e2e/hud-visual.spec.ts` 末尾追加：
 
 ```ts
 test.describe('HUD 活体状态', () => {
@@ -944,7 +949,10 @@ test.describe('HUD 活体状态', () => {
   })
 
   test('徽标有描边,不只是一块淡底', async ({ page }) => {
-    await open(page, '/dashboard')
+    // 不能用 /dashboard:总览页的每个 <Badge> 都在 rows.map() 里,兜底桩返回
+    // 空数组,一个 .c-badge 都不渲染。审计表每行都有一枚(result 列),而
+    // openAudit() 已经在喂数据了。
+    await openAudit(page)
     await page.waitForSelector('.c-badge')
     expect(parseFloat(await styleOf(page, '.c-badge', 'border-top-width'))).toBeGreaterThan(0)
   })
