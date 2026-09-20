@@ -37,6 +37,17 @@
   --blur-sm: 6px;
   --blur-md: 14px;
   --blur-lg: 28px;
+
+  /* ---- HUD 装饰层 ---- */
+  --hud-grid-size:   32px;  /* 4px 栅格 ×8 */
+  --hud-corner-size: 12px;
+  /* 卡片顶沿那条 1px 高光。两端透明,中段 azure→cyan —— 全宽等浓会变成第二条
+     边框,而它要做的是"这块面板的上沿被光扫过",不是再描一次边。 */
+  --hud-edge: linear-gradient(90deg,
+    transparent,
+    var(--hud-hairline),
+    color-mix(in oklch, var(--glow-accent) 70%, transparent),
+    transparent);
 }
 
 [data-theme="dark"] {

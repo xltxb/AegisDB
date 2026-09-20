@@ -112,6 +112,17 @@
 
   --focus-ring:      color-mix(in oklch, var(--azure-500) 45%, transparent);
   --selection-bg:    var(--azure-100);
+
+  /* ---- HUD 装饰层(见 hud.css)---- */
+  /* 网格取 slate-500 稀释:亮色底座要冷灰蓝,不要黑 —— 黑网格压在白卡片旁边
+     像脏,蓝灰网格才像蓝图纸。 */
+  --hud-grid:     rgba(105, 116, 139, 0.09);
+  /* 辉光压到 6–7%:它的活是把四角从死白里兜住,不是让人看见一团蓝。超过 10%
+     在白底上就成了色斑,卡片的白跟着脏。 */
+  --hud-glow-a:   rgba(59, 110, 246, 0.07);
+  --hud-glow-b:   rgba(45, 205, 230, 0.06);
+  --hud-corner:   rgba(59, 110, 246, 0.30);
+  --hud-hairline: rgba(59, 110, 246, 0.45);
 }
 
 /* ============================================================
@@ -158,4 +169,13 @@
 
   --focus-ring:      color-mix(in oklch, var(--azure-400) 60%, transparent);
   --selection-bg:    rgba(59, 110, 246, 0.34);
+
+  /* ---- HUD 装饰层 ---- */
+  /* 暗色底座反过来:网格是白色低透明(深蓝黑上画蓝线看不见),辉光放到能看出
+     纵深的量,角标换 cyan —— 暗色里 azure 和卡片边框的亮度差不够。 */
+  --hud-grid:     rgba(255, 255, 255, 0.045);
+  --hud-glow-a:   rgba(59, 110, 246, 0.16);
+  --hud-glow-b:   rgba(45, 205, 230, 0.12);
+  --hud-corner:   rgba(45, 205, 230, 0.42);
+  --hud-hairline: rgba(94, 131, 251, 0.75);
 }

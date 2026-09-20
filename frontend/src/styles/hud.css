@@ -1,0 +1,47 @@
+/* ============================================================
+   HUD 装饰层
+   ------------------------------------------------------------
+   这里只放"加在骨架之上的装饰":页面底座、卡片高光线与角标、活体脉冲。
+   骨架本身(卡片的边框圆角底色、按钮的高度内距、表格的栅格)仍在 theme.css
+   里就地改 —— 一条规则只出现在一个地方,两边没有同选择器,也就没有权重战争。
+
+   本文件由 main.tsx 在 theme.css **之后** import。不能塞进 theme.css 的
+   @import 块:CSS 的 @import 必须位于所有规则之前,放在那里会被后面 2800 行
+   同权重的规则压过去。
+
+   通则:装饰一律 pointer-events: none,且不改变盒模型 —— 全部用绝对定位的
+   伪元素或 background-image。用 border / padding 实现的任何一处都会挪动布局,
+   e2e/responsive.spec.ts 的溢出断言会红。
+   ============================================================ */
+
+/* ---- 页面底座:网格 + 双径向辉光 ---- */
+
+/* 挂 .main 不挂 .content:.content 是 overflow:auto 的滚动容器,背景挂上去会
+   随内容滚动,并在每帧重绘整张渐变。.main 是固定高度的 flex 列,画一次就不动。
+   而且——固定不动的网格才像 HUD 底座,跟着内容滚的网格像壁纸。 */
+.main { position: relative; isolation: isolate; }
+.main > * { position: relative; z-index: 1; }
+.main::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 88% 0%,  var(--hud-glow-b), transparent 70%),
+    radial-gradient(50% 45% at 0% 100%, var(--hud-glow-a), transparent 70%),
+    linear-gradient(var(--hud-grid) 1px, transparent 1px)
+      0 0 / 100% var(--hud-grid-size),
+    linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px)
+      0 0 / var(--hud-grid-size) 100%;
+}
+
+/* 登录页不在 .main 里,它是独立的全屏 grid。 */
+.login { position: relative; isolation: isolate; }
+.login > * { position: relative; z-index: 1; }
+.login::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(55% 45% at 80% 8%,  var(--hud-glow-b), transparent 70%),
+    radial-gradient(55% 45% at 12% 92%, var(--hud-glow-a), transparent 70%),
+    linear-gradient(var(--hud-grid) 1px, transparent 1px)
+      0 0 / 100% var(--hud-grid-size),
+    linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px)
+      0 0 / var(--hud-grid-size) 100%;
+}

@@ -5,6 +5,8 @@ import { queryClient } from '@/api/queryClient'
 import { useUIStore, applyTheme, applyLang } from '@/stores/ui'
 import '@/locales'
 import '@/styles/theme.css'
+// 装饰层必须在骨架层之后 —— 见 hud.css 文件头。
+import '@/styles/hud.css'
 import App from './App'
 
 // 挂载前先落主题,避免先白一闪再变深色。语言同样要落一次 —— 它决定 <html lang>,
