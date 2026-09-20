@@ -898,6 +898,7 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .aj-poll { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-body); color: var(--accent-text); white-space: nowrap; }
 
 .aj-item {
+  position: relative;
   padding: 13px 16px; border: 1px solid var(--border-subtle); border-radius: 14px;
   background: var(--surface-card); cursor: pointer;
   transition: border-color var(--dur-fast, .15s) var(--ease-out, ease);
@@ -3005,6 +3006,7 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 
 .osc-list { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .osc-item {
+  position: relative;
   padding: 13px 16px; border: 1px solid var(--border-subtle); border-radius: 14px;
   background: var(--surface-card);
 }

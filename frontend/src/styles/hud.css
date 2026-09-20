@@ -215,3 +215,37 @@
 .hud-corners::after {
   right: 0; border-right: 1px solid var(--hud-corner); border-bottom: 1px solid var(--hud-corner);
 }
+
+/* ---- 列表行:只要线,不要角 ---- */
+
+/* 一屏二十个角标是噪声,不是科技感 —— 角标回答的是"这是一块独立面板",
+   而列表行不是,它们是一列同类项。这条是第一阶段"整站卡片一起飘会显得廉价"
+   的同一个道理。
+   走 ::after 不走 ::before:.chg-item 和 .pl-item 的 ::before 被选中态的
+   3px 左色条占着。四个容器统一用 ::after,不做两个用这个两个用那个的分裂 ——
+   同一档待遇用两种机制,下一个人要读两遍才知道它们是一回事。 */
+.chg-item::after,
+.pl-item::after,
+.aj-item::after,
+.osc-item::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  pointer-events: none; background: var(--hud-edge);
+}
+
+/* 它们本来就可点,所以拿 hover 抬升 —— 和 .dash-card 同一组理由。 */
+.chg-item, .pl-item, .aj-item, .osc-item {
+  transition: var(--transition-colors), var(--transition-transform);
+}
+.chg-item:hover,
+.pl-item:hover,
+.aj-item:hover,
+.osc-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+[data-theme="dark"] .chg-item:hover,
+[data-theme="dark"] .pl-item:hover,
+[data-theme="dark"] .aj-item:hover,
+[data-theme="dark"] .osc-item:hover {
+  box-shadow: var(--glow-sm);
+}

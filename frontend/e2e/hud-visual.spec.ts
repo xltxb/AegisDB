@@ -666,3 +666,90 @@ test.describe('HUD 第二阶段 · 滚动容器', () => {
     expect(bad).toEqual([])
   })
 })
+
+test.describe('HUD 第二阶段 · 列表行', () => {
+  // 变更工单要有数据才渲染得出 .chg-item。字段名照 types/index.ts 的 Release
+  // 抄,不要凭印象写:列表读的是 relNo / changeType / pipelineName,写成 no / stage
+  // 之类的行会照常渲染出来但每格是空的,而下面那条 hover 测的是几何,
+  // 空格量掉了就等于没测。接口路径是 /releases,不是 /changes。
+  const RELEASES = {
+    items: [
+      {
+        id: 1, relNo: 'REL-2026-0001', title: '清理过期订单备注',
+        pipelineId: 1, pipelineName: '标准发布', connectionId: 1,
+        instance: 'prod-mysql-01', database: 'shop', env: 'prod',
+        tierCode: 'prod', engine: 'mysql', changeType: 'dml',
+        status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:00:00Z',
+      },
+      {
+        id: 2, relNo: 'REL-2026-0002', title: '补充索引',
+        pipelineId: 1, pipelineName: '标准发布', connectionId: 2,
+        instance: 'demo-dev', database: 'shop', env: 'dev',
+        tierCode: 'dev', engine: 'mysql', changeType: 'ddl',
+        status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:05:00Z',
+      },
+    ],
+    total: 2, page: 1, pageSize: 50,
+  }
+
+  async function openChanges(page: Page) {
+    await open(page, 'about:blank')
+    // 列表和详情分开装桩:`**/api/v1/releases**` 会把 `/releases/:id`(详情)也
+    // 吃掉,喂给它一个 { items, total } 形状的对象。详情区读 open.stages.find(...)
+    // (waitingGate),stages 是 undefined 就整页面炸掉,连带 .chg-item 也渲染不出来
+    // —— 抛的是 TypeError,不是找不到元素的断言失败,查网络请求才看得出来。
+    await page.route('**/api/v1/releases?**', (r) => r.fulfill(envelope(RELEASES)))
+    await page.route('**/api/v1/releases/*', (r) => {
+      const id = Number(new URL(r.request().url()).pathname.split('/').pop())
+      const item = RELEASES.items.find((it) => it.id === id) ?? RELEASES.items[0]
+      r.fulfill(envelope({ ...item, stages: [] }))
+    })
+    await page.goto('/changes')
+    await page.waitForSelector('.chg-item')
+  }
+
+  test('列表行的高光线走 ::after,不走 ::before', async ({ page }) => {
+    await openChanges(page)
+    // ::before 被选中态的 3px 左色条占着 —— 三处之一。
+    expect(await styleOf(page, '.chg-item', 'background-image', '::after')).toContain('gradient')
+    expect(await styleOf(page, '.chg-item', 'height', '::after')).toBe('1px')
+  })
+
+  test('列表行不拿角标', async ({ page }) => {
+    await openChanges(page)
+    // 角标是 border 画的;高光线是 background 画的。同一个 ::after 上,
+    // 有 background 没有 border 才是"只要线不要角"。
+    expect(parseFloat(await styleOf(page, '.chg-item', 'border-top-width', '::after'))).toBe(0)
+  })
+
+  test('列表行 hover 抬升', async ({ page }) => {
+    await openChanges(page)
+    const row = page.locator('.chg-item').first()
+    expect(await row.evaluate((el) => getComputedStyle(el).transform)).toBe('none')
+    await row.hover()
+    await page.waitForTimeout(300) // --dur-base 220ms,读的要是落定值
+    const t = await row.evaluate((el) => getComputedStyle(el).transform)
+    expect(t).toContain('-2')
+  })
+
+  // 三处选中态色条 —— 装饰不得覆盖它们。它们是这三个容器上唯一回答
+  // "现在选的是哪一个"的东西。
+  test('三处选中态色条都还在', async ({ page }) => {
+    // open() 的兜底桩把 /api/v1/roles 喂成 [],角色列表是空的,.perm-rcard
+    // 根本不会渲染 —— 同一份 API 契约问题,只是换了个容器。这里同样得先装桩
+    // 一张真角色卡,再导航,理由与 openChanges() 一致。
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/roles', (r) => r.fulfill(envelope([
+      { id: 1, code: 'admin', name: '平台管理员', layer: 'L0 · 全局', icon: 'crown', count: 1 },
+    ])))
+    await page.route('**/api/v1/roles/*', (r) => r.fulfill(envelope({
+      id: 1, code: 'admin', name: '平台管理员', layer: 'L0 · 全局', icon: 'crown',
+      members: [], matrix: {}, menus: {}, tags: [],
+    })))
+    await page.goto('/permissions')
+    await page.waitForSelector('.perm-rcard')
+    await page.click('.perm-rcard')
+    await page.waitForSelector('.perm-rcard.on')
+    expect(await styleOf(page, '.perm-rcard.on', 'width', '::before')).toBe('3px')
+  })
+})
