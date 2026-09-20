@@ -63,6 +63,9 @@ export default function LoginPage() {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
+        {/* 四角取景框。伪元素只够画两个角,而登录页是第一印象页,四角完整的
+            取景框值这一个装饰元素 —— 这是全站唯一为装饰加的 DOM。 */}
+        <span className="hud-corners" aria-hidden="true" />
         <div className="login-brand">
           <span className="login-mark"><ShieldCheck size={18} /></span>
           <span className="login-name">{t('appName')}</span>

@@ -128,3 +128,31 @@
     filter: drop-shadow(0 0 4px var(--glow-accent));
   }
 }
+
+/* ---- 四角取景框 ---- */
+
+/* 挂在任何 position: relative 的容器里。自身画上面两个角(用两层
+   background-image 定位到左上/右上),两个伪元素各画下面一个。
+   全程绝对定位 + pointer-events:none —— 不进布局,不吃点击。 */
+.hud-corners {
+  position: absolute; inset: 10px; pointer-events: none;
+  background-repeat: no-repeat;
+  background-size: var(--hud-corner-size) var(--hud-corner-size);
+  background-position: left top, right top;
+  background-image:
+    linear-gradient(to right,  var(--hud-corner) 1px, transparent 1px),
+    linear-gradient(to left,   var(--hud-corner) 1px, transparent 1px);
+}
+/* 上面那两层只画了水平的一划;竖划与下面两个角交给伪元素,它们各自是一个
+   真正的 L(两条 border),画起来比再堆四层背景干净。 */
+.hud-corners::before,
+.hud-corners::after {
+  content: ''; position: absolute; bottom: 0;
+  width: var(--hud-corner-size); height: var(--hud-corner-size);
+}
+.hud-corners::before {
+  left: 0; border-left: 1px solid var(--hud-corner); border-bottom: 1px solid var(--hud-corner);
+}
+.hud-corners::after {
+  right: 0; border-right: 1px solid var(--hud-corner); border-bottom: 1px solid var(--hud-corner);
+}

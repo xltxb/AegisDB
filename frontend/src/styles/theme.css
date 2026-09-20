@@ -493,14 +493,29 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 /* ============ 登录 ============ */
 .login { height: 100%; display: grid; place-items: center; background: var(--surface-page); }
 .login-card {
+  position: relative; /* .hud-corners 的定位上下文 */
   width: 380px; padding: var(--space-7, 28px);
-  border-radius: var(--radius-2xl); background: var(--surface-card);
+  border-radius: var(--radius-2xl);
+  /* 半透明 + 模糊,让底座的网格从卡片下面透出来一点 —— 实色卡片扣在网格上
+     像贴纸,透一点才像悬在上面。 */
+  background: color-mix(in oklch, var(--surface-card) 88%, transparent);
+  backdrop-filter: blur(var(--blur-sm));
   border: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+/* 顶沿高光,同卡片。 */
+.login-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  pointer-events: none; background: var(--hud-edge);
 }
 .login-brand { display: flex; align-items: center; gap: 9px; margin-bottom: var(--space-5, 20px); }
 .login-mark {
   width: 30px; height: 30px; border-radius: var(--radius-md); display: grid; place-items: center;
-  background: var(--accent); color: var(--text-on-accent);
+  color: #fff;
+  /* 与 .rail-logo 完全一致的两个色标 —— 同一个品牌标在登录页和侧栏不该长得
+     不一样。token 表里没有对应物,原型里也是写死的。 */
+  background: linear-gradient(135deg, #3b6ef6, #2dcde6);
+  box-shadow: 0 0 18px -4px rgba(45, 205, 230, .6);
 }
 .login-name { font: 700 15px var(--font-display); color: var(--text-strong); }
 .login-card h1 { margin: 0 0 4px; font: 700 21px var(--font-display); color: var(--text-strong); }
@@ -1604,11 +1619,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   color: transparent;
 }
 /* 单位后缀(.dash-nums b i,如 "ms")不跟着裁 —— 它是 11px 的 mono,裁字会
-   把这么小的字号啃掉笔画。 */
+   把这么小的字号啃掉笔画。background:none 挡住父元素的渐变图像不透过来;
+   background-clip 不必显式重置为 border-box —— 那本就是它的初始值,且此属性不继承。 */
 .dash-nums b i {
-  background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  background: none;
+  font: 500 11px var(--font-mono); font-style: normal; color: var(--text-faint); margin-left: 2px;
 }
-.dash-nums b i { font: 500 11px var(--font-mono); font-style: normal; color: var(--text-faint); margin-left: 2px; }
 .dash-nums span { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
 /* 告警数字不裁字:语义色是它唯一要传达的东西,不能被渐变冲淡。 */
 .dash-nums .warn b {

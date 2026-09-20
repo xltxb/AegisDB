@@ -390,3 +390,32 @@ test.describe('HUD 指标数字', () => {
     expect(cs.color).not.toBe('rgba(0, 0, 0, 0)')
   })
 })
+
+test.describe('HUD 登录页', () => {
+  test('登录卡有四角取景框,且对辅助技术隐藏、不吃点击', async ({ page }) => {
+    await page.goto('/login')
+    const el = page.locator('.login-card .hud-corners')
+    await expect(el).toHaveCount(1)
+    await expect(el).toHaveAttribute('aria-hidden', 'true')
+    expect(await styleOf(page, '.hud-corners', 'pointer-events')).toBe('none')
+    // 四个角:自身画两个(上),两个伪元素各画一个(下)。
+    expect(parseFloat(await styleOf(page, '.hud-corners', 'border-left-width', '::before'))).toBeGreaterThan(0)
+    expect(parseFloat(await styleOf(page, '.hud-corners', 'border-right-width', '::after'))).toBeGreaterThan(0)
+  })
+
+  test('装饰元素不改变登录卡尺寸', async ({ page }) => {
+    await page.goto('/login')
+    const w = await page.locator('.login-card').evaluate((el) => el.getBoundingClientRect().width)
+    // 380px 是写死的卡宽。取景框是绝对定位,不能把它顶宽。
+    expect(w).toBeCloseTo(380, 0)
+  })
+
+  test('登录页品牌标与侧栏 logo 用同一组渐变', async ({ page }) => {
+    await page.goto('/login')
+    const bg = await styleOf(page, '.login-mark', 'background-image')
+    expect(bg).toContain('gradient')
+    // #3b6ef6 → rgb(59, 110, 246);#2dcde6 → rgb(45, 205, 230)
+    expect(bg).toContain('59, 110, 246')
+    expect(bg).toContain('45, 205, 230')
+  })
+})
