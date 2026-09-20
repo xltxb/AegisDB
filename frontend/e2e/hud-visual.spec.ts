@@ -1112,3 +1112,86 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
     expect(result.total).toBe(4)
   })
 })
+
+/* ============================================================
+   第三阶段:补齐、清理、空态框
+   ============================================================ */
+
+// 脚本扫描弹窗要点开才有 .scan-nums。列表接口给一份上传,扫描接口给一份三档
+// 都非零的结果 —— 三档全是 0 的话,.danger / .warn 两个类不会挂上去,
+// 那两条豁免断言就变成了对着不存在的元素断言。
+const SCAN = {
+  filename: 'demo.sql', total: 12, high: 2, mid: 3, safe: 7, hasRisky: true,
+  statements: [
+    { index: 1, sql: 'DROP TABLE t;', command: 'DROP', risk: 'high', noWhere: false },
+    { index: 2, sql: 'UPDATE t SET a=1;', command: 'UPDATE', risk: 'mid', noWhere: true },
+    { index: 3, sql: 'SELECT 1;', command: 'SELECT', risk: 'safe', noWhere: false },
+  ],
+}
+
+async function openScanModal(page: Page) {
+  await open(page, 'about:blank')
+  await page.route('**/api/v1/scripts/uploads', (r) => r.fulfill(envelope([
+    { id: 1, userId: 1, filename: 'demo.sql', path: '/tmp/demo.sql', size: 120,
+      source: 'upload', createdAt: '2026-09-20T10:00:00Z' },
+  ])))
+  await page.route('**/api/v1/scripts/scan', (r) => r.fulfill(envelope(SCAN)))
+  await page.goto('/scripts')
+  // 下发按钮:ScriptCard 的 .sc-ops 里那颗 variant="primary"。
+  await page.click('.sc-ops .c-btn.v-primary')
+  await page.waitForSelector('.scan-nums')
+}
+
+test.describe('HUD 第三阶段', () => {
+  test('扫描弹窗的大数字也渐变裁字,两档语义色都豁免', async ({ page }) => {
+    await openScanModal(page)
+    // 普通档:和 .dash-nums b / .us-statv 同一套处理。
+    const plain = await page.locator('.scan-nums div:not(.danger):not(.warn) > b').first().evaluate((el) => {
+      const cs = getComputedStyle(el)
+      return { clip: cs.backgroundClip || cs.webkitBackgroundClip, color: cs.color, bg: cs.backgroundImage }
+    })
+    expect(plain.clip).toBe('text')
+    expect(plain.bg).toContain('gradient')
+    expect(plain.color).toBe('rgba(0, 0, 0, 0)')
+
+    // 两档豁免。.dash-nums 只有一档(warn),这里有两档 —— 语义色是这两个数字
+    // 唯一要传达的东西,渐变会把它冲淡。
+    for (const tone of ['danger', 'warn']) {
+      const cs = await page.locator(`.scan-nums .${tone} > b`).first().evaluate((el) => {
+        const s = getComputedStyle(el)
+        return { clip: s.backgroundClip || s.webkitBackgroundClip, color: s.color }
+      })
+      expect(cs.clip, `${tone} 档不该被裁字`).not.toBe('text')
+      expect(cs.color, `${tone} 档要保留语义色`).not.toBe('rgba(0, 0, 0, 0)')
+    }
+  })
+
+  test('.term-kv 是活的,不在终端 v1 的清理范围里', async ({ page }) => {
+    await openTerminal(page)
+    await page.waitForSelector('.term-kv')
+    // theme.css 里那一段 .term-* 大多是终端 v1 的死样式,但 .term-kv 不是 ——
+    // v2 的检查器(terminal/index.tsx 的 <dl className="term-kv">)还在用它,
+    // 而且 .tv-insp .term-kv 专门覆写过。整段删掉会把检查器的键值排版打散。
+    const cs = await page.locator('.term-kv').first().evaluate((el) => {
+      const s = getComputedStyle(el)
+      const dt = el.querySelector('dt')
+      return {
+        display: s.display, dir: s.flexDirection,
+        dtFont: dt ? getComputedStyle(dt).textTransform : null,
+      }
+    })
+    expect(cs.display).toBe('flex')
+    expect(cs.dir).toBe('column')
+    expect(cs.dtFont).toBe('uppercase')
+  })
+
+  test('空态框拿角标,不拿顶沿高光线', async ({ page }) => {
+    await open(page, '/inbox')
+    await page.waitForSelector('.ib-empty')
+    // 角标说的是"这是一块划定的区域" —— 空态框正是。
+    expect(parseFloat(await styleOf(page, '.ib-empty', 'border-top-width', '::after'))).toBeGreaterThan(0)
+    expect(parseFloat(await styleOf(page, '.ib-empty', 'border-right-width', '::after'))).toBeGreaterThan(0)
+    // 高光线说的是"这块面板的内容从这里开始" —— 空态框里没有内容,那句话是假的。
+    expect(await styleOf(page, '.ib-empty', 'background-image', '::before')).toBe('none')
+  })
+})
