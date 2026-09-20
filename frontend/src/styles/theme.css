@@ -607,74 +607,6 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .notice.warn { background: var(--warning-subtle); color: var(--warning-text); }
 .notice.danger { background: var(--danger-subtle); color: var(--danger-text); }
 
-/* ============ 终端(三栏:树 | 终端 | 检查器) ============ */
-.term-grid {
-  display: grid; grid-template-columns: 268px 1fr 340px; gap: 14px;
-  height: 100%; min-height: 0;
-}
-.term-tree, .term-insp {
-  display: flex; flex-direction: column; min-height: 0;
-  border: 1px solid var(--border-subtle); border-radius: 14px;
-  background: var(--surface-card); overflow: hidden;
-}
-.term-panel-head {
-  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken);
-  font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
-}
-.term-tree-list { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
-.term-conn {
-  width: 100%; display: flex; flex-direction: column; gap: 2px; text-align: left;
-  padding: 9px 11px; border: 1px solid transparent; border-radius: 10px; cursor: pointer;
-  background: transparent; color: var(--text-body);
-  transition: all var(--dur-fast, .15s) var(--ease-out, ease);
-}
-.term-conn:hover { background: var(--surface-sunken); }
-.term-conn.on { background: var(--accent-subtle); border-color: var(--accent-subtle-border); }
-.term-conn-name { font: 600 12.5px var(--font-body); }
-.term-conn-engine { font: 500 10.5px var(--font-mono); color: var(--text-faint); }
-
-.term-main {
-  display: flex; flex-direction: column; min-width: 0; min-height: 0;
-  border: 1px solid var(--border-subtle); border-radius: 14px;
-  background: var(--surface-card); overflow: hidden;
-}
-.term-tabs {
-  display: flex; align-items: center; gap: 10px; height: 40px; flex: 0 0 40px;
-  padding: 0 12px; border-bottom: 1px solid var(--border-subtle);
-}
-.term-tabs .grow, .term-status .grow { margin-left: auto; }
-.term-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); }
-.term-dot.open { background: var(--success); }
-.term-dot.connecting { background: var(--warning); }
-.term-dot.closed { background: var(--danger); }
-.term-target { font: 600 12.5px var(--font-mono); color: var(--text-strong); }
-.term-db {
-  width: 160px; height: 26px; padding: 0 9px; border-radius: 8px;
-  border: 1px solid var(--border-default); background: var(--surface-sunken);
-  color: var(--text-body); font: 500 11.5px var(--font-mono);
-}
-.term-danger {
-  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
-  background: var(--danger-subtle); color: var(--danger-text);
-  font: 600 12px var(--font-body);
-}
-.term-host { flex: 1; min-height: 0; padding: 10px 12px; }
-.term-host .xterm { height: 100%; }
-.term-status {
-  display: flex; align-items: center; gap: 7px; height: 36px; flex: 0 0 36px;
-  padding: 0 14px; border-top: 1px solid var(--border-subtle);
-  font: 500 11px var(--font-mono); color: var(--text-faint);
-}
-.term-status .dim { color: var(--text-faint); }
-.term-kv { margin: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-.term-kv dt { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
-.term-kv dd { margin: 3px 0 0; font: 500 12.5px var(--font-body); color: var(--text-body); }
-.term-insp .c-badge { margin: 0 16px 14px; align-self: flex-start; }
-
-/* 终端页要占满可用高度,所以它自己撑满 content。 */
-.content:has(.term-grid) { padding: 14px; overflow: hidden; }
-
 /* ============ 流水线阶段条(变更工单 / 变更流程 共用) ============ */
 .sg-strip {
   display: flex; align-items: flex-start; overflow-x: auto;
@@ -2393,6 +2325,14 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .tv-collapse { display: flex; border: none; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0; }
 .tv-collapse:hover { color: var(--accent-text); }
 .tv-insp .c-badge { margin: 0 16px 14px; align-self: flex-start; }
+/* 终端 v1 唯一活下来的类。v2 的检查器(pages/terminal/index.tsx 的
+   <dl className="term-kv">)还在用它,所以 v1 那一段被清掉时它单独留下,
+   并搬到这里跟它真正的使用者住在一起 —— 留在原地会变成一个没有上下文的孤儿,
+   下一个人清理时很容易连它一起删掉,而症状是检查器的键值排版散架。
+   名字没改:改名要同时动 TSX,与本轮的清理不是一件事。 */
+.term-kv { margin: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.term-kv dt { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.term-kv dd { margin: 3px 0 0; font: 500 12.5px var(--font-body); color: var(--text-body); }
 .tv-insp .term-kv dd { display: flex; align-items: center; gap: 5px; }
 /* 字段之间收紧一档:这一栏是"扫一眼确认自己在哪"的,不是读的。
    标签与值的层级靠字重和颜色拉开,不靠间距。 */
