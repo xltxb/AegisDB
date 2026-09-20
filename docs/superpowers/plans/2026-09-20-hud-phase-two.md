@@ -20,7 +20,8 @@
 - **语义 token，不写死色值。**
 - 不加依赖、不改 i18n、不加斑马线、不碰 `.ib-empty`、不碰 `.scan-nums`。
 - 所有新测试追加到 `frontend/e2e/hud-visual.spec.ts`，复用模块作用域助手 `open(page, path)`（传 `'about:blank'` 只装桩不跳页）、`setTheme`、`styleOf`（async，先等选择器）、`AUDIT_ROWS` / `openAudit`。
-- 命令都在 `frontend/` 下执行。当前基线：build 干净、291 单测、**78** e2e。
+- 命令都在 `frontend/` 下执行。当前基线：build 干净、291 单测、**78** e2e 全量（其中 `hud-visual.spec.ts` 单文件 **38**）。
+计划里每一步的期望值都标明属于哪条命令 —— 两个数字不是一回事，混用会让人以为回归了。
 
 ---
 
@@ -76,11 +77,17 @@ test.describe('HUD 第二阶段 · 面板档', () => {
   }
 
   test('窄屏下 .set-nav / .cat-side 仍然是装饰的定位祖先', async ({ page }) => {
+    // ≤768 的媒体查询把它们从 sticky 解除。解除必须落到 relative,不能落到
+    // static —— static 不是包含块,::before 会跑到更外层祖先上定位,
+    // 高光线就画到别的盒子上去了。
+    // 两个都验:今天它们共用同一条声明,而这条测试正是将来有人把它们拆开时
+    // 唯一会拦住的东西。
     await open(page, '/settings')
     await page.setViewportSize({ width: 768, height: 900 })
-    // ≤768 的媒体查询把它们从 sticky 解除。解除必须落到 relative,不能落到
-    // static —— static 会让 ::before 跑到更外层祖先上定位,高光线就画到别处去了。
     expect(await styleOf(page, '.set-nav', 'position')).toBe('relative')
+    await open(page, '/catalog')
+    await page.setViewportSize({ width: 768, height: 900 })
+    expect(await styleOf(page, '.cat-side', 'position')).toBe('relative')
   })
 })
 ```
@@ -106,13 +113,19 @@ Expected: 6 条全 FAIL —— 前五条因为 `background-image` 是 `none`、b
 
 ```css
 /* 不在这组里的两类:
-   一是横滚容器 —— .c-table 与 .ib-side 的高光线走 background-image,见 theme.css。
-     绝对定位的后代会跟着内容滚出可视区。
+   一是滚动容器 —— 绝对定位的后代会跟着内容滚出可视区,所以高光线改走元素自己的
+     background-image(background-attachment 默认 scroll,锚在边框盒上)。
+     目前是 .c-table(横滚),见 theme.css。
    二是 ::before 已被选中态左色条占用的容器 —— .perm-rcard、.chg-item、.pl-item
      三处都是这个模式(`.on::before` 画一根 3px 竖条)。第一阶段的注释说这是"全站
-     唯一"的冲突点,那是错的,实测三处。列表行整档因此改用 ::after,见下面那组。
+     唯一"的冲突点,那是错的,实测三处。
    按选择器引,不按行号:theme.css 会长,行号一改就成了假话。 */
 ```
+
+**这段注释只说此刻为真的事。** 不要提 `.ib-side` —— 它的 `background-image` 机制是
+Task 2 的活，现在 `theme.css` 里还没有。一条用现在时描述尚不存在之物的注释，
+正是本任务要修掉的那种缺陷。Task 2 会在它成真时把它加进这条子句。
+同理不要提"列表行改用 ::after" —— 那是 Task 3 的事。
 
 然后把高光线的选择器列表
 
@@ -212,7 +225,8 @@ Expected: 6 条全 FAIL —— 前五条因为 `background-image` 是 `none`、b
 - [ ] **Step 7: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 84 passed（基线 78 + 本任务 6）。
+Expected: **44 passed**（`hud-visual.spec.ts` 单文件：基线 38 + 本任务 6）。
+注意区分两套数字：单文件 38→44，全量套件（`npm run test:e2e`）78→84。下同。
 
 - [ ] **Step 8: 跑既有回归**
 
@@ -320,15 +334,26 @@ Task 1 没有把 `.ib-side` 放进伪元素列表，所以还没有违例者；�
 **注意** `@media (max-width: 1080px)` 里 `.ib-side` 会变成 `overflow: visible`，
 那一档它不再滚动，但 `background-image` 在两档下都成立，不必分档处理。
 
-- [ ] **Step 4: 跑测试,确认它绿**
+- [ ] **Step 4: 把 `.ib-side` 补进 `hud.css` 的排除说明**
+
+Task 1 那条注释只列了 `.c-table`，因为当时 `.ib-side` 的机制还不存在 ——
+注释不能用现在时描述尚未实现之物。现在它实现了，把它加进同一条子句：
+
+```
+     目前是 .c-table(横滚)与 .ib-side(纵滚),见 theme.css。
+```
+
+这一步是本任务的一部分，不是顺手 —— 那条注释现在才算说全。
+
+- [ ] **Step 5: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 86 passed。
+Expected: **46 passed**（单文件；全量 86）。
 
-- [ ] **Step 5: 提交**
+- [ ] **Step 6: 提交**
 
 ```bash
-git add src/styles/theme.css e2e/hud-visual.spec.ts
+git add src/styles/theme.css src/styles/hud.css e2e/hud-visual.spec.ts
 git commit -m "feat(ui): hairline the inbox sidebar without a pseudo element
 
 The sidebar scrolls, so an absolutely positioned decoration would slide out
@@ -487,7 +512,7 @@ Expected: 前三条 FAIL。第四条应当**已绿**（回归守卫）。
 - [ ] **Step 5: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 90 passed。
+Expected: **50 passed**（单文件；全量 90）。
 
 - [ ] **Step 6: 跑既有回归**
 
@@ -653,7 +678,7 @@ Expected: 三条全 FAIL（节点不存在 / 高光线是 `none`）。
 - [ ] **Step 6: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 94 passed。
+Expected: **54 passed**（单文件；全量 94）。
 
 - [ ] **Step 7: 跑终端回归 —— 这一步不能跳**
 
@@ -755,7 +780,7 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
 - [ ] **Step 2: 跑测试**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 96 passed。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
+Expected: **56 passed**（单文件；全量 96）。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
 若红，说明某一档的选择器列表和这份清单对不上，**先查列表再改数字**。
 
 - [ ] **Step 3: 全量自动化**
