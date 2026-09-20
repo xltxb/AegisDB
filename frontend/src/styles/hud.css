@@ -45,3 +45,45 @@
     linear-gradient(90deg, var(--hud-grid) 1px, transparent 1px)
       0 0 / var(--hud-grid-size) 100%;
 }
+
+/* ---- 卡片:顶沿高光 + 右上角标 ---- */
+
+/* .c-table 不在这组里 —— 它是横滚容器,高光线走 background-image,见 theme.css。
+   .perm-rcard 也不在 —— 它的 ::before 被选中态的左色条占着(theme.css:1060),
+   是全站唯一的伪元素冲突点。 */
+.c-card::before,
+.dash-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  pointer-events: none; background: var(--hud-edge);
+}
+
+/* 只做右上一个角。一个元素只有两个伪元素,四角要么加 DOM、要么把角标画进
+   background-image —— 而 .c-card 的 background 常被页面级 CSS 覆盖
+   (如 .us-stat.warning)。一个角已经够给出"这是一块仪表面板"的读感。 */
+.c-card::after,
+.dash-card::after {
+  content: ''; position: absolute; top: 10px; right: 10px;
+  width: var(--hud-corner-size); height: var(--hud-corner-size);
+  pointer-events: none;
+  border-top: 1px solid var(--hud-corner);
+  border-right: 1px solid var(--hud-corner);
+}
+
+/* 卡头分隔线:左浓右淡的渐变,不是一条等浓实线。
+   骨架层要把 border-bottom 去掉(见下),否则渐变叠在实线上等于没换。 */
+.c-card-head::after,
+.dash-card > header::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    color-mix(in oklch, var(--hud-hairline) 55%, transparent),
+    var(--border-subtle) 60%,
+    transparent);
+}
+.c-card-head, .dash-card > header { position: relative; }
+
+/* 卡头图标从"淡底色块"升级成"带描边的仪表位"。 */
+.c-card-icon, .dash-ico {
+  border: 1px solid var(--accent-subtle-border);
+  box-shadow: inset 0 0 12px -4px var(--accent);
+}

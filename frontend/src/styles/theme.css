@@ -259,11 +259,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 
 /* ---- 卡片 ---- */
 .c-card {
+  position: relative; /* HUD 装饰的定位上下文,见 hud.css */
   border: 1px solid var(--border-subtle); border-radius: 14px;
   background: var(--surface-card); overflow: hidden;
 }
 .c-card + .c-card { margin-top: 14px; }
-.c-card-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.c-card-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; }
 .c-card-icon {
   width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center;
   background: var(--accent-subtle); color: var(--accent-text); flex: 0 0 32px;
@@ -340,14 +341,37 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 /* 同上:表头/表行是 grid,列宽合计超出容器时(390px 下 /connections 超 48px)
    两轴 hidden 会把右边的列直接吃掉。横向放开成可滚。 */
 .c-table {
-  border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--surface-card);
+  border: 1px solid var(--border-subtle); border-radius: 14px;
   overflow-x: auto; overflow-y: hidden;
+  /* 顶沿那条高光走 background-image,不走伪元素:这是个横滚容器,绝对定位的
+     后代会跟着内容一起滚 —— 1440 宽的审计表往右滚一屏,线就跑到可视区外面了。
+     background-attachment 默认 scroll,锚在元素自己的边框盒上,不随内容滚动。
+     底色从 background 简写拆成 background-color,否则被下面的 background-image
+     连带清掉。 */
+  background-color: var(--surface-card);
+  background-image: var(--hud-edge);
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 0;
 }
 .c-thead, .c-trow { display: grid; gap: 12px; align-items: center; }
 .c-thead {
-  padding: 12px 18px; background: var(--surface-sunken);
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 18px;
   font: 600 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);
+  /* 实底把表头从卡片里切出来,而它本来就是这张卡的一部分 —— 改透明,只留
+     一条渐变底线分隔。
+     底线同样走 background-image 而不是 border:border 画不了渐变(border-image
+     会连带吃掉 .c-table 的圆角)。.c-thead 的盒宽等于表格内容全宽,所以这条线
+     在横滚时跟着表头一起走,和表头对齐 —— 这是对的,它是行内分隔线,不是
+     .c-table 那条锚在容器上的顶沿高光。 */
+  background-color: transparent;
+  background-image: linear-gradient(90deg,
+    var(--border-subtle),
+    color-mix(in oklch, var(--hud-hairline) 45%, transparent),
+    var(--border-subtle));
+  background-repeat: no-repeat;
+  background-size: 100% 1px;
+  background-position: 0 100%;
 }
 .c-trow { padding: 13px 18px; font: 400 13px var(--font-body); color: var(--text-body); }
 .c-trow + .c-trow { border-top: 1px solid var(--border-subtle); }
@@ -1481,11 +1505,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px;
 }
 .dash-card {
+  position: relative; /* HUD 装饰的定位上下文,见 hud.css */
   display: flex; flex-direction: column;
   border: 1px solid var(--border-subtle); border-radius: 14px;
   background: var(--surface-card); overflow: hidden;
 }
-.dash-card > header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
+.dash-card > header { display: flex; align-items: center; gap: 10px; padding: 14px 18px; }
 .dash-card h2 { margin: 0; font: 600 13.5px var(--font-display); color: var(--text-strong); }
 .dash-ico {
   width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;

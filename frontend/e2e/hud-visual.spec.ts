@@ -83,3 +83,75 @@ test.describe('HUD 底座', () => {
     expect(bg).toContain('radial-gradient')
   })
 })
+
+test.describe('HUD 卡片', () => {
+  test('卡片顶沿有 1px 渐变高光线', async ({ page }) => {
+    await open(page, '/settings')
+    expect(await styleOf(page, '.c-card', 'background-image', '::before')).toContain('gradient')
+    expect(await styleOf(page, '.c-card', 'height', '::before')).toBe('1px')
+    expect(await styleOf(page, '.c-card', 'pointer-events', '::before')).toBe('none')
+  })
+
+  test('卡片右上角有 L 形角标', async ({ page }) => {
+    await open(page, '/settings')
+    const w = await styleOf(page, '.c-card', 'border-top-width', '::after')
+    const r = await styleOf(page, '.c-card', 'border-right-width', '::after')
+    expect(parseFloat(w)).toBeGreaterThan(0)
+    expect(parseFloat(r)).toBeGreaterThan(0)
+    // L 形 —— 只有上和右,左和下必须是 0,否则画出来是个方框。
+    expect(parseFloat(await styleOf(page, '.c-card', 'border-left-width', '::after'))).toBe(0)
+    expect(parseFloat(await styleOf(page, '.c-card', 'border-bottom-width', '::after'))).toBe(0)
+  })
+
+  test('.c-table 的高光线用 background-image,不用伪元素', async ({ page }) => {
+    await open(page, '/audit')
+    await page.waitForSelector('.c-table')
+    // 它是 overflow-x:auto 的横滚容器。绝对定位的后代会跟着内容滚出可视区,
+    // 而 background-attachment 默认 scroll,锚在元素自己的边框盒上 —— 不随内容滚。
+    expect(await styleOf(page, '.c-table', 'background-image')).toContain('gradient')
+    expect(await styleOf(page, '.c-table', 'overflow-x')).toBe('auto')
+    expect(await styleOf(page, '.c-table', 'background-image', '::before')).toBe('none')
+  })
+
+  test('卡头分隔线是渐变,不是一条等浓的实线', async ({ page }) => {
+    await open(page, '/settings')
+    await page.waitForSelector('.c-card-head')
+    expect(await styleOf(page, '.c-card-head', 'background-image', '::after')).toContain('gradient')
+    // 实色 border 必须让位,否则渐变线叠在实线上等于没换。
+    expect(await styleOf(page, '.c-card-head', 'border-bottom-width')).toBe('0px')
+  })
+
+  test('表头去掉了实底,底线是渐变', async ({ page }) => {
+    await open(page, '/audit')
+    await page.waitForSelector('.c-thead')
+    const cs = await page.locator('.c-thead').first().evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { color: s.backgroundColor, img: s.backgroundImage, border: s.borderBottomWidth }
+    })
+    // 透明:实底把表头从卡片里切出来,而它本来就是这张卡的一部分。
+    expect(cs.color).toBe('rgba(0, 0, 0, 0)')
+    expect(cs.img).toContain('gradient')
+    expect(cs.border).toBe('0px')
+  })
+
+  test('.perm-rcard 的选中色条没被装饰顶掉', async ({ page }) => {
+    // open() 的兜底桩把 /api/v1/roles 喂成 [],角色列表是空的,.perm-rcard
+    // 根本不会渲染。这里要一张真卡片来点,所以先只装桩(不跳转),把角色列表
+    // 和详情单独喂上,再自己导航 —— open() 的注释里写的就是这个用法。
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/roles', (r) => r.fulfill(envelope([
+      { id: 1, code: 'admin', name: '平台管理员', layer: 'L0 · 全局', icon: 'crown', count: 1 },
+    ])))
+    await page.route('**/api/v1/roles/*', (r) => r.fulfill(envelope({
+      id: 1, code: 'admin', name: '平台管理员', layer: 'L0 · 全局', icon: 'crown',
+      members: [], matrix: {}, menus: {}, tags: [],
+    })))
+    await page.goto('/permissions')
+    await page.waitForSelector('.perm-rcard')
+    await page.click('.perm-rcard')
+    await page.waitForSelector('.perm-rcard.on')
+    // theme.css:1060 的 ::before 是这张卡的选中态左色条 —— 全站唯一的伪元素
+    // 冲突点。卡片装饰不能画到它身上。
+    expect(await styleOf(page, '.perm-rcard.on', 'width', '::before')).toBe('3px')
+  })
+})
