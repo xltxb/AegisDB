@@ -852,47 +852,76 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
   // 防两件事:漏掉一个容器(装饰不全),以及选择器写宽了误伤别的容器(装饰过度)。
   // 数字写死是有意的 —— 将来增删容器时这条会红,逼人回来改这份清单,
   // 而不是让覆盖面悄悄漂移。
-  test('拿到面板档装饰的容器,正好是清单上那些', async ({ page }) => {
+  //
+  // 只数"清单里的几个在场"防得住漏登记,防不住选择器被写宽多圈进一个清单外的
+  // 容器 —— 清单本身还是全中,谁会注意到 hit 数没变。这里额外数规则里逗号
+  // 分隔出的选择器**总数**,并与清单长度比对:写宽了,总数会先于 hit 露馅。
+  test('拿到面板档装饰的容器,正好是清单上那些(数量不多不少)', async ({ page }) => {
     await open(page, '/settings')
-    const n = await page.evaluate(() => {
-      const list = ['.c-card', '.dash-card', '.login-card', '.perm-roles', '.set-nav',
+    const result = await page.evaluate(() => {
+      // 顶沿高光线:十四个,含 .login-card。
+      const hairlineList = ['.c-card', '.dash-card', '.login-card', '.perm-roles', '.set-nav',
         '.set-save', '.cat-side', '.cat-detail', '.rr-stat', '.chg-detail',
         '.pl-editor', '.notif-panel', '.usermenu', '.conn-bulkbar']
-      // 直接数样式表里的选择器,不数页面上的元素 —— 一个页面不会同时渲染出
-      // 这十四个,但规则是全站一份。
-      let hit = 0
+      // 右上角标:十三个,比高光线少一个 —— .login-card 自己有一圈四角取景框
+      // (hud.css「登录页」段的 .hud-corners),再挂一个右上角标是两套角标叠在
+      // 一起,所以角标清单里故意不含它。两组数字不相等是设计使然,不是笔误。
+      const cornerList = ['.c-card', '.dash-card', '.perm-roles', '.set-nav',
+        '.set-save', '.cat-side', '.cat-detail', '.rr-stat', '.chg-detail',
+        '.pl-editor', '.notif-panel', '.usermenu', '.conn-bulkbar']
+
+      // selectorText 里逗号分隔的每一段,不同浏览器的空白/换行序列化不一样,
+      // 裁剪后再按非空过滤,不能直接信 split(',').length。
+      const selectorCount = (t: string) => t.split(',').map((s) => s.trim()).filter(Boolean).length
+
+      let hairlineHit = 0, hairlineTotal = 0
+      let cornerHit = 0, cornerTotal = 0
       for (const sheet of document.styleSheets) {
         let rules: CSSRuleList
         try { rules = sheet.cssRules } catch { continue }
         for (const r of rules) {
           const t = (r as CSSStyleRule).selectorText
           if (!t) continue
-          if (t.includes('::before') && t.includes('.c-card::before')) {
-            hit = list.filter((s) => t.includes(`${s}::before`)).length
+          if (t.includes('.c-card::before')) {
+            hairlineHit = hairlineList.filter((s) => t.includes(`${s}::before`)).length
+            hairlineTotal = selectorCount(t)
+          }
+          // 排除 .c-card-head::after(卡头分隔线,另一条规则):它的选择器文本
+          // 里也含子串 ".c-card",但紧跟的是 "-head::after" 不是 "::after"。
+          if (t.includes('.c-card::after')) {
+            cornerHit = cornerList.filter((s) => t.includes(`${s}::after`)).length
+            cornerTotal = selectorCount(t)
           }
         }
       }
-      return hit
+      return { hairlineHit, hairlineTotal, cornerHit, cornerTotal }
     })
-    expect(n).toBe(14)
+    // 漏登记:清单里的某个不在规则里,hit < 清单长度。
+    expect(result.hairlineHit).toBe(14)
+    expect(result.cornerHit).toBe(13)
+    // 装饰过度:规则里的选择器比清单多,total > 清单长度(hit 可能仍然满分)。
+    expect(result.hairlineTotal).toBe(14)
+    expect(result.cornerTotal).toBe(13)
   })
 
-  test('拿到列表行装饰的容器,正好是四个', async ({ page }) => {
+  test('拿到列表行装饰的容器,正好是四个(数量不多不少)', async ({ page }) => {
     await open(page, '/settings')
-    const n = await page.evaluate(() => {
+    const result = await page.evaluate(() => {
       const list = ['.chg-item', '.pl-item', '.aj-item', '.osc-item']
+      const selectorCount = (t: string) => t.split(',').map((s) => s.trim()).filter(Boolean).length
       for (const sheet of document.styleSheets) {
         let rules: CSSRuleList
         try { rules = sheet.cssRules } catch { continue }
         for (const r of rules) {
           const t = (r as CSSStyleRule).selectorText
           if (t && t.includes('.chg-item::after')) {
-            return list.filter((s) => t.includes(`${s}::after`)).length
+            return { hit: list.filter((s) => t.includes(`${s}::after`)).length, total: selectorCount(t) }
           }
         }
       }
-      return -1
+      return { hit: -1, total: -1 }
     })
-    expect(n).toBe(4)
+    expect(result.hit).toBe(4)
+    expect(result.total).toBe(4)
   })
 })
