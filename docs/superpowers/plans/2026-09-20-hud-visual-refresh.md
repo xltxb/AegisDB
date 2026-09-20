@@ -1019,7 +1019,7 @@ Expected: 三条全 FAIL（`animation-name` 是 `none`、`border-top-width` 是 
 - [ ] **Step 5: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 20 passed。
+Expected: 21 passed。
 
 - [ ] **Step 6: 跑动效回归**
 
@@ -1070,8 +1070,11 @@ test.describe('HUD 外壳', () => {
 
   test('侧栏边缘是渐变竖线,不是一条等浓的灰线', async ({ page }) => {
     await open(page, '/dashboard')
-    expect(await styleOf(page, '.rail', 'background-image', '::after')).toContain('gradient')
+    expect(await styleOf(page, '.rail', 'background-image')).toContain('gradient')
     expect(await styleOf(page, '.rail', 'border-right-width')).toBe('0px')
+    // 不能用伪元素:.rail 是 overflow-y:auto 的滚动容器,绝对定位的后代会跟着
+    // 内容滚 —— 菜单项一多,这条线就滚出可视区了。同 .c-table 那条。
+    expect(await styleOf(page, '.rail', 'background-image', '::after')).toBe('none')
   })
 
   test('侧栏边线不参与布局,不挤窄菜单项', async ({ page }) => {
@@ -1127,7 +1130,7 @@ Expected: 第 1、2、4 条 FAIL；第 3 条已绿（护栏）。
 }
 ```
 
-- [ ] **Step 4: 侧栏边线（骨架层去 border + 装饰层画线）**
+- [ ] **Step 4: 侧栏边线（骨架层：去 border，改 background-image）**
 
 `theme.css` 的 `.rail` 规则，把最后一行
 
@@ -1137,28 +1140,44 @@ Expected: 第 1、2、4 条 FAIL；第 3 条已绿（护栏）。
 
 删掉（其余原样保留，包括上面那两段解释 padding 与 overflow 的注释）。
 
-在 `hud.css` 末尾追加：
+这条线走 `background-image`，**不是伪元素** —— 理由和 `.c-table` 完全一样：
+`.rail` 是 `overflow-y: auto` 的滚动容器（菜单项多于视口高度时要滚，见该处注释），
+绝对定位的后代会跟着内容一起滚，菜单一长这条线就滑出可视区了。
+`background-attachment` 默认 `scroll`，定位锚在元素自己的边框盒上，不随内容滚动。
+
+所以改的是 `theme.css` 里 `.rail` 那条规则本身（骨架层），不是往 `hud.css` 加伪元素。
+把 `.rail` 的
 
 ```css
-/* ---- 侧栏边缘 ---- */
+  background: var(--surface-sunken);
+  border-right: 1px solid var(--border-subtle);
+```
 
-/* 一条从头到尾一样浓的灰线是"隔断",渐变线才是"边缘"。
-   绝对定位不是 sticky:.rail 是 overflow-y:auto 的滚动容器,但这条线挂在它的
-   padding box 外沿(right:0),滚动的菜单项不会从它上面过去。原来的
-   border-right 要去掉,否则 74px 的栏宽变成 75px —— 那个 74 是算过的
-   (见 .rail-item 的注释:64px 项 + 两边各 5px)。 */
-.rail { position: relative; }
-.rail::after {
-  content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 1px;
-  pointer-events: none;
-  background: linear-gradient(180deg,
+替换为
+
+```css
+  /* 底色拆成 background-color:下面的 background-image 会把 background 简写
+     里的颜色一并清掉。 */
+  background-color: var(--surface-sunken);
+  /* 一条从头到尾一样浓的灰线是"隔断",渐变线才是"边缘"。
+     不用伪元素:.rail 会滚(见上面那段 overflow-y 的注释),绝对定位的后代跟着
+     内容滚,菜单一长线就滑走了 —— 同 .c-table 的做法。
+     border-right 必须去掉,不能只是盖住:74px 的栏宽是算过的(见 .rail-item
+     的注释:64px 项 + 两边各 5px),多 1px 边框就是 75px。 */
+  background-image: linear-gradient(180deg,
     transparent,
     var(--border-subtle) 18%,
     color-mix(in oklch, var(--hud-hairline) 60%, transparent) 50%,
     var(--border-subtle) 82%,
     transparent);
-}
+  background-repeat: no-repeat;
+  background-size: 1px 100%;
+  background-position: 100% 0;
 ```
+
+注意 `border-right: 1px solid var(--border-subtle)` 在 `theme.css` 里出现四次
+（第 69 行的 `.rail`、2131 的 `.tv-rail.left`、2316、2481）。**只动第 69 行那条**，
+其余三处属于终端页的分栏，与本轮无关。
 
 - [ ] **Step 5: 选中项辉光（骨架层）**
 
@@ -1178,7 +1197,7 @@ Expected: 第 1、2、4 条 FAIL；第 3 条已绿（护栏）。
 - [ ] **Step 6: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 24 passed。
+Expected: 25 passed。
 
 - [ ] **Step 7: 跑侧栏回归 —— 这一步不能跳**
 
@@ -1327,7 +1346,7 @@ Expected: 第 1 条 FAIL（`clip` 是 `border-box`）；第 2 条已绿（护栏
 - [ ] **Step 4: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 26 passed。
+Expected: 27 passed。
 
 - [ ] **Step 5: 提交**
 
@@ -1512,7 +1531,7 @@ Expected: 第 1、3 条 FAIL；第 2 条已绿（护栏）。
 - [ ] **Step 6: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: 29 passed。
+Expected: 30 passed。
 
 - [ ] **Step 7: 类型检查与构建**
 
@@ -1570,7 +1589,7 @@ Expected: 全绿。重点看三个：
 |---|---|
 | `responsive.spec.ts` | 390/768/1024/1280/1440 五档下无页面级横向溢出；侧栏装不下时滚动而不压扁 |
 | `reduced-motion.spec.ts` | 新增的 `hud-pulse` 能被 reduce 关掉 |
-| `hud-visual.spec.ts` | 本阶段的 29 条 |
+| `hud-visual.spec.ts` | 本阶段的 30 条 |
 
 若 `responsive.spec.ts` 红：几乎一定是某处装饰用了 `border`/`padding`/`margin` 而不是绝对定位，或 `.rail` 的 `border-right` 没删干净。按报错的宽度档去查对应元素的 `getBoundingClientRect()`。
 
