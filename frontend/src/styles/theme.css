@@ -376,7 +376,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .c-trow { padding: 13px 18px; font: 400 13px var(--font-body); color: var(--text-body); }
 .c-trow + .c-trow { border-top: 1px solid var(--border-subtle); }
 .c-trow.clickable { cursor: pointer; }
-.c-trow.clickable:hover { background: var(--surface-sunken); }
+/* 左侧竖条用 inset 阴影,不用 border-left —— 同 .rail-item.on 和终端实例树
+   选中态的理由:border 会把整行内容向右挤 2px,hover 时行内文字跳一下。 */
+.c-trow.clickable:hover {
+  background: var(--surface-sunken);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
 .c-td { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-td.mono { font: 500 12px var(--font-mono); color: var(--text-muted); }
 

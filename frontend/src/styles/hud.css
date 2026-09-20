@@ -1,9 +1,9 @@
 /* ============================================================
    HUD 装饰层
    ------------------------------------------------------------
-   这里只放"加在骨架之上的装饰":页面底座、卡片高光线与角标、活体脉冲。
-   骨架本身(卡片的边框圆角底色、按钮的高度内距、表格的栅格)仍在 theme.css
-   里就地改 —— 一条规则只出现在一个地方,两边没有同选择器,也就没有权重战争。
+   这里放 HUD 视觉刷新本身的规则,不论用什么机制实现;骨架层(卡片的边框圆角
+   底色、按钮的高度内距、表格的栅格)仍在 theme.css 里就地改 —— 这条边界按
+   "归属哪个关注点"划,不按"是不是伪元素",这样整套刷新才能作为一个整体撤销。
 
    本文件由 main.tsx 在 theme.css **之后** import。不能塞进 theme.css 的
    @import 块:CSS 的 @import 必须位于所有规则之前,放在那里会被后面 2800 行
@@ -87,3 +87,25 @@
   border: 1px solid var(--accent-subtle-border);
   box-shadow: inset 0 0 12px -4px var(--accent);
 }
+
+/* ---- 可交互卡:hover 抬升 ---- */
+
+/* 只给确实可点的三类。整站卡片一起飘会显得廉价,而"能不能点"正是 hover
+   反馈唯一要回答的问题。 */
+.dash-card, .perm-rcard, .portal-opt {
+  transition: var(--transition-colors), var(--transition-transform);
+}
+.dash-card:hover,
+.perm-rcard:hover,
+.portal-opt:hover:not(.on) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+/* 暗色不投影,靠辉光 —— 设计系统:dark mode drops drop-shadows。 */
+[data-theme="dark"] .dash-card:hover,
+[data-theme="dark"] .perm-rcard:hover,
+[data-theme="dark"] .portal-opt:hover:not(.on) {
+  box-shadow: var(--glow-sm);
+}
+/* .portal-opt.on 已经带 --glow-sm(theme.css 的登录段)。hover 写成
+   :hover:not(.on),否则选中态的辉光被 hover 的投影盖掉。 */

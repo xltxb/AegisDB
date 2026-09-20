@@ -155,3 +155,80 @@ test.describe('HUD 卡片', () => {
     expect(await styleOf(page, '.perm-rcard.on', 'width', '::before')).toBe('3px')
   })
 })
+
+test.describe('HUD 交互态', () => {
+  // open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
+  // 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
+  // 字段名必须对上 types/index.ts 的 AuditRow —— 页面读的是 occurredAt /
+  // instance / result / approvalNo,写成别的名字行会渲染出来但全是空格,
+  // hover 测的是几何,空格量掉了就测不出位移。
+  const AUDIT_ROWS = {
+    items: [
+      {
+        id: 1, occurredAt: '2026-09-20T10:00:00Z', actor: 'linwei',
+        instance: 'prod-mysql-01', database: 'shop', command: 'select 1',
+        risk: 'low', result: 'executed', approvalNo: '', hash: 'a1',
+      },
+      {
+        id: 2, occurredAt: '2026-09-20T10:01:00Z', actor: 'linwei',
+        instance: 'prod-mysql-01', database: 'shop',
+        command: 'update orders set a = 1 where id = 1',
+        risk: 'high', result: 'executed', approvalNo: 'CR-2026-0001', hash: 'b2',
+      },
+    ],
+    total: 2, page: 1, pageSize: 20,
+  }
+  async function openAudit(page: Page) {
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/audit**', (r) => r.fulfill(envelope(AUDIT_ROWS)))
+    await page.goto('/audit')
+    await page.waitForSelector('.c-trow.clickable')
+  }
+
+  test('表格行 hover 时文字没有横向位移', async ({ page }) => {
+    await openAudit(page)
+    const cell = page.locator('.c-trow.clickable .c-td').first()
+    const before = await cell.boundingBox()
+    await page.locator('.c-trow.clickable').first().hover()
+    const after = await cell.boundingBox()
+    // 左侧竖条必须用 inset 阴影,不能用 border-left —— border 会把整行内容
+    // 往右挤 2px,hover 一次行内文字跳一下。同 .rail-item.on 的做法。
+    expect(after!.x).toBeCloseTo(before!.x, 1)
+    expect(after!.width).toBeCloseTo(before!.width, 1)
+  })
+
+  test('表格行 hover 时出现左侧 accent 竖条', async ({ page }) => {
+    await openAudit(page)
+    const row = page.locator('.c-trow.clickable').first()
+    await row.hover()
+    const shadow = await row.evaluate((el) => getComputedStyle(el).boxShadow)
+    expect(shadow).toContain('inset')
+    expect(shadow).not.toBe('none')
+  })
+
+  test('可交互卡 hover 抬升,静态卡不动', async ({ page }) => {
+    await open(page, '/dashboard')
+    await page.waitForSelector('.dash-card')
+    const card = page.locator('.dash-card').first()
+    expect(await card.evaluate((el) => getComputedStyle(el).transform)).toBe('none')
+    await card.hover()
+    // --transition-transform 的 --dur-base 是 220ms 的真实过渡,hover() 一返回就读
+    // computed style 会拿到插值中间态(见 e2e/responsive.spec.ts 里同样的
+    // waitForTimeout(300) 手法)。等过渡跑完,再读稳定值。
+    await page.waitForTimeout(300)
+    // translateY(-2px) → matrix(1, 0, 0, 1, 0, -2)
+    const t = await card.evaluate((el) => getComputedStyle(el).transform)
+    expect(t).not.toBe('none')
+    expect(t).toContain('-2')
+  })
+
+  test('.portal-opt 选中态的辉光不被 hover 顶掉', async ({ page }) => {
+    await page.goto('/login')
+    const on = page.locator('.portal-opt.on').first()
+    const before = await on.evaluate((el) => getComputedStyle(el).boxShadow)
+    await on.hover()
+    const after = await on.evaluate((el) => getComputedStyle(el).boxShadow)
+    // hover 规则必须写成 :hover:not(.on),否则选中态的 --glow-sm 被投影盖掉。
+    expect(after).toBe(before)
+  })
+})
