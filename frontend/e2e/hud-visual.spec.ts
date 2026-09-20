@@ -403,6 +403,18 @@ test.describe('HUD 登录页', () => {
     expect(parseFloat(await styleOf(page, '.hud-corners', 'border-right-width', '::after'))).toBeGreaterThan(0)
   })
 
+  test('取景框上方两角是完整的十字线(竖划+横划),不是半个角', async ({ page }) => {
+    await page.goto('/login')
+    const bg = await styleOf(page, '.hud-corners', 'background-image')
+    // 每个上角要有一条竖划 + 一条横划,两角合计四层渐变 —— 只有两层说明
+    // 每个角只画出了半划(比如只有竖划,没有横划,拼不成一个 L)。
+    expect((bg.match(/linear-gradient/g) ?? []).length).toBe(4)
+    const pos = await styleOf(page, '.hud-corners', 'background-position')
+    // 左上、右上都要出现 —— 缺一个就说明某个角一层都没画上。
+    expect(pos).toContain('0% 0%')
+    expect(pos).toContain('100% 0%')
+  })
+
   test('装饰元素不改变登录卡尺寸', async ({ page }) => {
     await page.goto('/login')
     const w = await page.locator('.login-card').evaluate((el) => el.getBoundingClientRect().width)

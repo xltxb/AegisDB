@@ -131,20 +131,24 @@
 
 /* ---- 四角取景框 ---- */
 
-/* 挂在任何 position: relative 的容器里。自身画上面两个角(用两层
-   background-image 定位到左上/右上),两个伪元素各画下面一个。
+/* 挂在任何 position: relative 的容器里。上面两个角用四层 background-image 画:
+   linear-gradient(to right/to left, ...) 沿水平轴变色,画的是贴左/右边的一条
+   竖划;linear-gradient(to bottom, ...) 沿垂直轴变色,画的是贴顶边的一条横划。
+   每个上角一竖一横拼成一个 L,两角合计四层。下面两个角交给两个伪元素 ——
+   一个元素只有两个伪元素,四角凑不满,下面这两角换成真正的 L(两条 border)来画。
    全程绝对定位 + pointer-events:none —— 不进布局,不吃点击。 */
 .hud-corners {
   position: absolute; inset: 10px; pointer-events: none;
   background-repeat: no-repeat;
   background-size: var(--hud-corner-size) var(--hud-corner-size);
-  background-position: left top, right top;
+  background-position: left top, left top, right top, right top;
   background-image:
     linear-gradient(to right,  var(--hud-corner) 1px, transparent 1px),
-    linear-gradient(to left,   var(--hud-corner) 1px, transparent 1px);
+    linear-gradient(to bottom, var(--hud-corner) 1px, transparent 1px),
+    linear-gradient(to left,   var(--hud-corner) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--hud-corner) 1px, transparent 1px);
 }
-/* 上面那两层只画了水平的一划;竖划与下面两个角交给伪元素,它们各自是一个
-   真正的 L(两条 border),画起来比再堆四层背景干净。 */
+/* 下面两个角:各是一个真正的 L(两条 border),比再堆四层背景干净。 */
 .hud-corners::before,
 .hud-corners::after {
   content: ''; position: absolute; bottom: 0;
