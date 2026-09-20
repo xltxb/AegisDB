@@ -744,7 +744,10 @@ test.describe('HUD 按钮与焦点', () => {
   })
 
   test('按钮按下时下沉', async ({ page }) => {
-    await open(page, '/dashboard')
+    // 用 /audit 不用 /dashboard:总览页自己一个 .c-btn 都没有,唯一可能的来源是
+    // ErrorState 的重试按钮,而兜底桩不制造错误 —— 元素根本不存在。审计页头的
+    // 风险筛选按钮(audit/index.tsx:212)是常驻控件,不依赖数据。
+    await open(page, '/audit')
     await page.waitForSelector('.c-btn')
     const btn = page.locator('.c-btn').first()
     const box = (await btn.boundingBox())!
