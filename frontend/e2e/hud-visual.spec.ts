@@ -40,6 +40,35 @@ async function styleOf(page: Page, sel: string, prop: string, pseudo?: string) {
   }, [sel, prop, pseudo ?? ''] as const)
 }
 
+/** 一个元素底色(渐变的每一个色标)对它自己文字色的最小 WCAG 2.x 对比度。
+ *  色标交给 canvas 画一像素再读回来 —— computed style 里 color-mix 会序列化成
+ *  oklch()/oklab(),在 Node 里重算一遍色彩空间不如让 Chromium 自己画一次准。 */
+async function fillContrast(page: Page, sel: string) {
+  await page.waitForSelector(sel)
+  return page.evaluate((s) => {
+    const el = document.querySelector(s!)
+    if (!el) throw new Error(`no element for ${s}`)
+    const cs = getComputedStyle(el)
+    const stops = cs.backgroundImage.match(/(?:rgba?|oklch|oklab|color|hsla?)\([^)]*\)/g) ?? []
+    if (!stops.length) return -1
+    const cv = document.createElement('canvas')
+    cv.width = 1; cv.height = 1
+    const ctx = cv.getContext('2d', { willReadFrequently: true })!
+    const px = (c: string) => {
+      ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1)
+      const d = ctx.getImageData(0, 0, 1, 1).data
+      return [d[0], d[1], d[2]]
+    }
+    const lin = (c: number) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+    const L = (v: number[]) => 0.2126 * lin(v[0]) + 0.7152 * lin(v[1]) + 0.0722 * lin(v[2])
+    const text = L(px(cs.color))
+    return Math.min(...stops.map((c) => {
+      const bg = L(px(c))
+      return (Math.max(bg, text) + 0.05) / (Math.min(bg, text) + 0.05)
+    }))
+  }, sel)
+}
+
 // open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
 // 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
 // 字段名必须对上 types/index.ts 的 AuditRow —— 页面读的是 occurredAt /
@@ -183,8 +212,9 @@ test.describe('HUD 卡片', () => {
     await page.waitForSelector('.perm-rcard')
     await page.click('.perm-rcard')
     await page.waitForSelector('.perm-rcard.on')
-    // theme.css:1060 的 ::before 是这张卡的选中态左色条 —— 全站唯一的伪元素
-    // 冲突点。卡片装饰不能画到它身上。
+    // theme.css 的 `.perm-rcard.on::before` 是这张卡的选中态左色条 —— 全站唯一的
+    // 伪元素冲突点,卡片装饰不能画到它身上。按选择器引不按行号:theme.css 一长,
+    // 行号就成了假话(本轮它就往下挪了 90 多行)。
     expect(await styleOf(page, '.perm-rcard.on', 'width', '::before')).toBe('3px')
   })
 })
@@ -211,7 +241,7 @@ test.describe('HUD 交互态', () => {
     expect(shadow).not.toBe('none')
   })
 
-  test('可交互卡 hover 抬升,静态卡不动', async ({ page }) => {
+  test('可交互卡 hover 抬升', async ({ page }) => {
     await open(page, '/dashboard')
     await page.waitForSelector('.dash-card')
     const card = page.locator('.dash-card').first()
@@ -235,6 +265,29 @@ test.describe('HUD 交互态', () => {
     const after = await on.evaluate((el) => getComputedStyle(el).boxShadow)
     // hover 规则必须写成 :hover:not(.on),否则选中态的 --glow-sm 被投影盖掉。
     expect(after).toBe(before)
+  })
+
+  test('亮色下可交互卡 hover 用投影,暗色才换成辉光', async ({ page }) => {
+    // 整份规格把亮暗当两个一等主题,但除了 token 那条,所有用例都落在暗色里 ——
+    // 而"只在亮色成立"的规则全站只有这一条(.dash-card:hover 用 --shadow-lg,
+    // 暗色覆写成 --glow-sm),在此之前它一条断言都没有,丢了也不会有人发现。
+    await open(page, '/dashboard')
+    await page.waitForSelector('.dash-card')
+    await setTheme(page, 'light')
+    const card = page.locator('.dash-card').first()
+    await card.hover()
+    // 同上,等 220ms 的过渡跑完再读。
+    await page.waitForTimeout(300)
+    const light = await card.evaluate((el) => getComputedStyle(el).boxShadow)
+    // --shadow-lg(亮):冷灰蓝的投影 rgba(16, 24, 48, …),两段,外扩 28px。
+    expect(light).toContain('rgba(16, 24, 48')
+    expect(light).toContain('28px')
+    await setTheme(page, 'dark')
+    // box-shadow 也在 --transition-colors 里,换主题同样要等过渡跑完才读得到新值。
+    await page.waitForTimeout(300)
+    const dark = await card.evaluate((el) => getComputedStyle(el).boxShadow)
+    // 设计系统:dark mode drops drop-shadows —— 暗色必须换成另一套值。
+    expect(dark).not.toBe(light)
   })
 
   test('静态卡 hover 不抬升', async ({ page }) => {
@@ -261,6 +314,36 @@ test.describe('HUD 按钮与焦点', () => {
     expect(bg).not.toMatch(/rgb\(\s*(1[0-9]{2}|[6-9][0-9])\s*,\s*[0-9]{1,2}\s*,\s*2[0-9]{2}/)
   })
 
+  test('主按钮底色的对比度不低于改版前的实色基线', async ({ page }) => {
+    await page.goto('/login')
+    // 改版前主按钮是实色 --accent,白字压上去实测 4.42(亮)/ 3.43(暗)。规格的
+    // 非目标写着「对比度不退化」,而把 cyan 混进 --accent 会把渐变的青端拉到
+    // 3.31 / 2.83 —— 主按钮是全站用得最多的控件,退化四分之一不能接受。
+    // 现在 cyan 混进的是更深一档的 --azure-700:常态渐变最浅的一点就是起点
+    // --accent 自己,也就是基线本身;hover 两个色标也都在基线之上。
+    for (const [theme, floor] of [['light', 4.42], ['dark', 3.43]] as const) {
+      await setTheme(page, theme)
+      expect(await fillContrast(page, '.login-submit'), `${theme} 常态`).toBeGreaterThanOrEqual(floor)
+      await page.locator('.login-submit').hover()
+      expect(await fillContrast(page, '.login-submit'), `${theme} hover`).toBeGreaterThanOrEqual(floor)
+      // 挪开鼠标,下一轮的常态才读得到常态。
+      await page.mouse.move(0, 0)
+    }
+  })
+
+  test('登录输入框聚焦时也有光晕', async ({ page }) => {
+    await page.goto('/login')
+    const shadow = await page.locator('.login-card input').first().evaluate((el: HTMLElement) => {
+      el.focus()
+      return getComputedStyle(el).boxShadow
+    })
+    // `box-shadow: var(--focus-ring)` 是非法值 —— 光秃秃一个颜色不是合法的 box-shadow。
+    // 按 CSS 变量的语义,这种"算到计算值才发现非法"的声明照样赢下层叠、然后算成
+    // none,于是它把 :focus-visible 新加的那圈光晕整条抹掉,偏偏抹在本轮的样板页上。
+    expect(shadow).not.toBe('none')
+    expect(shadow).toContain('4px')
+  })
+
   test('按钮按下时下沉', async ({ page }) => {
     // 用 /audit 不用 /dashboard:总览页自己一个 .c-btn 都没有,唯一可能的来源是
     // ErrorState 的重试按钮,而兜底桩不制造错误 —— 元素根本不存在。审计页头的
@@ -281,9 +364,9 @@ test.describe('HUD 按钮与焦点', () => {
     await page.goto('/login')
     // 必须用真键盘走到它,不能用 .focus():Chrome 对按钮的程序化聚焦
     // **不**匹配 :focus-visible,而这条规则正是挂在 :focus-visible 上的。
-    // 也不能拿输入框做靶子:theme.css:444 的 .login-card input:focus 写了
+    // 也不能拿输入框做靶子:theme.css 的 `.login-card input:focus` 写了
     // outline: none,特异度 (0,2,1) 压过 :focus-visible 的 (0,1,0),
-    // 输入框上根本不该有 outline。
+    // 输入框上根本不该有 outline(那条规则的光晕另有一条用例看着)。
     for (let i = 0; i < 15; i++) {
       await page.keyboard.press('Tab')
       if (await page.locator('.login-submit:focus').count()) break
@@ -305,6 +388,20 @@ test.describe('HUD 活体状态', () => {
     await page.waitForSelector('.pill-health')
     const name = await styleOf(page, '.pill-health svg', 'animation-name')
     expect(name).toBe('hud-pulse')
+  })
+
+  test('网关掉线时指示灯停跳', async ({ page }) => {
+    // 这一枚是全站唯一表示"网关此刻在跑"的指示灯,掉线正是它必须停下来的时刻。
+    // open() 把 gateway/stats 打成 online: true,这里再盖一层假的掉线。
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/gateway/stats**', (r) => r.fulfill(
+      envelope({ online: false, p50Ms: 0, samples: 0, intercepts: 0 })))
+    await page.goto('/dashboard')
+    await page.waitForSelector('.pill-health.off')
+    expect(await styleOf(page, '.pill-health.off svg', 'animation-name')).toBe('none')
+    // 静止态的辉光也要一起收:hud-pulse 的 filter 是 cyan 的 --glow-accent,
+    // 红图标顶着一圈青光说的是两件互相矛盾的事。
+    expect(await styleOf(page, '.pill-health.off svg', 'filter')).toBe('none')
   })
 
   test('reduce 下脉冲塌到 0', async ({ browser }) => {
@@ -329,10 +426,60 @@ test.describe('HUD 活体状态', () => {
 })
 
 test.describe('HUD 外壳', () => {
-  test('顶栏是半透明 + 背景模糊', async ({ page }) => {
+  test('顶栏是半透明 + 背景模糊,而且模糊不挂在 .top 自己身上', async ({ page }) => {
     await open(page, '/dashboard')
-    const f = await styleOf(page, '.top', 'backdrop-filter')
-    expect(f).toContain('blur')
+    expect(await styleOf(page, '.top', 'backdrop-filter', '::before')).toContain('blur')
+    // 半透明:实色顶栏把下面的 HUD 底座切断了。
+    const fill = await styleOf(page, '.top', 'background-color', '::before')
+    expect(fill).not.toBe('rgba(0, 0, 0, 0)')
+    // 带 backdrop-filter 的元素会成为它所有 position: fixed 后代的包含块,而通知
+    // 面板那张 inset: 0 的点击遮罩就挂在顶栏里 —— 挂回 .top 上,它就从整个视口塌成
+    // 顶栏那只 53px 的盒子。效果一模一样,包含块的副作用则没有。
+    expect(await styleOf(page, '.top', 'backdrop-filter')).toBe('none')
+  })
+
+  test('顶栏下沿是渐变线,不是一条等浓的实线', async ({ page }) => {
+    await open(page, '/dashboard')
+    expect(await styleOf(page, '.top', 'background-image', '::after')).toContain('gradient')
+    expect(await styleOf(page, '.top', 'height', '::after')).toBe('1px')
+    // 实色 border 必须让位,否则渐变线叠在实线上等于没换(同 .c-card-head)。
+    expect(await styleOf(page, '.top', 'border-bottom-width')).toBe('0px')
+  })
+
+  test('通知面板浮在页面内容之上,点击遮罩铺满视口', async ({ page }) => {
+    // 铃铛面板是全站唯一挂在 .top 里的浮层,本轮有两处改动各打断它一半:
+    // hud.css 的 .main > * 让 .content 和 .top 平级,.content 在 DOM 里靠后,面板被
+    // 总览页的不透明卡片盖住;theme.css 给 .top 的 backdrop-filter 让 inset: 0 的
+    // 遮罩塌成顶栏那只盒子,顶栏以下点空白关不掉面板。
+    // 两半都只有"真把铃铛点开"才看得见 —— 在这条用例之前,整套 e2e 没有一处点过它。
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/notifications**', (r) => r.fulfill(envelope({
+      items: [{
+        id: 1, type: 'approval-approved', title: 'CR-2026-0001 已通过',
+        body: '', refNo: 'CR-2026-0001', read: false, createdAt: '2026-09-20T10:00:00Z',
+      }],
+      unread: 1,
+    })))
+    await page.goto('/dashboard')
+    await page.waitForSelector('.dash-card')
+    await page.click('.iconbtn.bell')
+    await page.waitForSelector('.notif-panel')
+    const r = await page.evaluate(() => {
+      const panel = document.querySelector('.notif-panel')!.getBoundingClientRect()
+      const hit = document.elementFromPoint(panel.x + panel.width / 2, panel.y + panel.height / 2)
+      const bd = document.querySelector('.notif-backdrop')!.getBoundingClientRect()
+      return {
+        inPanel: !!(hit as HTMLElement | null)?.closest('.notif-panel'),
+        hit: (hit as HTMLElement | null)?.className ?? null,
+        bd: { x: bd.x, y: bd.y, w: bd.width, h: bd.height },
+        vw: window.innerWidth, vh: window.innerHeight,
+      }
+    })
+    // 必须用 elementFromPoint,不能用 toBeVisible:可见性判定不看绘制顺序,面板
+    // 被卡片整个盖住时它照样算"可见"。
+    expect(r.inPanel, `面板中心命中的是 ${r.hit}`).toBe(true)
+    // 遮罩是"点面板外面就关掉"的唯一实现,必须是整个视口。
+    expect(r.bd).toEqual({ x: 0, y: 0, w: r.vw, h: r.vh })
   })
 
   test('侧栏边缘是渐变竖线,不是一条等浓的灰线', async ({ page }) => {
@@ -408,11 +555,29 @@ test.describe('HUD 登录页', () => {
     const bg = await styleOf(page, '.hud-corners', 'background-image')
     // 每个上角要有一条竖划 + 一条横划,两角合计四层渐变 —— 只有两层说明
     // 每个角只画出了半划(比如只有竖划,没有横划,拼不成一个 L)。
-    expect((bg.match(/linear-gradient/g) ?? []).length).toBe(4)
+    const layers = bg.split(/,(?=\s*linear-gradient)/)
+    expect(layers.length).toBe(4)
+    // 光数四层不够:四层全是竖划照样凑得出四层,而"少了横划"正是这条用例要盯的
+    // 那个 bug。所以逐层钉方向 —— to right / to left 沿水平轴变色,画的是贴左 /
+    // 贴右的竖划;to bottom 沿垂直轴变色,画的是贴顶的横划,而 Chromium 序列化时
+    // 会把默认的 to bottom 省掉,于是"不带任何 to 关键字"就是横划的指纹。
+    expect(layers[0]).toContain('to right')
+    expect(layers[2]).toContain('to left')
+    expect(layers[1]).not.toContain('to ')
+    expect(layers[3]).not.toContain('to ')
     const pos = await styleOf(page, '.hud-corners', 'background-position')
     // 左上、右上都要出现 —— 缺一个就说明某个角一层都没画上。
     expect(pos).toContain('0% 0%')
     expect(pos).toContain('100% 0%')
+  })
+
+  test('登录卡顶沿的高光线来自装饰层', async ({ page }) => {
+    await page.goto('/login')
+    // 这条 ::before 原先在 theme.css 里跟 hud.css 的 .c-card::before 一字不差地
+    // 重复了一遍。它是全新的装饰,按 hud.css 头部那条"按关注点划"的边界归装饰层,
+    // 现在并进那条选择器列表 —— 合并之后必须仍然画得出来。
+    expect(await styleOf(page, '.login-card', 'background-image', '::before')).toContain('gradient')
+    expect(await styleOf(page, '.login-card', 'height', '::before')).toBe('1px')
   })
 
   test('装饰元素不改变登录卡尺寸', async ({ page }) => {

@@ -38,6 +38,27 @@
   --blur-md: 14px;
   --blur-lg: 28px;
 
+  /* ---- 主 CTA 的品牌渐变 ---- */
+  /* 一处定义,四处引用(.c-btn.v-primary 与 .login-submit 的常态 + hover)。
+     azure 起,收在一个偏 cyan 的深 azure 上;设计系统明令禁止 azure→violet
+     (「reads generic」)。
+
+     cyan **混进更深一档的 azure**(--azure-700),不是混进 --accent 本身 ——
+     这一步是对比度定的,不是色相定的。白字压在实色 --accent 上,实测(WCAG 2.x,
+     Chromium 里逐像素取样)亮色 4.42、暗色 3.43,这就是本轮之前的基线;把 30% cyan
+     混进 --accent,渐变的青端会被拉亮到 3.31(亮)/ 2.83(暗),主按钮是全站用得最多
+     的控件,而规格的非目标里写着「对比度不退化」。
+     混进 --azure-700 之后,两个色标对白字的实测值(渐变在 oklab 里插值,最低点就落在
+     其中一端):
+       常态  亮 4.42 → 5.01   暗 3.43 → 5.01
+       hover 亮 6.19 → 4.68   暗 4.42 → 4.68(暗色的 hover 见下面的覆写)
+     每一档都不低于基线。(4.42 本身仍在 AA 的 4.5 之下 —— 那是本轮之前就有的缺口,
+     属于 --accent 与 --text-on-accent 这两个 token,不在装饰层里动。) */
+  --btn-primary-bg: linear-gradient(120deg,
+    var(--accent), color-mix(in oklch, var(--glow-accent) 30%, var(--azure-700)));
+  --btn-primary-bg-hover: linear-gradient(120deg,
+    var(--accent-hover), color-mix(in oklch, var(--glow-accent) 34%, var(--azure-700)));
+
   /* ---- HUD 装饰层 ---- */
   --hud-grid-size:   32px;  /* 4px 栅格 ×8 */
   --hud-corner-size: 12px;
@@ -61,4 +82,12 @@
 
   --glow-sm: 0 0 0 1px rgba(94, 131, 251, 0.45), 0 8px 26px rgba(59, 110, 246, 0.45);
   --glow-md: 0 0 0 1px rgba(45, 205, 230, 0.50), 0 10px 40px rgba(45, 205, 230, 0.45);
+
+  /* 暗色的 hover 压深一档,不提亮。暗色的 --accent-hover 是 --azure-300,白字压上去
+     实测只有 2.21 —— 比常态的 3.43 还低,拿它当 hover 底色等于鼠标一扫过去就把按钮上
+     的字读糊(改版前就是这样)。暗色本来就"靠边框与辉光而不是投影",hover 的辨识度
+     交给已经叠上去的 --glow-sm 外圈辉光,底色反过来往 --accent-pressed 沉一档
+     (实测 4.42 → 4.68)。 */
+  --btn-primary-bg-hover: linear-gradient(120deg,
+    var(--accent-pressed), color-mix(in oklch, var(--glow-accent) 34%, var(--azure-700)));
 }

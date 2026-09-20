@@ -171,7 +171,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 14px;
   /* 同上,钉在底部。整宽 + 底色,让滚上来的菜单项从它下面过去而不是透出来;
      外扩的 box-shadow 铺的是 .rail 自己那 14px 内边距 —— sticky 停在内边距
-     里侧,不铺的话菜单项会从头像下方那道缝里露出来。 */
+     里侧,不铺的话菜单项会从头像下方那道缝里露出来。
+     它整宽、不透明,还带 14px 外扩阴影,会盖住 .rail 右边缘那条渐变竖线的末端 ——
+     规格要求确认这一点,确认过了:那条线是 background-image,锚在栏的可视盒上,
+     800px 高的视口里 .rail-foot 从 y=738 起(实测),只压住最后 7.7%;而渐变过了
+     82% 就一路收向 transparent,被压住的这一截起点只剩 82% 那一档浓度的四成,
+     再往下一路到 0 —— 盖掉的正是它本来就要消失的那一段。 */
   position: sticky; bottom: 0; z-index: 2;
   width: 100%; padding: 14px 0 0;
   background: var(--surface-sunken);
@@ -191,11 +196,41 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .top {
   height: 54px; flex: 0 0 54px;
   display: flex; align-items: center; gap: 14px; padding: 0 22px;
-  border-bottom: 1px solid var(--border-subtle);
-  /* 设计系统对顶栏的原文要求:半透明 + backdrop blur。实色顶栏把下面的
-     HUD 底座切断了,页面看着像两张拼起来的图。 */
+  /* 顶栏压在 .content 之上,并且自成一个层叠上下文。两件事都要:
+     1) 通知面板(.notif-panel, z-index 41)和它的点击遮罩(.notif-backdrop, 40)
+        都挂在顶栏里,要一起浮到页面内容上方 —— 不给这个 z-index,.content 在 DOM
+        里靠后,总览页的不透明卡片就把面板盖掉了(实测:面板中心的 elementFromPoint
+        命中 .page-head)。
+     2) 下面 ::before 的 z-index: -1 要有个上下文把它关住,否则那层半透明底色会掉到
+        .main::before 的网格底座后面去。
+     数字取 1 不取更大:页面里的模态遮罩(.c-overlay)是 50,它必须仍然盖得住顶栏。
+     position 这里自己声明一遍,不靠 hud.css 的 .main > * —— 装饰层整体撤掉时,
+     ::before / ::after 的定位上下文不能跟着一起没。 */
+  position: relative; z-index: 1;
+}
+/* 半透明底色 + 背景模糊挂在 ::before 上,**不能**挂在 .top 自己身上:带
+   backdrop-filter 的元素会成为它全部 position: fixed 后代的包含块,而通知面板
+   那张 inset: 0 的点击遮罩就在顶栏里 —— 挂在 .top 上时它从整个视口塌成顶栏那只盒子
+   (实测 1280×800:1206×53,本该是 1280×800),顶栏以下点空白关不掉面板。
+   挂到伪元素上,渲染结果一模一样(模糊的仍然是顶栏这块区域),而 .top 不再是包含块。
+   设计系统对顶栏的原文要求就是半透明 + backdrop blur:实色顶栏把下面的 HUD 底座
+   切断了,页面看着像两张拼起来的图。 */
+.top::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: color-mix(in oklch, var(--surface-card) 78%, transparent);
   backdrop-filter: blur(8px);
+}
+/* 顶栏下沿:同 .c-card-head::after 的渐变线,不是一条等浓的实线。
+   一条从头到尾一样浓的灰线是"隔断",渐变线是"边缘" —— 全站的卡头、表头、侧栏边
+   都已经换过来了,顶栏是其中最显眼的一条,又正好压在同样渐变的侧栏边上方,
+   留一条实线在这里最扎眼。走伪元素不走 border:border 画不了渐变。 */
+.top::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    color-mix(in oklch, var(--hud-hairline) 55%, transparent),
+    var(--border-subtle) 60%,
+    transparent);
 }
 /* 390 宽下「数据库管理网关」会竖成一列单字,压在页面标题上 —— flex 子项的
    min-width 默认是 auto,它不肯缩,于是改为逐字折行。单行省略才是对的:
@@ -384,10 +419,14 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   font: 600 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint);
   /* 实底把表头从卡片里切出来,而它本来就是这张卡的一部分 —— 改透明,只留
      一条渐变底线分隔。
-     底线同样走 background-image 而不是 border:border 画不了渐变(border-image
-     会连带吃掉 .c-table 的圆角)。.c-thead 的盒宽等于表格内容全宽,所以这条线
-     在横滚时跟着表头一起走,和表头对齐 —— 这是对的,它是行内分隔线,不是
-     .c-table 那条锚在容器上的顶沿高光。 */
+     底线走 background-image 而不是 border:border 画不了渐变(border-image
+     会连带吃掉 .c-table 的圆角)。
+     注意这条线**没有**解决横滚:.c-thead 是网格容器,盒宽是可视宽而不是内容全宽
+     (实测 400px 窄屏的审计表:offsetWidth 268 / scrollWidth 296),
+     background-size: 100% 1px 按 268 解析,往右滚时滚进来的表头单元格下面就没有线。
+     这和它替掉的那条 border-bottom 是同一个范围,不是回退,所以这里没有改。
+     真正锚在滚动容器上的是十几行之上 .c-table 的顶沿高光 —— 那条才是"横滚也不跑掉"
+     的那一条,两者不是一回事,别把这里当成横滚问题已经解决过了。 */
   background-color: transparent;
   background-image: linear-gradient(90deg,
     var(--border-subtle),
@@ -431,17 +470,15 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   border-color: var(--accent-subtle-border); color: var(--accent-text);
   box-shadow: inset 0 0 0 1px var(--accent-subtle-border);
 }
-/* 渐变只走 azure→cyan,cyan 混入 30% —— 设计系统禁止 azure→violet。
-   混得再多主按钮就偏绿,和"成功"的语义色撞上。 */
+/* 底色走 --btn-primary-bg,不在这里写死渐变:同一条渐变四个地方要用(这两条 +
+   .login-submit 的两条),抄四遍就会四份各改各的。取值与对比度实测见 effects.css。 */
 .c-btn.v-primary {
   height: 40px; border-color: transparent; color: var(--text-on-accent);
-  background: linear-gradient(120deg,
-    var(--accent), color-mix(in oklch, var(--glow-accent) 30%, var(--accent)));
+  background: var(--btn-primary-bg);
 }
 .c-btn.v-primary:hover:not(:disabled) {
   color: var(--text-on-accent);
-  background: linear-gradient(120deg,
-    var(--accent-hover), color-mix(in oklch, var(--glow-accent) 34%, var(--accent-hover)));
+  background: var(--btn-primary-bg-hover);
   box-shadow: var(--glow-sm);
 }
 /* 一直缺的按下态。设计系统:press → translateY(1px) scale(.99),一个很轻的
@@ -501,12 +538,9 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   background: color-mix(in oklch, var(--surface-card) 88%, transparent);
   backdrop-filter: blur(var(--blur-sm));
   border: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);
+  /* 顶沿那条 1px 高光(hud.css 的 .login-card::before)是左右拉满的绝对定位条,
+     不裁的话它会横穿 --radius-2xl 的圆角,在卡片左右上角外面各支出一小截。 */
   overflow: hidden;
-}
-/* 顶沿高光,同卡片。 */
-.login-card::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  pointer-events: none; background: var(--hud-edge);
 }
 .login-brand { display: flex; align-items: center; gap: 9px; margin-bottom: var(--space-5, 20px); }
 .login-mark {
@@ -526,7 +560,11 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   border: 1px solid var(--border-default); background: var(--surface-page); color: var(--text-body);
   font: 400 13.5px var(--font-body);
 }
-.login-card input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+/* box-shadow 必须写成完整的阴影,不能只丢一个颜色进去:`box-shadow: <color>` 是
+   非法值,而 var() 的非法值在层叠里照样胜出、然后计算成 none —— 于是这一条把
+   base.css 给 :focus-visible 新加的那圈光晕又抹掉了,而登录页正是本轮的样板页。
+   写法与 base.css 的 :focus-visible 对齐。 */
+.login-card input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--focus-ring); }
 .portal-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .portal-opt {
   display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; cursor: pointer; text-align: left;
@@ -539,14 +577,15 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .login-submit {
   width: 100%; margin-top: var(--space-5, 20px); padding: 11px; border: 0; cursor: pointer;
   border-radius: var(--radius-md); color: var(--text-on-accent);
-  background: linear-gradient(120deg,
-    var(--accent), color-mix(in oklch, var(--glow-accent) 30%, var(--accent)));
+  /* 与 .c-btn.v-primary 同一条 token,取值与对比度实测见 effects.css。 */
+  background: var(--btn-primary-bg);
   font: 600 14px var(--font-body);
   transition: var(--transition-colors), var(--transition-transform);
 }
-.login-submit:hover {
-  background: linear-gradient(120deg,
-    var(--accent-hover), color-mix(in oklch, var(--glow-accent) 34%, var(--accent-hover)));
+/* :not(:disabled) 与上下两条(:active、.c-btn 那组)对齐 —— 登录按钮在提交中是
+   disabled 的,少了这道闸,鼠标扫过一个按不动的按钮它还会亮一圈辉光。 */
+.login-submit:hover:not(:disabled) {
+  background: var(--btn-primary-bg-hover);
   box-shadow: var(--glow-sm);
 }
 .login-submit:active:not(:disabled) { transform: translateY(1px) scale(.99); }
@@ -1619,10 +1658,11 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   color: transparent;
 }
 /* 单位后缀(.dash-nums b i,如 "ms")不跟着裁 —— 它是 11px 的 mono,裁字会
-   把这么小的字号啃掉笔画。background:none 挡住父元素的渐变图像不透过来;
-   background-clip 不必显式重置为 border-box —— 那本就是它的初始值,且此属性不继承。 */
+   把这么小的字号啃掉笔画。挡住父元素那层渐变的是这里的实色 color:父元素的
+   background-clip: text 裁的是它整段文字的字形,包含这个 <i>,但 <i> 自己有不透明的
+   color,直接盖在上面。不需要再写一句 background: none —— background 不继承,
+   <i> 本来就没有自己的背景可挡。 */
 .dash-nums b i {
-  background: none;
   font: 500 11px var(--font-mono); font-style: normal; color: var(--text-faint); margin-left: 2px;
 }
 .dash-nums span { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }

@@ -19,8 +19,22 @@
 /* 挂 .main 不挂 .content:.content 是 overflow:auto 的滚动容器,背景挂上去会
    随内容滚动,并在每帧重绘整张渐变。.main 是固定高度的 flex 列,画一次就不动。
    而且——固定不动的网格才像 HUD 底座,跟着内容滚的网格像壁纸。 */
+/* isolation: isolate 把 .main 变成一个层叠上下文 —— 底座的 z-index: 0 因此关在
+   .main 里,压不到 .rail 头上。代价要记住:**.main 里所有页面级浮层的 z-index
+   从此只跟彼此可比**,跟 .rail 里的 .um-mask/.usermenu(400/401)不再是同一把尺 ——
+   后者在根层叠上下文里,数字再小也压在整个 .main 之上。以后往 .main 里加浮层,
+   参照物是 .content / .top / .c-overlay 这几个,不是全站最大的那个数。 */
 .main { position: relative; isolation: isolate; }
-.main > * { position: relative; z-index: 1; }
+/* 只给 position,**不给 z-index**。早先这里写了 z-index: 1,把 .top 和 .content
+   一起抬成同级的层叠上下文:.content 在 DOM 里靠后,于是它(以及里面每一张不透明
+   卡片)压在 .top 上面,挂在顶栏里的通知面板被卡片盖掉 —— 实测 1280×800,面板中心
+   的 elementFromPoint 命中 .page-head 而不是面板。
+   position: relative 自己就够把两个子元素抬到 .main::before(z-index: 0)之上:
+   定位后代与 z-index: 0 在同一轮按文档序绘制,而伪元素排在两个子元素前面。
+   .content 这边尤其**不能**再给 z-index:它一旦自成层叠上下文,页面里
+   position: fixed 的模态遮罩(.c-overlay, z-index 50)就被关进 .content 的层级里,
+   盖不住顶栏了。顶栏压在内容之上这件事改由 theme.css 的 .top 自己声明。 */
+.main > * { position: relative; }
 .main::before {
   content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
   background:
@@ -49,10 +63,12 @@
 /* ---- 卡片:顶沿高光 + 右上角标 ---- */
 
 /* .c-table 不在这组里 —— 它是横滚容器,高光线走 background-image,见 theme.css。
-   .perm-rcard 也不在 —— 它的 ::before 被选中态的左色条占着(theme.css:1060),
-   是全站唯一的伪元素冲突点。 */
+   .perm-rcard 也不在 —— 它的 ::before 被选中态的左色条占着(theme.css 的
+   `.perm-rcard.on::before`),是全站唯一的伪元素冲突点。按选择器引,不按行号:
+   theme.css 会长,行号一改就成了假话。 */
 .c-card::before,
-.dash-card::before {
+.dash-card::before,
+.login-card::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
   pointer-events: none; background: var(--hud-edge);
 }
@@ -121,12 +137,22 @@
 .pill-health svg {
   animation: hud-pulse 2.4s var(--ease-in-out) infinite;
 }
+/* 网关掉线时停跳。这一枚是"网关此刻在跑"的指示灯,掉线正是它必须停下来的时刻 ——
+   .pill-health.off 已经把底色换成 danger、把图标换成红色(theme.css),再让红图标
+   顶着一圈 cyan 的 --glow-accent 呼吸,说的是两件互相矛盾的事。
+   连 filter 一起清掉:hud-pulse 的静止态留着 drop-shadow 也还是青色辉光。 */
+.pill-health.off svg {
+  animation: none;
+  filter: none;
+}
 @media (prefers-reduced-motion: reduce) {
   /* 关掉动画但把辉光留在它的静止态 —— 不动不等于不亮。 */
   .pill-health svg {
     animation: none;
     filter: drop-shadow(0 0 4px var(--glow-accent));
   }
+  /* 掉线态在 reduce 下同样不发光 —— 上面那条只改了 animation。 */
+  .pill-health.off svg { filter: none; }
 }
 
 /* ---- 四角取景框 ---- */
