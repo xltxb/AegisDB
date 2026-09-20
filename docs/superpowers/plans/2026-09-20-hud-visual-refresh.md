@@ -571,12 +571,24 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 test.describe('HUD 交互态', () => {
   // open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
   // 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
+  // 字段名必须对上 types/index.ts 的 AuditRow —— 页面读的是 occurredAt /
+  // instance / result / approvalNo,写成别的名字行会渲染出来但全是空格,
+  // hover 测的是几何,空格量掉了就测不出位移。
   const AUDIT_ROWS = {
     items: [
-      { id: 1, at: '2026-09-20T10:00:00Z', actor: 'linwei', action: 'SELECT', risk: 'low', target: 'orders', command: 'select 1' },
-      { id: 2, at: '2026-09-20T10:01:00Z', actor: 'linwei', action: 'UPDATE', risk: 'high', target: 'orders', command: 'update orders set a=1 where id=1' },
+      {
+        id: 1, occurredAt: '2026-09-20T10:00:00Z', actor: 'linwei',
+        instance: 'prod-mysql-01', database: 'shop', command: 'select 1',
+        risk: 'low', result: 'executed', approvalNo: '', hash: 'a1',
+      },
+      {
+        id: 2, occurredAt: '2026-09-20T10:01:00Z', actor: 'linwei',
+        instance: 'prod-mysql-01', database: 'shop',
+        command: 'update orders set a = 1 where id = 1',
+        risk: 'high', result: 'executed', approvalNo: 'CR-2026-0001', hash: 'b2',
+      },
     ],
-    total: 2,
+    total: 2, page: 1, pageSize: 20,
   }
   async function openAudit(page: Page) {
     await open(page, 'about:blank')
