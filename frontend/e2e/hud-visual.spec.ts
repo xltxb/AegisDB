@@ -708,6 +708,29 @@ test.describe('HUD 第二阶段 · 列表行', () => {
     await page.waitForSelector('.chg-item')
   }
 
+  // 字段名照 types/index.ts:708 的 Pipeline 抄:id / name / description /
+  // tierCode / enabled / isDefault / stages(每条 stage 要 name + type,
+  // PipelineStage 在 types/index.ts:698)。接口是 GET /pipelines
+  // (api/modules/pipeline.ts 的 pipelineApi.pipelines),直接返回 Pipeline[],
+  // 不像 /releases 那样包一层 { items, total }。
+  const PIPELINES = [
+    {
+      id: 1, name: '标准发布', description: '审查通过后自动执行', tierCode: '',
+      enabled: true, isDefault: true,
+      stages: [
+        { name: '审查', type: 'review', config: '{"failOn":"error"}', onFailure: 'abort' },
+        { name: '执行', type: 'execute', config: '', onFailure: 'abort' },
+      ],
+    },
+  ]
+
+  async function openPipelines(page: Page) {
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/pipelines', (r) => r.fulfill(envelope(PIPELINES)))
+    await page.goto('/pipelines')
+    await page.waitForSelector('.pl-item')
+  }
+
   test('列表行的高光线走 ::after,不走 ::before', async ({ page }) => {
     await openChanges(page)
     // ::before 被选中态的 3px 左色条占着 —— 三处之一。
@@ -732,8 +755,20 @@ test.describe('HUD 第二阶段 · 列表行', () => {
     expect(t).toContain('-2')
   })
 
+  // .pl-item 是另一个 ::before 冲突容器。四个容器共用同一条逗号并列规则,
+  // 但只在 .chg-item 上挂了几何断言,机制若在 .pl-item 上悄悄分叉不会被发现 ——
+  // 这条补一次点验,不重复 hover/角标那两条(理由和 .chg-item 一样,机制是同一条
+  // 规则给出的)。
+  test('.pl-item 的高光线也走 ::after', async ({ page }) => {
+    await openPipelines(page)
+    expect(await styleOf(page, '.pl-item', 'background-image', '::after')).toContain('gradient')
+    expect(parseFloat(await styleOf(page, '.pl-item', 'border-top-width', '::after'))).toBe(0)
+  })
+
   // 三处选中态色条 —— 装饰不得覆盖它们。它们是这三个容器上唯一回答
-  // "现在选的是哪一个"的东西。
+  // "现在选的是哪一个"的东西。三个都要断言:.chg-item 和 .pl-item 正是这轮
+  // 刚拿到装饰的两个,只验 .perm-rcard 等于没看它们有没有被自己刚加的规则
+  // 顶掉的一半。
   test('三处选中态色条都还在', async ({ page }) => {
     // open() 的兜底桩把 /api/v1/roles 喂成 [],角色列表是空的,.perm-rcard
     // 根本不会渲染 —— 同一份 API 契约问题,只是换了个容器。这里同样得先装桩
@@ -751,5 +786,15 @@ test.describe('HUD 第二阶段 · 列表行', () => {
     await page.click('.perm-rcard')
     await page.waitForSelector('.perm-rcard.on')
     expect(await styleOf(page, '.perm-rcard.on', 'width', '::before')).toBe('3px')
+
+    // .chg-item:currentId 算出来就落在 items[0] 上(见 pages/changes/index.tsx),
+    // 不用点,第一张单子进页面就是 .on。
+    await openChanges(page)
+    expect(await styleOf(page, '.chg-item.on', 'width', '::before')).toBe('3px')
+
+    // .pl-item:同一个规矩,current 兜底落在 items[0](见 pages/pipelines/index.tsx
+    // 的 `current = editing ?? clone(items[0])`),第一条模板进页面就是 .on。
+    await openPipelines(page)
+    expect(await styleOf(page, '.pl-item.on', 'width', '::before')).toBe('3px')
   })
 })
