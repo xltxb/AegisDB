@@ -79,7 +79,9 @@ async function open(page: Page, path: string) {
   await stubShell(page, ADMIN)
   await page.route('**/api/v1/gateway/stats**', (r) => r.fulfill(
     envelope({ online: true, p50Ms: 3, p95Ms: 11, samples: 128, intercepts: 2 })))
-  await page.goto(path)
+  // 传 'about:blank' 表示"只装桩,先别跳" —— 调用方还要再加自己的路由,
+  // 而 Playwright 的路由是后注册者优先,必须在 goto 之前注册完。
+  if (path !== 'about:blank') await page.goto(path)
 }
 
 /** 切主题。stores/ui.ts 把主题写在 <html data-theme> 上。 */
@@ -567,9 +569,24 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 ```ts
 test.describe('HUD 交互态', () => {
-  test('表格行 hover 时文字没有横向位移', async ({ page }) => {
-    await open(page, '/audit')
+  // open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
+  // 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
+  const AUDIT_ROWS = {
+    items: [
+      { id: 1, at: '2026-09-20T10:00:00Z', actor: 'linwei', action: 'SELECT', risk: 'low', target: 'orders', command: 'select 1' },
+      { id: 2, at: '2026-09-20T10:01:00Z', actor: 'linwei', action: 'UPDATE', risk: 'high', target: 'orders', command: 'update orders set a=1 where id=1' },
+    ],
+    total: 2,
+  }
+  async function openAudit(page: Page) {
+    await open(page, 'about:blank')
+    await page.route('**/api/v1/audit**', (r) => r.fulfill(envelope(AUDIT_ROWS)))
+    await page.goto('/audit')
     await page.waitForSelector('.c-trow.clickable')
+  }
+
+  test('表格行 hover 时文字没有横向位移', async ({ page }) => {
+    await openAudit(page)
     const cell = page.locator('.c-trow.clickable .c-td').first()
     const before = await cell.boundingBox()
     await page.locator('.c-trow.clickable').first().hover()
@@ -581,8 +598,7 @@ test.describe('HUD 交互态', () => {
   })
 
   test('表格行 hover 时出现左侧 accent 竖条', async ({ page }) => {
-    await open(page, '/audit')
-    await page.waitForSelector('.c-trow.clickable')
+    await openAudit(page)
     const row = page.locator('.c-trow.clickable').first()
     await row.hover()
     const shadow = await row.evaluate((el) => getComputedStyle(el).boxShadow)
@@ -730,11 +746,20 @@ test.describe('HUD 按钮与焦点', () => {
 
   test('键盘焦点除 outline 外还有光晕', async ({ page }) => {
     await page.goto('/login')
-    await page.locator('input[type="email"]').focus()
-    const cs = await page.locator('input[type="email"]').evaluate((el) => {
+    // 必须用真键盘走到它,不能用 .focus():Chrome 对按钮的程序化聚焦
+    // **不**匹配 :focus-visible,而这条规则正是挂在 :focus-visible 上的。
+    // 也不能拿输入框做靶子:theme.css:444 的 .login-card input:focus 写了
+    // outline: none,特异度 (0,2,1) 压过 :focus-visible 的 (0,1,0),
+    // 输入框上根本不该有 outline。
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('Tab')
+      if (await page.locator('.login-submit:focus').count()) break
+    }
+    const cs = await page.locator('.login-submit').evaluate((el) => {
       const s = getComputedStyle(el)
-      return { outline: s.outlineWidth, shadow: s.boxShadow }
+      return { fv: el.matches(':focus-visible'), outline: s.outlineWidth, shadow: s.boxShadow }
     })
+    expect(cs.fv).toBe(true)
     // outline 保留不动 —— 它是键盘可达性的底线,光晕只是叠加。
     expect(parseFloat(cs.outline)).toBeGreaterThan(0)
     expect(cs.shadow).not.toBe('none')
@@ -829,7 +854,13 @@ Expected: 三条全 FAIL。
 
 ```css
 /* outline 保留不动 —— 它是键盘可达性的底线。光晕只是叠加在外面的一圈,
-   让焦点在深色页面上也一眼看得到。--focus-ring 亮暗各有值(见 colors.css)。 */
+   让焦点在深色页面上也一眼看得到。--focus-ring 亮暗各有值(见 colors.css)。
+
+   注意:光晕是 box-shadow,所以任何特异度更高、又自己设了 box-shadow 的组件
+   规则都会把它整条替换掉 —— .rail-item.on (0,2,0)、.c-btn:hover:not(:disabled)
+   (0,3,1)、.portal-opt.on 都是。这是可接受的:outline 在那些元素上仍然在,
+   可达性不受影响,丢的只是装饰。不要为了追平这一圈去给每个组件规则手动
+   append 光晕 —— 那是一张永远补不完的表。 */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1031,9 +1062,12 @@ test.describe('HUD 外壳', () => {
     await open(page, '/dashboard')
     await page.waitForSelector('.rail-item.on')
     const s = await styleOf(page, '.rail-item.on', 'box-shadow')
-    // 既有的 inset 色条 + 新加的外溢辉光 = 两段阴影
+    // 既有的 inset 色条 + 新加的外溢辉光 = 两段阴影。数颜色函数的个数,
+    // 不数逗号 —— 一段阴影自己就带好几个逗号。
     expect(s).toContain('inset')
-    expect(s.split('),').length + s.split('rgb').length).toBeGreaterThan(3)
+    expect((s.match(/rgba?\(/g) ?? []).length).toBeGreaterThanOrEqual(2)
+    // 外溢那一段不能也是 inset,否则辉光画在里面,外面看不见。
+    expect(s.replace(/inset/, '')).not.toContain('inset')
   })
 })
 ```
