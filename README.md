@@ -9,7 +9,7 @@
 ```
 db-gateway/
 ├─ backend/     Go + Gin + GORM 后端（REST + WebSocket；风险引擎/RBAC/审批/审计哈希链/多引擎真实执行）
-├─ frontend/    React 19 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
+├─ frontend/    React 19 + TS + Vite 前端（Vela 设计系统 + HUD 视觉层，明暗双主题，中英双语，xterm.js 真终端）
 ├─ docs/        功能总览 / PRD / 开发文档 / 交互原型 / ADR / 四份数据库规范 / 外部对接指南
 ├─ deploy/      systemd unit + 环境变量模板
 └─ docker-compose.yml  本地 PostgreSQL 16 + Redis 7（可选，本机已装 PostgreSQL 就不需要；后端目前不使用 Redis）
@@ -98,7 +98,7 @@ cd backend  && go test ./... -timeout 20m    # 需要本机 PostgreSQL 与 vela_
 cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && npm run build
 ```
 
-**后端**以 httptest 黑盒回归网为主：`backend/internal/bootstrap/` 下 179 个测试文件，每个用例
+**后端**以 httptest 黑盒回归网为主：`backend/internal/bootstrap/` 下 183 个测试文件，每个用例
 启动一次完整应用、实跑 HTTP 接口，覆盖判定链、多语句、审批链、审计链、脱敏、导出上限、
 执行窗口、会话安全。整包约 12 分钟，**超过 `go test` 默认的 10 分钟包超时** —— 所以上面
 那条命令带了 `-timeout`，不带会在跑完前被判超时失败。连不上 PostgreSQL 是**失败**不是 skip，
@@ -106,13 +106,18 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
 
 **前端有两个测试口，跑的是两种东西，不要互相替代：**
 
-- `npm run test:unit`（265 例，`playwright.unit.config.ts`）—— **Node 里跑纯逻辑**，没有浏览器
+- `npm run test:unit`（291 例，`playwright.unit.config.ts`）—— **Node 里跑纯逻辑**，没有浏览器
   也没有 dev server。结果渲染里的控制字符、行编辑器的忙/排队状态机、导入表的校验、
   窄屏该收哪些列，都是这一口盯的。
-- `npm run test:e2e`（25 例，`playwright.config.ts`）—— **真浏览器里跑真应用**，自动拉起 Vite，
+- `npm run test:e2e`（116 例 / 10 个 spec，`playwright.config.ts`）—— **真浏览器里跑真应用**，自动拉起 Vite，
   API 由各 spec 自己打桩，所以不需要起 Go 后端。这一口盯的是排版和层叠算完之后才成立的事：
   能力矩阵塌成一列、媒体查询没能收掉动画、两个数据源里坏了一个就把实例树整棵清空、
   表格的 grid 轨道数和实际渲染的单元格数对不上 —— 类型检查、构建和单测都看不见这些。
+  其中 `hud-visual.spec.ts` 一个文件就占 76 例，盯的是视觉层：装饰有没有真的画出来、
+  hover 时行内文字有没有被推动、主按钮的对比度有没有退化、滚动容器里的装饰会不会
+  跟着内容滚走。**断言要问"它看得见吗"，不是"这个节点在吗"** —— 后者在这个项目里
+  放过同一个 bug 两次：四角取景框的节点存在、绝对定位、不吃点击，四条断言全绿，
+  而它被三栏的不透明底色整个盖住，一个像素都没显示。
 
 ### 前端约定
 
@@ -122,6 +127,17 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
   store 会得到两份真相，而它们分叉时的表现是「刷新一下就变了」
 - 自适应只有两个断点：`768` / `1080`（`src/lib/breakpoints.ts` 与 CSS 各一份，**改一处要改两处**）；
   表格在窄屏按列优先级收列，而不是把八列压进 768px
+- **样式分两层，按关注点不按机制**：`theme.css`（3001 行）是既有骨架，就地改；
+  `hud.css`（325 行）是 HUD 视觉层，不论用伪元素还是 `background-image` 都归它。
+  这样整轮视觉改造可以作为一个单位回滚。`hud.css` 由 `main.tsx` 在 `theme.css`
+  **之后** import —— CSS 的 `@import` 必须位于所有规则之前，塞进去会被后面三千行压过
+- **滚动容器不能用绝对定位的伪元素承载装饰** —— 它会跟着内容滚出可视区。这个坑在本项目
+  踩过四次（`.c-table`、`.rail`、`.ib-side`、`.tv-insp`），前两个各犯一次才被发现。
+  会滚的容器改用元素自身的 `background-image`（`background-attachment` 默认 `scroll`，
+  锚在边框盒上）。`hud-visual.spec.ts` 里有一条普查断言守着这一**类**错误，不是守某一个容器
+- **三处 `.on::before` 是选中态的 3px 左色条**（`.perm-rcard` / `.chg-item` / `.pl-item`），
+  装饰不得占用它们的 `::before`，也不得盖住它们 —— 那是这三个容器上唯一回答
+  「现在选的是哪一个」的东西。列表行档因此整档走 `::after`
 
 ---
 
@@ -180,7 +196,9 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
 |---|---|
 | [`docs/features.md`](docs/features.md) | **功能总览** —— 每个页面、每条判定、每个开关做什么 |
 | [`DEPLOY.md`](DEPLOY.md) | 生产部署完整步骤与环境变量一览 |
-| `docs/adr/` | 架构决策记录（16 条） |
+| `docs/adr/` | 架构决策记录（17 条） |
+| `docs/superpowers/specs/` | 各轮改造的设计文档（7 份）—— 每份都写明**非目标**和被推翻的判断，不只写做了什么 |
+| `docs/superpowers/plans/` | 对应的实现计划（6 份），任务拆解到可独立审查的粒度 |
 | `docs/` | PRD、前后端开发文档、交互原型、Vela 设计系统、四份数据库规范（MySQL / TiDB / Oracle / DWS）—— 规范审查的 87 条规则就是从它们来的 |
 | `docs/开放接口对接文档.md` | 外部系统怎么拿凭据、幂等怎么算、状态怎么轮询 |
 | `docs/agents/`、`CLAUDE.md` | AI Agent 协作约定 |
