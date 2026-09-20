@@ -363,3 +363,30 @@ test.describe('HUD 外壳', () => {
     expect(s.replace(/inset/, '')).not.toContain('inset')
   })
 })
+
+test.describe('HUD 指标数字', () => {
+  test('普通指标数字是渐变裁字', async ({ page }) => {
+    await open(page, '/dashboard')
+    await page.waitForSelector('.dash-nums b')
+    const cs = await page.locator('.dash-nums div:not(.warn) > b').first().evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { clip: s.backgroundClip || s.webkitBackgroundClip, color: s.color, bg: s.backgroundImage }
+    })
+    expect(cs.clip).toBe('text')
+    expect(cs.bg).toContain('gradient')
+    // 裁字要求文字本身透明,否则实色盖在渐变上,渐变白画。
+    expect(cs.color).toBe('rgba(0, 0, 0, 0)')
+  })
+
+  test('告警数字不裁字 —— 语义色不能被渐变冲淡', async ({ page }) => {
+    await open(page, '/dashboard')
+    // open() 把 intercepts 打成 2,GatewayCard 因此渲染出一个 .warn。
+    await page.waitForSelector('.dash-nums .warn b')
+    const cs = await page.locator('.dash-nums .warn > b').first().evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { clip: s.backgroundClip || s.webkitBackgroundClip, color: s.color }
+    })
+    expect(cs.clip).not.toBe('text')
+    expect(cs.color).not.toBe('rgba(0, 0, 0, 0)')
+  })
+})

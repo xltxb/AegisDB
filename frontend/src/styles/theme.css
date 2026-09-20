@@ -71,8 +71,10 @@ a { color: inherit; text-decoration: none; }
   /* 一条从头到尾一样浓的灰线是"隔断",渐变线才是"边缘"。
      不用伪元素:.rail 会滚(见上面那段 overflow-y 的注释),绝对定位的后代跟着
      内容滚,菜单一长线就滑走了 —— 同 .c-table 的做法。
-     border-right 必须去掉,不能只是盖住:74px 的栏宽是算过的(见 .rail-item
-     的注释:64px 项 + 两边各 5px),多 1px 边框就是 75px。 */
+     border-right 必须去掉,不能只是盖住:实色的 border-right 画在栏的同一条
+     右边缘上(background-clip 默认就是 border-box),会把下面这条渐变线整条
+     盖死;而且它占掉的 1px 是从 .rail-item 那 5px 留白里扣的(见其注释:64px
+     项 + 两边各 5px),留白就少了 1px。 */
   background-image: linear-gradient(180deg,
     transparent,
     var(--border-subtle) 18%,
@@ -1219,8 +1221,16 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   background: var(--surface-card);
 }
 .us-stat.warning { border-color: var(--warning-subtle); background: var(--warning-subtle); }
-.us-statv { font: 700 22px var(--font-display); color: var(--text-strong); }
-.us-stat.warning .us-statv { color: var(--warning-text); }
+.us-statv {
+  font: 700 22px var(--font-display);
+  background: linear-gradient(135deg, var(--text-strong), var(--accent-text));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+.us-stat.warning .us-statv {
+  background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  color: var(--warning-text);
+}
 .us-statl { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
 .us-table .c-trow.us-off { opacity: .55; }
 .us-cell { display: flex; align-items: center; gap: 10px; }
@@ -1584,10 +1594,27 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .dash-nums { display: flex; gap: 26px; padding: 14px 18px 6px; }
 .dash-nums.wide { flex-wrap: wrap; gap: 22px; }
 .dash-nums div { display: flex; flex-direction: column; gap: 2px; }
-.dash-nums b { font: 700 22px var(--font-display); color: var(--text-strong); letter-spacing: -.02em; }
+/* 渐变幅度刻意小(strong → accent-text,不是 azure → cyan):大数字是要读的,
+   不是要发光的。设计系统允许 big-stat numerals 用 background-clip:text,
+   这里就用在它规定的位置上。 */
+.dash-nums b {
+  font: 700 22px var(--font-display); letter-spacing: -.02em;
+  background: linear-gradient(135deg, var(--text-strong), var(--accent-text));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent;
+}
+/* 单位后缀(.dash-nums b i,如 "ms")不跟着裁 —— 它是 11px 的 mono,裁字会
+   把这么小的字号啃掉笔画。 */
+.dash-nums b i {
+  background: none; -webkit-background-clip: border-box; background-clip: border-box;
+}
 .dash-nums b i { font: 500 11px var(--font-mono); font-style: normal; color: var(--text-faint); margin-left: 2px; }
 .dash-nums span { font: 600 10.5px var(--font-mono); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
-.dash-nums .warn b { color: var(--warning-text); }
+/* 告警数字不裁字:语义色是它唯一要传达的东西,不能被渐变冲淡。 */
+.dash-nums .warn b {
+  background: none; -webkit-background-clip: border-box; background-clip: border-box;
+  color: var(--warning-text);
+}
 .dash-card .c-state { padding: 18px; }
 
 /* ============ 脚本扫描弹窗 ============ */
