@@ -2829,6 +2829,7 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .ib-wait { font: 500 11px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
 
 .ib-empty {
+  position: relative; /* HUD 角标的定位上下文,见 hud.css */
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px;
   padding: 60px 20px; border: 1px dashed var(--border-default); border-radius: 14px;
   font: 500 13px var(--font-body); color: var(--text-muted);

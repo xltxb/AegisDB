@@ -1050,10 +1050,14 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
       const hairlineList = ['.c-card', '.dash-card', '.login-card', '.perm-roles', '.set-nav',
         '.set-save', '.cat-side', '.cat-detail', '.rr-stat', '.chg-detail',
         '.pl-editor', '.notif-panel', '.usermenu', '.conn-bulkbar']
-      // 右上角标:十三个,比高光线少一个 —— .login-card 自己有一圈四角取景框
-      // (hud.css「登录页」段的 .hud-corners),再挂一个右上角标是两套角标叠在
-      // 一起,所以角标清单里故意不含它。两组数字不相等是设计使然,不是笔误。
-      const cornerList = ['.c-card', '.dash-card', '.perm-roles', '.set-nav',
+      // 右上角标:十四个。与高光线组不是同一批容器,两处差异都是设计使然:
+      //   - .login-card 在高光线组、不在这里:它自己有一圈四角取景框
+      //     (hud.css 的 .hud-corners),再挂一个右上角标是两套角标叠在一起。
+      //   - .ib-empty 在这里、不在高光线组:高光线说的是"这块面板的内容从这里
+      //     开始",而空态框里没有内容;角标说的是"这是一块划定的区域",空态框
+      //     正是。
+      // 两组恰好都是十四个纯属巧合,不要因此把两份清单合成一份。
+      const cornerList = ['.c-card', '.dash-card', '.ib-empty', '.perm-roles', '.set-nav',
         '.set-save', '.cat-side', '.cat-detail', '.rr-stat', '.chg-detail',
         '.pl-editor', '.notif-panel', '.usermenu', '.conn-bulkbar']
 
@@ -1085,10 +1089,10 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
     })
     // 漏登记:清单里的某个不在规则里,hit < 清单长度。
     expect(result.hairlineHit).toBe(14)
-    expect(result.cornerHit).toBe(13)
+    expect(result.cornerHit).toBe(14)
     // 装饰过度:规则里的选择器比清单多,total > 清单长度(hit 可能仍然满分)。
     expect(result.hairlineTotal).toBe(14)
-    expect(result.cornerTotal).toBe(13)
+    expect(result.cornerTotal).toBe(14)
   })
 
   test('拿到列表行装饰的容器,正好是四个(数量不多不少)', async ({ page }) => {
