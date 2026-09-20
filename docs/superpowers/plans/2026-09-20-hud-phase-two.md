@@ -570,11 +570,30 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 
 追加：
 
+终端页的三条测试都要先顶掉 WebSocket。文件顶部补一个 import：
+
+```ts
+import { installWsFake } from './wsFake'
+```
+
+并在本段落里用这个助手打开终端，而不是直接 `open(page, '/terminal')`：
+
+```ts
+  // 不顶掉那条 socket,Vite 会把它转发给并不存在的 Go 后端,每跑一次就往输出里
+  // 刷一串 ECONNREFUSED —— 与本口无关的噪声,而它盖住的正是这一口自己的失败信息。
+  // 既有的 responsive / env-tier-tree / approval-card-long-sql 三套都是这么做的。
+  async function openTerminal(page: Page) {
+    await open(page, 'about:blank')
+    await installWsFake(page)
+    await page.goto('/terminal')
+    await page.waitForSelector('.tv-grid')
+  }
+```
+
 ```ts
 test.describe('HUD 第二阶段 · 终端', () => {
   test('外框有四角取景框,且不吃点击', async ({ page }) => {
-    await open(page, '/terminal')
-    await page.waitForSelector('.tv-grid')
+    await openTerminal(page)
     const el = page.locator('.tv-grid > .hud-corners')
     await expect(el).toHaveCount(1)
     await expect(el).toHaveAttribute('aria-hidden', 'true')
@@ -582,16 +601,14 @@ test.describe('HUD 第二阶段 · 终端', () => {
   })
 
   test('取景框是绝对定位,不占终端的网格轨道', async ({ page }) => {
-    await open(page, '/terminal')
-    await page.waitForSelector('.tv-grid')
+    await openTerminal(page)
     // .tv-grid 是 display:grid 且列模板写死三列。装饰节点若不是 absolute
     // 就会变成第四个网格项,把三栏挤位。
     expect(await styleOf(page, '.tv-grid > .hud-corners', 'position')).toBe('absolute')
   })
 
   test('树与终端栏各有顶沿高光线,但不各自加角标', async ({ page }) => {
-    await open(page, '/terminal')
-    await page.waitForSelector('.tv-main')
+    await openTerminal(page)
     // 类名是 .tv-*(终端 v2)。theme.css 里还留着一段 .term-* 是 v1 的死样式,
     // TSX 无引用 —— 拿它当靶子会一条都匹配不到。
     for (const sel of ['.tv-tree', '.tv-main']) {
@@ -602,7 +619,7 @@ test.describe('HUD 第二阶段 · 终端', () => {
   })
 
   test('.tv-insp 不拿顶沿高光线,改由面板头拿渐变分隔线', async ({ page }) => {
-    await open(page, '/terminal')
+    await openTerminal(page)
     await page.waitForSelector('.tv-insp')
     // 它是 overflow:auto 的滚动容器(伪元素会滚走),而它的首个子元素
     // .tv-panel-head 带不透明底色(background-image 会被盖住)。两条路都堵死,
