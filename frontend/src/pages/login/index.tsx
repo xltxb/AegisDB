@@ -64,7 +64,9 @@ export default function LoginPage() {
     <div className="login">
       <form className="login-card" onSubmit={submit}>
         {/* 四角取景框。伪元素只够画两个角,而登录页是第一印象页,四角完整的
-            取景框值这一个装饰元素 —— 这是全站唯一为装饰加的 DOM。 */}
+            取景框值这一个装饰元素。全站为装饰加 DOM 的一共两处,这是第一处;
+            第二处是终端的外框(pages/terminal/index.tsx 的 .tv-grid),用的是
+            同一个 .hud-corners 类。再加第三处之前先想清楚值不值。 */}
         <span className="hud-corners" aria-hidden="true" />
         <div className="login-brand">
           <span className="login-mark"><ShieldCheck size={18} /></span>

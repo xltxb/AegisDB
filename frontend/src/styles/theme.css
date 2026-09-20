@@ -2367,9 +2367,13 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   display: flex; flex-direction: column; min-height: 0; overflow: auto;
   border-left: 1px solid var(--border-subtle); background: var(--surface-card);
 }
+/* 没有 border-bottom:这一条头下分隔线由装饰层的 .c-card-head::after 那一组画成
+   渐变(hud.css)。实色边框留着的话,渐变线画在内距盒的 bottom: 0、正好压在实线
+   上方,读出来是一条 2px 的双线,而同组的 .c-card-head 与 .dash-card > header
+   都是一条 1px 渐变 —— 同一组待遇长出两种样子。这一组的骨架层一律不带下边框。 */
 .tv-panel-head {
   display: flex; align-items: center; gap: 8px; padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken);
+  background: var(--surface-sunken);
   font: 600 11px var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint);
 }
 .tv-collapse { display: flex; border: none; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0; }

@@ -98,6 +98,109 @@ async function openAudit(page: Page) {
   await page.waitForSelector('.c-trow.clickable')
 }
 
+// 下面这几个 opener 放在模块作用域(而不是各自的 describe 里),是因为它们有两批
+// 调用方:各档自己的断言,以及"滚动容器普查"那一条 —— 普查要走遍所有装饰容器
+// 实际所在的页面,拿不到 opener 就只能缩在一个页面里扫,那正是它上一版的毛病。
+
+// 字段名照 types/index.ts 的 Release 抄,不要凭印象写:列表读的是 relNo /
+// changeType / pipelineName,写成 no / stage 之类的行会照常渲染出来但每格是空的,
+// 而 hover 那条测的是几何,空格量掉了就等于没测。接口路径是 /releases,不是 /changes。
+const RELEASES = {
+  items: [
+    {
+      id: 1, relNo: 'REL-2026-0001', title: '清理过期订单备注',
+      pipelineId: 1, pipelineName: '标准发布', connectionId: 1,
+      instance: 'prod-mysql-01', database: 'shop', env: 'prod',
+      tierCode: 'prod', engine: 'mysql', changeType: 'dml',
+      status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:00:00Z',
+    },
+    {
+      id: 2, relNo: 'REL-2026-0002', title: '补充索引',
+      pipelineId: 1, pipelineName: '标准发布', connectionId: 2,
+      instance: 'demo-dev', database: 'shop', env: 'dev',
+      tierCode: 'dev', engine: 'mysql', changeType: 'ddl',
+      status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:05:00Z',
+    },
+  ],
+  total: 2, page: 1, pageSize: 50,
+}
+
+async function openChanges(page: Page) {
+  await open(page, 'about:blank')
+  // 列表和详情分开装桩:`**/api/v1/releases**` 会把 `/releases/:id`(详情)也
+  // 吃掉,喂给它一个 { items, total } 形状的对象。详情区读 open.stages.find(...)
+  // (waitingGate),stages 是 undefined 就整页面炸掉,连带 .chg-item 也渲染不出来
+  // —— 抛的是 TypeError,不是找不到元素的断言失败,查网络请求才看得出来。
+  await page.route('**/api/v1/releases?**', (r) => r.fulfill(envelope(RELEASES)))
+  await page.route('**/api/v1/releases/*', (r) => {
+    const id = Number(new URL(r.request().url()).pathname.split('/').pop())
+    const item = RELEASES.items.find((it) => it.id === id) ?? RELEASES.items[0]
+    r.fulfill(envelope({ ...item, stages: [] }))
+  })
+  await page.goto('/changes')
+  await page.waitForSelector('.chg-item')
+}
+
+// 字段名照 types/index.ts:708 的 Pipeline 抄:id / name / description /
+// tierCode / enabled / isDefault / stages(每条 stage 要 name + type,
+// PipelineStage 在 types/index.ts:698)。接口是 GET /pipelines
+// (api/modules/pipeline.ts 的 pipelineApi.pipelines),直接返回 Pipeline[],
+// 不像 /releases 那样包一层 { items, total }。
+const PIPELINES = [
+  {
+    id: 1, name: '标准发布', description: '审查通过后自动执行', tierCode: '',
+    enabled: true, isDefault: true,
+    stages: [
+      { name: '审查', type: 'review', config: '{"failOn":"error"}', onFailure: 'abort' },
+      { name: '执行', type: 'execute', config: '', onFailure: 'abort' },
+    ],
+  },
+]
+
+async function openPipelines(page: Page) {
+  await open(page, 'about:blank')
+  await page.route('**/api/v1/pipelines', (r) => r.fulfill(envelope(PIPELINES)))
+  await page.goto('/pipelines')
+  await page.waitForSelector('.pl-item')
+}
+
+// 在线表结构变更。字段名照 e2e/osc.spec.ts 的 JOBS 抄 —— 页面读 running /
+// copiedRows / totalRows,写成别的名字行会渲染但进度条是空的。
+// running: true 才拿得到 .osc-item.on(它表示"这条任务正在跑",不表示"被选中")。
+const OSC_JOBS = [
+  {
+    id: 12, connectionId: 1, schema: 'app', table: 't_order',
+    alter: 'ADD INDEX idx_memo (memo)', status: 'copying', shadow: 't_order_gho',
+    copiedRows: 4000, totalRows: 10000, err: '', createdBy: 'Lin Wei',
+    createdAt: '2026-09-18T10:00:00Z', updatedAt: '2026-09-18T10:01:00Z', finishedAt: null,
+    running: true, throttle: '已启用:2 个从库,阈值 30s', throttled: true,
+  },
+]
+
+async function openOsc(page: Page) {
+  await open(page, 'about:blank')
+  await page.route('**/api/v1/osc/status', (r) =>
+    r.fulfill(envelope({ enabled: true, caveats: [] })))
+  await page.route('**/api/v1/osc/jobs', (r) => r.fulfill(envelope(OSC_JOBS)))
+  await page.goto('/osc')
+  await page.waitForSelector('.osc-item')
+}
+
+// 不顶掉那条 socket,Vite 会把它转发给并不存在的 Go 后端,每跑一次就往输出里
+// 刷一串 ECONNREFUSED —— 与本口无关的噪声,而它盖住的正是这一口自己的失败信息。
+// 既有的 responsive / env-tier-tree / approval-card-long-sql 三套都是这么做的。
+//
+// 视口钉在 1500×900:Playwright 的 Desktop Chrome 默认是 1280×720,而 1280 正好
+// 是终端取景框被收起的那一档(hud.css 的 @media (max-width: 1280px))—— 用默认
+// 视口跑,下面几条关于取景框的断言全在对着一个 display: none 的节点读计算值。
+async function openTerminal(page: Page) {
+  await page.setViewportSize({ width: 1500, height: 900 })
+  await open(page, 'about:blank')
+  await installWsFake(page)
+  await page.goto('/terminal')
+  await page.waitForSelector('.tv-grid')
+}
+
 test.describe('HUD 底座', () => {
   test('两套主题都解析出 HUD token,且取值不同', async ({ page }) => {
     await open(page, '/dashboard')
@@ -180,8 +283,17 @@ test.describe('HUD 卡片', () => {
     await open(page, '/settings')
     await page.waitForSelector('.c-card-head')
     expect(await styleOf(page, '.c-card-head', 'background-image', '::after')).toContain('gradient')
-    // 实色 border 必须让位,否则渐变线叠在实线上等于没换。
+    // 实色 border 必须让位,否则渐变线叠在实线上等于没换 —— ::after 画在内距盒的
+    // bottom: 0,正好压在实线正上方,读出来是一条 2px 的双线。
+    //
+    // 三个成员一个不落地验:这是一条组契约,而只盯着组里最老的那个成员,
+    // 恰好拦不住"新成员入组时忘了改骨架层"—— .tv-panel-head 正是这样带着自己的
+    // border-bottom 进来的,而这一条当时只问了 .c-card-head。
     expect(await styleOf(page, '.c-card-head', 'border-bottom-width')).toBe('0px')
+    await open(page, '/dashboard')
+    expect(await styleOf(page, '.dash-card > header', 'border-bottom-width')).toBe('0px')
+    await openTerminal(page)
+    expect(await styleOf(page, '.tv-panel-head', 'border-bottom-width')).toBe('0px')
   })
 
   test('表头去掉了实底,底线是渐变', async ({ page }) => {
@@ -644,94 +756,63 @@ test.describe('HUD 第二阶段 · 滚动容器', () => {
 
   // 这条不针对某个容器,针对一类错误:本项目已经在 .c-table 和 .rail 上各犯过
   // 一次"给滚动容器挂绝对定位装饰"。将来任何人把某个装饰过的容器改成可滚,
-  // 这条立刻红。
-  test('凡是会滚的装饰容器,都不用绝对定位的伪元素承载装饰', async ({ page }) => {
-    await open(page, '/inbox')
-    const bad = await page.evaluate(() => {
-      const out: string[] = []
-      for (const el of document.querySelectorAll<HTMLElement>('*')) {
-        const cs = getComputedStyle(el)
-        const scrolls = ['auto', 'scroll'].includes(cs.overflowX)
-          || ['auto', 'scroll'].includes(cs.overflowY)
-        if (!scrolls) continue
-        for (const pe of ['::before', '::after']) {
-          const p = getComputedStyle(el, pe)
-          if (p.content === 'none') continue
-          if (p.position === 'absolute' && p.backgroundImage !== 'none') {
-            out.push(`${el.className || el.tagName}${pe}`)
+  // 这条立刻红 —— 而"立刻红"要成立,普查必须同时满足两件事,上一版两件都不满足:
+  //
+  // 一是**扫到的页面要覆盖装饰容器实际所在的地方**。上一版只扫 /inbox,那一屏上
+  //   唯一真正的被查对象是 .ib-side,而它上面那条断言已经直接点名验过了;把
+  //   /catalog 的 .cat-detail 改成可滚,普查一条都不会红。所以这里按页面展开成
+  //   一组用例 —— 每档待遇的容器都得有一页把它渲染出来。
+  // 二是**认得出用 border 画的装饰**。角标是两条 border 画的(hud.css 的
+  //   .c-card::after 那一组),不是 background。上一版只看 backgroundImage,
+  //   于是"某个面板档容器变成可滚、角标从此跟着内容滚走"这一类 —— 也就是最像
+  //   前两次事故的那一类 —— 恰好一条都拦不住。这里把判据放宽成"这个伪元素画了
+  //   任何看得见的东西":背景图、非透明底色、或者任意一条非零宽度的 border。
+  const DECORATED_PAGES: Array<[string, (page: Page) => Promise<void>]> = [
+    ['/dashboard', (p) => open(p, '/dashboard')],   // .dash-card / .dash-card > header
+    ['/settings', (p) => open(p, '/settings')],     // .c-card / .c-card-head / .set-nav / .set-save
+    ['/catalog', (p) => open(p, '/catalog')],       // .cat-side / .cat-detail
+    ['/permissions', (p) => open(p, '/permissions')], // .perm-roles
+    ['/risk-rules', (p) => open(p, '/risk-rules')], // .rr-stat
+    ['/async-jobs', (p) => open(p, '/async-jobs')], // .aj-item
+    ['/inbox', (p) => open(p, '/inbox')],           // .ib-side
+    ['/audit', openAudit],                          // .c-table
+    ['/changes', openChanges],                      // .chg-item / .chg-detail
+    ['/pipelines', openPipelines],                  // .pl-item / .pl-editor
+    ['/osc', openOsc],                              // .osc-item
+    ['/terminal', openTerminal],                    // .tv-tree / .tv-main / .tv-panel-head
+  ]
+
+  for (const [label, go] of DECORATED_PAGES) {
+    test(`${label}:会滚的容器都不用绝对定位的伪元素承载装饰`, async ({ page }) => {
+      await go(page)
+      const bad = await page.evaluate(() => {
+        const out: string[] = []
+        const BORDERS = ['borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth'] as const
+        for (const el of document.querySelectorAll<HTMLElement>('*')) {
+          const cs = getComputedStyle(el)
+          const scrolls = ['auto', 'scroll'].includes(cs.overflowX)
+            || ['auto', 'scroll'].includes(cs.overflowY)
+          if (!scrolls) continue
+          for (const pe of ['::before', '::after']) {
+            const p = getComputedStyle(el, pe)
+            if (p.content === 'none') continue
+            if (p.position !== 'absolute') continue
+            // 画了东西才算装饰:光有 content 没有任何着色的伪元素(布局占位、
+            // clearfix 之类)不该被算进来。
+            const paints = p.backgroundImage !== 'none'
+              || (p.backgroundColor !== 'rgba(0, 0, 0, 0)' && p.backgroundColor !== 'transparent')
+              || BORDERS.some((k) => parseFloat(p[k]) > 0)
+            if (paints) out.push(`${el.className || el.tagName}${pe}`)
           }
         }
-      }
-      return out
+        return out
+      })
+      expect(bad).toEqual([])
     })
-    expect(bad).toEqual([])
-  })
+  }
 })
 
 test.describe('HUD 第二阶段 · 列表行', () => {
-  // 变更工单要有数据才渲染得出 .chg-item。字段名照 types/index.ts 的 Release
-  // 抄,不要凭印象写:列表读的是 relNo / changeType / pipelineName,写成 no / stage
-  // 之类的行会照常渲染出来但每格是空的,而下面那条 hover 测的是几何,
-  // 空格量掉了就等于没测。接口路径是 /releases,不是 /changes。
-  const RELEASES = {
-    items: [
-      {
-        id: 1, relNo: 'REL-2026-0001', title: '清理过期订单备注',
-        pipelineId: 1, pipelineName: '标准发布', connectionId: 1,
-        instance: 'prod-mysql-01', database: 'shop', env: 'prod',
-        tierCode: 'prod', engine: 'mysql', changeType: 'dml',
-        status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:00:00Z',
-      },
-      {
-        id: 2, relNo: 'REL-2026-0002', title: '补充索引',
-        pipelineId: 1, pipelineName: '标准发布', connectionId: 2,
-        instance: 'demo-dev', database: 'shop', env: 'dev',
-        tierCode: 'dev', engine: 'mysql', changeType: 'ddl',
-        status: 'pending', creator: 'linwei', createdAt: '2026-09-20T10:05:00Z',
-      },
-    ],
-    total: 2, page: 1, pageSize: 50,
-  }
-
-  async function openChanges(page: Page) {
-    await open(page, 'about:blank')
-    // 列表和详情分开装桩:`**/api/v1/releases**` 会把 `/releases/:id`(详情)也
-    // 吃掉,喂给它一个 { items, total } 形状的对象。详情区读 open.stages.find(...)
-    // (waitingGate),stages 是 undefined 就整页面炸掉,连带 .chg-item 也渲染不出来
-    // —— 抛的是 TypeError,不是找不到元素的断言失败,查网络请求才看得出来。
-    await page.route('**/api/v1/releases?**', (r) => r.fulfill(envelope(RELEASES)))
-    await page.route('**/api/v1/releases/*', (r) => {
-      const id = Number(new URL(r.request().url()).pathname.split('/').pop())
-      const item = RELEASES.items.find((it) => it.id === id) ?? RELEASES.items[0]
-      r.fulfill(envelope({ ...item, stages: [] }))
-    })
-    await page.goto('/changes')
-    await page.waitForSelector('.chg-item')
-  }
-
-  // 字段名照 types/index.ts:708 的 Pipeline 抄:id / name / description /
-  // tierCode / enabled / isDefault / stages(每条 stage 要 name + type,
-  // PipelineStage 在 types/index.ts:698)。接口是 GET /pipelines
-  // (api/modules/pipeline.ts 的 pipelineApi.pipelines),直接返回 Pipeline[],
-  // 不像 /releases 那样包一层 { items, total }。
-  const PIPELINES = [
-    {
-      id: 1, name: '标准发布', description: '审查通过后自动执行', tierCode: '',
-      enabled: true, isDefault: true,
-      stages: [
-        { name: '审查', type: 'review', config: '{"failOn":"error"}', onFailure: 'abort' },
-        { name: '执行', type: 'execute', config: '', onFailure: 'abort' },
-      ],
-    },
-  ]
-
-  async function openPipelines(page: Page) {
-    await open(page, 'about:blank')
-    await page.route('**/api/v1/pipelines', (r) => r.fulfill(envelope(PIPELINES)))
-    await page.goto('/pipelines')
-    await page.waitForSelector('.pl-item')
-  }
-
   test('列表行的高光线走 ::after,不走 ::before', async ({ page }) => {
     await openChanges(page)
     // ::before 被选中态的 3px 左色条占着 —— 三处之一。
@@ -754,6 +835,25 @@ test.describe('HUD 第二阶段 · 列表行', () => {
     await page.waitForTimeout(300) // --dur-base 220ms,读的要是落定值
     const t = await row.evaluate((el) => getComputedStyle(el).transform)
     expect(t).toContain('-2')
+  })
+
+  // 这一档在 hover 上分家:四个容器都拿高光线,只有三个拿抬升。
+  // .osc-item 是一个既没有 onClick 也没有 cursor: pointer 的 <article>
+  // (pages/osc/index.tsx),它的 .on 表示"这条任务正在跑",不表示"被选中" ——
+  // 抬升是一句"按下去会有反应"的承诺,而这里按下去什么都不会发生。
+  // 两头都断言:线要在(它仍属于这一档),抬升不许有(它不可点)。
+  test('.osc-item 拿高光线但不拿 hover 抬升 —— 它不可点', async ({ page }) => {
+    await openOsc(page)
+    expect(await styleOf(page, '.osc-item', 'background-image', '::after')).toContain('gradient')
+    expect(await styleOf(page, '.osc-item', 'height', '::after')).toBe('1px')
+    // 不是靠"没写 onClick"推断的,是直接问 DOM:整行不可点。
+    expect(await styleOf(page, '.osc-item', 'cursor')).toBe('auto')
+
+    const row = page.locator('.osc-item').first()
+    expect(await row.evaluate((el) => getComputedStyle(el).transform)).toBe('none')
+    await row.hover()
+    await page.waitForTimeout(300) // --dur-base 220ms,读的要是落定值
+    expect(await row.evaluate((el) => getComputedStyle(el).transform)).toBe('none')
   })
 
   // .pl-item 是另一个 ::before 冲突容器。四个容器共用同一条逗号并列规则,
@@ -800,16 +900,6 @@ test.describe('HUD 第二阶段 · 列表行', () => {
   })
 })
 
-// 不顶掉那条 socket,Vite 会把它转发给并不存在的 Go 后端,每跑一次就往输出里
-// 刷一串 ECONNREFUSED —— 与本口无关的噪声,而它盖住的正是这一口自己的失败信息。
-// 既有的 responsive / env-tier-tree / approval-card-long-sql 三套都是这么做的。
-async function openTerminal(page: Page) {
-  await open(page, 'about:blank')
-  await installWsFake(page)
-  await page.goto('/terminal')
-  await page.waitForSelector('.tv-grid')
-}
-
 test.describe('HUD 第二阶段 · 终端', () => {
   test('外框有四角取景框,且不吃点击', async ({ page }) => {
     await openTerminal(page)
@@ -843,8 +933,98 @@ test.describe('HUD 第二阶段 · 终端', () => {
     // 它是 overflow:auto 的滚动容器(伪元素会滚走),而它的首个子元素
     // .tv-panel-head 带不透明底色(background-image 会被盖住)。两条路都堵死,
     // 所以改走它自己的面板头 —— 那才是这一栏真正的顶沿。
+    // 先钉住前提本身:hud.css 顶部那段"不进高光线组的两类"把 .tv-insp 列为第三个
+    // 滚动容器,它一旦不再滚,那段话就成了假话,而下面两条断言照样全绿。
+    expect(await styleOf(page, '.tv-insp', 'overflow-y')).toBe('auto')
     expect(await styleOf(page, '.tv-insp', 'background-image', '::before')).toBe('none')
     expect(await styleOf(page, '.tv-panel-head', 'background-image', '::after')).toContain('gradient')
+  })
+
+  /** 四个角标各取一个点(取景框自己的四个角),返回"绘制在取景框之上、且底色不透明"
+   *  的元素 —— 也就是把角标挡住的东西。空数组 = 四个角都看得见。
+   *
+   *  elementsFromPoint 会跳过 pointer-events: none 的元素,取景框因此永远不在它
+   *  返回的栈里,拿它当参照物得先临时把节点改成可命中。命中顺序就是绘制顺序的逆序
+   *  (谁在上面先命中谁),而 pointer-events 不参与层叠 —— 改它不会改变结论,
+   *  只是把结论问得出来。读完就改回去。 */
+  async function coveredCorners(page: Page) {
+    return page.evaluate(() => {
+      const frame = document.querySelector('.tv-grid > .hud-corners') as HTMLElement
+      const b = frame.getBoundingClientRect()
+      const prev = frame.style.pointerEvents
+      frame.style.pointerEvents = 'auto'
+      const out: string[] = []
+      for (const name of ['TL', 'TR', 'BL', 'BR']) {
+        const x = name.includes('L') ? b.left + 0.5 : b.right - 0.5
+        const y = name.includes('T') ? b.top + 0.5 : b.bottom - 0.5
+        const stack = document.elementsFromPoint(x, y)
+        const i = stack.indexOf(frame)
+        if (i < 0) { out.push(`${name}:取景框在这个点上根本没被命中`); continue }
+        for (const el of stack.slice(0, i)) {
+          if (getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)') {
+            out.push(`${name}:${el.className || el.tagName}`)
+          }
+        }
+      }
+      frame.style.pointerEvents = prev
+      return out
+    })
+  }
+
+  // 上面四条问的都是"这个节点长什么样",没有一条问过"它到底看不看得见" ——
+  // 而第一阶段的取景框 bug 正是带着一串这样的绿色断言上线的,spec 第三节把它列为
+  // 结构性守卫存在的理由。这条补上那个问题:
+  // 三栏都是定位元素、都带不透明底色、又都排在 .hud-corners 后面,同为
+  // z-index: auto 时按文档序绘制 —— 取景框不抬 z-index 就整个被盖在底下。
+  for (const width of [1600, 1500]) {
+    test(`${width} 宽下四个角标都真的看得见,没有被三栏盖住`, async ({ page }) => {
+      await openTerminal(page)
+      await page.setViewportSize({ width, height: 900 })
+      await page.waitForTimeout(100)
+      expect(await coveredCorners(page)).toEqual([])
+    })
+  }
+
+  // 抬到三栏之上以后,角标就画在栏的内容上了,所以还要管它落在哪。
+  // 收起态下那一栏塌成 30px 宽的导轨,当中只有一枚 16px 的展开图标:inset 10px
+  // 时竖划正好从图标当中划过去,inset 5px 落在图标盒左边。装饰划在图标上,
+  // 比装饰看不见更糟 —— 前者毁的是内容。
+  test('收起成导轨时,角标不划在导轨的展开图标上', async ({ page }) => {
+    await openTerminal(page)
+    await page.locator('.tv-tree .tv-collapse').click()
+    await page.waitForSelector('.tv-rail.left')
+    const gap = await page.evaluate(() => {
+      const frame = document.querySelector('.tv-grid > .hud-corners')!.getBoundingClientRect()
+      const icon = document.querySelector('.tv-rail.left svg')!.getBoundingClientRect()
+      // 竖划是 1px 宽,占 [frame.left, frame.left + 1)。整条要落在图标盒左边。
+      return { strokeRight: frame.left + 1, iconLeft: icon.left }
+    })
+    expect(gap.strokeRight).toBeLessThanOrEqual(gap.iconLeft)
+  })
+
+  // ≤1280 与沉浸模式下 .tv-main 顶到栅格右沿,右上角标必然划在工具条最右那颗
+  // 重连按钮上(见 hud.css 里的实测数字)。这两种情形整圈收起 —— 关键是"真不画",
+  // 不是"留着但被盖住":后者正是这一轮要修的 bug,再犯一次不会有任何断言发现。
+  test('≤1280 与沉浸模式下整圈取景框收起', async ({ page }) => {
+    // 不能走 styleOf():它的 waitForSelector 默认等 visible,而这条恰恰要读一个
+    // display: none 的节点,等到超时也等不到。
+    const display = () => page.evaluate(() =>
+      getComputedStyle(document.querySelector('.tv-grid > .hud-corners')!).display)
+
+    await openTerminal(page)
+    expect(await display()).not.toBe('none')
+
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await page.waitForTimeout(100)
+    expect(await display()).toBe('none')
+
+    await page.setViewportSize({ width: 1500, height: 900 })
+    await page.waitForTimeout(100)
+    expect(await display()).not.toBe('none')
+    // 工具条里第五颗按钮是沉浸模式(粘贴 / 片段 / 导出 / 表格视图 / 沉浸 / 检查器 / 重连)。
+    await page.locator('.tv-bar button[title]').nth(4).click()
+    await page.waitForSelector('.tv-grid.zen')
+    expect(await display()).toBe('none')
   })
 })
 
@@ -856,6 +1036,13 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
   // 只数"清单里的几个在场"防得住漏登记,防不住选择器被写宽多圈进一个清单外的
   // 容器 —— 清单本身还是全中,谁会注意到 hit 数没变。这里额外数规则里逗号
   // 分隔出的选择器**总数**,并与清单长度比对:写宽了,总数会先于 hit 露馅。
+  //
+  // **这条因此给 hud.css 立了一条长期约束:下面三组(顶沿高光线、右上角标、
+  // 列表行高光线)每组都必须保持成一条逗号并列的规则。** 普查靠
+  // selectorText.includes(...) 找到那条规则、再数它的逗号 —— 把一组拆成两条规则
+  // 本身是个合法重构,但拆完之后这里只会数到其中一条,报出来的是"14 个变成了 9 个"
+  // 这种看不出所以然的数字,而不是"你拆了规则"。真要拆,就把这里一并改成
+  // 「把所有 selectorText 含该组任一选择器的规则合起来数」,别只改数字。
   test('拿到面板档装饰的容器,正好是清单上那些(数量不多不少)', async ({ page }) => {
     await open(page, '/settings')
     const result = await page.evaluate(() => {

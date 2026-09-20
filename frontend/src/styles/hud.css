@@ -64,14 +64,19 @@
 
 /* 不在这组里的两类:
    一是滚动容器 —— 绝对定位的后代会跟着内容滚出可视区,高光线只能走
-     background-image,见 theme.css。目前两个:.c-table(横向滚动,
-     overflow-x: auto)与 .ib-side(纵向滚动的粘性侧栏)。再有会滚的容器,
-     按同一条理由加进这句话,不要另起一条 —— 理由是"会滚",不是"横滚"。
+     background-image,见 theme.css。目前三个:.c-table(横向滚动,
+     overflow-x: auto)、.ib-side(纵向滚动的粘性侧栏),以及终端的 .tv-insp
+     (overflow: auto)。.tv-insp 比前两个多堵了一层:它的首个子元素
+     .tv-panel-head 带不透明底色,连容器自己的 background-image 都会被盖住 ——
+     两条路都不通,所以它改由面板头拿卡头分隔线(见下面 .c-card-head::after
+     那一组)。再有会滚的容器,按同一条理由加进这句话,不要另起一条 ——
+     理由是"会滚",不是"横滚"。
    二是 ::before 已被选中态左色条占用的容器 —— .perm-rcard、.chg-item、.pl-item
      三处都是这个模式(`.on::before` 画一根 3px 竖条)。第一阶段的注释说这是"全站
-     唯一"的冲突点,那是错的,实测三处。这三个不在本文件任何一组列表里 —— 它们
-     属于列表行档(HUD 第二阶段 Task 3 新增的一段,高光线改走 ::after),现在这段
-     还不存在,不是指下面紧跟着的角标组。
+     唯一"的冲突点,那是错的,实测三处。三个都不在这条高光线/角标列表里,但去处
+     各不相同:.chg-item 与 .pl-item 在下面的列表行档(`.chg-item::after` 那一组,
+     高光线改走 ::after);.perm-rcard 一条高光线都不拿,它只出现在"可交互卡
+     hover 抬升"那一组里。
    按选择器引,不按行号:theme.css 会长,行号一改就成了假话。 */
 .c-card::before,
 .dash-card::before,
@@ -237,21 +242,25 @@
   pointer-events: none; background: var(--hud-edge);
 }
 
-/* 它们本来就可点,所以拿 hover 抬升 —— 和 .dash-card 同一组理由。 */
-.chg-item, .pl-item, .aj-item, .osc-item {
+/* 高光线四个都拿,hover 抬升只给三个 —— 这一档在 hover 上分家、在高光线上不分,
+   因为两种装饰回答的不是同一个问题:高光线说"这是一块卡片形状的行",四个都是;
+   抬升说"按下去会有反应",而 .osc-item 是一个既没有 onClick 也没有 cursor:
+   pointer 的 <article>(pages/osc/index.tsx),它的 .on 表示"这条任务正在跑",
+   不是"选中"。给它抬升等于承诺一次点击,而点下去什么都不会发生 —— 和上面
+   "能不能点正是 hover 反馈唯一要回答的问题"是同一条理由。
+   它里面那颗中止按钮自己会有按钮的 hover,整行不必跟着飘。 */
+.chg-item, .pl-item, .aj-item {
   transition: var(--transition-colors), var(--transition-transform);
 }
 .chg-item:hover,
 .pl-item:hover,
-.aj-item:hover,
-.osc-item:hover {
+.aj-item:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lg);
 }
 [data-theme="dark"] .chg-item:hover,
 [data-theme="dark"] .pl-item:hover,
-[data-theme="dark"] .aj-item:hover,
-[data-theme="dark"] .osc-item:hover {
+[data-theme="dark"] .aj-item:hover {
   box-shadow: var(--glow-sm);
 }
 
@@ -261,10 +270,51 @@
    一条顶沿高光线,不各自加角标 —— 加了一屏就是四个角标,外框那圈反而读不出来。
    类名是 .tv-*(v2)。theme.css 里的 .term-* 是 v1 的死样式,TSX 已无引用。
    只有这两栏在这里:.tv-tree 是 overflow:hidden(真正滚的是它的孩子
-   .tv-tree-list),.tv-main 未声明 overflow —— 两者用伪元素都安全。
-   .tv-insp 不在这组,它是 overflow:auto,见下一条。 */
+   .tv-body),.tv-main 未声明 overflow —— 两者用伪元素都安全。
+   .tv-insp 不在这组,它是 overflow:auto,改由面板头拿分隔线,见上面
+   .c-card-head::after 那一组。 */
 .tv-tree::before,
 .tv-main::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
   pointer-events: none; background: var(--hud-edge); z-index: 1;
 }
+
+/* 取景框必须抬到三栏之上,而且只能抬。三栏全是定位元素(.tv-tree 与
+   .tv-panel-head 为了托住各自的装饰在本轮拿了 position: relative,.tv-main 本来
+   就有),全带不透明底色,又全排在 .hud-corners 之后 —— 同为 z-index: auto 时按
+   文档序绘制,取景框整个被盖在底下。实测 1600×900 只剩右下一个角露出来,
+   1200×900 四个角一个都不剩。上面两栏的高光线正是为这条理由拿的 z-index: 1,
+   取景框当时漏了。
+   登录卡上不需要这一句,是因为 .login-card 的其余子元素都是未定位的流内容,
+   绝对定位的取景框天然绘制在最后。.hud-corners 确实可复用,被推翻的是
+   "宿主的其它孩子不会是定位元素"这条没写下来的假设。 */
+.tv-grid > .hud-corners {
+  z-index: 1;
+  /* inset 从 10px 收到 5px(登录卡那边仍是 10px —— 那 10px 落在卡片自己的内距
+     沟里,终端的三栏却是顶着边排的,没有沟)。收起态下 .tv-tree / .tv-insp 各塌成
+     一条 30px 宽的 .tv-rail,里面那枚 16px 的展开图标居中:导轨还带 1px 边框,
+     图标盒的左沿因此在距栏边 6.5px 处。10px 的竖划正好从图标当中划过去(截图确认
+     过,1600/1500/1281 三档、收树与收检查器两种状态下 elementsFromPoint 都命中
+     svg);5px 的竖划占 [5,6),整条落在图标盒左边。
+     再小就不行了:.tv-grid 是 border-radius 14px + overflow: hidden,内圆角半径
+     13px,L 的拐点要留在圆角里需要 √2·(13−inset) ≤ 13,即 inset ≥ 3.81px —— 越过
+     这条线,拐点会被圆角裁掉,四个角变成四个断口。 */
+  inset: 5px;
+}
+
+/* 两种情形下整圈取景框收起 —— 不是"留着但被盖住",是真不画:
+   ≤1280 栅格塌成两栏(检查器改成滑入式覆盖层),以及沉浸模式 .zen(两侧一起收成
+   导轨)。这两种情形的共同点是 .tv-main 自己顶到了栅格右沿,而那一栏上下各压着
+   一条控件密排的横条,右上角因此无解:
+   工具条最右那颗重连按钮实测 y 71–107、条自身 69–109(上下各只剩 2px),右沿距
+   栏右 12px;而横划本身就是 12px 长、画在距顶 inset 处 —— 要让它躲开按钮就得
+   inset < 2px,那又跌出上面那条圆角下限 3.81px。两头堵死。
+   右下角(状态条末尾的 "UTF-8 · 审计 ON",实测右沿 1171、下沿 877,条自身右沿
+   1185、下沿 885)在 5px 下勉强擦得过去,但只剩两三个像素余量,而且这两条横条
+   都是 overflow-x: auto,控件位置还会随横滚漂。
+   缺一个角的取景框读作"画坏了",不读作"克制"。与其把装饰划在全站最密的一屏的
+   控件上,不如这两种情形老实不装饰 —— 何况 .zen 的本意就是"只留终端"。 */
+@media (max-width: 1280px) {
+  .tv-grid > .hud-corners { display: none; }
+}
+.tv-grid.zen > .hud-corners { display: none; }
