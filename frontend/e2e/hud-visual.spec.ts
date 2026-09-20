@@ -40,6 +40,34 @@ async function styleOf(page: Page, sel: string, prop: string, pseudo?: string) {
   }, [sel, prop, pseudo ?? ''] as const)
 }
 
+// open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
+// 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
+// 字段名必须对上 types/index.ts 的 AuditRow —— 页面读的是 occurredAt /
+// instance / result / approvalNo,写成别的名字行会渲染出来但全是空格,
+// hover 测的是几何,空格量掉了就测不出位移。
+const AUDIT_ROWS = {
+  items: [
+    {
+      id: 1, occurredAt: '2026-09-20T10:00:00Z', actor: 'linwei',
+      instance: 'prod-mysql-01', database: 'shop', command: 'select 1',
+      risk: 'low', result: 'executed', approvalNo: '', hash: 'a1',
+    },
+    {
+      id: 2, occurredAt: '2026-09-20T10:01:00Z', actor: 'linwei',
+      instance: 'prod-mysql-01', database: 'shop',
+      command: 'update orders set a = 1 where id = 1',
+      risk: 'high', result: 'executed', approvalNo: 'CR-2026-0001', hash: 'b2',
+    },
+  ],
+  total: 2, page: 1, pageSize: 20,
+}
+async function openAudit(page: Page) {
+  await open(page, 'about:blank')
+  await page.route('**/api/v1/audit**', (r) => r.fulfill(envelope(AUDIT_ROWS)))
+  await page.goto('/audit')
+  await page.waitForSelector('.c-trow.clickable')
+}
+
 test.describe('HUD 底座', () => {
   test('两套主题都解析出 HUD token,且取值不同', async ({ page }) => {
     await open(page, '/dashboard')
@@ -162,34 +190,6 @@ test.describe('HUD 卡片', () => {
 })
 
 test.describe('HUD 交互态', () => {
-  // open() 的兜底桩返回 envelope([]),而审计页读的是 data.items —— 取不到值,
-  // 表格渲染 0 行,.c-trow 根本不存在。可点的行必须自己喂数据。
-  // 字段名必须对上 types/index.ts 的 AuditRow —— 页面读的是 occurredAt /
-  // instance / result / approvalNo,写成别的名字行会渲染出来但全是空格,
-  // hover 测的是几何,空格量掉了就测不出位移。
-  const AUDIT_ROWS = {
-    items: [
-      {
-        id: 1, occurredAt: '2026-09-20T10:00:00Z', actor: 'linwei',
-        instance: 'prod-mysql-01', database: 'shop', command: 'select 1',
-        risk: 'low', result: 'executed', approvalNo: '', hash: 'a1',
-      },
-      {
-        id: 2, occurredAt: '2026-09-20T10:01:00Z', actor: 'linwei',
-        instance: 'prod-mysql-01', database: 'shop',
-        command: 'update orders set a = 1 where id = 1',
-        risk: 'high', result: 'executed', approvalNo: 'CR-2026-0001', hash: 'b2',
-      },
-    ],
-    total: 2, page: 1, pageSize: 20,
-  }
-  async function openAudit(page: Page) {
-    await open(page, 'about:blank')
-    await page.route('**/api/v1/audit**', (r) => r.fulfill(envelope(AUDIT_ROWS)))
-    await page.goto('/audit')
-    await page.waitForSelector('.c-trow.clickable')
-  }
-
   test('表格行 hover 时文字没有横向位移', async ({ page }) => {
     await openAudit(page)
     const cell = page.locator('.c-trow.clickable .c-td').first()
@@ -296,5 +296,34 @@ test.describe('HUD 按钮与焦点', () => {
     // outline 保留不动 —— 它是键盘可达性的底线,光晕只是叠加。
     expect(parseFloat(cs.outline)).toBeGreaterThan(0)
     expect(cs.shadow).not.toBe('none')
+  })
+})
+
+test.describe('HUD 活体状态', () => {
+  test('健康指示灯在脉冲', async ({ page }) => {
+    await open(page, '/dashboard')
+    await page.waitForSelector('.pill-health')
+    const name = await styleOf(page, '.pill-health svg', 'animation-name')
+    expect(name).toBe('hud-pulse')
+  })
+
+  test('reduce 下脉冲塌到 0', async ({ browser }) => {
+    const ctx = await browser.newContext({ reducedMotion: 'reduce' })
+    const page = await ctx.newPage()
+    await open(page, '/dashboard')
+    await page.waitForSelector('.pill-health')
+    const name = await styleOf(page, '.pill-health svg', 'animation-name')
+    await ctx.close()
+    // e2e/reduced-motion.spec.ts 守的是同一条线:新动效必须能被 reduce 关掉。
+    expect(name).toBe('none')
+  })
+
+  test('徽标有描边,不只是一块淡底', async ({ page }) => {
+    // 不能用 /dashboard:总览页的每个 <Badge> 都在 rows.map() 里,兜底桩返回
+    // 空数组,一个 .c-badge 都不渲染。审计表每行都有一枚(result 列),而
+    // openAudit() 已经在喂数据了。
+    await openAudit(page)
+    await page.waitForSelector('.c-badge')
+    expect(parseFloat(await styleOf(page, '.c-badge', 'border-top-width'))).toBeGreaterThan(0)
   })
 })

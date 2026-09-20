@@ -292,6 +292,9 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 10px;
   border-radius: 999px; white-space: nowrap; font: 600 11px var(--font-mono);
   background: var(--surface-sunken); color: var(--text-muted);
+  /* 描边取自身文字色的 28%,不是实心框 —— 各 tone 的 color 不同,描边跟着走,
+     不用为五个 tone 各写一条。全局 box-sizing: border-box,22px 不被顶高。 */
+  border: 1px solid color-mix(in oklch, currentColor 28%, transparent);
 }
 .c-badge.t-accent { background: var(--accent-subtle); color: var(--accent-text); }
 .c-badge.t-success { background: var(--success-subtle); color: var(--success-text); }

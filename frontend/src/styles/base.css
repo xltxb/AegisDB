@@ -44,7 +44,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
    注意:光晕是 box-shadow,所以任何特异度更高、又自己设了 box-shadow 的组件
    规则都会把它整条替换掉 —— .rail-item.on (0,2,0)、.c-btn:hover:not(:disabled)
-   (0,3,1)、.portal-opt.on 都是。这是可接受的:outline 在那些元素上仍然在,
+   (0,3,0)、.portal-opt.on 都是。这是可接受的:outline 在那些元素上仍然在,
    可达性不受影响,丢的只是装饰。不要为了追平这一圈去给每个组件规则手动
    append 光晕 —— 那是一张永远补不完的表。 */
 :focus-visible {

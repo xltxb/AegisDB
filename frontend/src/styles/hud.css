@@ -109,3 +109,22 @@
 }
 /* .portal-opt.on 已经带 --glow-sm(theme.css 的登录段)。hover 写成
    :hover:not(.on),否则选中态的辉光被 hover 的投影盖掉。 */
+
+/* ---- 活体状态 ---- */
+
+/* 脉冲只给"系统健康"这一枚。全站到处闪等于没有重点,而它是唯一表示
+   "网关此刻在跑"的指示灯。 */
+@keyframes hud-pulse {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--glow-accent)); opacity: .85; }
+  50%      { filter: drop-shadow(0 0 7px var(--glow-accent)); opacity: 1; }
+}
+.pill-health svg {
+  animation: hud-pulse 2.4s var(--ease-in-out) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 关掉动画但把辉光留在它的静止态 —— 不动不等于不亮。 */
+  .pill-health svg {
+    animation: none;
+    filter: drop-shadow(0 0 4px var(--glow-accent));
+  }
+}
