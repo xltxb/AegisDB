@@ -39,9 +39,18 @@ code, kbd, pre, samp { font-family: var(--font-mono); }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
+/* outline 保留不动 —— 它是键盘可达性的底线。光晕只是叠加在外面的一圈,
+   让焦点在深色页面上也一眼看得到。--focus-ring 亮暗各有值(见 colors.css)。
+
+   注意:光晕是 box-shadow,所以任何特异度更高、又自己设了 box-shadow 的组件
+   规则都会把它整条替换掉 —— .rail-item.on (0,2,0)、.c-btn:hover:not(:disabled)
+   (0,3,1)、.portal-opt.on 都是。这是可接受的:outline 在那些元素上仍然在,
+   可达性不受影响,丢的只是装饰。不要为了追平这一圈去给每个组件规则手动
+   append 光晕 —— 那是一张永远补不完的表。 */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--focus-ring);
 }
 
 img, svg, video { display: block; max-width: 100%; }

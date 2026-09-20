@@ -26,8 +26,13 @@ async function setTheme(page: Page, theme: 'light' | 'dark') {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme)
 }
 
-/** 读一个元素(或它的伪元素)的计算样式。 */
-function styleOf(page: Page, sel: string, prop: string, pseudo?: string) {
+/** 读一个元素(或它的伪元素)的计算样式。
+ *  先等选择器挂载再读:调用方大多紧跟在 open()/goto() 后面就取值,并行 worker
+ *  下页面还没渲染完就有概率撞上 —— 复现过一次间歇性的 "no element for …"。
+ *  等待不改变任何断言,只是把"读之前先等它存在"这一步挪进 helper,
+ *  别再让每个调用点各自处理一次。 */
+async function styleOf(page: Page, sel: string, prop: string, pseudo?: string) {
+  await page.waitForSelector(sel)
   return page.evaluate(([s, p, pe]) => {
     const el = document.querySelector(s!)
     if (!el) throw new Error(`no element for ${s}`)
@@ -230,5 +235,66 @@ test.describe('HUD 交互态', () => {
     const after = await on.evaluate((el) => getComputedStyle(el).boxShadow)
     // hover 规则必须写成 :hover:not(.on),否则选中态的 --glow-sm 被投影盖掉。
     expect(after).toBe(before)
+  })
+
+  test('静态卡 hover 不抬升', async ({ page }) => {
+    // 抬升只挂在 .dash-card / .perm-rcard / .portal-opt 上 —— 普通、非交互的
+    // .c-card 不该动。/settings 的卡片就是纯 Card 组件,不带那三个类。
+    await open(page, '/settings')
+    await page.waitForSelector('.c-card')
+    const card = page.locator('.c-card').first()
+    await card.hover()
+    // 同上面 .dash-card 的手法:等 220ms 的 transition 跑完,读的是稳定值,
+    // 不是 hover() 刚返回时的插值中间态。
+    await page.waitForTimeout(300)
+    expect(await card.evaluate((el) => getComputedStyle(el).transform)).toBe('none')
+  })
+})
+
+test.describe('HUD 按钮与焦点', () => {
+  test('主按钮是 azure→cyan 渐变,不是实色', async ({ page }) => {
+    await page.goto('/login')
+    const bg = await styleOf(page, '.login-submit', 'background-image')
+    expect(bg).toContain('gradient')
+    // 设计系统明令禁止 azure→violet。紫色的 red 通道会明显高于 blue 通道之外
+    // 还带出 red,这里只做一件事:确认渐变里没有出现紫。
+    expect(bg).not.toMatch(/rgb\(\s*(1[0-9]{2}|[6-9][0-9])\s*,\s*[0-9]{1,2}\s*,\s*2[0-9]{2}/)
+  })
+
+  test('按钮按下时下沉', async ({ page }) => {
+    // 用 /audit 不用 /dashboard:总览页自己一个 .c-btn 都没有,唯一可能的来源是
+    // ErrorState 的重试按钮,而兜底桩不制造错误 —— 元素根本不存在。审计页头的
+    // 风险筛选按钮(audit/index.tsx:212)是常驻控件,不依赖数据。
+    await open(page, '/audit')
+    await page.waitForSelector('.c-btn')
+    const btn = page.locator('.c-btn').first()
+    const box = (await btn.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    const t = await btn.evaluate((el) => getComputedStyle(el).transform)
+    await page.mouse.up()
+    // translateY(1px) scale(.99) → 一个非 none 的矩阵
+    expect(t).not.toBe('none')
+  })
+
+  test('键盘焦点除 outline 外还有光晕', async ({ page }) => {
+    await page.goto('/login')
+    // 必须用真键盘走到它,不能用 .focus():Chrome 对按钮的程序化聚焦
+    // **不**匹配 :focus-visible,而这条规则正是挂在 :focus-visible 上的。
+    // 也不能拿输入框做靶子:theme.css:444 的 .login-card input:focus 写了
+    // outline: none,特异度 (0,2,1) 压过 :focus-visible 的 (0,1,0),
+    // 输入框上根本不该有 outline。
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('Tab')
+      if (await page.locator('.login-submit:focus').count()) break
+    }
+    const cs = await page.locator('.login-submit').evaluate((el) => {
+      const s = getComputedStyle(el)
+      return { fv: el.matches(':focus-visible'), outline: s.outlineWidth, shadow: s.boxShadow }
+    })
+    expect(cs.fv).toBe(true)
+    // outline 保留不动 —— 它是键盘可达性的底线,光晕只是叠加。
+    expect(parseFloat(cs.outline)).toBeGreaterThan(0)
+    expect(cs.shadow).not.toBe('none')
   })
 })
