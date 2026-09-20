@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> 计数说明：Task 3 的修复轮额外加了 1 条测试，本计划中它之后的期望值都含这一条。
+> 单文件与全量是两条不同命令的两个数字，每处都已标明属于哪条。
+
 **Goal:** 把第一阶段的 HUD 装饰铺到那 18 个自建了卡片外观、却没复用 `.c-card` / `.c-table` / `.dash-card` 的容器上，按"面板 / 列表行 / 仪器"三档区别对待。
 
 **Architecture:** 扩展 `src/styles/hud.css` 的既有选择器列表，不新建机制。骨架层 `theme.css` 只补各容器缺的 `position: relative`。唯一新增的 DOM 是终端外框的一个装饰节点，复用登录页已有的 `.hud-corners` 类。
@@ -710,7 +713,7 @@ Expected: 三条全 FAIL（节点不存在 / 高光线是 `none`）。
 - [ ] **Step 6: 跑测试,确认它绿**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: **54 passed**（单文件；全量 94）。
+Expected: **55 passed**（单文件；全量 95）。
 
 - [ ] **Step 7: 跑终端回归 —— 这一步不能跳**
 
@@ -812,7 +815,7 @@ test.describe('HUD 第二阶段 · 覆盖面', () => {
 - [ ] **Step 2: 跑测试**
 
 Run: `npx playwright test e2e/hud-visual.spec.ts --reporter=list`
-Expected: **56 passed**（单文件；全量 96）。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
+Expected: **57 passed**（单文件；全量 97）。这两条在前四个任务做完之后应当直接绿 —— 它们是账本，不是新行为。
 若红，说明某一档的选择器列表和这份清单对不上，**先查列表再改数字**。
 
 - [ ] **Step 3: 全量自动化**
@@ -825,7 +828,7 @@ npm run test:unit
 npm run test:e2e
 ```
 
-Expected: build 干净、291 单测、96 e2e。任何一个数字低于此，就是回归 —— 贴出失败输出，
+Expected: build 干净、291 单测、97 e2e 全量。任何一个数字低于此，就是回归 —— 贴出失败输出，
 不要四舍五入过去。
 
 - [ ] **Step 4: 跑起真应用**
