@@ -992,6 +992,9 @@ func (s *Services) ExecuteSafeScript(u *model.User, connID int64, content, mfaCo
 // SweepApprovalTimeouts applies the configured timeout policy to overdue pending
 // approvals (FR-APPR-05 / backend doc §7). Called periodically from a goroutine.
 func (s *Services) SweepApprovalTimeouts() {
+	// 过期的 IM 绑定码搭这一轮清掉 —— 它们本来就不能用了,留着只是占地方。
+	_, _ = s.Repo.PurgeExpiredIMBindCodes(time.Now())
+
 	action := s.Repo.SettingString("approval.onTimeout", "keep-waiting")
 	if action == "" || action == "keep-waiting" {
 		return

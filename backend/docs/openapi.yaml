@@ -589,6 +589,23 @@ paths:
       tags: [auth]
       summary: 解绑 TOTP(需当前验证码)
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /me/im-identities:
+    get:
+      tags: [auth]
+      summary: 我在各交互审批渠道上的绑定状态
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /me/im-identities/{channel}/code:
+    post:
+      tags: [auth]
+      summary: 生成一次性绑定码(10 分钟,只回显这一次;渠道未启用时拒绝)
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /me/im-identities/{channel}:
+    delete:
+      tags: [auth]
+      summary: 解绑自己在该渠道的账号
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /gateway/stats:
     get:
       tags: [auth]
@@ -1314,6 +1331,27 @@ paths:
       tags: [users]
       summary: '[perms · admin] 代为生成并绑定 TOTP(返回密钥与 otpauth URI)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/im-identities:
+    get:
+      tags: [users]
+      summary: '[perms] 某人在各交互审批渠道上的绑定状态'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/im-identities/{channel}:
+    put:
+      tags: [users]
+      summary: '[perms · admin] 代绑平台账号 {platformUserId}(写审计)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: channel, in: path, required: true, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [users]
+      summary: '[perms · admin] 解绑(写审计)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: channel, in: path, required: true, schema: { type: string } }
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/{id}/tags:
     get:

@@ -175,11 +175,6 @@ func (s *Services) OnAction(_ context.Context, a imchannel.Action) imchannel.Act
 	}
 }
 
-// OnDirectMessage 在 Task 5 里实现绑定;在那之前,任何私聊都只得到这句通用回复。
-func (s *Services) OnDirectMessage(_ context.Context, _ imchannel.DM) string {
-	return imBindInvalidReply
-}
-
 // imUser 把平台账号认成网关账户。停用的、服务账号一律认不出 —— 与登录的规则一致。
 func (s *Services) imUser(channel, pid string) *model.User {
 	id, err := s.Repo.IMIdentityByPlatform(channel, pid)

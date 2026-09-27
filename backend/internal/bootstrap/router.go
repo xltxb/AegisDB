@@ -133,6 +133,11 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/auth/mfa/enable", h.MFAEnable)
 		a.POST("/auth/mfa/disable", h.MFADisable)
 
+		// IM 账号绑定是每个人自己的事(和 MFA 自助绑定一样),不挂菜单闸。
+		a.GET("/me/im-identities", h.MyIMIdentities)
+		a.POST("/me/im-identities/:channel/code", h.IssueMyIMBindCode)
+		a.DELETE("/me/im-identities/:channel", h.UnbindMyIM)
+
 		// notifications — every authenticated user has an inbox (no menu gate)
 		a.GET("/notifications", h.ListNotifications)
 		a.POST("/notifications/read", h.MarkNotificationsRead)
@@ -270,6 +275,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)
 		a.POST("/users/:id/mfa/reset", menu("perms"), admin, h.ResetUserMFA)
 		a.POST("/users/:id/mfa/bind", menu("perms"), admin, h.BindUserMFA)
+		a.GET("/users/:id/im-identities", menu("perms"), h.UserIMIdentities)
+		a.PUT("/users/:id/im-identities/:channel", menu("perms"), admin, h.BindUserIM)
+		a.DELETE("/users/:id/im-identities/:channel", menu("perms"), admin, h.UnbindUserIM)
 		// Per-user data-access scope (overrides the role scope; see model.UserTag)
 		a.GET("/users/:id/tags", menu("perms"), h.UserTags)
 		a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)
