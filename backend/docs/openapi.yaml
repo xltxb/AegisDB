@@ -1664,10 +1664,21 @@ paths:
       summary: '[settings] 最近的投递结果'
       parameters: [{ name: limit, in: query, schema: { type: integer, default: 50 } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/im/status:
+    get:
+      tags: [settings]
+      summary: '[settings] 各 IM 渠道的能力、开关、运行状态与最近错误'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/im/{channel}/test-notify:
     post:
       tags: [settings]
       summary: '[settings · admin] 往该渠道的通知群发一条样例(用已保存的配置)'
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/im/{channel}/test-card:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 给当前管理员自己私信一张测试卡片(需已绑定;点击不触及任何工单)'
       parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /service-accounts:

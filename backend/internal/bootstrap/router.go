@@ -337,7 +337,9 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.PUT("/settings", menu("settings"), admin, h.SaveSettings)
 		a.PUT("/settings/webhook", menu("settings"), admin, h.SaveWebhook)
 		a.POST("/settings/webhook/test", menu("settings"), admin, h.TestWebhook)
+		a.GET("/settings/im/status", menu("settings"), h.IMStatus)
 		a.POST("/settings/im/:channel/test-notify", menu("settings"), admin, h.TestIMNotify)
+		a.POST("/settings/im/:channel/test-card", menu("settings"), admin, h.TestIMCard)
 		a.GET("/settings/webhook/deliveries", menu("settings"), h.WebhookDeliveries)
 
 		// 服务账号 — the machine principal an API credential acts as. Creation is

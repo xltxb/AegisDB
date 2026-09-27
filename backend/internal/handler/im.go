@@ -83,3 +83,10 @@ func (h *Handler) TestIMNotify(c *gin.Context) {
 	ok, msg := h.Svc.TestIMNotify(c.Param("channel"))
 	resp.OK(c, gin.H{"ok": ok, "message": msg})
 }
+
+func (h *Handler) IMStatus(c *gin.Context) { resp.OK(c, h.Svc.IM.Status()) }
+
+func (h *Handler) TestIMCard(c *gin.Context) {
+	ok, msg := h.Svc.TestIMCard(middleware.CurrentUser(c), c.Param("channel"))
+	resp.OK(c, gin.H{"ok": ok, "message": msg})
+}

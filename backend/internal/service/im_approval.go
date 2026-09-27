@@ -156,6 +156,25 @@ func (s *Services) TestIMNotify(channel string) (bool, string) {
 	return true, "测试消息已发送到" + imchannel.Label(channel)
 }
 
+// TestIMCard 给管理员**自己**私信一张测试卡片。点它只回一句话(见 OnAction 对 AP-TEST
+// 的处理),顺带验证了「这个账号认得出是我」。
+func (s *Services) TestIMCard(actor *model.User, channel string) (bool, string) {
+	ids, err := s.Repo.IMPlatformIDs(channel, []int64{actor.ID})
+	pid, ok := ids[actor.ID]
+	if err != nil || !ok {
+		return false, "你还没有绑定" + imchannel.Label(channel) + "账号,请先在账户菜单「IM 账号绑定」中绑定"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := s.IM.TestCard(ctx, channel, pid, s.imSampleCard()); err != nil {
+		if errors.Is(err, imchannel.ErrNotConfigured) {
+			return false, imchannel.Label(channel) + "交互审批未配置"
+		}
+		return false, "发送失败 · " + err.Error()
+	}
+	return true, "测试卡片已私信给你"
+}
+
 const imBindInvalidReply = "无效或已过期的绑定码,请在控制台重新生成"
 
 // OnAction 是所有渠道按钮点击的唯一入口。
