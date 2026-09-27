@@ -149,6 +149,57 @@ func TestIM_CancelClosesCards(t *testing.T) {
 	}
 }
 
+// 改 / 删执行窗口会把它那张还在等的单作废。单作废了,私聊里那张卡也得收起 ——
+// 否则审批人手里留着两个点下去只会得到「已处理」的按钮。
+func TestIM_RetiredWindowTicketClosesItsCards(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		retire func(app *testApp, token string, winID, prod int64)
+	}{
+		{"edit", func(app *testApp, token string, winID, prod int64) {
+			app.editWindowHours(token, winID, prod, "orders_db", "收卡", 6)
+		}},
+		{"delete", func(app *testApp, token string, winID, _ int64) {
+			eq(t, app.do(http.MethodDelete, "/api/v1/exec-windows/"+itoa(winID), token, nil).Code, 0, "删窗口")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := newTestApp(t)
+			admin := app.login("linwei@vela.io", "vela123")
+			f := app.fakeIM("fake")
+			app.enableIM(admin, "fake")
+			app.bindIM("zhangwei@vela.io", "fake", "p-zw")
+			app.bindIM("lina@vela.io", "fake", "p-ln")
+			prod := app.connIDByEnv(admin, "prod")
+
+			winID, apNo := app.applyWindow(admin, prod, "orders_db", "收卡")
+			app.flushIM()
+			oldRefs := map[string]bool{}
+			for _, s := range f.Sent() {
+				if s.Card.ApNo == apNo {
+					eq(t, s.Card.Kind, "window", "a window ticket is a window card")
+					oldRefs[s.Ref] = true
+				}
+			}
+			if len(oldRefs) == 0 {
+				t.Fatalf("前置条件:窗口单应当给链成员发卡,sent = %+v", f.Sent())
+			}
+
+			tc.retire(app, admin, winID, prod)
+			app.flushIM()
+
+			closed := 0
+			for _, c := range f.Closed() {
+				if oldRefs[c.Ref] {
+					eq(t, c.State.Status, "cancelled", "the retired ticket's card closes as cancelled")
+					closed++
+				}
+			}
+			eq(t, closed, len(oldRefs), "every card of the retired ticket is closed")
+		})
+	}
+}
+
 func TestIM_CardsAreClosedAfterTheChannelIsSwitchedOff(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")

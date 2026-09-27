@@ -264,7 +264,13 @@ func (s *Services) retireWindowTicket(approvalID int64, w *model.ExecWindow, why
 	if approvalID <= 0 {
 		return
 	}
-	if _, err := s.Repo.CancelPendingApproval(approvalID); err != nil {
+	claimed, err := s.Repo.CancelPendingApproval(approvalID)
+	if err != nil {
 		slog.Error("作废执行窗口旧单失败", "window", w.ID, "approval", approvalID, "why", why, "err", err)
+		return
+	}
+	if claimed {
+		// 单作废了,私聊里的卡片也要收起,否则审批人手里还挂着两个点不动的按钮。
+		s.imApprovalSettled(&model.Approval{ID: approvalID}, model.StatusCancelled, "")
 	}
 }
