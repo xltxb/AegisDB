@@ -895,6 +895,7 @@ export const en: Dict = {
   imStateIdle: 'Off',
   imStateUnconfigured: 'Not configured',
   imStateError: 'Error: {{msg}}',
+  imStateNotifyError: 'Group notify failed: {{msg}}',
   // The audit webhook forwarding test button (see whSendTest below) reuses this
   // "Sending" copy too, so it stays.
   larkSending: 'Sending',

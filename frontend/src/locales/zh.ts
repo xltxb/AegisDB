@@ -918,6 +918,7 @@ export const zh = {
   imStateIdle: '未启用',
   imStateUnconfigured: '未配置',
   imStateError: '异常:{{msg}}',
+  imStateNotifyError: '群通知失败:{{msg}}',
   // 审计 Webhook 转发的测试按钮(见下方 whSendTest)也用这个「发送中」文案,保留。
   larkSending: '发送中',
   setEmail: '邮件通知',

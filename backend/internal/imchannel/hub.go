@@ -3,6 +3,7 @@ package imchannel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -48,15 +49,44 @@ type Status struct {
 	Running    bool   `json:"running"`
 	BotName    string `json:"botName,omitempty"`
 	LastError  string `json:"lastError,omitempty"`
+	// LastNotifyError 是最近一次群通知的失败原因;下一次发送成功就清空。群通知是
+	// 异步发的,不记在这里,失败就只剩一条没人看的 WARN。
+	LastNotifyError string `json:"lastNotifyError,omitempty"`
 }
 
 type entry struct {
-	caps    Caps
-	build   Builder
-	ch      Channel
-	cancel  context.CancelFunc
-	running bool
-	lastErr string
+	caps      Caps
+	build     Builder
+	ch        Channel
+	cancel    context.CancelFunc
+	running   bool
+	lastErr   string
+	notifyErr string
+}
+
+// pinnedSink 把入站事件的渠道钉成投递它的那个适配器。
+//
+// 渠道名决定了去哪张绑定表认人:让适配器自己填,一个写错了 Channel 的适配器就能拿
+// 别的渠道上的绑定来认人。
+type pinnedSink struct {
+	kind string
+	next ActionSink
+}
+
+func (p pinnedSink) OnAction(ctx context.Context, a Action) ActionResult {
+	a.Channel = p.kind
+	return p.next.OnAction(ctx, a)
+}
+
+func (p pinnedSink) OnDirectMessage(ctx context.Context, dm DM) string {
+	dm.Channel = p.kind
+	return p.next.OnDirectMessage(ctx, dm)
+}
+
+// panicErr 把 recover 到的值记一条 ERROR 并转成错误。适配器的 bug 不能拖垮网关。
+func panicErr(kind, where string, p any) error {
+	slog.Error("im channel panicked", "channel", kind, "where", where, "panic", p)
+	return fmt.Errorf("渠道内部错误(panic): %v", p)
 }
 
 // Hub 管理所有渠道:扇出、记录、收起、长连接。它不做任何判定。
@@ -122,7 +152,7 @@ func (h *Hub) Reload() {
 	for _, kind := range h.order {
 		e := h.entries[kind]
 		e.ch = e.build(h.deps)
-		e.lastErr = ""
+		e.lastErr, e.notifyErr = "", ""
 		ap, ok := e.ch.(Approver)
 		if !ok || !e.caps.Approve || h.root == nil || h.sink == nil || !h.deps.Settings.Bool(Key(kind, "approval")) {
 			continue
@@ -130,7 +160,7 @@ func (h *Hub) Reload() {
 		ctx, cancel := context.WithCancel(h.root)
 		e.cancel, e.running = cancel, true
 		h.runs.Add(1)
-		go h.run(kind, ap, ctx, h.sink)
+		go h.run(kind, ap, ctx, pinnedSink{kind: kind, next: h.sink})
 	}
 }
 
@@ -156,12 +186,21 @@ func (h *Hub) stopRuns() {
 
 func (h *Hub) run(kind string, ap Approver, ctx context.Context, sink ActionSink) {
 	defer h.runs.Done()
-	err := ap.Run(ctx, sink)
+	panicked := false
+	var err error
+	func() {
+		defer func() {
+			if p := recover(); p != nil {
+				panicked, err = true, panicErr(kind, "run", p)
+			}
+		}()
+		err = ap.Run(ctx, sink)
+	}()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	e := h.entries[kind]
 	e.running = false
-	if err != nil && ctx.Err() == nil {
+	if err != nil && (ctx.Err() == nil || panicked) {
 		e.lastErr = err.Error()
 		slog.Warn("im channel stopped", "channel", kind, "err", err)
 	}
@@ -222,7 +261,7 @@ func (h *Hub) enqueue(id int64, job func()) {
 	h.apMu.Unlock()
 	go func() {
 		for {
-			job()
+			h.runJob(id, job)
 			h.work.Done()
 			h.apMu.Lock()
 			q := h.queues[id]
@@ -235,6 +274,17 @@ func (h *Hub) enqueue(id int64, job func()) {
 			h.apMu.Unlock()
 		}
 	}()
+}
+
+// runJob 跑一个排队任务并吞掉它的 panic:队列的 worker 必须活着把后面的任务做完,
+// 否则这张单之后的收卡永远排不上,而 Flush 也永远等不到头。
+func (h *Hub) runJob(approvalID int64, job func()) {
+	defer func() {
+		if p := recover(); p != nil {
+			slog.Error("im job panicked", "approvalId", approvalID, "panic", p)
+		}
+	}()
+	job()
 }
 
 // ApprovalCreated 给 recipients 里每个在已开启渠道上绑定过的人私信一张卡片。
@@ -306,25 +356,55 @@ func (h *Hub) ApprovalSettled(approvalID int64, final CardState) {
 
 // NotifyApproval 往每个开了群通知的渠道发一条新工单通知。
 func (h *Hub) NotifyApproval(c ApprovalCard) {
+	type notifyTarget struct {
+		kind string
+		n    Notifier
+	}
 	h.mu.Lock()
-	var ns []Notifier
+	var ns []notifyTarget
 	for _, kind := range h.order {
 		e := h.entries[kind]
 		if n, ok := e.ch.(Notifier); ok && e.caps.Notify && h.deps.Settings.Bool(Key(kind, "notify")) {
-			ns = append(ns, n)
+			ns = append(ns, notifyTarget{kind, n})
 		}
 	}
 	h.mu.Unlock()
-	for _, n := range ns {
+	for _, t := range ns {
 		h.work.Add(1)
-		go func(n Notifier) {
+		go func(t notifyTarget) {
 			defer h.work.Done()
-			ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
-			defer cancel()
-			if err := n.NotifyApproval(ctx, c); err != nil {
-				slog.Warn("im: notify failed", "channel", n.Kind(), "apNo", c.ApNo, "err", err)
+			err := h.notifyOne(t.kind, t.n, c)
+			if err != nil {
+				slog.Warn("im: notify failed", "channel", t.kind, "apNo", c.ApNo, "err", err)
 			}
-		}(n)
+			h.recordNotify(t.kind, err)
+		}(t)
+	}
+}
+
+func (h *Hub) notifyOne(kind string, n Notifier, c ApprovalCard) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			err = panicErr(kind, "notify", p)
+		}
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
+	defer cancel()
+	return n.NotifyApproval(ctx, c)
+}
+
+// recordNotify 把这一次群通知的结果记进状态:失败留下原因,成功清掉上一次的。
+func (h *Hub) recordNotify(kind string, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	e := h.entries[kind]
+	if e == nil {
+		return
+	}
+	if err != nil {
+		e.notifyErr = err.Error()
+	} else {
+		e.notifyErr = ""
 	}
 }
 
@@ -404,7 +484,7 @@ func (h *Hub) Status() []Status {
 			Configured: e.ch != nil,
 			Notify:     h.deps.Settings.Bool(Key(kind, "notify")),
 			Approval:   h.deps.Settings.Bool(Key(kind, "approval")),
-			Running:    e.running, LastError: e.lastErr,
+			Running:    e.running, LastError: e.lastErr, LastNotifyError: e.notifyErr,
 		}
 		if b, ok := e.ch.(BotNamer); ok {
 			st.BotName = b.BotName()

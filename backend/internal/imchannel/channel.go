@@ -106,6 +106,9 @@ type ActionSink interface {
 }
 
 // BotNamer 是可选能力:知道自己机器人叫什么的渠道实现它,绑定弹窗据此告诉用户私聊谁。
+//
+// BotName 在 Hub 的锁里被调用(设置页状态、绑定弹窗),必须廉价且不做任何 I/O ——
+// 返回构造时或 Run 里已经拿到的值;要查平台接口,就在别处查好缓存下来。
 type BotNamer interface{ BotName() string }
 
 // Settings 是渠道读配置的口子。Secret 返回解密后的值。
@@ -124,4 +127,7 @@ type Deps struct {
 }
 
 // Builder 按当前配置造一个渠道实例。凭据不全时返回 nil —— 那不是错误,只是没配。
+//
+// Builder 在 Hub 的锁里被调用(Reload),必须廉价且不做任何 I/O:只读配置、组装结构体。
+// 连平台、换 token 这类事放进 Run 或各个发送方法里做,否则一次慢请求会卡住整个 Hub。
 type Builder func(d Deps) Channel

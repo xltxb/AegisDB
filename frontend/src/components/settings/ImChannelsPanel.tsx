@@ -148,6 +148,9 @@ function Capability({
 function StateTag({ s }: { s: ImStatus }) {
   const { t } = useTranslation()
   if (s.lastError) return <span className="im-state err" title={s.lastError}>{t('imStateError', { msg: s.lastError })}</span>
+  if (s.lastNotifyError) {
+    return <span className="im-state err" title={s.lastNotifyError}>{t('imStateNotifyError', { msg: s.lastNotifyError })}</span>
+  }
   if (s.running) return <span className="im-state on">{t('imStateRunning')}</span>
   if (!s.configured) return <span className="im-state">{t('imStateUnconfigured')}</span>
   return <span className="im-state">{s.notify || s.approval ? t('imStateReady') : t('imStateIdle')}</span>

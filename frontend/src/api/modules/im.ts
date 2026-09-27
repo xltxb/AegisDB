@@ -13,6 +13,8 @@ export interface ImStatus {
   running: boolean
   botName?: string
   lastError?: string
+  /** 最近一次群通知的失败原因;下一次发送成功后清空。 */
+  lastNotifyError?: string
 }
 
 /** 某人在一个交互审批渠道上的绑定。 */
