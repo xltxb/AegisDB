@@ -142,11 +142,11 @@ SPA 托管:`/assets/*` 带一年 `immutable` 缓存,`index.html` `no-cache`;带�
 | --- | --- |
 | `VELA_PG_DSN` | 网关自身存储的 PostgreSQL DSN(覆盖配置文件的 `database.postgres_dsn`)。生产**必填**:`config.prod.yaml` 里故意留空,而空 DSN 会被 libpq 读成"这台机器的默认库"(走 unix socket、user = OS 用户、**dbname = OS 用户名**),所以 prod 留空 = 拒绝启动 —— `serve` / `migrate` / `init` **三条路都拦**(`Config.ValidateForDB`),不是只拦 serve |
 | `VELA_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位、≥8 种不同字符、不在弱值黑名单**;未设 `VELA_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
-| `VELA_SECRET_KEY` | 连接口令与运行时密钥(审批魔方令牌等)的 AES-GCM 静态加密密钥(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量口令解密;**一经设定不可更改**(轮换会导致存量口令无法解密)。未设时启动打 WARN |
+| `VELA_SECRET_KEY` | 连接口令与运行时密钥(IM 渠道密钥等)的 AES-GCM 静态加密密钥(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量口令解密;**一经设定不可更改**(轮换会导致存量口令无法解密)。未设时启动打 WARN |
 | `VELA_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`);缺 `index.html`/`assets` 时打 WARN |
 | `VELA_TLS_CERT` / `VELA_TLS_KEY` | 直接由网关终止 TLS 的证书/私钥(可选) |
 | `VELA_WEBHOOK_SECRET` | 出站审计 Webhook 的 Bearer Token(随 `Authorization: Bearer` 发送;**不是 HMAC 签名**)。只在空库首次 seed/init 时写入 Webhook 配置行,之后以「设置 › Webhook」为准 |
-| `VELA_WEBHOOK_ALLOW_PRIVATE` | `1/true/yes/on` 时允许 Webhook / 飞书 / 审批魔方的出站目标是内网、loopback、链路本地、CGNAT 地址。默认 dev 放行、prod 拦截(SSRF 防护);生产打开时启动打 WARN |
+| `VELA_WEBHOOK_ALLOW_PRIVATE` | `1/true/yes/on` 时允许 Webhook / IM 渠道的出站目标是内网、loopback、链路本地、CGNAT 地址。默认 dev 放行、prod 拦截(SSRF 防护);生产打开时启动打 WARN |
 | `APP_ENV` / `VELA_ENV` | 部署档位:`prod`(别名 `production` / `release` / `live`)/ 其它(含 `dev` / `development` / `local`);未识别的值按 dev 并打 WARN。**它不挑存储引擎** —— 两档都是 PostgreSQL;它决定的是演示数据(仅 dev)、生产 JWT 强度校验、CORS 与出站 SSRF 的松紧 |
 | `VELA_ADMIN_EMAIL` / `VELA_ADMIN_PASSWORD` / `VELA_ADMIN_NAME` | `init` 时的管理员凭据;口令 ≥12 位且含大小写 / 数字 / 符号中 ≥3 类 |
 

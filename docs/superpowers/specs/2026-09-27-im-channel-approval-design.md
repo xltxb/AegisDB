@@ -493,3 +493,24 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
 - **群成员即审批人**的降级选项。
 - **个人微信**。
 - 群通知触发点扩展（导出完成、发布完成等）。
+
+## 18. 第 1 期实现记录
+
+与上文的三处偏离，均为实现时的细化，不改变设计意图：
+
+- **迁移拆成三个文件**：`0005_im_channel.sql`（三张表）、`0006_im_lark_notify_keys.sql`（飞书通知
+  键搬家）、`0007_drop_approval_cube.sql`（删魔方遗留）。每个迁移和依赖它的代码在同一次提交里落地。
+- **绑定码按哈希查找**，而不是取出后常量时间比较：库里只有 `sha256(code)`，查的也是哈希，查找本身
+  不泄露码。
+- **新增 `GET /users/:id/im-identities`**：权限页要显示某人的绑定状态，§10 漏列了这个读接口。
+- **飞书群通知迁移时保留「默认开」语义**：旧 `notify.lark` 默认 true 且生产环境不播种，只配了
+  webhook 的部署升级后照常发通知。
+- **webhook 入口推迟到第 2 期**：`POST /api/v1/im/:channel/webhook`、`im.callbackBaseURL`、
+  `im.callbackAllowIPs` 与来源 IP 白名单都随第一个用到它们的渠道（Telegram）一起落地。第 1 期没有
+  真实的交互渠道，提前放一个没有调用方的公开入口只会是一段无人测试的高危代码。
+- 基线迁移 `0001_init.sql` 同步删掉了 `external_task_id` 列与 `idx_approval_ext` 的定义（注释标明由
+  0007 删除）。测试夹具会在空台账上重放全部迁移，0007 删列后 0001 里那条建索引语句会失败；迁移台账
+  只按文件名记录、不校验内容，已升级的库不会重跑 0001，全新安装与升级安装最终表结构一致。
+- 飞书群通知不再写入 `/settings/webhook/deliveries` 投递记录：失败只记 WARN 日志，运行状况看
+  「设置 › IM 渠道」的状态。
+- 旧的 `approval.external.*` 键若由旧前端带来，保存设置时静默丢弃。

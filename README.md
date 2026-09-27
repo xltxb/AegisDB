@@ -3,7 +3,7 @@
 面向 DBA 与运维团队的统一数据库访问网关：所有数据库操作经 Web 终端 / 脚本 / 异步任务 /
 数据导出 / 发布流水线 / 开放接口下发，由网关**逐语句实时判定** —— 放行、拦截或转审批；
 审批通过后由**有权者自己**执行（见 ADR 0010）。全程写入防篡改审计哈希链，可经 Webhook /
-飞书外推。支持真实连接 MySQL 家族（MySQL / PolarDB / TiDB / MariaDB）、PostgreSQL 家族
+IM 渠道（飞书等）外推。支持真实连接 MySQL 家族（MySQL / PolarDB / TiDB / MariaDB）、PostgreSQL 家族
 （PostgreSQL / GaussDB(DWS)）与 Oracle。
 
 ```
@@ -143,13 +143,12 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
 
 ## API
 
-三套鉴权面，别混用：
+两套鉴权面，别混用：
 
 | 面 | 前缀 | 鉴权 | 谁在调 |
 |---|---|---|---|
 | 控制台 | `/api/v1` | `Authorization: Bearer <JWT>` | 登录的人 |
 | 开放接口 | `/api/v1/open` | `Authorization: Bearer <key>.<secret>`（或 `X-Vela-Key` / `X-Vela-Secret`） | 外部系统 |
-| 回调 | `/api/v1/approvals/lark/callback` | 共享密钥 + 可选 IP 白名单 | 审批服务 |
 
 一律 HTTP 200，业务结果在包体里：`{ code, msg, data }`（`0` 成功、`42200` 命令被拦截转审批、
 `42800` 需二次验证、`42900` 登录频控、`40300` 无权、`40301` IP 不在白名单……完整码表见契约开头）。
@@ -203,10 +202,11 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
 | `docs/开放接口对接文档.md` | 外部系统怎么拿凭据、幂等怎么算、状态怎么轮询 |
 | `docs/agents/`、`CLAUDE.md` | AI Agent 协作约定 |
 
-较关键的几条 ADR：0003 外部飞书审批 · 0004 按引擎判定方言 · 0005 发布流水线与规范审查 ·
+较关键的几条 ADR：0004 按引擎判定方言 · 0005 发布流水线与规范审查 ·
 0006 开放接口提单 · 0009 敏感字段脱敏在服务端做 · **0010 审批通过不执行** · 0013 无 WHERE
 拦截按分层 · 0014 脚本扫描按目标分层判 · 0015 执行窗口 · 0017 JWT 存 localStorage（记在账上的
-取舍，附偿还条件） · **0018 自身存储收敛到 PostgreSQL 单一来源** · 0019 审计链哈希的 payload 版本。
+取舍，附偿还条件） · **0018 自身存储收敛到 PostgreSQL 单一来源** · 0019 审计链哈希的 payload 版本 ·
+0020 多渠道 IM 审批（取代 0003）。
 
 ---
 

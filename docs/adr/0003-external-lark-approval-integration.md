@@ -1,6 +1,6 @@
 # ADR-0003 · 外部飞书审批(审批魔方)对接
 
-Status: Accepted(设计已定,实现待 Phase 1)
+Status: Superseded by ADR-0020(2026-09-27 起审批魔方对接已删除)
 Date: 2026-07-23
 Supersedes: 无
 Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)
