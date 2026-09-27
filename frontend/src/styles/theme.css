@@ -3008,3 +3008,13 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .im-state { font: 600 10px var(--font-mono); color: var(--text-faint); }
 .im-state.on { color: var(--success-text); }
 .im-state.err { color: var(--danger-text); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- IM 账号绑定(账户菜单弹窗 / 用户详情代绑) ---- */
+.im-empty { font: 400 12.5px/1.6 var(--font-body); color: var(--text-muted); padding: 8px 0; }
+.im-bind-list { display: flex; flex-direction: column; gap: 10px; }
+.im-bind-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.im-bind-row .um-tag { margin-left: 0; }
+.im-pid { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+.im-bind-act { margin-left: auto; display: flex; gap: 8px; }
+.im-codebox { margin-top: 16px; padding: 14px 16px; border-radius: 10px; background: var(--accent-subtle); border: 1px solid var(--accent-subtle-border); display: flex; flex-direction: column; gap: 8px; }
+.im-code { font: 600 20px var(--font-mono); letter-spacing: 0.08em; color: var(--accent-text); user-select: all; }

@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { LogOut, ShieldCheck } from 'lucide-react'
+import { LogOut, ShieldCheck, MessagesSquare } from 'lucide-react'
 import { meQueryOptions } from '@/api/modules/auth'
 import { useAuthStore } from '@/stores/auth'
 import MfaModal from '@/components/modals/MfaModal'
+import ImBindModal from '@/components/modals/ImBindModal'
 
 /**
  * 账户菜单 —— 头像点开。
@@ -16,7 +17,8 @@ import MfaModal from '@/components/modals/MfaModal'
  * 事后才发现登录的是别人的账号。
  *
  * 二次验证的自助绑定也在这里,而不是设置页:设置页整页挂着 `menu("settings")` 闸,
- * 而 MFA 是**每个账号自己的事**,非管理员同样要能绑。
+ * 而 MFA 是**每个账号自己的事**,非管理员同样要能绑。IM 账号绑定同理 —— 审批人往往
+ * 不是管理员。
  */
 export default function AccountMenu() {
   const { t } = useTranslation()
@@ -25,6 +27,7 @@ export default function AccountMenu() {
   const logout = useAuthStore((s) => s.logout)
   const [open, setOpen] = useState(false)
   const [mfaOpen, setMfaOpen] = useState(false)
+  const [imOpen, setImOpen] = useState(false)
 
   const bound = !!me?.mfaEnabled
 
@@ -58,6 +61,9 @@ export default function AccountMenu() {
                 {bound ? t('otpBound') : t('otpUnboundState')}
               </span>
             </button>
+            <button className="um-row" onClick={() => { setOpen(false); setImOpen(true) }}>
+              <MessagesSquare size={15} />{t('imBindTitle')}
+            </button>
             <button
               className="um-row um-logout"
               onClick={() => { setOpen(false); logout(); nav('/login', { replace: true }) }}
@@ -69,6 +75,7 @@ export default function AccountMenu() {
       )}
 
       {mfaOpen && <MfaModal bound={bound} onClose={() => setMfaOpen(false)} />}
+      {imOpen && <ImBindModal onClose={() => setImOpen(false)} />}
     </>
   )
 }

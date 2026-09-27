@@ -14,6 +14,7 @@ import {
 } from '@/hooks/usePermissions'
 import { TagEditModal } from '@/components/modals/TagEditModal'
 import { CapabilityMatrix } from '@/components/permission/CapabilityMatrix'
+import UserImPane from '@/components/permission/UserImPane'
 import { Card, CardHead } from '@/components/common/Card'
 import { Button } from '@/components/common/Button'
 import { Modal } from '@/components/common/Modal'
@@ -324,6 +325,7 @@ function UserDetail({ user, onClose }: { user: UserView; onClose: () => void }) 
       </div>
 
       {isAdmin && <CredentialPane user={user} />}
+      {isAdmin && <UserImPane user={user} />}
 
       <TagEditModal
         key={`utags-${user.id}-${tagging}`}
