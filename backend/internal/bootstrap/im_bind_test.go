@@ -71,9 +71,14 @@ func TestIMBind_SelfServiceHappyPath(t *testing.T) {
 	if !row.Bound || row.PlatformUserID != "p-zw" || row.BoundBy != model.IMBoundSelf {
 		t.Fatalf("after binding: %+v", row)
 	}
-	var n int64
-	app.repo.DB().Model(&model.AuditLog{}).Where("command LIKE ?", "im.bind channel=fake%").Count(&n)
-	eq(t, n, int64(1), "self-binding is audited")
+	var bindRows []model.AuditLog
+	app.repo.DB().Where("command LIKE ?", "im.bind channel=fake%").Find(&bindRows)
+	if len(bindRows) != 1 {
+		t.Fatalf("self-binding is audited exactly once, got %d", len(bindRows))
+	}
+	if !strings.Contains(bindRows[0].Command, "platformUserId=p-zw") {
+		t.Fatalf("bind audit = %q, want it to name the bound platform account", bindRows[0].Command)
+	}
 
 	// 绑上以后这个账号的点击就能被认出来
 	ap := app.submitProdHighRisk(admin)
@@ -94,6 +99,31 @@ func TestIMBind_CodeIsSingleUseAndRegenerationInvalidatesTheOldOne(t *testing.T)
 	}
 	eq(t, f.DirectMessage("p-2", fresh), "无效或已过期的绑定码,请在控制台重新生成", "a used code is dead")
 	eq(t, app.myIdentity(me, "fake").PlatformUserID, "p-1", "the second use did not rebind")
+}
+
+func TestIMBind_RebindAuditsThePreviousPlatformID(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	me := app.login("zhangwei@vela.io", "vela123")
+	f := app.runningFake(admin)
+
+	code1, _ := app.issueBindCode(me, "fake")
+	f.DirectMessage("p-1", code1)
+	code2, _ := app.issueBindCode(me, "fake")
+	f.DirectMessage("p-2", code2)
+	eq(t, app.myIdentity(me, "fake").PlatformUserID, "p-2", "the rebind takes effect")
+
+	var rows []model.AuditLog
+	app.repo.DB().Where("command LIKE ?", "im.bind channel=fake%").Order("id").Find(&rows)
+	if len(rows) != 2 {
+		t.Fatalf("want one audit row per bind, got %d: %+v", len(rows), rows)
+	}
+	if !strings.Contains(rows[0].Command, "platformUserId=p-1") {
+		t.Fatalf("first bind audit = %q", rows[0].Command)
+	}
+	if !strings.Contains(rows[1].Command, "platformUserId=p-2") || !strings.Contains(rows[1].Command, "previous=p-1") {
+		t.Fatalf("rebind audit = %q, want it to name both the new and the previous platform account", rows[1].Command)
+	}
 }
 
 func TestIMBind_ExpiredCode(t *testing.T) {
@@ -167,6 +197,11 @@ func TestIMBind_SelfUnbind(t *testing.T) {
 	if app.myIdentity(me, "fake").Bound {
 		t.Fatal("still bound after unbind")
 	}
+	var rows []model.AuditLog
+	app.repo.DB().Where("command LIKE ?", "im.unbind channel=fake%").Find(&rows)
+	if len(rows) != 1 || !strings.Contains(rows[0].Command, "platformUserId=p-zw") {
+		t.Fatalf("unbind audit = %+v, want it to name the removed platform account", rows)
+	}
 }
 
 func TestIMBind_AdminBindAndUnbind(t *testing.T) {
@@ -191,7 +226,15 @@ func TestIMBind_AdminBindAndUnbind(t *testing.T) {
 		t.Fatal("a blank platform id is not a binding")
 	}
 	eq(t, app.do(http.MethodDelete, path, admin, nil).Code, 0, "admin unbinds")
-	var n int64
-	app.repo.DB().Model(&model.AuditLog{}).Where("command LIKE ?", "admin.im.%").Count(&n)
-	eq(t, n, int64(2), "bind and unbind are both audited")
+	var rows []model.AuditLog
+	app.repo.DB().Where("command LIKE ?", "admin.im.%").Order("id").Find(&rows)
+	if len(rows) != 2 {
+		t.Fatalf("bind and unbind are both audited, got %d: %+v", len(rows), rows)
+	}
+	if !strings.Contains(rows[0].Command, "admin.im.bind") || !strings.Contains(rows[0].Command, "platformUserId=p-ln") {
+		t.Fatalf("bind audit = %q", rows[0].Command)
+	}
+	if !strings.Contains(rows[1].Command, "admin.im.unbind") || !strings.Contains(rows[1].Command, "platformUserId=p-ln") {
+		t.Fatalf("unbind audit = %q, want it to name the removed platform account", rows[1].Command)
+	}
 }

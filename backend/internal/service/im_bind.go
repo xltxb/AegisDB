@@ -55,6 +55,20 @@ func hashBindCode(code string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// previousIMPlatformID 查这个人在某渠道之前绑的是哪个平台账号(绑定前调用)。
+//
+// BindIMIdentity 是 upsert,UnbindIMIdentity 是删除 —— 两者都不留旧值。争议工单的调查
+// 只能靠审计,所以旧值要在动手之前先读出来,写进这次操作的审计行里。
+func (s *Services) previousIMPlatformID(userID int64, channel string) string {
+	rows, _ := s.Repo.IMIdentitiesOfUser(userID)
+	for _, r := range rows {
+		if r.Channel == channel {
+			return r.PlatformUserID
+		}
+	}
+	return ""
+}
+
 // IMIdentities 列出每个能做交互审批的渠道,以及这个人在上面绑没绑。
 func (s *Services) IMIdentities(userID int64) []IMIdentityView {
 	rows, _ := s.Repo.IMIdentitiesOfUser(userID)
@@ -116,6 +130,7 @@ func (s *Services) OnDirectMessage(_ context.Context, dm imchannel.DM) string {
 		return imBindInvalidReply
 	}
 	label := imchannel.Label(dm.Channel)
+	old := s.previousIMPlatformID(uid, dm.Channel)
 	err = s.Repo.BindIMIdentity(&model.IMIdentity{UserID: uid, Channel: dm.Channel, PlatformUserID: dm.PlatformUserID, BoundBy: model.IMBoundSelf})
 	if errors.Is(err, repository.ErrIMIdentityTaken) {
 		return "这个" + label + "账号已绑定到其他网关账户,请联系管理员"
@@ -123,7 +138,11 @@ func (s *Services) OnDirectMessage(_ context.Context, dm imchannel.DM) string {
 	if err != nil {
 		return "绑定失败,请稍后重试"
 	}
-	s.auditAdminAction(u, "im.bind channel="+dm.Channel+" user="+u.Email+" by=self")
+	detail := "im.bind channel=" + dm.Channel + " user=" + u.Email + " by=self platformUserId=" + clip(dm.PlatformUserID, 64)
+	if old != "" && old != dm.PlatformUserID {
+		detail += " previous=" + clip(old, 64)
+	}
+	s.auditAdminAction(u, detail)
 	return "已绑定到 " + u.Name + "(" + u.Email + ")"
 }
 
@@ -131,10 +150,15 @@ func (s *Services) UnbindOwnIM(u *model.User, channel string) error {
 	if !s.IM.CanApprove(channel) {
 		return ErrNotFound
 	}
+	old := s.previousIMPlatformID(u.ID, channel)
 	if ok, err := s.Repo.UnbindIMIdentity(u.ID, channel); err != nil {
 		return err
 	} else if ok {
-		s.auditAdminAction(u, "im.unbind channel="+channel+" user="+u.Email+" by=self")
+		detail := "im.unbind channel=" + channel + " user=" + u.Email + " by=self"
+		if old != "" {
+			detail += " platformUserId=" + clip(old, 64)
+		}
+		s.auditAdminAction(u, detail)
 	}
 	return nil
 }
@@ -152,10 +176,15 @@ func (s *Services) AdminBindIM(actor *model.User, userID int64, channel, pid str
 	if err != nil || u == nil {
 		return ErrNotFound
 	}
+	old := s.previousIMPlatformID(u.ID, channel)
 	if err := s.Repo.BindIMIdentity(&model.IMIdentity{UserID: u.ID, Channel: channel, PlatformUserID: pid, BoundBy: model.IMBoundAdmin}); err != nil {
 		return err
 	}
-	s.auditAdminAction(actor, "admin.im.bind channel="+channel+" user="+u.Email+" platformUserId="+clip(pid, 64))
+	detail := "admin.im.bind channel=" + channel + " user=" + u.Email + " platformUserId=" + clip(pid, 64)
+	if old != "" && old != pid {
+		detail += " previous=" + clip(old, 64)
+	}
+	s.auditAdminAction(actor, detail)
 	return nil
 }
 
@@ -167,9 +196,14 @@ func (s *Services) AdminUnbindIM(actor *model.User, userID int64, channel string
 	if err != nil || u == nil {
 		return ErrNotFound
 	}
+	old := s.previousIMPlatformID(u.ID, channel)
 	if _, err := s.Repo.UnbindIMIdentity(u.ID, channel); err != nil {
 		return err
 	}
-	s.auditAdminAction(actor, "admin.im.unbind channel="+channel+" user="+u.Email)
+	detail := "admin.im.unbind channel=" + channel + " user=" + u.Email
+	if old != "" {
+		detail += " platformUserId=" + clip(old, 64)
+	}
+	s.auditAdminAction(actor, detail)
 	return nil
 }
