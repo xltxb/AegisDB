@@ -919,6 +919,8 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
 		return
 	}
+	// IM 渠道的凭据与开关都在设置里。保存即重建渠道、重启长连接,不需要重启进程。
+	h.Svc.IM.Reload()
 	// 进审计链:这些键决定放行结论(审批超时、MFA 强制、空闲锁定…),改它们和改角色
 	// 权限是同一类事。只记**键名**,不记值 —— 秘钥类的键尤其,把值写进审计等于多了
 	// 一处泄露点,而要查的问题("谁什么时候换过它")记键名就够了。

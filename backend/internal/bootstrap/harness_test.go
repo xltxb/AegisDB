@@ -7,6 +7,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -96,6 +97,10 @@ func newTestApp(t *testing.T) *testApp {
 	engine := gateway.NewRiskEngine(repo)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
 	svc := service.New(repo, engine, jwtMgr)
+	imCtx, imCancel := context.WithCancel(context.Background())
+	svc.IM.Start(imCtx)
+	// 必须比库的清理更早执行(LIFO,所以注册得更晚):长连接和出站任务都还可能碰库。
+	t.Cleanup(func() { imCancel(); svc.IM.Stop() })
 	// 与 main.go 保持一致:不挂上这个 provider,脱敏在测试里根本不会发生,
 	// 而"测试通过了但线上才是另一套接线"是最不该有的一种绿。
 	gateway.SensitiveRulesProvider = svc.SensitiveRulesForGateway

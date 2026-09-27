@@ -691,6 +691,7 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 	}
 	s.Webhook.SendLarkApproval(ap)
 	s.dispatchExternalApproval(creator, ap)
+	s.imApprovalCreated(ap)
 	s.recordAuditBy(creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
 		status: model.RunWaiting, approvalID: ap.ID, approvalNo: ap.ApNo,
@@ -1333,6 +1334,7 @@ func (s *Services) voidReleaseApprovals(rel *model.Release, reason string) {
 			"log": "· 审批单 " + ap.ApNo + " 已作废(" + reason + ")",
 		})
 		s.cancelExternalApproval(*ap) // collapse the still-open 审批魔方/飞书 card, best-effort
+		s.imApprovalSettled(ap, model.StatusExpired, "")
 	}
 }
 

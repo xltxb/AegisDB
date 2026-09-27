@@ -85,6 +85,7 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 	s.recordAudit(u, conn, ap.Command, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
 	s.Webhook.SendLarkApproval(ap)
 	s.dispatchExternalApproval(u, ap)
+	s.imApprovalCreated(ap)
 	return nil
 }
 

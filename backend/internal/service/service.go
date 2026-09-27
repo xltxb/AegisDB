@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"velagateway/internal/gateway"
+	"velagateway/internal/imchannel"
 	"velagateway/internal/model"
 	"velagateway/internal/osc"
 	"velagateway/internal/repository"
@@ -44,6 +45,8 @@ type Services struct {
 	Executor sqlExecutor
 	JWT      *jwt.Manager
 	Webhook  *Dispatcher
+	// IM 是即时通讯渠道(飞书、Telegram、钉钉、Slack、企业微信)的 Hub。见 im_approval.go。
+	IM *imchannel.Hub
 
 	// osc 是在线变更的执行器,可能为 nil(没接的部署照旧直发)。
 	//
@@ -90,6 +93,7 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		JWT:      jwtMgr,
 		Webhook:  NewDispatcher(repo),
 	}
+	s.IM = newIMHub(s)
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
 	if m := repo.MaxApprovalSeq(); m >= 2294 {

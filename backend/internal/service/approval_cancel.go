@@ -48,6 +48,7 @@ func (s *Services) CancelApproval(actor *model.User, id int64) error {
 	now := time.Now()
 	// 把还"active"着的那一步一起收掉,否则审批链上会永远留着一个等不到人的节点。
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusCancelled, now)
+	s.imApprovalSettled(ap, model.StatusCancelled, actor.Name)
 	_ = s.Repo.SetApprovalResult(ap.ID, "", 0, now)
 
 	// 这张单挂着的东西也要跟着收场,否则它会停在一个永远等不到结果的中间态。

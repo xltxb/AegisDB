@@ -8,7 +8,6 @@ import (
 
 	"velagateway/internal/dto"
 	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
 )
 
 // extApprovalConfig is the resolved (decrypted) external-approval configuration
@@ -38,20 +37,6 @@ func (s *Services) extApprovalConfig() extApprovalConfig {
 		callbackSecret: s.decryptSetting("approval.external.callbackSecret"),
 		allowIPs:       s.Repo.SettingString("approval.external.callbackAllowIPs", ""),
 	}
-}
-
-// decryptSetting reads a setting and decrypts it (token/callbackSecret are stored
-// encrypted at rest via crypto.EncryptSecret on save). DecryptSecret returns
-// empty/legacy-plaintext values unchanged, so a blank setting is safe.
-func (s *Services) decryptSetting(key string) string {
-	raw := s.Repo.SettingString(key, "")
-	if raw == "" {
-		return ""
-	}
-	if v, err := crypto.DecryptSecret(raw); err == nil {
-		return v
-	}
-	return raw
 }
 
 // dispatchExternalApproval pushes a high-risk ticket to审批魔方 for interactive

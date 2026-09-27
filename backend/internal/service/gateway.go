@@ -498,6 +498,7 @@ func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection
 	}
 	s.Webhook.SendLarkApproval(ap)    // push an interactive Lark card to the approvers
 	s.dispatchExternalApproval(u, ap) // (审批魔方) best-effort external interactive approval
+	s.imApprovalCreated(ap)
 	return ap, auditID, nil
 }
 
@@ -558,6 +559,18 @@ func (s *Services) approverPool() []model.User {
 // 返回值仍是 *dto.ExecResp,因为升级单那一路的执行归流水线所有、会带回结果 —— 普通
 // 工单这条路返回的是一个空壳。
 func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*dto.ExecResp, error) {
+	name := ""
+	if actor != nil {
+		name = actor.Name
+	}
+	return s.DecideApprovalAs(actor, id, approve, name)
+}
+
+// DecideApprovalAs 与 DecideApproval 做同一件事,只是 operator 由调用方给 —— IM 渠道批的
+// 要在审计里看得出是哪个渠道("李四(飞书)"),否则和控制台批的长得一模一样。
+//
+// 权限判断一处都没动:能不能决定这张单,仍然只问 DecideBlockFor。
+func (s *Services) DecideApprovalAs(actor *model.User, id int64, approve bool, operator string) (*dto.ExecResp, error) {
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
 		return nil, ErrNotFound
@@ -574,7 +587,7 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		return nil, &DecideRefusal{Block: block}
 	}
 	// 站内驳回目前没有理由输入框 —— 有了之后从这里传进去,不必再动下面那一层。
-	return s.finalizeApproval(ap, approve, actor.Name, "")
+	return s.finalizeApproval(ap, approve, operator, "")
 }
 
 // finalizeApproval is the shared decision core: atomically claim pending →
@@ -614,6 +627,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 			return nil, ErrAlreadyDecided // someone else already decided/expired it
 		}
 		_ = s.Repo.DecideActiveStep(ap.ID, model.StatusApproved, now)
+		s.imApprovalSettled(ap, model.StatusApproved, operatorName)
 		// 通过不再执行任何命令,两条分支的区别只是**接下来由谁执行**:
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
@@ -685,6 +699,7 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
 	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusRejected, now)
+	s.imApprovalSettled(ap, model.StatusRejected, operatorName)
 	_ = s.Repo.SetApprovalResult(ap.ID, clip(strings.TrimSpace(reason), 400), 0, now)
 	if ap.WindowID > 0 {
 		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
@@ -1004,6 +1019,7 @@ func (s *Services) SweepApprovalTimeouts() {
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, "审批已超时作废",
 				fmt.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
 			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
+			s.imApprovalSettled(&a, model.StatusExpired, "")
 			// 这张单挂着的东西也要跟着收场 —— 撤回那一路(CancelApproval)早就这么做了。
 			//
 			// 少了这一步,窗口永远停在 pending、导出任务永远停在 awaiting:它们在等一张

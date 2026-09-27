@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -127,6 +128,8 @@ func main() {
 	engine := gateway.NewRiskEngine(repo)
 	jwtMgr := jwt.New(cfg.JWT.Secret, cfg.JWT.TTLHours)
 	svc := service.New(repo, engine, jwtMgr)
+	// IM 渠道:按当前设置建渠道、起长连接。进程活多久它们活多久。
+	svc.IM.Start(context.Background())
 	// Ensure the default upload/export directories exist under the run dir at startup.
 	_ = os.MkdirAll(svc.ScriptSavePath(), 0o755)
 	_ = os.MkdirAll(svc.ExportSavePath(), 0o755)
