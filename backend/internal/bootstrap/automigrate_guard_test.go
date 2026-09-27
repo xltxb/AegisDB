@@ -40,7 +40,7 @@ func TestMigrate_CreatesEverySchemaTable(t *testing.T) {
 	}
 	// 期望值只写一次。刚才改这个数字时,条件改了而报错文案没改,于是它红着却说
 	// 「表数 = 37, want 37」—— 一句自相矛盾的话会让下一个人去怀疑数据库。
-	const want = 37
+	const want = 40
 	if n != want {
 		t.Fatalf("表数 = %d, want %d", n, want)
 	}
