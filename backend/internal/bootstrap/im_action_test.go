@@ -3,9 +3,11 @@ package bootstrap
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	"velagateway/internal/imchannel/imtest"
+	"velagateway/internal/model"
 )
 
 // runningFake 装好一个开着交互审批、长连接已在跑的假渠道。
@@ -163,7 +165,106 @@ func TestIM_ClickOnUnknownTicket(t *testing.T) {
 	f := app.runningFake(admin)
 	app.bindIM("lina@vela.io", "fake", "p-ln")
 
-	if res := f.Click("p-ln", "AP-999999", true); !strings.Contains(res.Toast, "工单不存在") {
-		t.Fatalf("toast = %q", res.Toast)
+	// 不存在的单号与「你不在链上」说同一句话:按钮点击可以被伪造,单号是否存在、
+	// 最后怎样了,不该对随便哪个绑定过的人有问必答。
+	eq(t, f.Click("p-ln", "AP-999999", true).Toast, "仅审批链成员可处理该工单",
+		"an unknown ticket answers like a ticket you are not on")
+}
+
+// 不在链上的人点一张已处理的单,得不到它的终态。
+func TestIM_NonChainClickOnASettledTicketLearnsNothing(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	f := app.runningFake(admin)
+	app.bindIM("chenhao@vela.io", "fake", "p-ch") // 绑了,但不在链上
+	ap := app.submitProdHighRisk(admin)
+	owner := app.login("zhangwei@vela.io", "vela123")
+	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", owner, nil).Code, 0, "console reject")
+
+	res := f.Click("p-ch", ap.ApNo, true)
+	eq(t, res.Toast, "仅审批链成员可处理该工单", "no hint of the final state for an outsider")
+}
+
+// 控制台的审批接口先过 menu("approve") 才问 DecideBlockFor;IM 点击没有那道中间件,
+// 所以菜单这一条必须落在 DecideBlockFor 里 —— 否则角色被收回审批菜单的人,在 IM 里还能批。
+func TestIM_ChainMemberWithoutTheApproveMenuIsRefused(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	f := app.runningFake(admin)
+	zw := app.bindIM("zhangwei@vela.io", "fake", "p-zw")
+	ap := app.submitProdHighRisk(admin) // 工单建好时 zhangwei 还有审批菜单
+
+	u, err := app.repo.GetUserByID(zw)
+	if err != nil {
+		t.Fatal(err)
 	}
+	for _, rid := range app.repo.EffectiveRoleIDs(u) {
+		if err := app.repo.SetMenus(rid, map[string]bool{"approve": false}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	res := f.Click("p-zw", ap.ApNo, true)
+	eq(t, res.Toast, "你的角色当前没有审批权限,请联系管理员", "the approve-menu reason, verbatim")
+	eq(t, app.approvalRow(admin, ap.ApNo).Status, "pending", "still pending")
+}
+
+// decisionRows 数这张单上的决定审计行:发起那一行 operator 为空,批 / 驳那一行带着审批人。
+func (a *testApp) decisionRows(apNo string) int64 {
+	a.t.Helper()
+	var n int64
+	if err := a.repo.DB().Model(&model.AuditLog{}).
+		Where("approval_no = ? AND operator <> ''", apNo).Count(&n).Error; err != nil {
+		a.t.Fatal(err)
+	}
+	return n
+}
+
+// 平台重投:同一次点击几乎同时到了两遍,只能决定一次。
+func TestIM_ConcurrentDuplicateClicksDecideOnce(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	f := app.runningFake(admin)
+	app.bindIM("zhangwei@vela.io", "fake", "p-zw")
+	ap := app.submitProdHighRisk(admin)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			f.Click("p-zw", ap.ApNo, true)
+		}()
+	}
+	wg.Wait()
+
+	eq(t, app.approvalRow(admin, ap.ApNo).Status, "approved", "approved")
+	rows, _ := app.repo.AuditByOperatorLike("%(fake)")
+	eq(t, len(rows), 1, "exactly one approve audit row carrying the channel label")
+	eq(t, app.decisionRows(ap.ApNo), int64(1), "exactly one decision recorded")
+}
+
+// IM 与控制台同时批同一张单:只有一边算数。
+func TestIM_ClickRacingTheConsoleDecidesOnce(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	f := app.runningFake(admin)
+	app.bindIM("lina@vela.io", "fake", "p-ln")
+	ap := app.submitProdHighRisk(admin)
+	owner := app.login("zhangwei@vela.io", "vela123")
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		f.Click("p-ln", ap.ApNo, true)
+	}()
+	go func() {
+		defer wg.Done()
+		app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", owner, nil)
+	}()
+	wg.Wait()
+
+	eq(t, app.approvalRow(admin, ap.ApNo).Status, "approved", "approved")
+	eq(t, app.decisionRows(ap.ApNo), int64(1), "exactly one decision recorded across both paths")
 }

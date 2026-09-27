@@ -21,6 +21,9 @@ const (
 	BlockNotPending DecideBlock = "settled"   // 已审批 / 已驳回 / 已过期
 	BlockSelf       DecideBlock = "self"      // 自己发起的工单(两人控制)
 	BlockNotInChain DecideBlock = "not-chain" // 不在这张工单的审批链上
+	// 在链上,但角色此刻没有「审批」菜单。控制台的审批接口有 menu("approve") 中间件
+	// 挡着,IM 点击没有 —— 这条落在这里,两条入口才说同一件事。
+	BlockNoApproveMenu DecideBlock = "no-approve-menu"
 )
 
 // Reason 是给人看的说法。它必须点出**具体是哪一条**,否则等于没说。
@@ -32,6 +35,8 @@ func (b DecideBlock) Reason() string {
 		return "不能审批自己发起的工单(两人控制),请由审批链上的其他成员处理"
 	case BlockNotInChain:
 		return "仅审批链成员可处理该工单"
+	case BlockNoApproveMenu:
+		return "你的角色当前没有审批权限,请联系管理员"
 	}
 	return ""
 }
@@ -39,7 +44,10 @@ func (b DecideBlock) Reason() string {
 // DecideBlockFor answers whether u may decide ap right now, and if not, why.
 //
 // 判断顺序就是要说给人听的顺序:先看这张单还在不在待办里(已处理的谁都动不了),
-// 再看是不是自己发起的(他在链上,说他"不是链成员"是指错方向),最后才看链成员。
+// 再看是不是自己发起的(他在链上,说他"不是链成员"是指错方向),再看链成员,
+// 最后才看角色还有没有审批菜单 —— 不在链上的人,告诉他"去找管理员开菜单"是指错方向;
+// 这一查也只对链成员才做。菜单规则与 middleware.MenuGuard 是同一条(EffectiveRoleIDs
+// + MenusForRoles),不另写一份。
 func (s *Services) DecideBlockFor(u *model.User, ap *model.Approval) DecideBlock {
 	if u == nil || ap == nil {
 		return BlockNotInChain
@@ -54,6 +62,9 @@ func (s *Services) DecideBlockFor(u *model.User, ap *model.Approval) DecideBlock
 	}
 	if !s.isChainMember(ap.ID, u) {
 		return BlockNotInChain
+	}
+	if menus, _ := s.Repo.MenusForRoles(s.Repo.EffectiveRoleIDs(u)); !menus["approve"] {
+		return BlockNoApproveMenu
 	}
 	return BlockNone
 }

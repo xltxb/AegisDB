@@ -191,9 +191,12 @@ func (s *Services) OnAction(_ context.Context, a imchannel.Action) imchannel.Act
 	if a.ApNo == imTestApNo {
 		return imchannel.ActionResult{Toast: "测试卡片 · 点击已送达网关,认出的账户是 " + u.Name}
 	}
+	// 单号不存在,与「不在链上」回同一句话:按钮回调可以被伪造,一个绑定过的人不该
+	// 靠换单号来探出哪些单存在、最后怎样了。
+	outsider := imchannel.ActionResult{Toast: BlockNotInChain.Reason()}
 	ap, err := s.Repo.GetApprovalByApNo(a.ApNo)
 	if err != nil || ap == nil {
-		return imchannel.ActionResult{Toast: "工单不存在:" + clip(a.ApNo, 32)}
+		return outsider
 	}
 	_, err = s.DecideApprovalAs(u, ap.ID, a.Approve, clip(u.Name+"("+label+")", 127))
 	var refusal *DecideRefusal
@@ -204,6 +207,10 @@ func (s *Services) OnAction(_ context.Context, a imchannel.Action) imchannel.Act
 		}
 		return imchannel.ActionResult{Toast: "已驳回"}
 	case errors.Is(err, ErrAlreadyDecided):
+		// 终态只说给发起人和链成员听 —— 其他人拿到的与一张待审批、他不在链上的单一样。
+		if u.ID != ap.InitiatorID && !s.isChainMember(ap.ID, u) {
+			return outsider
+		}
 		status := ap.Status
 		if cur, e := s.Repo.GetApproval(ap.ID); e == nil {
 			status = cur.Status
