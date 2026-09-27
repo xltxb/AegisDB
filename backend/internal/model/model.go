@@ -683,10 +683,6 @@ type Approval struct {
 	RiskLevel      string `gorm:"size:16;not null" json:"riskLevel"` // high|mid|low
 	Status         string `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
 	AuditID        string `gorm:"size:32" json:"auditId"`
-	// External (审批魔方) integration: ExternalTaskID is the vendor's task_id, used
-	// by the timeout PATCH write-back. Callback correlation uses our ApNo (echoed
-	// back as external_task_id), not this.
-	ExternalTaskID string `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
 	// ReleaseID links a ticket raised by a release pipeline's approve stage back
 	// to its release. It also keeps the ticket OUT of the manual execute path
 	// (ExecuteApproved): the pipeline owns the execute stage, and letting someone

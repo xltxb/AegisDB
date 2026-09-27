@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS tbl_approval (
   risk_level       VARCHAR(16)  NOT NULL,                  -- high|mid|low
   status           VARCHAR(16)  NOT NULL DEFAULT 'pending', -- pending|approved|rejected|expired
   audit_id         VARCHAR(32),
-  external_task_id VARCHAR(128) NOT NULL DEFAULT '',
+  -- external_task_id VARCHAR(128) dropped by migration 0007 (审批魔方 integration removed)
   release_id       BIGINT       NOT NULL DEFAULT 0,
   export_job_id    BIGINT       NOT NULL DEFAULT 0,
   window_id        BIGINT       NOT NULL DEFAULT 0,
@@ -230,7 +230,7 @@ CREATE TABLE IF NOT EXISTS tbl_approval (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_approval_apno ON tbl_approval (ap_no);
 CREATE INDEX IF NOT EXISTS idx_approval_status ON tbl_approval (status);
 CREATE INDEX IF NOT EXISTS idx_approval_initiator ON tbl_approval (initiator_id);
-CREATE INDEX IF NOT EXISTS idx_approval_ext ON tbl_approval (external_task_id);
+-- idx_approval_ext dropped by migration 0007 (审批魔方 integration removed)
 CREATE INDEX IF NOT EXISTS idx_approval_release ON tbl_approval (release_id);
 CREATE INDEX IF NOT EXISTS idx_approval_export ON tbl_approval (export_job_id);
 CREATE INDEX IF NOT EXISTS idx_approval_window ON tbl_approval (window_id);

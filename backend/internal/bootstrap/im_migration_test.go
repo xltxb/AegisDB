@@ -73,3 +73,24 @@ func TestMigration0006_NoWebhookWritesNoSwitch(t *testing.T) {
 		t.Fatal("nothing configured → nothing switched on")
 	}
 }
+
+func TestMigration0007_RemovesApprovalCubeLeftovers(t *testing.T) {
+	db := testsupport.NewDB(t)
+	db.Exec(`INSERT INTO tbl_setting (k, v) VALUES
+		('approval.external.enabled', 'true'), ('approval.external.token', '"enc:xxx"'),
+		('approval.external.callbackSecret', '"enc:yyy"'), ('approval.onTimeout', '"auto-reject"')`)
+	rerunMigration(t, db, "0007_drop_approval_cube.sql")
+
+	got := settingRows(t, db)
+	for k := range got {
+		if len(k) >= 18 && k[:18] == "approval.external." {
+			t.Errorf("%s should be gone", k)
+		}
+	}
+	eq(t, got["approval.onTimeout"], `"auto-reject"`, "unrelated approval.* keys are untouched")
+
+	var n int64
+	db.Raw(`SELECT count(*) FROM information_schema.columns
+	        WHERE table_schema = current_schema() AND table_name = 'tbl_approval' AND column_name = 'external_task_id'`).Scan(&n)
+	eq(t, n, int64(0), "external_task_id column dropped")
+}

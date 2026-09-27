@@ -83,7 +83,6 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 	// 申请本身也进审计链:一扇免审批的门被"申请"过,和它被"打开"过,都是事后要
 	// 能查的事。
 	s.recordAudit(u, conn, ap.Command, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
-	s.dispatchExternalApproval(u, ap)
 	s.imApprovalCreated(ap)
 	return nil
 }

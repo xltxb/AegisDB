@@ -52,7 +52,6 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 		return err
 	}
 	s.recordAudit(u, conn, "EXPORT [含敏感字段] "+job.SQL, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
-	s.dispatchExternalApproval(u, ap)
 	s.imApprovalCreated(ap)
 	job.ApNo = ap.ApNo
 	job.ApprovalID = ap.ID

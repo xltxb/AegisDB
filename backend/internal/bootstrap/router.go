@@ -112,12 +112,6 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		open.GET("/pipelines", middleware.RequireScope(model.ScopeReleaseRead), h.OpenListPipelines)
 	}
 
-	// 审批魔方 approval-result callback: authenticated by a shared secret (Authorization:
-	// Bearer, or ?secret= query) + its own optional source-IP allowlist inside the
-	// handler, NOT by the user JWT / user IP allowlist — the caller is the approval
-	// service, not a console user.
-	v1.POST("/approvals/lark/callback", h.LarkApprovalCallback)
-
 	// ---- authenticated ----
 	// IPAllowlist runs after auth so the source IP is enforced on every data API
 	// (Session & Security · IP allowlist); loopback is always permitted.
@@ -426,8 +420,8 @@ func dirExists(p string) bool  { fi, err := os.Stat(p); return err == nil && fi.
 func fileExists(p string) bool { fi, err := os.Stat(p); return err == nil && !fi.IsDir() }
 
 // secretQueryKeys are query parameters that carry a credential. Some callers
-// cannot send headers (审批魔方 registers a callback URL and nothing else), so the
-// credential legitimately rides in the URL — but gin's default formatter writes
+// cannot send headers (some webhook senders register a URL and nothing else), so
+// the credential legitimately rides in the URL — but gin's default formatter writes
 // path+rawQuery, which would file a working approve-anything secret into the
 // access log for anyone with log access, un-rotated (EA3).
 var secretQueryKeys = map[string]bool{"secret": true, "token": true, "access_token": true}

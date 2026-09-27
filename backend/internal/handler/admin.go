@@ -3,7 +3,6 @@ package handler
 import (
 	"errors"
 	"log/slog"
-	"net/http"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,19 +19,11 @@ import (
 	"velagateway/pkg/sqlutil"
 )
 
-// encryptedSettingKeys hold high-impact secrets encrypted at rest (a DB dump must
-// not hand over a usable token / callback secret that could forge approvals →
-// trigger production execution). Encrypted on save, decrypted where read.
-var encryptedSettingKeys = map[string]bool{
-	"approval.external.token":          true,
-	"approval.external.callbackSecret": true,
-}
-
-// encryptedSetting 决定一个设置键是否加密落库。im.* 下凡是看起来像密钥的键一律加密 ——
-// 每接一个渠道就要新增几个密钥(appSecret、botToken、signingSecret…),靠手工往上面那张表
-// 里添,迟早有一个被漏掉,以明文躺进库里。
+// encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
+// 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
+// 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
 func encryptedSetting(k string) bool {
-	return encryptedSettingKeys[k] || (strings.HasPrefix(k, "im.") && isSecretKey(k))
+	return strings.HasPrefix(k, "im.") && isSecretKey(k)
 }
 
 // ---------------------------------------------------------------- Connections
@@ -547,78 +538,6 @@ func (h *Handler) RejectApproval(c *gin.Context) {
 	resp.OK(c, gin.H{"ok": true, "status": "rejected"})
 }
 
-// LarkApprovalCallback receives审批魔方's approval-result callback (public route,
-// no user JWT). It is authenticated by a shared secret (Authorization: Bearer, or
-// a ?secret= query fallback) + optional source-IP allowlist, correlated to our
-// ticket by ApNo, idempotent, and — since it can trigger a production execution —
-// fails closed on any auth error.
-// bearerToken extracts the token from an "Authorization: Bearer <token>" header
-// (case-insensitive scheme), or "" if absent/malformed.
-func bearerToken(auth string) string {
-	auth = strings.TrimSpace(auth)
-	const p = "bearer "
-	if len(auth) > len(p) && strings.EqualFold(auth[:len(p)], p) {
-		return strings.TrimSpace(auth[len(p):])
-	}
-	return ""
-}
-
-func (h *Handler) LarkApprovalCallback(c *gin.Context) {
-	ip := c.ClientIP()
-	// Authenticate the callback by a shared secret carried as `Authorization:
-	// Bearer <secret>` (the vendor sends it). Fallback: a `secret` query param in
-	// the callback URL, for vendors that can register a URL but not headers.
-	secret := bearerToken(c.GetHeader("Authorization"))
-	if secret == "" {
-		secret = c.Query("secret")
-	}
-	// Parse first so we can log correlation keys even on an auth failure (the body
-	// is untrusted until VerifyExternalCallback passes — we only log from it here).
-	var req dto.LarkApprovalCallbackReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Warn("lark callback: bad body", "ip", ip, "err", err)
-		resp.FailStatus(c, http.StatusBadRequest, resp.CodeBadRequest, "参数错误")
-		return
-	}
-	slog.Info("lark callback received",
-		"ip", ip, "secretPresent", secret != "",
-		"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID, "vendorTaskId", req.TaskID,
-		"approved", req.Approved, "approvers", len(req.Approver))
-
-	if err := h.Svc.VerifyExternalCallback(secret, ip); err != nil {
-		// Most common misconfig: the vendor didn't send the Bearer secret, or our
-		// callbackSecret setting is empty (fail-closed) / mismatched, or the source
-		// IP isn't in the allowlist. The vendor only sees HTTP 200, so this line is
-		// how you spot a silently-rejected callback.
-		slog.Warn("lark callback: auth rejected (fail-closed)",
-			"ip", ip, "secretPresent", secret != "", "externalTaskId", req.ExternalTaskID)
-		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调鉴权失败")
-		return
-	}
-	status, err := h.Svc.DecideApprovalExternal(req)
-	if errors.Is(err, service.ErrNotFound) {
-		slog.Warn("lark callback: approval not found",
-			"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID)
-		resp.FailStatus(c, http.StatusNotFound, resp.CodeNotFound, "审批单不存在")
-		return
-	}
-	if errors.Is(err, service.ErrForbidden) {
-		// The payload authenticated but does not describe this ticket (e.g. it
-		// quotes a different vendor task) — see DecideApprovalExternal.
-		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
-		resp.FailStatus(c, http.StatusForbidden, resp.CodeForbidden, "回调与该审批单不匹配")
-		return
-	}
-	if err != nil {
-		slog.Error("lark callback: process failed", "externalTaskId", req.ExternalTaskID, "err", err)
-		resp.FailStatus(c, http.StatusInternalServerError, resp.CodeInternalError, "回调处理失败")
-		return
-	}
-	slog.Info("lark callback processed",
-		"externalTaskId", req.ExternalTaskID, "approved", req.Approved, "resultStatus", status)
-	resp.OK(c, gin.H{"status": status})
-}
-
 // ---------------------------------------------------------------- Notifications
 
 func (h *Handler) ListNotifications(c *gin.Context) {
@@ -869,6 +788,11 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		if k == "strictMode" {
 			continue
 		}
+		// 审批魔方的对接已经删除(ADR-0020)。旧前端还可能带着这些键来,静默丢弃 ——
+		// 存进去就是一堆看着像配置、其实什么也不控制的东西,其中还有凭据。
+		if strings.HasPrefix(k, "approval.external.") {
+			continue
+		}
 		// A secret key with an empty value means "keep the existing secret" — the
 		// client never receives the real value, so a blank field is not a clear
 		// request (R3). Only a non-empty value replaces it.
@@ -888,11 +812,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateOutboundURL(sv)
 			}
 			switch k {
-			case "approval.external.baseURL":
-				verr = service.ValidateOutboundURL(sv)
-			case "approval.external.callbackBaseURL":
-				verr = service.ValidateCallbackBaseURL(sv)
-			case "security.ipAllowlist", "approval.external.callbackAllowIPs":
+			case "security.ipAllowlist":
 				// 判定层遇到认不出的条目是**静默跳过**的,所以校验必须在这一刻 ——
 				// 否则一个手滑多打一位的地址存进去,人以为那台机器被放行了,直到它
 				// 被挡在门外。前端早就在标红,但校验不能只长在界面上。
@@ -979,7 +899,7 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 		wh.Endpoint = req.Endpoint
 	}
 	if req.Secret != "" {
-		// 加密落库 —— 同类的 approval.external.token 一直是这么存的。留空 = 保持原值。
+		// 加密落库 —— 同类的 IM 渠道密钥一直是这么存的。留空 = 保持原值。
 		enc, err := crypto.EncryptSecret(req.Secret)
 		if err != nil {
 			resp.Fail(c, resp.CodeInternalError, "密钥加密失败")

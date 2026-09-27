@@ -2,12 +2,8 @@ package bootstrap
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
-	"time"
 
 	"velagateway/internal/model"
 	"velagateway/pkg/resp"
@@ -188,54 +184,24 @@ func TestDualSnapshot_LegacyRowsWithoutATierStillList(t *testing.T) {
 	eq(t, app.do(http.MethodGet, "/api/v1/audit", admin, nil).Code, 0, "the audit listing still renders")
 }
 
-// The outbound 审批魔方 payload carries both fields. `tier` is additive; `env`
-// keeps its name and meaning but now ranges over any environment code.
-func TestDualSnapshot_ExternalPayloadCarriesEnvAndTier(t *testing.T) {
-	var mu sync.Mutex
-	var gotEnv, gotTier string
-	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var in struct {
-			Payload struct {
-				Env  string `json:"env"`
-				Tier string `json:"tier"`
-			} `json:"payload"`
-		}
-		_ = json.Unmarshal(body, &in)
-		mu.Lock()
-		gotEnv, gotTier = in.Payload.Env, in.Payload.Tier
-		mu.Unlock()
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`{"code":0,"task_id":"cube-1","status":"PENDING"}`))
-	}))
-	defer stub.Close()
-
+// 出站的卡片同样要带上两个快照:env 说「在哪儿跑」,tier 说「按什么级别判的」——
+// 后者才解释得了这张单为什么需要审批。
+func TestDualSnapshot_IMCardCarriesEnvAndTier(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
 	conn := app.hkSetup(admin)
-	app.setSettings(admin, map[string]any{
-		"approval.external.enabled":         true,
-		"approval.external.baseURL":         stub.URL,
-		"approval.external.token":           "tok-xyz",
-		"approval.external.callbackBaseURL": "https://gw.example",
-	})
-	app.interceptOn(admin, conn, "DROP TABLE orders;")
+	f := app.fakeIM("fake")
+	app.enableIM(admin, "fake")
+	app.bindIM("zhangwei@vela.io", "fake", "p-zw")
 
-	// Dispatch is async.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		mu.Lock()
-		done := gotEnv != ""
-		mu.Unlock()
-		if done {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
+	app.interceptOn(admin, conn, "DROP TABLE orders;")
+	app.flushIM()
+	sent := f.Sent()
+	if len(sent) != 1 {
+		t.Fatalf("sent %d cards, want 1", len(sent))
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	eq(t, gotEnv, "prod-hk", "payload env = environment code (range now open)")
-	eq(t, gotTier, "prod", "payload tier = control tier, new and additive")
+	eq(t, sent[0].Card.Env, "prod-hk", "card env = environment code")
+	eq(t, sent[0].Card.Tier, "prod", "card tier = control tier")
 }
 
 // Instance labels are built from the environment, so they name the cluster an

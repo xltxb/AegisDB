@@ -689,7 +689,6 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 	if err := s.Repo.CreateApproval(ap, steps); err != nil {
 		return failStage("· 审批单创建失败: %v", err)
 	}
-	s.dispatchExternalApproval(creator, ap)
 	s.imApprovalCreated(ap)
 	s.recordAuditBy(creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
@@ -1085,10 +1084,10 @@ func releaseApprovalLabel(rel *model.Release, body string) string {
 // that has since been decided and moves them on.
 //
 // A sweeper rather than a callback from finalizeApproval, because a decision can
-// arrive through four different doors — the console, the 飞书 card, the 审批魔方
-// callback, and the timeout expiry — and a hook on one of them would leave
-// releases hanging when a decision came through another. Polling a row that
-// already records the outcome works no matter who wrote it.
+// arrive through three different doors — the console, the IM channels, and the
+// timeout expiry — and a hook on one of them would leave releases hanging when
+// a decision came through another. Polling a row that already records the
+// outcome works no matter who wrote it.
 func (s *Services) ResumeReleaseApprovals() {
 	stages, err := s.Repo.WaitingApprovalStages()
 	if err != nil {
@@ -1332,7 +1331,6 @@ func (s *Services) voidReleaseApprovals(rel *model.Release, reason string) {
 		_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{
 			"log": "· 审批单 " + ap.ApNo + " 已作废(" + reason + ")",
 		})
-		s.cancelExternalApproval(*ap) // collapse the still-open 审批魔方/飞书 card, best-effort
 		s.imApprovalSettled(ap, model.StatusExpired, "")
 	}
 }

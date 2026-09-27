@@ -496,7 +496,6 @@ func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection
 		slog.Error("create approval failed", "apNo", apNo, "err", err)
 		return nil, "", err
 	}
-	s.dispatchExternalApproval(u, ap) // (审批魔方) best-effort external interactive approval
 	s.imApprovalCreated(ap)
 	return ap, auditID, nil
 }
@@ -592,8 +591,8 @@ func (s *Services) DecideApprovalAs(actor *model.User, id int64, approve bool, o
 // finalizeApproval is the shared decision core: atomically claim pending →
 // approved/rejected, then (approve) execute the fixed ap.Command on behalf of the
 // initiator + audit + notify, or (reject) record the rejection. It is reused by
-// the in-app decision path (DecideApproval) and the external审批魔方 callback
-// (DecideApprovalExternal); authorization is the caller's responsibility — this
+// the in-app decision path (DecideApproval) and the IM channels (DecideApprovalAs
+// via OnAction); authorization is the caller's responsibility — this
 // function assumes the decision is already authorized. operatorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.
@@ -1020,7 +1019,6 @@ func (s *Services) SweepApprovalTimeouts() {
 			s.recordAudit(initiator, conn, a.Command, a.RiskLevel, model.ResultRejected, a.ApNo, "approve")
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, "审批已超时作废",
 				fmt.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
-			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
 			s.imApprovalSettled(&a, model.StatusExpired, "")
 			// 这张单挂着的东西也要跟着收场 —— 撤回那一路(CancelApproval)早就这么做了。
 			//

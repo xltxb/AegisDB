@@ -722,15 +722,6 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		// One PROD step-up vouches for a session on that instance for this long.
 		"security.mfaGraceMinutes": 30,
 		"security.ipAllowlist":     "",
-		// External 飞书审批(审批魔方)对接 — 默认关闭,先在 dev/uat 小范围验证。
-		// token / callbackSecret 为敏感值:保存时加密落库、GetSettings 不回传明文。
-		"approval.external.enabled":          false,
-		"approval.external.baseURL":          "",
-		"approval.external.token":            "",
-		"approval.external.aiGroup":          "",
-		"approval.external.callbackBaseURL":  "",
-		"approval.external.callbackSecret":   "",
-		"approval.external.callbackAllowIPs": "",
 	}
 	for k, v := range settings {
 		b, _ := json.Marshal(v)

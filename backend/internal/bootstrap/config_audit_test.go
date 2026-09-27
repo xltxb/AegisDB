@@ -96,11 +96,11 @@ func TestConfigAudit_SettingsAuditNeverContainsTheSecretValue(t *testing.T) {
 
 	const secret = "audit-should-not-see-this"
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
-		"approval.external.callbackSecret": secret,
+		"im.lark.notifySecret": secret,
 	}).Code, 0, "改秘钥设置")
 
 	got := app.configAuditDetails(token)
-	if !containsSub(got, "approval.external.callbackSecret") {
+	if !containsSub(got, "im.lark.notifySecret") {
 		t.Error("秘钥类设置的**改动**本身要记 —— 谁什么时候换过它,是事后要查的")
 	}
 	if containsSub(got, secret) {

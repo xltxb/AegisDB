@@ -199,9 +199,9 @@ func main() {
 
 	// Background: resume release pipelines whose approval has been decided.
 	//
-	// A sweeper rather than a callback, because a decision arrives through four
-	// different doors — the console, the 飞书 card, the 审批魔方 callback and the
-	// timeout expiry — and a hook on one of them would strand releases whose
+	// A sweeper rather than a callback, because a decision arrives through three
+	// different doors — the console, the IM channels and the timeout expiry —
+	// and a hook on one of them would strand releases whose
 	// approval came through another. It polls a row that already records the
 	// outcome, so it works no matter who wrote it. 15s keeps the pipeline feeling
 	// responsive without hammering the metadata DB.

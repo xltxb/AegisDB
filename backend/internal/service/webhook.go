@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -19,7 +18,6 @@ import (
 	"velagateway/internal/model"
 	"velagateway/internal/repository"
 	"velagateway/pkg/crypto"
-	"velagateway/pkg/sqlutil"
 )
 
 // AllowPrivateWebhookTargets permits loopback/private webhook destinations.
@@ -163,105 +161,6 @@ func newOutboundClient() *http.Client {
 			}).DialContext,
 		},
 	}
-}
-
-// SendExternalApproval posts a high-risk ticket to审批魔方's create-approval API
-// (POST {baseURL}/api/v1/approvals, Bearer auth) and returns the vendor task_id.
-// Reuses the SSRF-guarded outbound client. See ADR-0003 for the field mapping.
-func (d *Dispatcher) SendExternalApproval(baseURL, token, aiGroup, callbackURL, userAccount string, ap *model.Approval) (string, error) {
-	endpoint := baseURL + "/api/v1/approvals"
-	if err := validateOutboundURL(endpoint); err != nil {
-		return "", err
-	}
-	// Mask credential literals BEFORE anything leaves the building. This request
-	// hands the command to a third-party approval service, which stores it, renders
-	// it into a chat card and keeps it in its own history — the one sink where a
-	// leaked password is furthest outside our control and least revocable. The
-	// approver still sees the statement and the account it creates; only the secret
-	// itself becomes '***', which is not information they need to decide.
-	//
-	// The interactive card built further down already did this. This path did not,
-	// so a CREATE USER … IDENTIFIED BY '…' went out in the clear in both the
-	// summary text and the payload.
-	safeCommand := sqlutil.RedactSecrets(ap.Command)
-	summary := fmt.Sprintf("%s/%s/%s 高危命令待审批:%s · 原因:%s · 风险:%s",
-		ap.Env, ap.Instance, ap.Database, clip(safeCommand, 200), ap.Reason, ap.RiskLevel)
-	body := map[string]any{
-		"user":             userAccount,     // 发起人网关账户
-		"message_id":       "gw-" + ap.ApNo, // 网关生成的确定性ID(幂等)
-		"external_task_id": ap.ApNo,         // 回调关联主键(原样带回)
-		"request_id":       ap.ApNo,         // 备用关联键
-		"ai_group":         aiGroup,
-		"callback_url":     callbackURL,
-		"messages":         []map[string]string{{"role": "user", "content": summary}},
-		"payload": map[string]any{
-			// `env` keeps its meaning — where the command ran — but its value range
-			// widens from the four fixed strings to any environment code an operator
-			// creates (prod-hk, prod-sh, …). A downstream that validates it as a
-			// closed enum will start rejecting tickets; see the contract note in
-			// .scratch/env-tier-model/issues/03-dual-snapshot.md.
-			//
-			// `tier` is new and additive: the control level the command was judged
-			// under, which is what actually explains why it needed approval.
-			"env": ap.Env, "tier": ap.TierCode,
-			"instance": ap.Instance, "database": ap.Database,
-			"command": safeCommand, "risk": ap.RiskLevel, "initiator": ap.Initiator,
-			"reason": ap.Reason, "apNo": ap.ApNo,
-		},
-	}
-	raw, _ := json.Marshal(body)
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(raw))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("审批魔方返回 %d: %s", resp.StatusCode, clip(string(respBody), 200))
-	}
-	var out struct {
-		TaskID string `json:"task_id"`
-	}
-	_ = json.Unmarshal(respBody, &out)
-	return out.TaskID, nil
-}
-
-// PatchExternalStatus writes a terminal status back to审批魔方 for a ticket the
-// gateway resolved on its own (an internal timeout auto-reject). approval_status
-// 2 = cancel — collapses the still-open飞书 card so the two sides stay in sync.
-// Best-effort; reuses the SSRF-guarded outbound client. See ADR-0003.
-func (d *Dispatcher) PatchExternalStatus(baseURL, token, taskID string) error {
-	endpoint := baseURL + "/api/v1/approvals/" + url.PathEscape(taskID) + "/status"
-	if err := validateOutboundURL(endpoint); err != nil {
-		return err
-	}
-	body, _ := json.Marshal(map[string]any{
-		"task_id":         taskID,
-		"approver":        "gateway-timeout",
-		"approval_status": 2, // cancel
-	})
-	req, err := http.NewRequest(http.MethodPatch, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("审批魔方 PATCH 返回 %d: %s", resp.StatusCode, clip(string(respBody), 200))
-	}
-	return nil
 }
 
 // Dispatcher pushes audit events to the configured webhook, authenticating with
