@@ -94,6 +94,7 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		Webhook:  NewDispatcher(repo),
 	}
 	s.IM = newIMHub(s)
+	s.IM.SetSink(s) // 点击与私聊回到 service:认人、判定、绑定都在这一侧
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
 	if m := repo.MaxApprovalSeq(); m >= 2294 {
