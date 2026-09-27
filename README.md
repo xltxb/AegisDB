@@ -195,7 +195,7 @@ cd frontend && npm run type-check && npm run test:unit && npm run test:e2e && np
 |---|---|
 | [`docs/features.md`](docs/features.md) | **功能总览** —— 每个页面、每条判定、每个开关做什么 |
 | [`DEPLOY.md`](DEPLOY.md) | 生产部署完整步骤与环境变量一览 |
-| `docs/adr/` | 架构决策记录（17 条） |
+| `docs/adr/` | 架构决策记录（18 条） |
 | `docs/superpowers/specs/` | 各轮改造的设计文档（7 份）—— 每份都写明**非目标**和被推翻的判断，不只写做了什么 |
 | `docs/superpowers/plans/` | 对应的实现计划（6 份），任务拆解到可独立审查的粒度 |
 | `docs/` | PRD、前后端开发文档、交互原型、Vela 设计系统、四份数据库规范（MySQL / TiDB / Oracle / DWS）—— 规范审查的 87 条规则就是从它们来的 |
