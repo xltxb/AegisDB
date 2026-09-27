@@ -62,7 +62,7 @@ func TestSaveSettings_RejectsTheWholeBatchOnOneBadValue(t *testing.T) {
 
 	body := map[string]any{
 		// 这一条不合法:URL 解析不出协议。
-		"approval.external.baseURL": "://not-a-url",
+		"im.lark.notifyWebhook": "://not-a-url",
 	}
 	for k, v := range companions {
 		body[k] = v

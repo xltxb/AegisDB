@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -468,146 +466,4 @@ func (d *Dispatcher) record(event, endpoint string, success bool, status string,
 	_ = d.repo.InsertWebhookDelivery(&model.WebhookDelivery{
 		Event: event, Endpoint: endpoint, Success: success, Status: status, Attempts: attempts,
 	})
-}
-
-// ---------------------------------------------------------------- Lark (飞书) cards
-
-// SendLarkApproval pushes an interactive Lark card for a newly created approval
-// to the configured bot webhook (async, best-effort). No-op unless Lark is
-// enabled and a webhook URL is set.
-func (d *Dispatcher) SendLarkApproval(ap *model.Approval) {
-	if ap == nil || !d.repo.SettingBool("notify.lark", true) {
-		return
-	}
-	webhook := d.repo.SettingString("notify.larkWebhook", "")
-	if webhook == "" {
-		return
-	}
-	secret, consoleURL := d.repo.SettingString("notify.larkSecret", ""), d.repo.SettingString("notify.consoleURL", "")
-	card := larkApprovalCard(ap, consoleURL)
-	go func() {
-		ok, msg := d.postLark(webhook, secret, card)
-		d.record("lark-approval", webhook, ok, msg, 1)
-		if !ok {
-			slog.Warn("lark approval card failed", "ap", ap.ApNo, "err", msg)
-		}
-	}()
-}
-
-// TestLark sends a sample approval card synchronously and reports the outcome.
-func (d *Dispatcher) TestLark() (bool, string) {
-	webhook := d.repo.SettingString("notify.larkWebhook", "")
-	if webhook == "" {
-		return false, "未配置飞书 Webhook 地址"
-	}
-	secret, consoleURL := d.repo.SettingString("notify.larkSecret", ""), d.repo.SettingString("notify.consoleURL", "")
-	sample := &model.Approval{
-		ApNo: "AP-TEST", Instance: "order-cluster", Env: "prod", TierCode: "prod", RiskLevel: "high",
-		Initiator: "Vela", Command: "DROP TABLE orders_2024_q3;", Reason: "测试飞书审批卡片推送",
-	}
-	ok, msg := d.postLark(webhook, secret, larkApprovalCard(sample, consoleURL))
-	d.record("lark-test", webhook, ok, msg, 1)
-	if ok {
-		return true, "测试卡片已发送到飞书"
-	}
-	return false, "发送失败 · " + msg
-}
-
-// postLark POSTs {msg_type:interactive, card} to a Lark custom-bot webhook,
-// signing the request when a secret is configured.
-func (d *Dispatcher) postLark(webhook, secret string, card any) (bool, string) {
-	if err := validateOutboundURL(webhook); err != nil {
-		return false, err.Error()
-	}
-	payload := map[string]any{"msg_type": "interactive", "card": card}
-	if secret != "" {
-		ts := strconv.FormatInt(time.Now().Unix(), 10)
-		payload["timestamp"] = ts
-		payload["sign"] = larkSign(ts, secret)
-	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequest(http.MethodPost, webhook, bytes.NewReader(body))
-	if err != nil {
-		return false, err.Error()
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := d.client.Do(req)
-	if err != nil {
-		return false, err.Error()
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	// Lark returns HTTP 200 with {"code":0,...} on success; non-zero code = error.
-	var lr struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	_ = json.Unmarshal(raw, &lr)
-	if resp.StatusCode < 300 && lr.Code == 0 {
-		return true, "ok"
-	}
-	if lr.Msg != "" {
-		return false, lr.Msg
-	}
-	return false, resp.Status
-}
-
-// larkSign computes the Lark custom-bot signature: base64(HMAC-SHA256(key, "")),
-// where key = "<timestamp>\n<secret>".
-func larkSign(timestamp, secret string) string {
-	mac := hmac.New(sha256.New, []byte(timestamp+"\n"+secret))
-	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
-}
-
-// larkSafe neutralizes backticks so a command/reason embedded in a lark_md code
-// fence can't close the fence and inject rich text (fake buttons/links). There is
-// no escape mechanism inside a fence, so backticks become a look-alike modifier
-// grave accent (U+02CB) — visually faithful, functionally inert (C10).
-func larkSafe(s string) string {
-	return strings.ReplaceAll(s, "`", "ˋ")
-}
-
-// dbOrDefault labels an empty target database as the instance default.
-func dbOrDefault(db string) string {
-	if strings.TrimSpace(db) == "" {
-		return "默认"
-	}
-	return db
-}
-
-func larkApprovalCard(ap *model.Approval, consoleURL string) map[string]any {
-	tmpl, riskLabel := "orange", "🟠 中危"
-	if ap.RiskLevel == "high" {
-		tmpl, riskLabel = "red", "🔴 高危"
-	}
-	shortField := func(k, v string) map[string]any {
-		return map[string]any{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": "**" + k + "**\n" + v}}
-	}
-	elements := []any{
-		map[string]any{"tag": "div", "fields": []any{
-			shortField("实例", ap.Instance),
-			shortField("数据库", dbOrDefault(ap.Database)),
-			shortField("环境", strings.ToUpper(ap.Env)),
-			shortField("风险", riskLabel),
-			shortField("发起人", ap.Initiator),
-		}},
-		map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**命令**\n```sql\n" + larkSafe(clip(sqlutil.RedactSecrets(ap.Command), 400)) + "\n```"}},
-	}
-	if strings.TrimSpace(ap.Reason) != "" {
-		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**原因**\n" + larkSafe(ap.Reason)}})
-	}
-	if consoleURL != "" {
-		elements = append(elements, map[string]any{"tag": "action", "actions": []any{
-			map[string]any{"tag": "button", "type": "primary",
-				"text": map[string]any{"tag": "plain_text", "content": "前往审批"},
-				"url":  strings.TrimRight(consoleURL, "/") + "/#/approvals"},
-		}})
-	}
-	elements = append(elements, map[string]any{"tag": "note", "elements": []any{
-		map[string]any{"tag": "plain_text", "content": "AegisDB 数据库网关 · " + ap.ApNo}}})
-	return map[string]any{
-		"config":   map[string]any{"wide_screen_mode": true},
-		"header":   map[string]any{"template": tmpl, "title": map[string]any{"tag": "plain_text", "content": "高危命令待审批 · " + ap.ApNo}},
-		"elements": elements,
-	}
 }

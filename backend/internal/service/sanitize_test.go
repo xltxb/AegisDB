@@ -26,13 +26,3 @@ func TestCsvSanitize_LeadingWhitespace(t *testing.T) {
 		}
 	}
 }
-
-// C10: a command/reason embedded in a Lark code fence must not be able to close
-// the fence and inject rich text (fake buttons/links). Backticks are neutralized.
-func TestLarkSafe_NeutralizesBackticks(t *testing.T) {
-	in := "SELECT * FROM `t`; ``` <fake markdown>"
-	out := larkSafe(in)
-	if strings.Contains(out, "`") {
-		t.Errorf("larkSafe(%q) = %q; expected no raw backticks", in, out)
-	}
-}

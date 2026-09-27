@@ -496,7 +496,6 @@ func (s *Services) createApprovalForScript(u *model.User, conn *model.Connection
 		slog.Error("create approval failed", "apNo", apNo, "err", err)
 		return nil, "", err
 	}
-	s.Webhook.SendLarkApproval(ap)    // push an interactive Lark card to the approvers
 	s.dispatchExternalApproval(u, ap) // (审批魔方) best-effort external interactive approval
 	s.imApprovalCreated(ap)
 	return ap, auditID, nil

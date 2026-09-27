@@ -1664,10 +1664,11 @@ paths:
       summary: '[settings] 最近的投递结果'
       parameters: [{ name: limit, in: query, schema: { type: integer, default: 50 } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
-  /settings/lark/test:
+  /settings/im/{channel}/test-notify:
     post:
       tags: [settings]
-      summary: '[settings · admin] 测试飞书 / 审批魔方连通性'
+      summary: '[settings · admin] 往该渠道的通知群发一条样例(用已保存的配置)'
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /service-accounts:
     get:

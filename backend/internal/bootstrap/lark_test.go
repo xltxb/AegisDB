@@ -10,10 +10,8 @@ import (
 	"time"
 )
 
-// Lark (飞书) channel: once a webhook is configured, the test endpoint sends a
-// sample approval card, and a real high-risk approval pushes an interactive card
-// to the bot webhook.
-func TestLark_ApprovalCardPushedToWebhook(t *testing.T) {
+// 飞书群通知:配置好 webhook 后,测试接口发一张样例卡片;真实的高危工单推一张带单号的卡片。
+func TestLark_NotifyCardOnNewApproval(t *testing.T) {
 	received := make(chan string, 4)
 	lark := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
@@ -24,33 +22,24 @@ func TestLark_ApprovalCardPushedToWebhook(t *testing.T) {
 
 	app := newTestApp(t)
 	token := app.login("linwei@vela.io", "vela123")
+	app.setSettings(token, map[string]any{
+		"im.lark.notify": true, "im.lark.notifyWebhook": lark.URL, "notify.consoleURL": "https://gw.corp.io",
+	})
 
-	// configure the Lark channel
-	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
-		"notify.lark": true, "notify.larkWebhook": lark.URL, "notify.consoleURL": "https://gw.corp.io",
-	}).Code, 0, "configure lark")
-
-	// the test endpoint sends a sample card
-	tr := app.do(http.MethodPost, "/api/v1/settings/lark/test", token, nil)
-	eq(t, tr.Code, 0, "lark test code")
+	tr := app.do(http.MethodPost, "/api/v1/settings/im/lark/test-notify", token, nil)
+	eq(t, tr.Code, 0, "test-notify code")
 	var tres struct {
 		Ok      bool   `json:"ok"`
 		Message string `json:"message"`
 	}
 	_ = json.Unmarshal(tr.Data, &tres)
 	if !tres.Ok {
-		t.Errorf("lark test card should succeed, got %q", tres.Message)
+		t.Fatalf("test notify should succeed, got %q", tres.Message)
 	}
-	select {
-	case body := <-received:
-		if !strings.Contains(body, `"interactive"`) || !strings.Contains(body, "AP-TEST") {
-			t.Errorf("test card not an interactive approval card: %s", body)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("no test card delivered to the Lark webhook")
+	if body := waitCard(t, received); !strings.Contains(body, `"interactive"`) || !strings.Contains(body, "AP-TEST") {
+		t.Errorf("test card is not an interactive approval card: %s", body)
 	}
 
-	// a real high-risk approval pushes an interactive card carrying its ap number
 	prod := app.connIDByEnv(token, "prod")
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
 		"connectionId": prod, "sql": "DROP TABLE orders_2024_q3;", "reason": "q3 cleanup",
@@ -60,15 +49,39 @@ func TestLark_ApprovalCardPushedToWebhook(t *testing.T) {
 		ApprovalNo string `json:"approvalNo"`
 	}
 	_ = json.Unmarshal(r.Data, &er)
-	if er.ApprovalNo == "" {
-		t.Fatal("expected an approval number")
+	body := waitCard(t, received)
+	if !strings.Contains(body, er.ApprovalNo) || !strings.Contains(body, "https://gw.corp.io/#/approvals") {
+		t.Errorf("approval card missing apNo %s or console link: %s", er.ApprovalNo, body)
 	}
+}
+
+func TestLark_NotifySwitchOffSendsNothing(t *testing.T) {
+	received := make(chan string, 4)
+	lark := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received <- "hit"
+		_, _ = w.Write([]byte(`{"code":0}`))
+	}))
+	defer lark.Close()
+
+	app := newTestApp(t)
+	token := app.login("linwei@vela.io", "vela123")
+	app.setSettings(token, map[string]any{"im.lark.notify": false, "im.lark.notifyWebhook": lark.URL})
+	app.submitProdHighRisk(token)
+	app.flushIM()
 	select {
-	case body := <-received:
-		if !strings.Contains(body, er.ApprovalNo) || !strings.Contains(body, `"interactive"`) {
-			t.Errorf("approval card missing apNo %s or not interactive: %s", er.ApprovalNo, body)
-		}
+	case <-received:
+		t.Fatal("switch is off, nothing should be posted")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func waitCard(t *testing.T, ch <-chan string) string {
+	t.Helper()
+	select {
+	case b := <-ch:
+		return b
 	case <-time.After(3 * time.Second):
-		t.Fatal("no approval card delivered to the Lark webhook")
+		t.Fatal("no card delivered to the Lark webhook")
+		return ""
 	}
 }

@@ -689,7 +689,6 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 	if err := s.Repo.CreateApproval(ap, steps); err != nil {
 		return failStage("· 审批单创建失败: %v", err)
 	}
-	s.Webhook.SendLarkApproval(ap)
 	s.dispatchExternalApproval(creator, ap)
 	s.imApprovalCreated(ap)
 	s.recordAuditBy(creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")

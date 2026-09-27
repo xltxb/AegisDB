@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"time"
 
 	"velagateway/internal/imchannel"
 	"velagateway/internal/model"
@@ -132,6 +133,28 @@ func settledText(status, operator string) string {
 
 // imTestApNo 是测试卡片上的单号。点它只回一句话,不碰任何工单。
 const imTestApNo = "AP-TEST"
+
+// imSampleCard 是测试通知 / 测试卡片用的样例工单。
+func (s *Services) imSampleCard() imchannel.ApprovalCard {
+	return s.imCardFor(&model.Approval{
+		ApNo: imTestApNo, Instance: "order-cluster", Env: "prod", TierCode: "prod", RiskLevel: model.RiskHigh,
+		Initiator: "Vela", Command: "DROP TABLE orders_2024_q3;", Reason: "测试审批卡片推送",
+	})
+}
+
+// TestIMNotify 同步发一条测试群通知,把结果原话告诉管理员。
+func (s *Services) TestIMNotify(channel string) (bool, string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	err := s.IM.TestNotify(ctx, channel, s.imSampleCard())
+	switch {
+	case errors.Is(err, imchannel.ErrNotConfigured):
+		return false, "未配置" + imchannel.Label(channel) + "群通知 Webhook"
+	case err != nil:
+		return false, "发送失败 · " + err.Error()
+	}
+	return true, "测试消息已发送到" + imchannel.Label(channel)
+}
 
 const imBindInvalidReply = "无效或已过期的绑定码,请在控制台重新生成"
 

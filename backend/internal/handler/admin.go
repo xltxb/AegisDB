@@ -28,6 +28,13 @@ var encryptedSettingKeys = map[string]bool{
 	"approval.external.callbackSecret": true,
 }
 
+// encryptedSetting 决定一个设置键是否加密落库。im.* 下凡是看起来像密钥的键一律加密 ——
+// 每接一个渠道就要新增几个密钥(appSecret、botToken、signingSecret…),靠手工往上面那张表
+// 里添,迟早有一个被漏掉,以明文躺进库里。
+func encryptedSetting(k string) bool {
+	return encryptedSettingKeys[k] || (strings.HasPrefix(k, "im.") && isSecretKey(k))
+}
+
 // ---------------------------------------------------------------- Connections
 
 func (h *Handler) ListConnections(c *gin.Context) {
@@ -877,8 +884,11 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		// 配错它的人早就走了。两把尺子不同,见 service 里那两个函数的注释。
 		if sv, ok := v.(string); ok && strings.TrimSpace(sv) != "" {
 			var verr error
+			if strings.HasPrefix(k, "im.") && strings.HasSuffix(k, "Webhook") {
+				verr = service.ValidateOutboundURL(sv)
+			}
 			switch k {
-			case "approval.external.baseURL", "notify.larkWebhook":
+			case "approval.external.baseURL":
 				verr = service.ValidateOutboundURL(sv)
 			case "approval.external.callbackBaseURL":
 				verr = service.ValidateCallbackBaseURL(sv)
@@ -898,7 +908,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		// 加密失败就**不写** —— 原先这里是 `if err == nil { v = enc }`,于是加密一旦
 		// 出错(密钥没初始化),那条秘钥就以明文落进库里,而接口照样回 ok。一条本该
 		// 加密的秘钥变成明文,没有任何迹象,下一次看到它的人是拿到库备份的人。
-		if encryptedSettingKeys[k] {
+		if encryptedSetting(k) {
 			if sv, ok := v.(string); ok && sv != "" {
 				enc, err := crypto.EncryptSecret(sv)
 				if err != nil {
@@ -1007,12 +1017,6 @@ func (h *Handler) SaveWebhook(c *gin.Context) {
 
 func (h *Handler) TestWebhook(c *gin.Context) {
 	ok, msg := h.Svc.Webhook.Test()
-	resp.OK(c, gin.H{"ok": ok, "message": msg})
-}
-
-// TestLark sends a sample approval card to the configured Lark bot webhook.
-func (h *Handler) TestLark(c *gin.Context) {
-	ok, msg := h.Svc.Webhook.TestLark()
 	resp.OK(c, gin.H{"ok": ok, "message": msg})
 }
 

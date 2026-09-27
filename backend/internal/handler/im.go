@@ -77,3 +77,9 @@ func (h *Handler) UnbindUserIM(c *gin.Context) {
 	}
 	resp.OK(c, gin.H{"ok": true})
 }
+
+// TestIMNotify 往某渠道的通知群发一条样例。只用已保存的配置 —— 界面先保存再测。
+func (h *Handler) TestIMNotify(c *gin.Context) {
+	ok, msg := h.Svc.TestIMNotify(c.Param("channel"))
+	resp.OK(c, gin.H{"ok": ok, "message": msg})
+}
