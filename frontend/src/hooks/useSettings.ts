@@ -57,24 +57,6 @@ export function useSaveSettings() {
   })
 }
 
-/** 试发一条飞书卡片。先把当前填的地址存下来再试 —— 否则试的是上一次保存的那个。 */
-export function useTestLark() {
-  const notify = useUIStore((s) => s.notify)
-  const { t } = useTranslation()
-  return useMutation({
-    mutationFn: async (cfg: { webhook: string; secret: string; consoleURL: string }) => {
-      await settingsApi.saveSettings({
-        'notify.larkWebhook': cfg.webhook.trim(),
-        'notify.larkSecret': cfg.secret.trim(),
-        'notify.consoleURL': cfg.consoleURL.trim(),
-      })
-      return settingsApi.testLark()
-    },
-    onSuccess: (r) => notify(r.message || t('larkTestOk'), r.ok ? 'ok' : 'error'),
-    onError: (e: Error) => notify(e.message || t('larkTestFail'), 'error'),
-  })
-}
-
 export function useTestWebhook() {
   const qc = useQueryClient()
   const notify = useUIStore((s) => s.notify)

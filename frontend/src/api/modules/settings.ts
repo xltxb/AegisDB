@@ -11,7 +11,6 @@ export const settingsApi = {
   saveWebhook: (body: Partial<WebhookConfig>) =>
     http.put<any, Envelope<WebhookConfig>>('/settings/webhook', body).then(ok),
   testWebhook: () => http.post<any, Envelope<any>>('/settings/webhook/test').then(ok),
-  testLark: () => http.post<any, Envelope<{ ok: boolean; message: string }>>('/settings/lark/test').then(ok),
   webhookDeliveries: (limit = 50) =>
     http.get<any, Envelope<WebhookDelivery[]>>(`/settings/webhook/deliveries?limit=${limit}`).then(ok),
 

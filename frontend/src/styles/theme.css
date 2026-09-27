@@ -2999,3 +2999,12 @@ html[lang="en"] .rail-item span { font-size: 9px; }
   .osc-bar { width: 100%; }
 }
 .osc-orphan { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--warning-text); }
+
+/* ---- IM 渠道(设置页) ---- */
+.im-list { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.im-ch { border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken); }
+.im-ch-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px 4px; }
+.im-ch-name { font: 600 13px var(--font-body); color: var(--text-strong); }
+.im-state { font: 600 10px var(--font-mono); color: var(--text-faint); }
+.im-state.on { color: var(--success-text); }
+.im-state.err { color: var(--danger-text); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

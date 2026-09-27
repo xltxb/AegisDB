@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
 import {
-  Bell, DatabaseZap, EyeOff, GitPullRequestArrow, KeyRound, Lock, Palette, Shield, Webhook,
+  Bell, DatabaseZap, EyeOff, GitPullRequestArrow, KeyRound, Lock, MessagesSquare, Palette, Shield, Webhook,
 } from 'lucide-react'
 import {
-  useApprovalChain, useSaveSettings, useSettings, useTestLark, useTestWebhook,
+  useApprovalChain, useSaveSettings, useSettings, useTestWebhook,
 } from '@/hooks/useSettings'
 import ApiClientsPanel from '@/components/settings/ApiClientsPanel'
+import ImChannelsPanel, { imInitialValues, imSettingsPayload, type ImValues } from '@/components/settings/ImChannelsPanel'
 import { invalidIpEntries, normalizeIpAllowlist } from '@/lib/ipAllowlist'
 import { parseSetting } from '@/lib/settingOptions'
 import { Card, CardHead, CardRow } from '@/components/common/Card'
@@ -20,11 +21,12 @@ import { useUIStore, type Lang, type Theme } from '@/stores/ui'
 import type { SettingsResp } from '@/types'
 
 /**
- * 子导航的九个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
+ * 子导航的十个分区。id 同时是锚点 —— 深链 `/settings#set-security` 能直接落到那一节。
  */
 const SECTIONS = [
   { id: 'gateway', icon: Shield, label: 'setGw' },
   { id: 'approval', icon: GitPullRequestArrow, label: 'setAppr' },
+  { id: 'im', icon: MessagesSquare, label: 'setIm' },
   { id: 'security', icon: Lock, label: 'setSec' },
   { id: 'sensitive', icon: EyeOff, label: 'setSens' },
   { id: 'meta', icon: DatabaseZap, label: 'setMeta' },
@@ -98,7 +100,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
   const g = data.settings ?? {}
   const save = useSaveSettings()
   const notify = useUIStore((s) => s.notify)
-  const testLark = useTestLark()
   const testWebhook = useTestWebhook()
   const [active, setActive] = useState<string>(SECTIONS[0].id)
 
@@ -120,14 +121,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     // ---- 审批 ----
     onTimeout: keyOf(parseSetting<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate'),
     allowSelf: parseSetting(g['approval.allowSelfApprove'], false),
-    extEnabled: parseSetting(g['approval.external.enabled'], false),
-    extBaseURL: parseSetting<string>(g['approval.external.baseURL'], ''),
-    extAiGroup: parseSetting<string>(g['approval.external.aiGroup'], ''),
-    extCallbackBaseURL: parseSetting<string>(g['approval.external.callbackBaseURL'], ''),
-    extAllowIPs: parseSetting<string>(g['approval.external.callbackAllowIPs'], ''),
-    // 密钥从不回传。输入框留空 = 保持不变,所以初值只能是空串。
-    extToken: '',
-    extCallbackSecret: '',
 
     // ---- 会话与安全 ----
     ttl: keyOf(parseSetting<string>(g['security.sessionTTL'], '8h'), SESSION_TTL_KEYS, '8h'),
@@ -153,11 +146,8 @@ function SettingsForm({ data }: { data: SettingsResp }) {
     oscMinRows: Number(parseSetting(g['osc.autoRoute.minRows'], 2000000)) || 2000000,
 
     // ---- 通知 ----
-    lark: parseSetting(g['notify.lark'], true),
     email: parseSetting(g['notify.email'], false),
     push: parseSetting(g['notify.push'], true),
-    larkWebhook: parseSetting<string>(g['notify.larkWebhook'], ''),
-    larkSecret: '',
     consoleURL: parseSetting<string>(g['notify.consoleURL'], ''),
 
     // ---- Webhook(审计事件转发,独立接口) ----
@@ -169,6 +159,9 @@ function SettingsForm({ data }: { data: SettingsResp }) {
   }))
   type Form = typeof f
   const set = (patch: Partial<Form>) => setF((p) => ({ ...p, ...patch }))
+  // IM 渠道的配置是一张按渠道派生的键值表(见 ImChannelsPanel 的 IM_CHANNELS),
+  // 不塞进上面那个平铺的表单对象 —— 否则每接一个渠道都要来这里加一排字段。
+  const [im, setIm] = useState<ImValues>(() => imInitialValues(g))
 
   /**
    * 滚动到哪一节,子导航就高亮哪一节。
@@ -217,14 +210,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'export.retentionDays': Math.max(0, Math.round(Number(f.exportRetention) || 0)),
         'approval.onTimeout': f.onTimeout,
         'approval.allowSelfApprove': f.allowSelf,
-        'approval.external.enabled': f.extEnabled,
-        'approval.external.baseURL': f.extBaseURL.trim(),
-        // 空 token / 空 secret 表示沿用已存的那一个,服务端据此判断
-        'approval.external.token': f.extToken.trim(),
-        'approval.external.aiGroup': f.extAiGroup.trim(),
-        'approval.external.callbackBaseURL': f.extCallbackBaseURL.trim(),
-        'approval.external.callbackSecret': f.extCallbackSecret.trim(),
-        'approval.external.callbackAllowIPs': f.extAllowIPs.trim(),
         'security.sessionTTL': f.ttl,
         'security.requireMFA': f.mfa,
         'security.mfaMandatory': f.mfaMandatory,
@@ -239,12 +224,10 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         'osc.enabled': f.oscEnabled,
         'osc.autoRoute.enabled': f.oscAutoRoute,
         'osc.autoRoute.minRows': clampInt(f.oscMinRows, 10000, 1000000000, 2000000),
-        'notify.lark': f.lark,
         'notify.email': f.email,
         'notify.push': f.push,
-        'notify.larkWebhook': f.larkWebhook.trim(),
-        'notify.larkSecret': f.larkSecret.trim(),
         'notify.consoleURL': f.consoleURL.trim(),
+        ...imSettingsPayload(im),
       },
       webhook: {
         endpoint: f.whEndpoint.trim(),
@@ -255,10 +238,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
       },
     })
   }
-
-  const callbackURL = f.extCallbackBaseURL.trim().replace(/\/+$/, '')
-    ? `${f.extCallbackBaseURL.trim().replace(/\/+$/, '')}/api/v1/approvals/lark/callback`
-    : ''
 
   return (
     <div className="set-wrap">
@@ -346,43 +325,20 @@ function SettingsForm({ data }: { data: SettingsResp }) {
           <CardRow title={t('setSelfApprove')} hint={t('setSelfApproveD')}>
             <Switch checked={f.allowSelf} onChange={(v) => set({ allowSelf: v })} />
           </CardRow>
-          <CardRow title={t('setExtAppr')} hint={t('setExtApprD')}>
-            <Switch checked={f.extEnabled} onChange={(v) => set({ extEnabled: v })} />
+        </Card></section>
+
+        {/* ---------------- IM 渠道 ---------------- */}
+        <section id="set-im" className="set-sec"><Card>
+          <CardHead icon={<MessagesSquare size={17} />} title={t('setIm')} sub={t('setImSub')} />
+          <CardRow title={t('imConsole')} hint={t('imConsoleD')}>
+            <input className="set-in" value={f.consoleURL} placeholder="https://gw.corp.io"
+                   onChange={(e) => set({ consoleURL: e.target.value })} />
           </CardRow>
-          {f.extEnabled && (
-            <div className="set-sub">
-              <Field label={t('extBaseURL')}>
-                <input className="set-in" value={f.extBaseURL} placeholder="https://approval.example.com"
-                       onChange={(e) => set({ extBaseURL: e.target.value })} />
-              </Field>
-              <Field label={t('extToken')}>
-                <input className="set-in" type="password" value={f.extToken}
-                       placeholder={data.secretsSet?.['approval.external.token'] ? t('secretConfigured') : t('extTokenPh')}
-                       onChange={(e) => set({ extToken: e.target.value })} />
-              </Field>
-              <Field label={t('extAiGroup')}>
-                <input className="set-in" value={f.extAiGroup} placeholder="K8S_AI"
-                       onChange={(e) => set({ extAiGroup: e.target.value })} />
-              </Field>
-              <Field label={t('extCallbackBase')}>
-                <input className="set-in" value={f.extCallbackBaseURL} placeholder="https://gw.corp.io"
-                       onChange={(e) => set({ extCallbackBaseURL: e.target.value })} />
-              </Field>
-              {/* 回调地址本身不带密钥;对方用 callbackSecret 作 Bearer 来认证。 */}
-              {callbackURL && (
-                <div className="set-hint">{t('extCallbackFull')}<code>{callbackURL}</code></div>
-              )}
-              <Field label={t('extCallbackSecret')}>
-                <input className="set-in" type="password" value={f.extCallbackSecret}
-                       placeholder={data.secretsSet?.['approval.external.callbackSecret'] ? t('secretConfigured') : t('extCallbackSecretPh')}
-                       onChange={(e) => set({ extCallbackSecret: e.target.value })} />
-              </Field>
-              <Field label={t('extAllowIPs')}>
-                <input className="set-in" value={f.extAllowIPs} placeholder={t('extAllowIPsPh')}
-                       onChange={(e) => set({ extAllowIPs: e.target.value })} />
-              </Field>
-            </div>
-          )}
+          <ImChannelsPanel
+            values={im}
+            onChange={(k, v) => setIm((prev) => ({ ...prev, [k]: v }))}
+            secretsSet={data.secretsSet}
+          />
         </Card></section>
 
         {/* ---------------- 会话与安全 ---------------- */}
@@ -509,37 +465,6 @@ function SettingsForm({ data }: { data: SettingsResp }) {
         {/* ---------------- 通知 ---------------- */}
         <section id="set-notify" className="set-sec"><Card>
           <CardHead icon={<Bell size={17} />} title={t('setNotify')} sub={t('setNotifySub')} />
-          <CardRow title={t('setLark')} hint={t('setLarkD')}>
-            <Switch checked={f.lark} onChange={(v) => set({ lark: v })} />
-          </CardRow>
-          {f.lark && (
-            <div className="set-sub">
-              <Field label={t('larkWebhook')}>
-                <input className="set-in" value={f.larkWebhook}
-                       placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxxx"
-                       onChange={(e) => set({ larkWebhook: e.target.value })} />
-              </Field>
-              <Field label={t('larkSecret')}>
-                <input className="set-in" type="password" value={f.larkSecret}
-                       placeholder={data.secretsSet?.['notify.larkSecret'] ? t('secretConfigured') : t('larkSecretPh')}
-                       onChange={(e) => set({ larkSecret: e.target.value })} />
-              </Field>
-              <Field label={t('larkConsole')}>
-                <input className="set-in" value={f.consoleURL} placeholder="https://gw.corp.io"
-                       onChange={(e) => set({ consoleURL: e.target.value })} />
-              </Field>
-              <div className="set-sub-foot">
-                <Button
-                  disabled={!f.larkWebhook.trim() || testLark.isPending}
-                  onClick={() => testLark.mutate({
-                    webhook: f.larkWebhook, secret: f.larkSecret, consoleURL: f.consoleURL,
-                  })}
-                >
-                  {testLark.isPending ? t('larkSending') : t('larkSendTest')}
-                </Button>
-              </div>
-            </div>
-          )}
           <CardRow title={t('setEmail')} hint={t('setEmailD')}>
             <Switch checked={f.email} onChange={(v) => set({ email: v })} />
           </CardRow>
