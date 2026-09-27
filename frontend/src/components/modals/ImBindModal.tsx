@@ -63,12 +63,16 @@ export default function ImBindModal({ onClose }: { onClose: () => void }) {
               </span>
               {row.bound && <code className="im-pid">{row.platformUserId}</code>}
               <div className="im-bind-act">
-                <Button disabled={!row.enabled || issue.isPending} onClick={() => bind(row)}
+                {/* 两个 mutation 是每个弹窗共一份,不是每行一份 —— 光看 isPending 会把
+                    正在等结果的那一行之外的所有行也锁住。用 variables 认出「是不是这一行」。 */}
+                <Button disabled={!row.enabled || (issue.isPending && issue.variables === row.channel)}
+                        onClick={() => bind(row)}
                         title={!row.enabled ? t('imChannelOffHint') : undefined}>
                   {row.bound ? t('imRebind') : t('imBind')}
                 </Button>
                 {row.bound && (
-                  <Button variant="danger" disabled={unbind.isPending} onClick={() => doUnbind(row)}>
+                  <Button variant="danger" disabled={unbind.isPending && unbind.variables === row.channel}
+                          onClick={() => doUnbind(row)}>
                     {t('imUnbind')}
                   </Button>
                 )}
