@@ -496,7 +496,7 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
 
 ## 18. 第 1 期实现记录
 
-与上文的三处偏离，均为实现时的细化，不改变设计意图：
+与上文的以下几处偏离与补充，均为实现时的细化，不改变设计意图：
 
 - **迁移拆成三个文件**：`0005_im_channel.sql`（三张表）、`0006_im_lark_notify_keys.sql`（飞书通知
   键搬家）、`0007_drop_approval_cube.sql`（删魔方遗留）。每个迁移和依赖它的代码在同一次提交里落地。
@@ -511,6 +511,12 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
 - 基线迁移 `0001_init.sql` 同步删掉了 `external_task_id` 列与 `idx_approval_ext` 的定义（注释标明由
   0007 删除）。测试夹具会在空台账上重放全部迁移，0007 删列后 0001 里那条建索引语句会失败；迁移台账
   只按文件名记录、不校验内容，已升级的库不会重跑 0001，全新安装与升级安装最终表结构一致。
-- 飞书群通知不再写入 `/settings/webhook/deliveries` 投递记录：失败只记 WARN 日志，运行状况看
-  「设置 › IM 渠道」的状态。
-- 旧的 `approval.external.*` 键若由旧前端带来，保存设置时静默丢弃。
+- 飞书群通知不再写入 `/settings/webhook/deliveries` 投递记录：失败记 WARN 日志，并把最近一次失败
+  原因记进渠道状态的 `lastNotifyError`（「设置 › IM 渠道」状态标签显示），下一次发送成功即清空。
+- 旧的 `approval.external.*` 与 `notify.lark*` 键若由旧前端带来，保存设置时静默丢弃。
+- 控制台审批接口前的 `menu("approve")` 挪进了判定：`DecideBlockFor` 新增 `BlockNoApproveMenu`
+  （链成员的角色没有审批菜单），IM 点击因此与控制台同样受菜单约束。
+- 单号不存在、或非发起人 / 非链成员点了已处理的单，都回「仅审批链成员可处理该工单」，不泄露单是否
+  存在与终态。
+- Hub 把入站事件的渠道钉成投递它的适配器；运行循环、排队任务、群通知里的 panic 被 recover 并记日志 /
+  状态，不拖垮网关。

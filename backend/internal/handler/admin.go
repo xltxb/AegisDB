@@ -793,6 +793,12 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		if strings.HasPrefix(k, "approval.external.") {
 			continue
 		}
+		// 飞书群通知搬到了 im.lark.*(迁移已经把旧值挪过去)。旧前端还会带着 notify.lark*
+		// 来,同样静默丢弃 —— 否则库里又长出一份什么也不控制的飞书配置,其中还有签名密钥。
+		switch k {
+		case "notify.lark", "notify.larkWebhook", "notify.larkSecret", "notify.larkChannel":
+			continue
+		}
 		// A secret key with an empty value means "keep the existing secret" — the
 		// client never receives the real value, so a blank field is not a clear
 		// request (R3). Only a non-empty value replaces it.
@@ -823,7 +829,8 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				return
 			}
 		}
-		// Encrypt high-impact secrets at rest (token / callback secret).
+		// Encrypt IM channel secrets at rest: any im.* key that looks like a secret
+		// (name contains secret / password / token — see encryptedSetting).
 		//
 		// 加密失败就**不写** —— 原先这里是 `if err == nil { v = enc }`,于是加密一旦
 		// 出错(密钥没初始化),那条秘钥就以明文落进库里,而接口照样回 ok。一条本该

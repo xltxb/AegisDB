@@ -33,3 +33,21 @@ func TestSettings_LegacyApprovalCubeKeysAreDropped(t *testing.T) {
 		}
 	}
 }
+
+// 飞书群通知搬到了 im.lark.*。旧前端还带着 notify.lark* 来保存 —— 同样静默丢弃,
+// 否则库里会长回一份看着像配置、其实什么也不控制的飞书设置(其中还有签名密钥)。
+func TestSettings_LegacyLarkNotifyKeysAreDropped(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	legacy := []string{"notify.lark", "notify.larkWebhook", "notify.larkSecret", "notify.larkChannel"}
+	app.setSettings(admin, map[string]any{
+		"notify.lark": true, "notify.larkWebhook": "https://open.feishu.cn/open-apis/bot/v2/hook/x",
+		"notify.larkSecret": "sig", "notify.larkChannel": "#dba",
+	})
+	stored := settingRows(t, app.repo.DB())
+	for _, k := range legacy {
+		if _, ok := stored[k]; ok {
+			t.Errorf("legacy key %s was stored", k)
+		}
+	}
+}
