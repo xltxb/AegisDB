@@ -100,6 +100,9 @@ type Approver interface {
 }
 
 // ActionSink 由 service 实现:认人、决策、绑定都在那一侧。
+//
+// 回调跑在渠道的长连接里。回调里不许调用 Hub.Reload —— Reload 要等所有长连接退出,
+// 而这一条正卡在回调里,两边会互相等死。
 type ActionSink interface {
 	OnAction(ctx context.Context, a Action) ActionResult
 	OnDirectMessage(ctx context.Context, dm DM) string

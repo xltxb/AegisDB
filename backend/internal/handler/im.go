@@ -21,6 +21,8 @@ func imFail(c *gin.Context, err error) {
 		resp.Fail(c, resp.CodeBadRequest, "该渠道未启用交互审批,机器人不在运行,请联系管理员")
 	case errors.Is(err, repository.ErrIMIdentityTaken):
 		resp.Fail(c, resp.CodeBadRequest, "该平台账号已绑定到其他网关账户")
+	case errors.Is(err, service.ErrIMUserInactive):
+		resp.Fail(c, resp.CodeBadRequest, "该账户已停用或是服务账号,绑定了也无法在 IM 里审批")
 	case errors.Is(err, service.ErrBadRequest):
 		resp.Fail(c, resp.CodeBadRequest, "平台账号 ID 不能为空,且不超过 128 个字符")
 	default:

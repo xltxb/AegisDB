@@ -85,7 +85,8 @@ func approvalKind(ap *model.Approval) string {
 func (s *Services) imCardFor(ap *model.Approval) imchannel.ApprovalCard {
 	console := ""
 	if base := strings.TrimRight(strings.TrimSpace(s.Repo.SettingString("notify.consoleURL", "")), "/"); base != "" {
-		console = base + "/#/approvals"
+		// 前端是 BrowserRouter:/#/approvals 会落到根路径(总览页),而不是审批页。
+		console = base + "/approvals"
 	}
 	return imchannel.ApprovalCard{
 		ApNo: ap.ApNo, Kind: approvalKind(ap), Env: ap.Env, Tier: ap.TierCode,

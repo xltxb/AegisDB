@@ -100,6 +100,9 @@ type Hub struct {
 	entries  map[string]*entry
 	root     context.Context
 	sink     ActionSink
+	// stopped 之后不再接任何新活。Stop 在 mu 里置位,而所有 work.Add 也在 mu 里做 ——
+	// 于是 Stop 里的 work.Wait 不会撞上一个从零开始的 Add(sync.WaitGroup 禁止这样用)。
+	stopped bool
 
 	work sync.WaitGroup // 出站异步任务
 	runs sync.WaitGroup // 长连接
@@ -115,10 +118,18 @@ func NewHub(deps Deps, store Store) *Hub {
 }
 
 // Register 登记一个渠道。登记完要 Reload 才生效。
+//
+// 同一个渠道登记第二次时,先取消旧实例的长连接:旧 entry 被替换后,stopRuns 再也找不到
+// 它的 cancel,而 runs.Wait 会一直等那个没人能叫停的循环。
 func (h *Hub) Register(kind string, caps Caps, b Builder) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if _, ok := h.entries[kind]; !ok {
+	if old, ok := h.entries[kind]; ok {
+		if old.cancel != nil {
+			old.cancel()
+			old.cancel = nil
+		}
+	} else {
 		h.order = append(h.order, kind)
 	}
 	h.entries[kind] = &entry{caps: caps, build: b}
@@ -149,6 +160,9 @@ func (h *Hub) Reload() {
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.stopped {
+		return
+	}
 	for _, kind := range h.order {
 		e := h.entries[kind]
 		e.ch = e.build(h.deps)
@@ -160,7 +174,7 @@ func (h *Hub) Reload() {
 		ctx, cancel := context.WithCancel(h.root)
 		e.cancel, e.running = cancel, true
 		h.runs.Add(1)
-		go h.run(kind, ap, ctx, pinnedSink{kind: kind, next: h.sink})
+		go h.run(e, kind, ap, ctx, pinnedSink{kind: kind, next: h.sink})
 	}
 }
 
@@ -168,6 +182,9 @@ func (h *Hub) Reload() {
 func (h *Hub) Stop() {
 	h.reloadMu.Lock()
 	defer h.reloadMu.Unlock()
+	h.mu.Lock()
+	h.stopped = true
+	h.mu.Unlock()
 	h.stopRuns()
 	h.work.Wait()
 }
@@ -184,7 +201,9 @@ func (h *Hub) stopRuns() {
 	h.runs.Wait()
 }
 
-func (h *Hub) run(kind string, ap Approver, ctx context.Context, sink ActionSink) {
+// run 把状态记在启动它的那个 entry 上,而不是按 kind 去查:渠道被重新登记后,
+// 旧循环退出时不该改写新 entry 的状态。
+func (h *Hub) run(e *entry, kind string, ap Approver, ctx context.Context, sink ActionSink) {
 	defer h.runs.Done()
 	panicked := false
 	var err error
@@ -198,11 +217,16 @@ func (h *Hub) run(kind string, ap Approver, ctx context.Context, sink ActionSink
 	}()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	e := h.entries[kind]
 	e.running = false
-	if err != nil && (ctx.Err() == nil || panicked) {
+	switch {
+	case err != nil && (ctx.Err() == nil || panicked):
 		e.lastErr = err.Error()
 		slog.Warn("im channel stopped", "channel", kind, "err", err)
+	case err == nil && ctx.Err() == nil:
+		// 没人叫它停,它却自己回来了,还不说为什么 —— 设置页上必须看得见,否则就是一个
+		// 开关开着、状态「未运行」、没有任何原因的渠道。
+		e.lastErr = "长连接已退出(渠道未说明原因)"
+		slog.Warn("im channel run loop returned without error", "channel", kind)
 	}
 }
 
@@ -250,7 +274,13 @@ func (h *Hub) approver(kind string) Approver {
 // 用队列而不是锁:锁得在调用方的 goroutine 里拿才能保证顺序,而调用方是控制台上那次
 // 「批准」请求 —— 它不该等着十几张卡片发完才返回。
 func (h *Hub) enqueue(id int64, job func()) {
+	h.mu.Lock()
+	if h.stopped {
+		h.mu.Unlock()
+		return
+	}
 	h.work.Add(1)
+	h.mu.Unlock()
 	h.apMu.Lock()
 	if q, busy := h.queues[id]; busy {
 		q.jobs = append(q.jobs, job)
@@ -361,6 +391,10 @@ func (h *Hub) NotifyApproval(c ApprovalCard) {
 		n    Notifier
 	}
 	h.mu.Lock()
+	if h.stopped {
+		h.mu.Unlock()
+		return
+	}
 	var ns []notifyTarget
 	for _, kind := range h.order {
 		e := h.entries[kind]
@@ -368,9 +402,9 @@ func (h *Hub) NotifyApproval(c ApprovalCard) {
 			ns = append(ns, notifyTarget{kind, n})
 		}
 	}
+	h.work.Add(len(ns)) // 在锁内加:见 stopped 字段的注释
 	h.mu.Unlock()
 	for _, t := range ns {
-		h.work.Add(1)
 		go func(t notifyTarget) {
 			defer h.work.Done()
 			err := h.notifyOne(t.kind, t.n, c)

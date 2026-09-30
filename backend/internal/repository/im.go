@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -21,7 +22,7 @@ func (r *Repo) BindIMIdentity(id *model.IMIdentity) error {
 	if id.CreatedAt.IsZero() {
 		id.CreatedAt = time.Now()
 	}
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	err := r.db.Transaction(func(tx *gorm.DB) error {
 		var n int64
 		if err := tx.Model(&model.IMIdentity{}).
 			Where("channel = ? AND platform_user_id = ? AND user_id <> ?", id.Channel, id.PlatformUserID, id.UserID).
@@ -36,6 +37,13 @@ func (r *Repo) BindIMIdentity(id *model.IMIdentity) error {
 			DoUpdates: clause.AssignmentColumns([]string{"platform_user_id", "bound_by", "created_at"}),
 		}).Create(id).Error
 	})
+	// 并发下两边都查到「没人占」,后写的那个撞在 uk_im_identity_platform 上。它说的是同一件
+	// 事 —— 这个平台账号已经是别人的 —— 所以给同一个错误。
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uk_im_identity_platform" {
+		return ErrIMIdentityTaken
+	}
+	return err
 }
 
 func (r *Repo) IMIdentityByPlatform(channel, pid string) (*model.IMIdentity, error) {

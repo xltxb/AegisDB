@@ -2,6 +2,8 @@ package repository
 
 import (
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -102,5 +104,39 @@ func TestIMCard_OpenAndClose(t *testing.T) {
 	}
 	if open, _ = r.OpenIMCards(7); len(open) != 1 {
 		t.Fatalf("open after close = %d", len(open))
+	}
+}
+
+// 两个人同时把同一个平台账号绑到自己身上:只能有一个成功,另一个必须拿到
+// ErrIMIdentityTaken —— 而不是一个原样的唯一约束错误,那会在界面上变成「操作失败」。
+func TestIMIdentity_ConcurrentBindOfOnePlatformIDHasOneWinner(t *testing.T) {
+	r, a, b := newIMRepo(t)
+	for i := 0; i < 20; i++ {
+		pid := fmt.Sprintf("race-%d", i)
+		errs := make([]error, 2)
+		var wg sync.WaitGroup
+		for j, uid := range []int64{a, b} {
+			wg.Add(1)
+			go func(j int, uid int64) {
+				defer wg.Done()
+				errs[j] = r.BindIMIdentity(&model.IMIdentity{UserID: uid, Channel: "race", PlatformUserID: pid, BoundBy: model.IMBoundSelf})
+			}(j, uid)
+		}
+		wg.Wait()
+		wins := 0
+		for _, err := range errs {
+			switch {
+			case err == nil:
+				wins++
+			case errors.Is(err, ErrIMIdentityTaken):
+			default:
+				t.Fatalf("round %d: unexpected error %v", i, err)
+			}
+		}
+		if wins != 1 {
+			t.Fatalf("round %d: %d winners, want exactly 1", i, wins)
+		}
+		_, _ = r.UnbindIMIdentity(a, "race")
+		_, _ = r.UnbindIMIdentity(b, "race")
 	}
 }

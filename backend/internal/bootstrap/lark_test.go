@@ -50,7 +50,7 @@ func TestLark_NotifyCardOnNewApproval(t *testing.T) {
 	}
 	_ = json.Unmarshal(r.Data, &er)
 	body := waitCard(t, received)
-	if !strings.Contains(body, er.ApprovalNo) || !strings.Contains(body, "https://gw.corp.io/#/approvals") {
+	if !strings.Contains(body, er.ApprovalNo) || !strings.Contains(body, "https://gw.corp.io/approvals") {
 		t.Errorf("approval card missing apNo %s or console link: %s", er.ApprovalNo, body)
 	}
 }

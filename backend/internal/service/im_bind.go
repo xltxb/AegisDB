@@ -19,6 +19,10 @@ import (
 // ErrIMChannelOff:渠道的交互审批没打开(机器人没在跑),生成的码发出去没人收。
 var ErrIMChannelOff = fmt.Errorf("im channel approval is off")
 
+// ErrIMUserInactive:代绑的目标账户已停用或是服务账号 —— 它们点了也认不出来(imUser
+// 与登录同一条规则),绑上只会让管理员以为那个人能在 IM 里审批了。
+var ErrIMUserInactive = fmt.Errorf("im: user disabled or service account")
+
 const (
 	imBindTTL      = 10 * time.Minute
 	bindCodeAlpha  = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // 去掉 0/O、1/I:念给别人听时不出错
@@ -176,6 +180,9 @@ func (s *Services) AdminBindIM(actor *model.User, userID int64, channel, pid str
 	if err != nil || u == nil {
 		return ErrNotFound
 	}
+	if u.Status != "active" || u.Kind == model.UserKindService {
+		return ErrIMUserInactive
+	}
 	old := s.previousIMPlatformID(u.ID, channel)
 	if err := s.Repo.BindIMIdentity(&model.IMIdentity{UserID: u.ID, Channel: channel, PlatformUserID: pid, BoundBy: model.IMBoundAdmin}); err != nil {
 		return err
@@ -197,8 +204,12 @@ func (s *Services) AdminUnbindIM(actor *model.User, userID int64, channel string
 		return ErrNotFound
 	}
 	old := s.previousIMPlatformID(u.ID, channel)
-	if _, err := s.Repo.UnbindIMIdentity(u.ID, channel); err != nil {
+	ok, err := s.Repo.UnbindIMIdentity(u.ID, channel)
+	if err != nil {
 		return err
+	}
+	if !ok {
+		return nil // 本来就没绑:什么都没发生,不是一条审计
 	}
 	detail := "admin.im.unbind channel=" + channel + " user=" + u.Email
 	if old != "" {
