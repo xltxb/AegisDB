@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"sort"
 	"strconv"
@@ -818,11 +819,19 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateOutboundURL(sv)
 			}
 			switch k {
-			case "security.ipAllowlist":
+			case "security.ipAllowlist", "im.callbackAllowIPs":
 				// 判定层遇到认不出的条目是**静默跳过**的,所以校验必须在这一刻 ——
 				// 否则一个手滑多打一位的地址存进去,人以为那台机器被放行了,直到它
 				// 被挡在门外。前端早就在标红,但校验不能只长在界面上。
 				verr = service.ValidateIPAllowlist(sv)
+			case "im.callbackBaseURL":
+				verr = service.ValidateCallbackBaseURL(sv)
+			case "im.telegram.apiBase":
+				verr = service.ValidateOutboundURL(sv)
+			case "im.telegram.mode":
+				if sv != "polling" && sv != "webhook" {
+					verr = fmt.Errorf("只能是 polling 或 webhook")
+				}
 			}
 			if verr != nil {
 				resp.Fail(c, resp.CodeBadRequest, k+": "+verr.Error())

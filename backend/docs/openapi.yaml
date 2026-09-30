@@ -1861,3 +1861,13 @@ paths:
                     tier: { type: string }
                     isDefault: { type: boolean }
                     stages: { type: array, items: { type: string } }
+  /im/{channel}/webhook:
+    post:
+      tags: [settings]
+      summary: IM 平台推送事件(不走用户 JWT;来源 IP 白名单 + 渠道 secret)
+      security: []
+      description: |
+        Telegram 等平台把按钮点击与私聊推到这里。渠道未开交互审批、secret 不符、来源不在
+        im.callbackAllowIPs(非空时)一律 403;鉴权通过后无论处理成败都回 200。
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK }, '403': { description: 鉴权失败 }, '404': { description: 未知渠道 } }

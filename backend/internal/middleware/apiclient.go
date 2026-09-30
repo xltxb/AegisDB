@@ -131,6 +131,10 @@ func apiCredential(c *gin.Context) (key, secret string) {
 	return tok[:i], tok[i+1:]
 }
 
+// IPInList 是同一把尺子的导出版:逗号 / 换行 / 空白分隔的 IP 与网段,空名单 = 不限。
+// IM 的 webhook 入口用它做来源白名单 —— 与开放接口凭据的白名单是同一套写法。
+func IPInList(list, clientIP string) bool { return apiIPAllowed(list, clientIP) }
+
 // apiIPAllowed reports whether the source is permitted by this client's list.
 // An empty list means "any source" — see model.APIClient.AllowIPs.
 func apiIPAllowed(list, clientIP string) bool {

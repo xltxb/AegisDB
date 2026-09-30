@@ -3,8 +3,11 @@ package imtest
 
 import (
 	"context"
+	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -27,6 +30,9 @@ type Closed struct {
 type Fake struct {
 	FailSend  bool
 	SendDelay time.Duration
+	// WebhookSecret 非空时假渠道接受 webhook:请求头 X-Fake-Secret 必须与之相等。
+	WebhookSecret string
+	webhookToasts []string
 
 	kind     string
 	mu       sync.Mutex
@@ -157,4 +163,31 @@ func (f *Fake) Notified() []imchannel.ApprovalCard {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]imchannel.ApprovalCard(nil), f.notified...)
+}
+
+// HandleWebhook 模拟一个「平台推点击过来」的渠道。body 是 {"pid","apNo","approve"}。
+// 它故意把 Channel 填成一个错的值 —— Hub 必须把它钉回来。
+func (f *Fake) HandleWebhook(ctx context.Context, h http.Header, body []byte, sink imchannel.ActionSink) int {
+	if f.WebhookSecret == "" || subtle.ConstantTimeCompare([]byte(h.Get("X-Fake-Secret")), []byte(f.WebhookSecret)) != 1 {
+		return http.StatusForbidden
+	}
+	var in struct {
+		PID     string `json:"pid"`
+		ApNo    string `json:"apNo"`
+		Approve bool   `json:"approve"`
+	}
+	if json.Unmarshal(body, &in) != nil {
+		return http.StatusOK
+	}
+	res := sink.OnAction(ctx, imchannel.Action{Channel: "spoofed", PlatformUserID: in.PID, ApNo: in.ApNo, Approve: in.Approve})
+	f.mu.Lock()
+	f.webhookToasts = append(f.webhookToasts, res.Toast)
+	f.mu.Unlock()
+	return http.StatusOK
+}
+
+func (f *Fake) WebhookToasts() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.webhookToasts...)
 }

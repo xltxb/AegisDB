@@ -114,6 +114,15 @@ type ActionSink interface {
 // 返回构造时或 Run 里已经拿到的值;要查平台接口,就在别处查好缓存下来。
 type BotNamer interface{ BotName() string }
 
+// Webhooker 是可选能力:支持「平台把事件推过来」的渠道实现它。
+//
+// 它自己校验这次请求是不是真的来自平台(secret、签名):校验不过回 403;校验通过后,
+// 不论处理成败都回 200 —— 平台把非 2xx 当成投递失败会一直重投,而重投不会让一次坏的
+// 处理变好。它拿到的 sink 已由 Hub 钉住渠道名。
+type Webhooker interface {
+	HandleWebhook(ctx context.Context, header http.Header, body []byte, sink ActionSink) int
+}
+
 // Settings 是渠道读配置的口子。Secret 返回解密后的值。
 type Settings interface {
 	String(key string) string

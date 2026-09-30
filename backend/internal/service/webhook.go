@@ -78,7 +78,7 @@ func ValidateCallbackBaseURL(raw string) error {
 		return fmt.Errorf("URL 缺少主机名")
 	}
 	if u.Scheme != "https" && !AllowPrivateWebhookTargets {
-		return fmt.Errorf("回调地址必须使用 https(ADR 0003)")
+		return fmt.Errorf("回调地址必须使用 https(ADR 0020)")
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
 		return fmt.Errorf("URL 必须使用 http/https")

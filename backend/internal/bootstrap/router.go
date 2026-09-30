@@ -112,6 +112,10 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		open.GET("/pipelines", middleware.RequireScope(model.ScopeReleaseRead), h.OpenListPipelines)
 	}
 
+	// IM 平台的 webhook(Telegram 等):不走用户 JWT —— 调用方是平台,不是控制台用户。
+	// 认证在 handler 与渠道里,见 handler.IMWebhook。
+	v1.POST("/im/:channel/webhook", h.IMWebhook)
+
 	// ---- authenticated ----
 	// IPAllowlist runs after auth so the source IP is enforced on every data API
 	// (Session & Security · IP allowlist); loopback is always permitted.

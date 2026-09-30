@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 )
@@ -530,3 +531,32 @@ func (h *Hub) Status() []Status {
 
 // Flush 等所有已派出的出站任务结束。给测试和优雅退出用。
 func (h *Hub) Flush() { h.work.Wait() }
+
+// ServeWebhook 把一次入站 webhook 交给对应的渠道。
+//
+// 这是一扇在 JWT 之外、能驱动审批的门,所以每一步都失败朝严:渠道没登记 → 404;
+// 不能审批、没配置、交互审批没打开、不收 webhook、Hub 还没有 sink → 403。真伪由渠道
+// 自己验(Webhooker)。渠道 panic 时回 200:一个解析不了的请求,重投一万次也一样。
+func (h *Hub) ServeWebhook(ctx context.Context, kind string, header http.Header, body []byte) (status int) {
+	h.mu.Lock()
+	e := h.entries[kind]
+	var wh Webhooker
+	if e != nil && e.caps.Approve && e.ch != nil {
+		wh, _ = e.ch.(Webhooker)
+	}
+	sink := h.sink
+	h.mu.Unlock()
+	if e == nil {
+		return http.StatusNotFound
+	}
+	if wh == nil || sink == nil || !h.deps.Settings.Bool(Key(kind, "approval")) {
+		return http.StatusForbidden
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = panicErr(kind, "webhook", p)
+			status = http.StatusOK
+		}
+	}()
+	return wh.HandleWebhook(ctx, header, body, pinnedSink{kind: kind, next: sink})
+}

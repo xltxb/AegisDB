@@ -2,6 +2,8 @@ package handler
 
 import (
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -91,4 +93,20 @@ func (h *Handler) IMStatus(c *gin.Context) { resp.OK(c, h.Svc.IM.Status()) }
 func (h *Handler) TestIMCard(c *gin.Context) {
 	ok, msg := h.Svc.TestIMCard(middleware.CurrentUser(c), c.Param("channel"))
 	resp.OK(c, gin.H{"ok": ok, "message": msg})
+}
+
+// IMWebhook 是 IM 平台推事件的入口。它在 JWT 之外:认证靠可选的来源 IP 白名单
+// (im.callbackAllowIPs)加各渠道自己的 secret / 签名。这是一扇能驱动审批的公开门,
+// 所以每一步都失败朝严,具体规则见 imchannel.Hub.ServeWebhook。
+func (h *Handler) IMWebhook(c *gin.Context) {
+	if !middleware.IPInList(h.Repo.SettingString("im.callbackAllowIPs", ""), c.ClientIP()) {
+		c.Status(http.StatusForbidden)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
+	if err != nil {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+	c.Status(h.Svc.IM.ServeWebhook(c.Request.Context(), c.Param("channel"), c.Request.Header, body))
 }
