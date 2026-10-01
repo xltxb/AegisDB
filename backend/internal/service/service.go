@@ -13,6 +13,7 @@ import (
 	"velagateway/internal/gateway"
 	"velagateway/internal/imchannel"
 	"velagateway/internal/imchannel/lark"
+	"velagateway/internal/imchannel/telegram"
 	"velagateway/internal/model"
 	"velagateway/internal/osc"
 	"velagateway/internal/repository"
@@ -98,6 +99,8 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 	s.IM.SetSink(s) // 点击与私聊回到 service:认人、判定、绑定都在这一侧
 	// 第 1 期飞书只有群通知;交互审批在第 3 期把 Approve 打开。
 	s.IM.Register(imchannel.Lark, imchannel.Caps{Notify: true}, lark.New)
+	// Telegram:第 2 期起能做交互审批;群通知在第 6 期。
+	s.IM.Register(imchannel.Telegram, imchannel.Caps{Approve: true}, telegram.New)
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
 	if m := repo.MaxApprovalSeq(); m >= 2294 {
