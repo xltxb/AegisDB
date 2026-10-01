@@ -28,8 +28,8 @@ const startReply = "你好,我是数据库网关的审批机器人。\n" +
 	"请在网关控制台右上角头像菜单「IM 账号绑定」里生成绑定码,再把绑定码发给我。\n" +
 	"绑定之后,待你审批的工单会以卡片的形式私信给你。"
 
-// Run 阻塞到 ctx 取消。它只在两种情况下提前返回错误:token 被拒(换 token 之前重试
-// 多少次都一样),或 webhook 模式缺配置。其它错误一律退避重试。
+// Run 阻塞到 ctx 取消。它只在两种情况下提前返回错误:Telegram 回了永久性的 4xx(token 被拒、格式错、
+// setWebhook 被拒 —— 改配置之前重试多少次都一样),或 webhook 模式缺配置。其它错误一律退避重试。
 func (c *Channel) Run(ctx context.Context, sink imchannel.ActionSink) error {
 	var me User
 	if err := c.retry(ctx, func() error { return c.call(ctx, c.client, "getMe", map[string]any{}, &me) }); err != nil {
@@ -82,7 +82,7 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 			if ctx.Err() != nil {
 				return nil
 			}
-			if isUnauthorized(err) {
+			if isPermanent(err) {
 				return err
 			}
 			// 409 = 另一个实例在 getUpdates,或 webhook 又被人登记上了。退避,不要互相踢。
@@ -95,6 +95,10 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 		}
 		backoff = time.Second
 		for _, u := range ups {
+			// ctx 取消(Reload)后不再处理半批:没确认的 update 会被重投,处理一半只会重复消费(比如绑定码)。
+			if ctx.Err() != nil {
+				return nil
+			}
 			// 先推进 offset 再处理:下一次 getUpdates 带着它就是在确认。处理到一半进程挂了,
 			// 这条会被重投 —— 重投由 OnAction 的幂等(ErrAlreadyDecided)兜住。
 			if u.UpdateID >= offset {
@@ -106,12 +110,12 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 	return nil
 }
 
-// retry 反复调 fn 直到成功、token 被拒或 ctx 结束(后者返回 nil)。
+// retry 反复调 fn 直到成功、遇到永久性错误(4xx,409/429 除外)或 ctx 结束(后者返回 nil)。
 func (c *Channel) retry(ctx context.Context, fn func() error) error {
 	backoff := time.Second
 	for {
 		err := fn()
-		if err == nil || isUnauthorized(err) {
+		if err == nil || isPermanent(err) {
 			return err
 		}
 		if ctx.Err() != nil {
@@ -179,7 +183,10 @@ func (c *Channel) onCallback(ctx context.Context, q *CallbackQuery, sink imchann
 		}).Toast
 	}
 	// 必须应答。不应答,按钮会在对方的客户端上一直转圈,而他刚刚可能批准了一条 DROP。
-	if err := c.call(ctx, c.client, "answerCallbackQuery", map[string]any{
+	// 决定已经记下了,应答不能因为 ctx 刚好被取消(Reload)而丢掉。
+	ackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := c.call(ackCtx, c.client, "answerCallbackQuery", map[string]any{
 		"callback_query_id": q.ID, "text": clipRunes(toast, 190),
 	}, nil); err != nil {
 		slog.Warn("telegram: answerCallbackQuery failed", "err", err)
@@ -202,7 +209,9 @@ func (c *Channel) onMessage(ctx context.Context, m *Message, sink imchannel.Acti
 	if reply == "" {
 		return
 	}
-	if err := c.call(ctx, c.client, "sendMessage", map[string]any{"chat_id": m.Chat.ID, "text": reply}, nil); err != nil {
+	ackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := c.call(ackCtx, c.client, "sendMessage", map[string]any{"chat_id": m.Chat.ID, "text": reply}, nil); err != nil {
 		slog.Warn("telegram: reply failed", "err", err)
 	}
 }

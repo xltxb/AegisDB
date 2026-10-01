@@ -137,6 +137,25 @@ func isUnauthorized(err error) bool {
 	return errors.As(err, &ae) && ae.Code == http.StatusUnauthorized
 }
 
+// isPermanent 判断重试无望的错误:Telegram 明确回了 4xx(401 token 被拒、404 token 格式错、
+// 400 setWebhook 被拒、403 …),不改配置重试多少次结果都一样。409(另一个实例在轮询)和
+// 429(限流)是暂时的,不算。
+func isPermanent(err error) bool {
+	var ae *apiError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	return ae.Code >= 400 && ae.Code < 500 && ae.Code != http.StatusConflict && ae.Code != http.StatusTooManyRequests
+}
+
+// maxBody 是每个方法响应体的上限。getUpdates 一批可能带很多 update,放宽;其它方法的响应都很小。
+func maxBody(method string) int64 {
+	if method == "getUpdates" {
+		return 16 << 20
+	}
+	return 1 << 20
+}
+
 // call 调一个 Bot API 方法。
 //
 // bot token 就在请求 URL 里(/bot<token>/method),而 Go 的 *url.Error 会把整个 URL 写进
@@ -160,7 +179,11 @@ func (c *Channel) call(ctx context.Context, hc *http.Client, method string, para
 		return c.scrub(err)
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	limit := maxBody(method)
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if int64(len(raw)) > limit {
+		return fmt.Errorf("telegram: %s response exceeds %d bytes", method, limit)
+	}
 	var r apiResp
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return fmt.Errorf("telegram %s: HTTP %d,响应无法解析", method, resp.StatusCode)
