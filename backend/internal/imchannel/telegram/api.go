@@ -132,11 +132,6 @@ type apiError struct {
 
 func (e *apiError) Error() string { return fmt.Sprintf("telegram %s: %d %s", e.Method, e.Code, e.Desc) }
 
-func isUnauthorized(err error) bool {
-	var ae *apiError
-	return errors.As(err, &ae) && ae.Code == http.StatusUnauthorized
-}
-
 // isPermanent 判断重试无望的错误:Telegram 明确回了 4xx(401 token 被拒、404 token 格式错、
 // 400 setWebhook 被拒、403 …),不改配置重试多少次结果都一样。409(另一个实例在轮询)和
 // 429(限流)是暂时的,不算。

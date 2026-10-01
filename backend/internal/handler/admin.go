@@ -21,12 +21,12 @@ import (
 	"velagateway/pkg/sqlutil"
 )
 
-// encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
-// 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
-// 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
 // telegramWebhookSecretRe 约束 Telegram 渠道的 webhook secret。
 var telegramWebhookSecretRe = regexp.MustCompile(`^[A-Za-z0-9_-]{32,256}$`)
 
+// encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
+// 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
+// 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
 func encryptedSetting(k string) bool {
 	return strings.HasPrefix(k, "im.") && isSecretKey(k)
 }
