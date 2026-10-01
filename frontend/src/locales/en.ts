@@ -906,7 +906,7 @@ export const en: Dict = {
   imTgModePolling: 'Long polling (no public entry needed)',
   imTgModeWebhook: 'Webhook (needs public HTTPS)',
   imTgSecret: 'Webhook secret',
-  imTgSecretPh: 'Telegram sends it with every push; the gateway authenticates by it',
+  imTgSecretPh: '32+ letters, digits, _ or -; Telegram sends it with every push',
   imTgApiBase: 'Bot API URL',
   imTgPollingNote: 'Long polling allows only one gateway instance at a time; use webhook when running several.',
   imTgWebhookURL: 'The gateway registers this URL with Telegram: ',

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 
 	"velagateway/internal/imchannel/imtest"
@@ -79,4 +80,19 @@ func TestIMSettings_CallbackKeysAreValidatedOnSave(t *testing.T) {
 		}
 	}
 	app.setSettings(admin, map[string]any{"im.telegram.mode": "webhook", "im.callbackAllowIPs": "10.0.0.0/8, 192.168.1.5"})
+}
+
+func TestIMSettings_TelegramWebhookSecretIsValidatedOnSave(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@vela.io", "vela123")
+	save := func(v string) int {
+		return app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"im.telegram.webhookSecret": v}).Code
+	}
+	for _, bad := range []string{"1", strings.Repeat("a", 39) + "!", strings.Repeat("a", 257)} {
+		if save(bad) == 0 {
+			t.Errorf("webhook secret %q must be rejected at save time", bad)
+		}
+	}
+	eq(t, save(strings.Repeat("aZ0_-", 8)), 0, "32 valid chars")
+	eq(t, save(""), 0, "empty keeps the existing secret")
 }

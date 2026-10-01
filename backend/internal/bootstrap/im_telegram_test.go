@@ -96,12 +96,12 @@ func TestTelegram_WebhookModeEndToEnd(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@vela.io", "vela123")
 	srv := app.telegramIM(admin, map[string]any{
-		"im.telegram.mode": "webhook", "im.telegram.webhookSecret": "s3cret",
+		"im.telegram.mode": "webhook", "im.telegram.webhookSecret": "s3cret-s3cret-s3cret-s3cret-s3cret-0000",
 		"im.callbackBaseURL": "https://gw.example",
 	})
 	hook := srv.Calls("setWebhook")[0]
 	eq(t, hook.Str("url"), "https://gw.example"+telegram.WebhookPath, "registered URL")
-	eq(t, hook.Str("secret_token"), "s3cret", "registered secret")
+	eq(t, hook.Str("secret_token"), "s3cret-s3cret-s3cret-s3cret-s3cret-0000", "registered secret")
 
 	app.bindIM("zhangwei@vela.io", "telegram", "777")
 	ap := app.submitProdHighRisk(admin)
@@ -110,7 +110,7 @@ func TestTelegram_WebhookModeEndToEnd(t *testing.T) {
 	eq(t, app.postIMWebhook("telegram", nil, body), http.StatusForbidden, "no secret header")
 	eq(t, app.postIMWebhook("telegram", map[string]string{"X-Telegram-Bot-Api-Secret-Token": "nope"}, body), http.StatusForbidden, "wrong secret")
 	eq(t, app.approvalRow(admin, ap.ApNo).Status, "pending", "nothing decided yet")
-	eq(t, app.postIMWebhook("telegram", map[string]string{"X-Telegram-Bot-Api-Secret-Token": "s3cret"}, body), http.StatusOK, "accepted")
+	eq(t, app.postIMWebhook("telegram", map[string]string{"X-Telegram-Bot-Api-Secret-Token": "s3cret-s3cret-s3cret-s3cret-s3cret-0000"}, body), http.StatusOK, "accepted")
 	eq(t, app.approvalRow(admin, ap.ApNo).Status, "approved", "decided via webhook")
 	srv.WaitCall(t, "answerCallbackQuery", func(c tgtest.Call) bool { return c.Str("callback_query_id") == "w1" })
 	if len(srv.Calls("getUpdates")) != 0 {
@@ -125,7 +125,7 @@ func TestTelegram_SwitchingModesMovesTheWebhook(t *testing.T) {
 	eq(t, len(srv.Calls("deleteWebhook")), 1, "polling clears any webhook first")
 
 	app.setSettings(admin, map[string]any{
-		"im.telegram.mode": "webhook", "im.telegram.webhookSecret": "s3", "im.callbackBaseURL": "https://gw.example",
+		"im.telegram.mode": "webhook", "im.telegram.webhookSecret": "s3-s3-s3-s3-s3-s3-s3-s3-s3-s3-s3-s3", "im.callbackBaseURL": "https://gw.example",
 	})
 	srv.WaitCall(t, "setWebhook", nil)
 	before := len(srv.Calls("getUpdates"))

@@ -929,7 +929,7 @@ export const zh = {
   imTgModePolling: 'Long polling(无需公网入口)',
   imTgModeWebhook: 'Webhook(需要公网 HTTPS)',
   imTgSecret: 'Webhook secret',
-  imTgSecretPh: 'Telegram 每次推送都带上它,网关据此认证',
+  imTgSecretPh: '32 位以上字母、数字、_ 或 -,Telegram 每次推送都带上它',
   imTgApiBase: 'Bot API 地址',
   imTgPollingNote: 'Long polling 同一时刻只允许一个网关实例:多实例部署请改用 webhook。',
   imTgWebhookURL: '网关会把这个地址登记到 Telegram:',

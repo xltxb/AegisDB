@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,9 @@ import (
 // encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
 // 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
 // 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
+// telegramWebhookSecretRe 约束 Telegram 渠道的 webhook secret。
+var telegramWebhookSecretRe = regexp.MustCompile(`^[A-Za-z0-9_-]{32,256}$`)
+
 func encryptedSetting(k string) bool {
 	return strings.HasPrefix(k, "im.") && isSecretKey(k)
 }
@@ -828,6 +832,12 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateCallbackBaseURL(sv)
 			case "im.telegram.apiBase":
 				verr = service.ValidateOutboundURL(sv)
+			case "im.telegram.webhookSecret":
+				// 到这里的一定是真要换的新明文(空值已在上面按「保持原值」跳过),
+				// 校验在加密之前。Telegram 只收 1-256 位 [A-Za-z0-9_-],我们再要求 >=32 位。
+				if !telegramWebhookSecretRe.MatchString(sv) {
+					verr = fmt.Errorf("Webhook secret 需为 32-256 位字母、数字、_ 或 -")
+				}
 			case "im.telegram.mode":
 				if sv != "polling" && sv != "webhook" {
 					verr = fmt.Errorf("只能是 polling 或 webhook")
