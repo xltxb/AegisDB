@@ -520,3 +520,25 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   存在与终态。
 - Hub 把入站事件的渠道钉成投递它的适配器；运行循环、排队任务、群通知里的 panic 被 recover 并记日志 /
   状态，不拖垮网关。
+
+## 19. 第 2 期（Telegram）实现记录
+
+- **收卡用 `editMessageReplyMarkup`，不用 `editMessageText`**：网关不存卡片原文，重写正文会丢掉
+  「这张单原来是什么」。改为把两个按钮换成一颗显示终态的按钮（`callback_data = done`，点它只回
+  「该工单已处理」）。
+- **webhook 入口是所有渠道共用的一条路由** `POST /api/v1/im/:channel/webhook`，由
+  `Hub.ServeWebhook` 按渠道分派；渠道实现可选接口 `Webhooker` 自己验 secret / 签名。
+- **webhook 入口的拒绝顺序**：来源 IP 白名单（`im.callbackAllowIPs`，非空时）→ 渠道未登记 404 →
+  不能审批 / 未配置 / 开关关 / 不收 webhook 403 → 渠道自己验 secret（403）→ 之后一律 200。渠道
+  panic 被兜住并回 200。
+- **`im.telegram.apiBase`**：新增的配置键，缺省 `https://api.telegram.org`，供自建 Bot API server
+  与测试使用。
+- **`getUpdates` 每批最多 10 条（`limit`）**：适配器读响应有 1 MiB 上限；不设上限时，任何人私聊
+  机器人一批超长消息就能让每一批都解析失败、轮询停在同一个 offset 上，审批通道随之停摆。
+- **bot token 在请求 URL 里**，适配器返回的所有错误都先把 token 换成 `<bot-token>`，状态页与日志
+  都看不到它。
+- **卡片里的控制台链接改为 `/approvals`**：前端是 BrowserRouter，原来的 `/#/approvals` 会落到总览页。
+- **第 1 期暂缓项在本期收口的**：Hub `Stop` 之后不再接任务；长连接无声退出留痕；重复登记不卡死
+  `Reload`；并发绑定同一平台账号只有一个成功，失败方得到「已绑定到其他网关账户」；代绑拒绝停用账户
+  与服务账号；代解绑只在真的删到时写审计。
+- Telegram 群通知不在本期，属于第 6 期。
