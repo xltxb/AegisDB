@@ -84,7 +84,7 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	case "getMe":
 		writeJSON(w, map[string]any{"ok": true, "result": map[string]any{"id": 42, "is_bot": true, "username": s.BotUsername}})
 	case "getUpdates":
-		writeJSON(w, map[string]any{"ok": true, "result": s.take(r.Context(), int64(num(params["offset"])))})
+		writeJSON(w, map[string]any{"ok": true, "result": s.take(r.Context(), int64(num(params["offset"])), int(num(params["limit"])))})
 	case "sendMessage":
 		s.mu.Lock()
 		s.nextMsg++
@@ -100,13 +100,13 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 // take 返回 update_id >= offset 的 update。没有就最多等 300ms —— 真实的长轮询会挂 25 秒,
 // 测试里不必。offset 之前的 update 永远不再返回,这正是 Telegram「确认」的语义。
-func (s *Server) take(ctx context.Context, offset int64) []telegram.Update {
+func (s *Server) take(ctx context.Context, offset int64, limit int) []telegram.Update {
 	deadline := time.After(300 * time.Millisecond)
 	for {
 		s.mu.Lock()
 		out := []telegram.Update{}
 		for _, u := range s.updates {
-			if u.UpdateID >= offset {
+			if u.UpdateID >= offset && (limit <= 0 || len(out) < limit) {
 				out = append(out, u)
 			}
 		}

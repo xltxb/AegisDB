@@ -19,6 +19,11 @@ import (
 // 伪造,别让任意字符串流进后面的查询和提示语。
 var callbackRe = regexp.MustCompile(`^ap:([A-Za-z0-9-]{1,32}):([ar])$`)
 
+// pollLimit 限定每批 getUpdates 的条数。call 只读 1 MiB 响应体,而任何人都能私信 bot 发超长
+// 文本(JSON 里非 ASCII 会被转义成 \uXXXX,单条可达几十 KB);默认 100 条一批会超限,
+// 解析失败后退避重试同一个 offset,轮询就卡死到那些 update 过期,审批点击也进不来。
+const pollLimit = 10
+
 const startReply = "你好,我是数据库网关的审批机器人。\n" +
 	"请在网关控制台右上角头像菜单「IM 账号绑定」里生成绑定码,再把绑定码发给我。\n" +
 	"绑定之后,待你审批的工单会以卡片的形式私信给你。"
@@ -71,7 +76,7 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 	for ctx.Err() == nil {
 		var ups []Update
 		err := c.call(ctx, c.poll, "getUpdates", map[string]any{
-			"offset": offset, "timeout": pollTimeout, "allowed_updates": allowedUpdates,
+			"offset": offset, "limit": pollLimit, "timeout": pollTimeout, "allowed_updates": allowedUpdates,
 		}, &ups)
 		if err != nil {
 			if ctx.Err() != nil {

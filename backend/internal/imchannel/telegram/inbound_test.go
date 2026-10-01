@@ -215,3 +215,25 @@ func TestHandleWebhook_AuthenticatesThenDispatches(t *testing.T) {
 	}
 	srv.WaitCall(t, "answerCallbackQuery", nil)
 }
+
+func TestPolling_AHugeBacklogIsFetchedInBoundedBatches(t *testing.T) {
+	srv := tgtest.New(t)
+	ch := newChannel(t, srv, nil)
+	sk := &sink{}
+	// 先排好再起循环:第一次 getUpdates 看到的就是全部积压。
+	for i := 0; i < 30; i++ {
+		srv.PushText(int64(100+i), "private", strings.Repeat("长", 15000))
+	}
+	srv.PushText(999, "private", "marker")
+	runPolling(t, ch, sk)
+
+	srv.WaitCall(t, "sendMessage", func(c tgtest.Call) bool { return c.Str("text") == "reply:marker" })
+	if _, dms := sk.snapshot(); len(dms) != 31 {
+		t.Fatalf("dms = %d, want 31 — an oversized batch must not wedge polling", len(dms))
+	}
+	for _, c := range srv.Calls("getUpdates") {
+		if n, _ := c.Params["limit"].(float64); n < 1 || n > 10 {
+			t.Fatalf("getUpdates limit = %v, want 1..10 so a batch fits the response cap", c.Params["limit"])
+		}
+	}
+}
