@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CardRow } from '@/components/common/Card'
 import { Switch } from '@/components/common/Switch'
@@ -14,12 +15,25 @@ type FieldDef = {
   /** 需要翻译的占位符 */
   placeholderKey?: string
   secret?: boolean
+  /** 有这项就渲染成下拉:value 存进设置,labelKey 走翻译 */
+  options?: { value: string; labelKey: string }[]
+  /** 设置里还没有值时的初值(下拉必须有一个合法的初值) */
+  defaultValue?: string
 }
 type ChannelDef = { notify?: FieldDef[]; approval?: FieldDef[] }
 
 /**
+ * 所有渠道共用的回调配置。只有 webhook 模式用得到 —— polling / 长连接由网关主动外连,
+ * 不需要公网入口。
+ */
+export const IM_COMMON: FieldDef[] = [
+  { key: 'im.callbackBaseURL', label: 'imCallbackBase', placeholder: 'https://gw.corp.io' },
+  { key: 'im.callbackAllowIPs', label: 'imCallbackAllowIPs', placeholderKey: 'imCallbackAllowIPsPh' },
+]
+
+/**
  * 每个渠道自己的配置项。表单初值、保存载荷、渲染都从这张表派生 —— 接一个新渠道只在
- * 这里加一项,不必再去动设置页。第 1 期只有飞书群通知。
+ * 这里加一项,不必再去动设置页。飞书群通知(第 1 期)、Telegram 交互审批(第 2 期)。
  */
 export const IM_CHANNELS: Record<string, ChannelDef> = {
   lark: {
@@ -28,19 +42,30 @@ export const IM_CHANNELS: Record<string, ChannelDef> = {
       { key: 'im.lark.notifySecret', label: 'imLarkSecret', placeholderKey: 'imLarkSecretPh', secret: true },
     ],
   },
+  telegram: {
+    approval: [
+      { key: 'im.telegram.botToken', label: 'imTgToken', placeholderKey: 'imTgTokenPh', secret: true },
+      {
+        key: 'im.telegram.mode', label: 'imTgMode', defaultValue: 'polling',
+        options: [{ value: 'polling', labelKey: 'imTgModePolling' }, { value: 'webhook', labelKey: 'imTgModeWebhook' }],
+      },
+      { key: 'im.telegram.webhookSecret', label: 'imTgSecret', placeholderKey: 'imTgSecretPh', secret: true },
+      { key: 'im.telegram.apiBase', label: 'imTgApiBase', placeholder: 'https://api.telegram.org' },
+    ],
+  },
 }
 
 export type ImValues = Record<string, string | boolean>
 
 export function imInitialValues(g: Record<string, string>): ImValues {
+  // 密钥从不回传。输入框留空 = 保持不变,所以初值只能是空串。
+  const init = (f: FieldDef) => (f.secret ? '' : parseSetting<string>(g[f.key], f.defaultValue ?? ''))
   const v: ImValues = {}
+  for (const f of IM_COMMON) v[f.key] = init(f)
   for (const [kind, def] of Object.entries(IM_CHANNELS)) {
     if (def.notify) v[`im.${kind}.notify`] = parseSetting(g[`im.${kind}.notify`], false)
     if (def.approval) v[`im.${kind}.approval`] = parseSetting(g[`im.${kind}.approval`], false)
-    for (const f of [...(def.notify ?? []), ...(def.approval ?? [])]) {
-      // 密钥从不回传。输入框留空 = 保持不变,所以初值只能是空串。
-      v[f.key] = f.secret ? '' : parseSetting<string>(g[f.key], '')
-    }
+    for (const f of [...(def.notify ?? []), ...(def.approval ?? [])]) v[f.key] = init(f)
   }
   return v
 }
@@ -58,6 +83,7 @@ export default function ImChannelsPanel({
   onChange: (key: string, v: string | boolean) => void
   secretsSet?: Record<string, boolean>
 }) {
+  const { t } = useTranslation()
   const { data: status } = useImStatus()
   const testNotify = useTestImNotify()
   const testCard = useTestImCard()
@@ -67,6 +93,12 @@ export default function ImChannelsPanel({
   const rows = (status ?? []).filter((s) => IM_CHANNELS[s.kind])
   return (
     <div className="im-list">
+      <div className="im-common">
+        {IM_COMMON.map((f) => (
+          <FieldInput key={f.key} f={f} values={values} onChange={onChange} secretsSet={secretsSet} />
+        ))}
+        <div className="set-hint">{t('imCallbackD')}</div>
+      </div>
       {rows.map((s) => {
         const def = IM_CHANNELS[s.kind]
         return (
@@ -89,6 +121,7 @@ export default function ImChannelsPanel({
                 values={values} onChange={onChange} secretsSet={secretsSet}
                 testLabel="imTestCard" busy={testCard.isPending}
                 onTest={() => testCard.mutate({ kind: s.kind, settings: settings() })}
+                extra={s.kind === 'telegram' ? <TelegramHint values={values} /> : undefined}
               />
             )}
           </div>
@@ -99,7 +132,7 @@ export default function ImChannelsPanel({
 }
 
 function Capability({
-  title, hint, switchKey, fields, values, onChange, secretsSet, testLabel, busy, onTest,
+  title, hint, switchKey, fields, values, onChange, secretsSet, testLabel, busy, onTest, extra,
 }: {
   title: string
   hint: string
@@ -111,6 +144,7 @@ function Capability({
   testLabel: string
   busy: boolean
   onTest: () => void
+  extra?: ReactNode
 }) {
   const { t } = useTranslation()
   const on = values[switchKey] === true
@@ -121,21 +155,8 @@ function Capability({
       </CardRow>
       {on && (
         <div className="set-sub">
-          {fields.map((f) => (
-            <label key={f.key} className="set-field">
-              <span>{t(f.label)}</span>
-              <input
-                className="set-in"
-                type={f.secret ? 'password' : 'text'}
-                value={String(values[f.key] ?? '')}
-                placeholder={
-                  f.secret && secretsSet?.[f.key] ? t('secretConfigured')
-                    : f.placeholderKey ? t(f.placeholderKey) : f.placeholder
-                }
-                onChange={(e) => onChange(f.key, e.target.value)}
-              />
-            </label>
-          ))}
+          {fields.map((f) => <FieldInput key={f.key} f={f} values={values} onChange={onChange} secretsSet={secretsSet} />)}
+          {extra}
           <div className="set-sub-foot">
             <Button disabled={busy} onClick={onTest}>{busy ? t('imSending') : t(testLabel)}</Button>
           </div>
@@ -143,6 +164,54 @@ function Capability({
       )}
     </>
   )
+}
+
+function FieldInput({
+  f, values, onChange, secretsSet,
+}: {
+  f: FieldDef
+  values: ImValues
+  onChange: (key: string, v: string | boolean) => void
+  secretsSet?: Record<string, boolean>
+}) {
+  const { t } = useTranslation()
+  const value = String(values[f.key] ?? '')
+  return (
+    <label className="set-field">
+      <span>{t(f.label)}</span>
+      {f.options ? (
+        <select className="set-in" value={value} onChange={(e) => onChange(f.key, e.target.value)}>
+          {f.options.map((o) => <option key={o.value} value={o.value}>{t(o.labelKey)}</option>)}
+        </select>
+      ) : (
+        <input
+          className="set-in"
+          type={f.secret ? 'password' : 'text'}
+          value={value}
+          placeholder={
+            f.secret && secretsSet?.[f.key] ? t('secretConfigured')
+              : f.placeholderKey ? t(f.placeholderKey) : f.placeholder
+          }
+          onChange={(e) => onChange(f.key, e.target.value)}
+        />
+      )}
+    </label>
+  )
+}
+
+/**
+ * Telegram 两种模式各有一件必须让人知道的事:polling 只能单实例跑(第二个实例会与它
+ * 互相踢掉),webhook 要把这个地址填进 setWebhook —— 网关会自己登记,但管理员要确认
+ * 平台能从公网访问到它。
+ */
+function TelegramHint({ values }: { values: ImValues }) {
+  const { t } = useTranslation()
+  if (values['im.telegram.mode'] !== 'webhook') {
+    return <div className="set-hint">{t('imTgPollingNote')}</div>
+  }
+  const base = String(values['im.callbackBaseURL'] ?? '').trim().replace(/\/+$/, '')
+  if (!base) return <div className="set-hint warn">{t('imTgWebhookNeedsBase')}</div>
+  return <div className="set-hint">{t('imTgWebhookURL')}<code>{`${base}/api/v1/im/telegram/webhook`}</code></div>
 }
 
 function StateTag({ s }: { s: ImStatus }) {
