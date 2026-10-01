@@ -3008,7 +3008,7 @@ html[lang="en"] .rail-item span { font-size: 9px; }
 .im-state { font: 600 10px var(--font-mono); color: var(--text-faint); }
 .im-state.on { color: var(--success-text); }
 .im-state.err { color: var(--danger-text); max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.im-common { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 8px; }
+.im-common { display: flex; flex-direction: column; gap: 10px; padding: 4px 20px 8px; }
 .set-hint.warn { color: var(--warning-text); }
 
 /* ---- IM 账号绑定(账户菜单弹窗 / 用户详情代绑) ---- */
