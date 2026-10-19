@@ -23,8 +23,13 @@ func (m kv) Secret(k string) string { return m[k] }
 
 func deps(s kv) imchannel.Deps {
 	return imchannel.Deps{
-		Settings:    s,
-		HTTP:        &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{DialContext: (&net.Dialer{}).DialContext}},
+		Settings: s,
+		HTTP: &http.Client{
+			Timeout:   5 * time.Second,
+			Transport: &http.Transport{DialContext: (&net.Dialer{}).DialContext},
+			// 与网关的出站客户端(service.newOutboundClient)一样拒绝跟随重定向
+			CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("重定向已被禁止(防 SSRF)") },
+		},
 		ValidateURL: func(string) error { return nil },
 	}
 }
@@ -71,8 +76,12 @@ func TestNotifyApproval_PostsASignedInteractiveCard(t *testing.T) {
 			t.Errorf("body missing %s: %s", want, body)
 		}
 	}
-	if strings.Contains(body, "``` <x>") || strings.Contains(body, "r`x") {
-		t.Errorf("backticks must be neutralised so the code fence cannot be closed: %s", body)
+	if strings.Contains(body, "``` <x>") {
+		t.Errorf("backticks in the command must be neutralised so the code fence cannot be closed: %s", body)
+	}
+	// 原因是 plain_text,没有代码块可闭合:原样显示
+	if !strings.Contains(body, "原因:r`x") {
+		t.Errorf("the reason is plain text and shown verbatim: %s", body)
 	}
 }
 

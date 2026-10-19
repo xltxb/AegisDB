@@ -13,14 +13,14 @@ func TestSendCard_ShowsTheReasonVerbatim(t *testing.T) {
 	srv := larktest.New(t)
 	a := newTestApp(t, srv, nil)
 	_, err := a.SendCard(context.Background(), "ou_1", imchannel.ApprovalCard{
-		ApNo: "AP-1", Reason: "[查看详情](https://evil.example)", Command: "SELECT 1 WHERE a < b && c",
+		ApNo: "AP-1", Reason: "[查看详情](https://evil.example) `x`", Command: "SELECT 1 WHERE a < b && c",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := srv.Calls("send")[0].Str("content")
-	// 原因走 plain_text:发起人写的 markdown 链接在审批人的卡片里只是一段字。
-	if !strings.Contains(content, `"content":"原因:[查看详情](https://evil.example)","tag":"plain_text"`) {
+	// 原因走 plain_text:发起人写的 markdown 链接在审批人的卡片里只是一段字,反引号也原样显示。
+	if !strings.Contains(content, "\"content\":\"原因:[查看详情](https://evil.example) `x`\",\"tag\":\"plain_text\"") {
 		t.Fatalf("reason must be plain text: %s", content)
 	}
 }

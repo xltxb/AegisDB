@@ -52,6 +52,42 @@ func TestHandleWebhook_AnswersTheURLChallenge(t *testing.T) {
 	}
 }
 
+// URL 校验不带签名,是唯一一条只凭 Token 就能拿到 200 的路。别让一个夹带了事件的请求、或一段
+// 任意内容的 challenge 借着它过关。
+func TestHandleWebhook_AnUnsignedChallengeCarriesNothingElse(t *testing.T) {
+	srv := larktest.New(t)
+	a := webhookApp(t, srv, nil)
+	sink := &recSink{}
+	challenge := func(extra map[string]any) []byte {
+		m := map[string]any{"type": "url_verification", "challenge": "c-123", "token": srv.VerificationToken}
+		for k, v := range extra {
+			m[k] = v
+		}
+		b, _ := json.Marshal(m)
+		return encrypted(srv.EncryptKey, b)
+	}
+	uuidLike := "3f1f7c2e-9a4b-4c1d-8e2f-0a1b2c3d4e5f"
+	if r := a.HandleWebhook(context.Background(), http.Header{}, challenge(map[string]any{"challenge": uuidLike}), sink); r.Status != http.StatusOK {
+		t.Fatalf("a real (UUID-like) challenge must pass, got %d", r.Status)
+	}
+	for name, extra := range map[string]map[string]any{
+		"with a header":      {"header": map[string]any{"token": srv.VerificationToken, "event_type": "card.action.trigger"}},
+		"with a schema":      {"schema": "2.0"},
+		"with an event":      {"event": map[string]any{"operator": map[string]any{"open_id": "ou_1"}}},
+		"an empty challenge": {"challenge": ""},
+		"a long challenge":   {"challenge": strings.Repeat("a", 129)},
+		"markup in it":       {"challenge": "<script>alert(1)</script>"},
+	} {
+		r := a.HandleWebhook(context.Background(), http.Header{}, challenge(extra), sink)
+		if r.Status != http.StatusForbidden || len(r.Body) != 0 {
+			t.Errorf("%s → %d %q, want 403 with an empty body", name, r.Status, r.Body)
+		}
+	}
+	if n, m := sink.counts(); n+m != 0 {
+		t.Fatal("nothing may reach the sink through the challenge path")
+	}
+}
+
 func TestHandleWebhook_AClickNeedsEncryptionTokenAndSignature(t *testing.T) {
 	srv := larktest.New(t)
 	a := webhookApp(t, srv, nil)
@@ -113,7 +149,11 @@ func TestRun_WebhookModeNeverDialsTheLongConnection(t *testing.T) {
 	}
 
 	a := webhookApp(t, srv, kv{"im.lark.encryptKey": ""})
+	before := len(srv.Calls("token")) + len(srv.Calls("botInfo"))
 	if err := a.Run(context.Background(), &recSink{}); err == nil || !strings.Contains(err.Error(), "Encrypt Key") {
 		t.Fatalf("webhook mode without keys must stop with a reason, got %v", err)
+	}
+	if len(srv.Calls("token"))+len(srv.Calls("botInfo")) != before {
+		t.Fatal("a missing key is a config error: refuse before any request to Lark (it must show even when Lark is unreachable)")
 	}
 }

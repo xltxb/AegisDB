@@ -148,7 +148,11 @@ func TestLark_BadCredentialsShowInStatusWithoutTheSecret(t *testing.T) {
 		}
 		_ = json.Unmarshal(r.Data, &rows)
 		for _, row := range rows {
+			// 假开放平台把收到的 app_secret 回显进了错误 msg:LastError 里只能剩 scrub 的占位符
 			if row.Kind == "lark" && !row.Running && strings.Contains(row.LastError, "10014") {
+				if !strings.Contains(row.LastError, "<app-secret>") {
+					t.Fatalf("the echoed secret must be replaced by the redaction marker: %q", row.LastError)
+				}
 				return
 			}
 		}

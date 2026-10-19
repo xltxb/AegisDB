@@ -741,6 +741,7 @@ func (h *Handler) VerifyAuditChain(c *gin.Context) {
 func isSecretKey(k string) bool {
 	l := strings.ToLower(k)
 	// 飞书的 encryptKey 名字里没有 secret / token,但拿到它就能伪造飞书推来的事件。
+	// 按后缀匹配:只认以 encryptKey 结尾的键,假想的 …EncryptKeyId 这类不算。
 	return strings.Contains(l, "secret") || strings.Contains(l, "password") || strings.Contains(l, "token") ||
 		strings.HasSuffix(l, "encryptkey")
 }

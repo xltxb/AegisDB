@@ -558,11 +558,13 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   在响应体里。Telegram 不受影响。
 - **webhook 不用 SDK 的 `dispatcher.Handle`**：它的签名比较不是常量时间、验签失败回 500（飞书会重投）、允许
   未加密请求只靠 Token 过关。网关自己做：只收加密请求 → 解密 → 常量时间比对 Verification Token →
-  （URL 校验到此回 challenge，飞书不给它签名）→ 常量时间验签 → 交给同一个分发器。任何一步失败都是同一个 403。
+  （URL 校验到此回 challenge，飞书不给它签名；只认不带 `schema` / `header` / `event` 的纯校验请求，challenge
+  限 `[A-Za-z0-9_-]{1,128}`）→ 常量时间验签 → 交给同一个分发器。任何一步失败都是同一个 403。
 - **私聊按 `message_id` 去重**（最近 512 条）：飞书没及时收到确认会重推，绑定码第二次到达时已被消费。
 - **原因改用 `plain_text`**：群通知与交互卡片都是。lark_md 会把发起人写的 markdown 链接渲染成真链接。
 - **tenant_access_token** 缓存到过期前 5 分钟；飞书回 `99991661` / `99991663` 时换新 token 重试一次。
-- **永久性错误停循环**：飞书明确拒绝（code 非零，频控 `99991400` 除外）或开放平台地址回了 4xx，`Run` 返回
-  错误，设置页显示原因。
+- **永久性错误停循环**：飞书明确拒绝（code 非零，频控 `99991400` 除外）或开放平台地址填错（回了 3xx / 4xx、
+  回了解析不了的 2xx、被出站校验拒绝；DNS 解析失败仍按暂时的重试），`Run` 返回错误，设置页显示原因。
+  webhook 模式缺密钥、长连接拿不到受控拨号器这类纯配置错在任何网络请求之前就报。
 - `isSecretKey` 认得 `encryptKey`：它名字里没有 secret / token，但同样能伪造飞书推送。
 - 新增配置键 `im.lark.apiBase`（私有化部署与测试用）。它走出站 URL 校验（https + 非私网），生产环境指向内网需部署配置 `webhook.allow_private: true`（`VELA_WEBHOOK_ALLOW_PRIVATE`）。

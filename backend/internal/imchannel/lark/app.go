@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -43,6 +44,9 @@ const (
 // 后台重置了 App Secret)换一个再试一次,而不是之后每张卡片都失败到 token 自然过期。
 var tokenRejected = map[int]bool{99991661: true, 99991663: true}
 
+// errBadBase:出站防护拒绝了开放平台地址(不是 https、解析到内网)。改配置之前怎么重试都一样。
+var errBadBase = errors.New("开放平台地址不可用")
+
 // msgIDRe 是飞书消息 ID。收卡时 ref 来自库里,但仍按白名单拼进 URL 路径。
 var msgIDRe = regexp.MustCompile(`^om_[A-Za-z0-9_-]{1,128}$`)
 
@@ -51,7 +55,7 @@ type App struct {
 	*Channel // 群通知那一半;没配群机器人 webhook 时 NotifyApproval 报「未配置」
 
 	appID       string
-	secret      string
+	appSecret   string // 不叫 secret:那会遮住内嵌 *Channel 的群机器人签名密钥
 	base        string
 	mode        string
 	encryptKey  string
@@ -88,20 +92,32 @@ func newApp(d imchannel.Deps, n *Channel) *App {
 		mode = modeWS
 	}
 	a := &App{
-		Channel: n, appID: appID, secret: secret, base: base, mode: mode,
+		Channel: n, appID: appID, appSecret: secret, base: base, mode: mode,
 		encryptKey:  strings.TrimSpace(d.Settings.Secret(key("encryptKey"))),
 		verifyToken: strings.TrimSpace(d.Settings.Secret(key("verificationToken"))),
-		client:      d.HTTP, validate: d.ValidateURL,
+		client:      noRedirects(d.HTTP), validate: d.ValidateURL,
 	}
 	a.bot.Store("")
 	a.disp = a.newDispatcher()
 	return a
 }
 
+// noRedirects 复制一份出站客户端(Transport 即受控拨号器照旧共用),遇到 3xx 不跟随、把它
+// 原样交回来。网关的出站客户端本来就拒绝跟随,但它报的是一个普通错误,与网络错误分不开,
+// 只能当暂时的无限重试;拿到 3xx 响应本身,request 才能把它判成「开放平台地址填错」。
+func noRedirects(c *http.Client) *http.Client {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	cp.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &cp
+}
+
 // BotName 返回 Run 里查到并缓存的应用名。Hub 锁内调用,所以不做 I/O。
 func (a *App) BotName() string { return a.bot.Load().(string) }
 
-// apiError 是飞书明确回了错误:code 非零,或者回了个解析不了的 4xx/5xx。
+// apiError 是飞书明确回了错误:code 非零、HTTP 非 2xx,或者回了个解析不了的响应。
 type apiError struct {
 	Path string
 	HTTP int
@@ -114,19 +130,31 @@ func (e *apiError) Error() string {
 }
 
 // permanent 判断重试无望的错误:飞书明确拒绝(凭据错、应用没开机器人能力 …),或开放平台
-// 地址填错回了 4xx。频控、5xx、网络错误是暂时的。
+// 地址填错 —— 回了 3xx / 4xx、回了解析不了的 2xx(比如一个控制台页面)、被出站防护拒绝。
+// 频控、5xx、网络错误(含 DNS 解析失败)是暂时的。
+//
+// request 只在出错时造 *apiError,所以除了那几种暂时的,其余都是永久的。
 func permanent(err error) bool {
+	if errors.Is(err, errBadBase) {
+		return true
+	}
 	var ae *apiError
-	if !errors.As(err, &ae) || ae.HTTP >= 500 || ae.Code == codeRateLimited {
+	if !errors.As(err, &ae) {
 		return false
 	}
-	return ae.Code != 0 || (ae.HTTP >= 400 && ae.HTTP != http.StatusTooManyRequests)
+	return ae.HTTP < 500 && ae.HTTP != http.StatusTooManyRequests && ae.Code != codeRateLimited
 }
 
-// request 发一次 OpenAPI 请求;code 非零或 HTTP 非 2xx 都是 *apiError。
+// request 发一次 OpenAPI 请求;code 非零、HTTP 非 2xx、响应解析不了都是 *apiError,出站校验拒绝是 errBadBase。
 func (a *App) request(ctx context.Context, method, path, token string, body any) ([]byte, error) {
 	if err := a.validate(a.base); err != nil {
-		return nil, err
+		// DNS 解析失败可能只是一时的网络问题,照常重试;其余(不是 https、解析到内网)是配置错,
+		// 标成永久的,让 Run 停下来把原因交给设置页。
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %v", errBadBase, err)
 	}
 	var rd io.Reader
 	if body != nil {
@@ -156,7 +184,13 @@ func (a *App) request(ctx context.Context, method, path, token string, body any)
 		Msg  string `json:"msg"`
 	}
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return nil, &apiError{Path: short, HTTP: resp.StatusCode, Msg: "响应无法解析"}
+		// 5xx 回 HTML 多半是飞书那头临时出错;5xx 以下还解析不了(200 的控制台页面、3xx 重定向),
+		// 就是地址指错了地方。不把响应体带进错误:那里面什么都可能有。
+		msg := "响应无法解析"
+		if resp.StatusCode < 500 {
+			msg = "响应无法解析,检查开放平台地址"
+		}
+		return nil, &apiError{Path: short, HTTP: resp.StatusCode, Msg: msg}
 	}
 	if env.Code != 0 || resp.StatusCode >= 300 {
 		return nil, &apiError{Path: short, HTTP: resp.StatusCode, Code: env.Code, Msg: a.scrub(errors.New(env.Msg)).Error()}
@@ -189,7 +223,7 @@ func (a *App) token(ctx context.Context) (string, error) {
 	if a.tok != "" && time.Now().Before(a.tokExp) {
 		return a.tok, nil
 	}
-	raw, err := a.request(ctx, http.MethodPost, pathToken, "", map[string]string{"app_id": a.appID, "app_secret": a.secret})
+	raw, err := a.request(ctx, http.MethodPost, pathToken, "", map[string]string{"app_id": a.appID, "app_secret": a.appSecret})
 	if err != nil {
 		return "", err
 	}
@@ -216,10 +250,10 @@ func (a *App) dropToken(old string) {
 // scrub 把 App Secret 从错误文本里换掉。它只在请求体里,正常不会出现在错误里 ——
 // 这是防一个往错误里回显请求的代理或私有化部署。
 func (a *App) scrub(err error) error {
-	if err == nil || a.secret == "" {
+	if err == nil || a.appSecret == "" {
 		return err
 	}
-	return errors.New(strings.ReplaceAll(err.Error(), a.secret, "<app-secret>"))
+	return errors.New(strings.ReplaceAll(err.Error(), a.appSecret, "<app-secret>"))
 }
 
 // retry 反复调 fn 直到成功、遇到永久性错误或 ctx 结束(后者返回 nil)。

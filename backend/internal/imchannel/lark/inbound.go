@@ -41,7 +41,17 @@ func sinkFrom(ctx context.Context) imchannel.ActionSink {
 
 // Run 阻塞到 ctx 取消。先查应用名(顺带验证凭据与机器人能力:失败是永久的,返回让设置页
 // 看见),然后长连接模式交给 SDK,webhook 模式只是待命 —— 事件从 HandleWebhook 进来。
+//
+// 纯配置错(webhook 模式缺密钥、长连接拿不到受控拨号器)先查,不等网络:飞书连不上时它们
+// 也该立刻出现在设置页上,而不是藏在一串重试日志后面。
 func (a *App) Run(ctx context.Context, sink imchannel.ActionSink) error {
+	if a.mode == modeWebhook {
+		if a.encryptKey == "" || a.verifyToken == "" {
+			return errors.New("webhook 模式需要配置 Encrypt Key 与 Verification Token")
+		}
+	} else if _, err := guardedDial(a.client); err != nil {
+		return err
+	}
 	var name string
 	err := a.retry(ctx, func() error {
 		n, err := a.botInfo(ctx)
@@ -53,9 +63,6 @@ func (a *App) Run(ctx context.Context, sink imchannel.ActionSink) error {
 	}
 	a.bot.Store(name)
 	if a.mode == modeWebhook {
-		if a.encryptKey == "" || a.verifyToken == "" {
-			return errors.New("webhook 模式需要配置 Encrypt Key 与 Verification Token")
-		}
 		slog.Info("lark: webhook mode — point both the event and the callback request URL at the gateway", "path", WebhookPath)
 		<-ctx.Done()
 		return nil
@@ -73,7 +80,7 @@ func (a *App) stream(ctx context.Context) error {
 	if err := a.validate(a.base); err != nil {
 		return err
 	}
-	cli := larkws.NewClient(a.appID, a.secret,
+	cli := larkws.NewClient(a.appID, a.appSecret,
 		larkws.WithEventHandler(a.disp),
 		larkws.WithDomain(a.base),
 		larkws.WithHttpClient(a.client),

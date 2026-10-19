@@ -3,6 +3,8 @@ package lark
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net"
 	"strings"
 	"testing"
 
@@ -94,6 +96,11 @@ func TestCall_RefreshesARejectedToken(t *testing.T) {
 	if n := len(srv.Calls("token")); n != 2 {
 		t.Fatalf("token fetched %d times, want 2", n)
 	}
+	// 第一张一次;第二张先带缓存的旧 token 被拒,换新 token 再发一次。不缓存 token 的实现
+	// 在这里只会有 2 次。
+	if n := len(srv.Calls("send")); n != 3 {
+		t.Fatalf("send called %d times, want 3 (ok, rejected with the cached token, retried)", n)
+	}
 }
 
 func TestCall_ErrorsCarryLarksMessageButNotTheSecret(t *testing.T) {
@@ -104,9 +111,11 @@ func TestCall_ErrorsCarryLarksMessageButNotTheSecret(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "230013") || !strings.Contains(err.Error(), "NO availability") {
 		t.Fatalf("err = %v", err)
 	}
+	// 假开放平台会把收到的 app_secret 回显进 msg:错误里只能剩 scrub 的占位符。
 	bad := newTestApp(t, srv, kv{"im.lark.appSecret": "the-wrong-secret-value"})
 	_, err = bad.botInfo(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "10014") || strings.Contains(err.Error(), "the-wrong-secret-value") {
+	if err == nil || !strings.Contains(err.Error(), "10014") || !strings.Contains(err.Error(), "<app-secret>") ||
+		strings.Contains(err.Error(), "the-wrong-secret-value") {
 		t.Fatalf("credential error = %v", err)
 	}
 }
@@ -127,13 +136,32 @@ func TestPermanent(t *testing.T) {
 		{&apiError{HTTP: 400, Code: 10014}, true},            // 凭据被拒
 		{&apiError{HTTP: 400, Code: 99991672}, true},         // 应用没开机器人能力之类
 		{&apiError{HTTP: 404, Code: 0, Msg: "响应无法解析"}, true}, // 开放平台地址填错
+		{&apiError{HTTP: 200, Code: 0, Msg: "响应无法解析"}, true}, // 地址指到了一个回 200 HTML 的控制台
+		{&apiError{HTTP: 302, Code: 0, Msg: "响应无法解析"}, true}, // 地址被重定向(出站不跟随)
+		{fmt.Errorf("%w: 出站地址必须使用 https", errBadBase), true},
 		{&apiError{HTTP: 400, Code: codeRateLimited}, false},
 		{&apiError{HTTP: 503, Code: 0}, false},
 		{&apiError{HTTP: 429, Code: 0}, false},
 		{errors.New("dial tcp: connection refused"), false},
+		{&apiError{HTTP: 502, Code: 0, Msg: "响应无法解析"}, false},
 	} {
 		if got := permanent(tc.err); got != tc.want {
 			t.Errorf("permanent(%v) = %v, want %v", tc.err, got, tc.want)
 		}
+	}
+}
+
+func TestRequest_AnOutboundGuardRefusalIsPermanentButADNSFailureIsNot(t *testing.T) {
+	srv := larktest.New(t)
+	a := newTestApp(t, srv, nil)
+	a.validate = func(string) error { return errors.New("目标解析到内网/环回地址，已拒绝(防 SSRF)") }
+	if _, err := a.botInfo(context.Background()); !permanent(err) {
+		t.Fatalf("a refused open-platform address must be permanent, got %v", err)
+	}
+	a.validate = func(string) error {
+		return fmt.Errorf("无法解析主机 %q: %w", "open.feishu.cn", &net.DNSError{Err: "no such host", Name: "open.feishu.cn"})
+	}
+	if _, err := a.botInfo(context.Background()); err == nil || permanent(err) {
+		t.Fatalf("a DNS lookup failure is transient, got %v", err)
 	}
 }

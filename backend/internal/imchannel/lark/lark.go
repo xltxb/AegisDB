@@ -105,7 +105,7 @@ func sign(timestamp, secret string) string {
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// safe 中和反引号,免得嵌在 lark_md 代码块里的命令 / 原因把代码块闭合、注入富文本
+// safe 中和反引号,免得嵌在 lark_md 里的命令 / 字段把代码块闭合、注入富文本
 // (假按钮、假链接)。代码块里没有转义机制,所以换成外观相同的 U+02CB(C10)。
 func safe(s string) string { return strings.ReplaceAll(s, "`", "ˋ") }
 
@@ -136,8 +136,9 @@ func approvalCard(c imchannel.ApprovalCard) map[string]any {
 	}
 	if strings.TrimSpace(c.Reason) != "" {
 		// 原因是发起人写的:按 plain_text 原样显示。lark_md 会把一段 [前往审批](http://…)
-		// 渲染成真链接,出现在审批人的卡片里。
-		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "plain_text", "content": "原因:" + safe(c.Reason)}})
+		// 渲染成真链接,出现在审批人的卡片里。plain_text 里没有代码块可闭合,所以也不过 safe:
+		// 反引号照原样显示。
+		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "plain_text", "content": "原因:" + c.Reason}})
 	}
 	if c.ConsoleURL != "" {
 		elements = append(elements, map[string]any{"tag": "action", "actions": []any{

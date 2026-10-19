@@ -2,6 +2,7 @@ package lark
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,6 +33,12 @@ func (s *recSink) OnDirectMessage(_ context.Context, dm imchannel.DM) string {
 	s.dms = append(s.dms, dm)
 	s.mu.Unlock()
 	return "reply to " + dm.Text
+}
+
+func (s *recSink) dmList() []imchannel.DM {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]imchannel.DM(nil), s.dms...)
 }
 
 func (s *recSink) counts() (int, int) {
@@ -120,8 +127,8 @@ func TestRun_ADirectMessageIsAnsweredAndGroupTextIsIgnored(t *testing.T) {
 		t.Fatal("a code posted in a group must not be looked at")
 	}
 	srv.SendDM(t, "ou_9", "p2p", "  BIND-AAAA1111 ")
-	if _, n := sink.counts(); n != 1 || sink.dms[0].PlatformUserID != "ou_9" || sink.dms[0].Text != "BIND-AAAA1111" {
-		t.Fatalf("dms = %+v", sink.dms)
+	if dms := sink.dmList(); len(dms) != 1 || dms[0].PlatformUserID != "ou_9" || dms[0].Text != "BIND-AAAA1111" {
+		t.Fatalf("dms = %+v", dms)
 	}
 	srv.WaitCall(t, "send", func(c larktest.Call) bool {
 		return c.Str("receive_id") == "ou_9" && c.Str("msg_type") == "text" && strings.Contains(c.Str("content"), "reply to BIND-AAAA1111")
@@ -164,7 +171,56 @@ func TestRun_RefusesAClientWithoutAGuardedDialer(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "拨号") {
 		t.Fatalf("err = %v, want a refusal to fall back to an unguarded dialer", err)
 	}
-	if srv.ConnectCount() != 0 {
-		t.Fatal("nothing may be dialled without the guard")
+	if srv.ConnectCount() != 0 || len(srv.Calls("token")) != 0 || len(srv.Calls("botInfo")) != 0 {
+		t.Fatal("a missing guard is a config error: refuse before any request to Lark")
 	}
+}
+
+// runOnce 跑 Run 并等它自己返回;5 秒不返回就是在无限重试。
+func runOnce(t *testing.T, a *App) error {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- a.Run(context.Background(), &recSink{}) }()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run kept retrying; a wrong open-platform address must stop it with a reason")
+		return nil
+	}
+}
+
+func TestRun_AWrongOpenPlatformAddressStopsTheLoop(t *testing.T) {
+	const html = "<!doctype html><html><body>开发者后台</body></html>"
+	for _, tc := range []struct {
+		name, method string
+		fail         func(srv *larktest.Server) larktest.Failure
+	}{
+		{"token answered by an HTML page", "token", func(*larktest.Server) larktest.Failure { return larktest.Failure{Raw: html} }},
+		{"bot info answered by an HTML page", "botInfo", func(*larktest.Server) larktest.Failure { return larktest.Failure{Raw: html} }},
+		{"a redirect", "token", func(srv *larktest.Server) larktest.Failure {
+			// 跟随的话会落到 botInfo 上,被记下来
+			return larktest.Failure{HTTP: http.StatusFound, Location: srv.URL + "/open-apis/bot/v3/info"}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := larktest.New(t)
+			srv.SetFail(tc.method, tc.fail(srv))
+			err := runOnce(t, newTestApp(t, srv, nil))
+			if err == nil || !strings.Contains(err.Error(), "开放平台地址") {
+				t.Fatalf("err = %v, want a pointer at the open-platform address", err)
+			}
+			if tc.method == "token" && len(srv.Calls("botInfo")) != 0 {
+				t.Fatal("a redirect must not be followed")
+			}
+		})
+	}
+	t.Run("refused by the outbound guard", func(t *testing.T) {
+		srv := larktest.New(t)
+		a := newTestApp(t, srv, nil)
+		a.validate = func(string) error { return errors.New("出站地址必须使用 https(ADR 0003)") }
+		if err := runOnce(t, a); err == nil || !strings.Contains(err.Error(), "https") {
+			t.Fatalf("err = %v", err)
+		}
+	})
 }

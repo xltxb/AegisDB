@@ -22,10 +22,15 @@ type Call struct {
 }
 
 // Failure 让某个方法回一个飞书错误。HTTP 为 0 时按 400 回。
+//
+// Raw 非空时不回飞书的 JSON,原样回这段 body(HTTP 为 0 时按 200),Location 非空时带上
+// 这个头 —— 扮演填错的开放平台地址:一个回 200 HTML 的控制台页面,或一次重定向。
 type Failure struct {
-	HTTP int
-	Code int
-	Msg  string
+	HTTP     int
+	Code     int
+	Msg      string
+	Raw      string
+	Location string
 }
 
 type Server struct {
@@ -117,6 +122,19 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	f, failing := s.fail[method]
 	tenant := s.tenant
 	s.mu.Unlock()
+	if failing && (f.Raw != "" || f.Location != "") {
+		status := f.HTTP
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if f.Location != "" {
+			w.Header().Set("Location", f.Location)
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(f.Raw))
+		return
+	}
 	if failing {
 		status := f.HTTP
 		if status == 0 {
@@ -131,7 +149,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if method == "token" {
 		if params["app_id"] != s.AppID || params["app_secret"] != s.AppSecret {
-			writeJSON(w, http.StatusBadRequest, map[string]any{"code": 10014, "msg": "app secret invalid"})
+			// 把收到的 app_secret 回显进 msg:扮演一个往错误里回显请求的代理 / 私有化部署,
+			// 让「错误里不出现 App Secret」的测试真的有东西可拦(否则删掉 scrub 它们也照样绿)。
+			got, _ := params["app_secret"].(string)
+			writeJSON(w, http.StatusBadRequest, map[string]any{"code": 10014, "msg": "app secret invalid: " + got})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"code": 0, "msg": "ok", "tenant_access_token": tenant, "expire": 7200})
