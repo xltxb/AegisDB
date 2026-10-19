@@ -12,6 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/larksuite/oapi-sdk-go/v3 v3.12.2
 	github.com/lib/pq v1.10.9
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.1
 	github.com/sijms/go-ora/v2 v2.8.19
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
 	golang.org/x/crypto v0.31.0

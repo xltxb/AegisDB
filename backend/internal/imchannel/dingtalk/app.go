@@ -49,6 +49,7 @@ type App struct {
 	base         string
 	client       *http.Client
 	validate     func(string) error
+	seen         imchannel.Recent // 已处理的私聊 msgId
 
 	tokMu  sync.Mutex
 	tok    string

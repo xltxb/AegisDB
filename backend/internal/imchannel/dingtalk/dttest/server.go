@@ -11,6 +11,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/open-dingtalk/dingtalk-stream-sdk-go/payload"
 )
 
 type Call struct {
@@ -43,12 +46,21 @@ type Server struct {
 	rejectWith string
 	tickets    map[string]bool
 	nextTicket int
+
+	// Stream(stream.go)
+	conn      *websocket.Conn
+	writeMu   sync.Mutex
+	connects  int
+	waiting   map[string]chan payload.DataFrameResponse
+	nextFrame int
+	nextMsg   int
 }
 
 func New(t testing.TB) *Server {
 	s := &Server{
 		ClientID: "dingtestclientid", ClientSecret: "test-client-secret-0000",
 		fail: map[string]Failure{}, token: "at-0", tickets: map[string]bool{},
+		waiting: map[string]chan payload.DataFrameResponse{},
 	}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	t.Cleanup(s.Close)
@@ -93,6 +105,10 @@ func credentialError(w http.ResponseWriter, got any) {
 }
 
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/connect" {
+		s.upgrade(w, r)
+		return
+	}
 	var params map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&params)
 	if params == nil {
