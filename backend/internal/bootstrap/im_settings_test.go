@@ -26,8 +26,8 @@ func TestIMSettings_StatusListsChannels(t *testing.T) {
 		switch row.Kind {
 		case "lark":
 			sawLark = true
-			if row.CanApprove {
-				t.Error("phase 1 lark is notify-only")
+			if !row.CanApprove {
+				t.Error("lark does interactive approval since phase 3")
 			}
 		case "fake":
 			sawFake = row.Approval && row.Running

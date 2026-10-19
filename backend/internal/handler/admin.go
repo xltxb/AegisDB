@@ -740,7 +740,9 @@ func (h *Handler) VerifyAuditChain(c *gin.Context) {
 // never be returned to a client (M2/R3).
 func isSecretKey(k string) bool {
 	l := strings.ToLower(k)
-	return strings.Contains(l, "secret") || strings.Contains(l, "password") || strings.Contains(l, "token")
+	// 飞书的 encryptKey 名字里没有 secret / token,但拿到它就能伪造飞书推来的事件。
+	return strings.Contains(l, "secret") || strings.Contains(l, "password") || strings.Contains(l, "token") ||
+		strings.HasSuffix(l, "encryptkey")
 }
 
 // settingHasValue reports whether a stored setting holds a non-empty value
@@ -830,7 +832,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateIPAllowlist(sv)
 			case "im.callbackBaseURL":
 				verr = service.ValidateCallbackBaseURL(sv)
-			case "im.telegram.apiBase":
+			case "im.telegram.apiBase", "im.lark.apiBase":
 				verr = service.ValidateOutboundURL(sv)
 			case "im.telegram.webhookSecret":
 				// 到这里的一定是真要换的新明文(空值已在上面按「保持原值」跳过),
@@ -841,6 +843,14 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			case "im.telegram.mode":
 				if sv != "polling" && sv != "webhook" {
 					verr = fmt.Errorf("只能是 polling 或 webhook")
+				}
+			case "im.lark.mode":
+				if sv != "ws" && sv != "webhook" {
+					verr = fmt.Errorf("只能是 ws 或 webhook")
+				}
+			case "im.lark.domain":
+				if sv != "feishu" && sv != "lark" {
+					verr = fmt.Errorf("只能是 feishu 或 lark")
 				}
 			}
 			if verr != nil {
