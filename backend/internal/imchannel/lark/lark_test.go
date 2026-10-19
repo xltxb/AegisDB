@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"velagateway/internal/imchannel"
+	"velagateway/internal/imchannel/lark/larktest"
 )
 
 type kv map[string]string
@@ -19,7 +22,25 @@ func (m kv) Bool(k string) bool     { return m[k] == "true" }
 func (m kv) Secret(k string) string { return m[k] }
 
 func deps(s kv) imchannel.Deps {
-	return imchannel.Deps{Settings: s, HTTP: http.DefaultClient, ValidateURL: func(string) error { return nil }}
+	return imchannel.Deps{
+		Settings:    s,
+		HTTP:        &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{DialContext: (&net.Dialer{}).DialContext}},
+		ValidateURL: func(string) error { return nil },
+	}
+}
+
+// newTestApp 造一个指向假开放平台的 *App。
+func newTestApp(t *testing.T, srv *larktest.Server, extra kv) *App {
+	t.Helper()
+	s := kv{"im.lark.appID": srv.AppID, "im.lark.appSecret": srv.AppSecret, "im.lark.apiBase": srv.URL}
+	for k, v := range extra {
+		s[k] = v
+	}
+	a, _ := New(deps(s)).(*App)
+	if a == nil {
+		t.Fatal("a configured app must build")
+	}
+	return a
 }
 
 func TestNew_UnconfiguredIsNil(t *testing.T) {

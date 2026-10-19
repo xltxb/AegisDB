@@ -1,5 +1,6 @@
-// Package lark 是飞书渠道。第 1 期只做群通知(自定义机器人 webhook);交互审批在第 3 期
-// 接飞书开放平台应用 + 长连接。
+// Package lark 是飞书渠道。群通知走自定义机器人 webhook(*Channel);交互审批走开放平台
+// 自建应用(*App):出站直接调 OpenAPI,入站用官方 SDK 的长连接或 webhook。它不做任何判定 ——
+// 点击交给 ActionSink,由 service 认人、走 DecideBlockFor。
 package lark
 
 import (
@@ -9,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,23 +28,36 @@ type Channel struct {
 	validate func(string) error
 }
 
-// New 在配置了群通知 webhook 时返回渠道,否则返回 nil(接口 nil,不是类型化的 nil 指针)。
+// New 按配置造飞书渠道:配了开放平台应用(App ID + App Secret)就是能做交互审批的 *App,
+// 只配了群通知 webhook 就是只能通知的 *Channel,都没配返回 nil(接口 nil)。
+//
+// 两种类型而不是一个带开关的类型:Hub 靠类型断言 Approver 判断「能不能发卡片」。只配了
+// 群通知的飞书若也满足 Approver,绑定弹窗会把它列成可绑定的渠道,而发出去的码没人收。
 func New(d imchannel.Deps) imchannel.Channel {
-	webhook := strings.TrimSpace(d.Settings.String(imchannel.Key(imchannel.Lark, "notifyWebhook")))
-	if webhook == "" {
-		return nil
-	}
-	return &Channel{
-		webhook:  webhook,
+	n := &Channel{
+		webhook:  strings.TrimSpace(d.Settings.String(imchannel.Key(imchannel.Lark, "notifyWebhook"))),
 		secret:   d.Settings.Secret(imchannel.Key(imchannel.Lark, "notifySecret")),
 		client:   d.HTTP,
 		validate: d.ValidateURL,
 	}
+	if a := newApp(d, n); a != nil {
+		return a
+	}
+	if n.webhook == "" {
+		return nil
+	}
+	return n
 }
+
+// errNoNotifyWebhook:配了应用、打开了群通知,却没填群机器人地址。
+var errNoNotifyWebhook = errors.New("未配置群通知 webhook")
 
 func (c *Channel) Kind() string { return imchannel.Lark }
 
 func (c *Channel) NotifyApproval(ctx context.Context, card imchannel.ApprovalCard) error {
+	if c.webhook == "" {
+		return errNoNotifyWebhook
+	}
 	return c.post(ctx, approvalCard(card))
 }
 
@@ -120,7 +135,9 @@ func approvalCard(c imchannel.ApprovalCard) map[string]any {
 		map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**命令**\n```sql\n" + safe(c.Command) + "\n```"}},
 	}
 	if strings.TrimSpace(c.Reason) != "" {
-		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": "**原因**\n" + safe(c.Reason)}})
+		// 原因是发起人写的:按 plain_text 原样显示。lark_md 会把一段 [前往审批](http://…)
+		// 渲染成真链接,出现在审批人的卡片里。
+		elements = append(elements, map[string]any{"tag": "div", "text": map[string]any{"tag": "plain_text", "content": "原因:" + safe(c.Reason)}})
 	}
 	if c.ConsoleURL != "" {
 		elements = append(elements, map[string]any{"tag": "action", "actions": []any{
