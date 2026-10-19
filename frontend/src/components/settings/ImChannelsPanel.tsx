@@ -33,13 +33,28 @@ export const IM_COMMON: FieldDef[] = [
 
 /**
  * 每个渠道自己的配置项。表单初值、保存载荷、渲染都从这张表派生 —— 接一个新渠道只在
- * 这里加一项,不必再去动设置页。飞书群通知(第 1 期)、Telegram 交互审批(第 2 期)。
+ * 这里加一项,不必再去动设置页。飞书群通知（第 1 期）与交互审批（第 3 期）、Telegram 交互审批（第 2 期）。
  */
 export const IM_CHANNELS: Record<string, ChannelDef> = {
   lark: {
     notify: [
       { key: 'im.lark.notifyWebhook', label: 'imLarkWebhook', placeholder: 'https://open.feishu.cn/open-apis/bot/v2/hook/xxxx' },
       { key: 'im.lark.notifySecret', label: 'imLarkSecret', placeholderKey: 'imLarkSecretPh', secret: true },
+    ],
+    approval: [
+      { key: 'im.lark.appID', label: 'imLarkAppID', placeholder: 'cli_xxxxxxxxxxxxxxxx' },
+      { key: 'im.lark.appSecret', label: 'imLarkAppSecret', placeholderKey: 'imLarkAppSecretPh', secret: true },
+      {
+        key: 'im.lark.domain', label: 'imLarkDomain', defaultValue: 'feishu',
+        options: [{ value: 'feishu', labelKey: 'imLarkDomainFeishu' }, { value: 'lark', labelKey: 'imLarkDomainLark' }],
+      },
+      {
+        key: 'im.lark.mode', label: 'imLarkMode', defaultValue: 'ws',
+        options: [{ value: 'ws', labelKey: 'imLarkModeWs' }, { value: 'webhook', labelKey: 'imLarkModeWebhook' }],
+      },
+      { key: 'im.lark.encryptKey', label: 'imLarkEncryptKey', placeholderKey: 'imLarkEncryptKeyPh', secret: true },
+      { key: 'im.lark.verificationToken', label: 'imLarkVerifyToken', placeholderKey: 'imLarkVerifyTokenPh', secret: true },
+      { key: 'im.lark.apiBase', label: 'imLarkApiBase', placeholderKey: 'imLarkApiBasePh' },
     ],
   },
   telegram: {
@@ -121,7 +136,11 @@ export default function ImChannelsPanel({
                 values={values} onChange={onChange} secretsSet={secretsSet}
                 testLabel="imTestCard" busy={testCard.isPending}
                 onTest={() => testCard.mutate({ kind: s.kind, settings: settings() })}
-                extra={s.kind === 'telegram' ? <TelegramHint values={values} /> : undefined}
+                extra={
+                  s.kind === 'telegram' ? <TelegramHint values={values} />
+                    : s.kind === 'lark' ? <LarkHint values={values} />
+                      : undefined
+                }
               />
             )}
           </div>
@@ -212,6 +231,21 @@ function TelegramHint({ values }: { values: ImValues }) {
   const base = String(values['im.callbackBaseURL'] ?? '').trim().replace(/\/+$/, '')
   if (!base) return <div className="set-hint warn">{t('imTgWebhookNeedsBase')}</div>
   return <div className="set-hint">{t('imTgWebhookURL')}<code>{`${base}/api/v1/im/telegram/webhook`}</code></div>
+}
+
+/**
+ * 飞书两种接收方式各要管理员在开发者后台做一件事:长连接要把订阅方式切成「使用长连接接收」,
+ * webhook 要把这个地址同时填进「事件配置」与「回调配置」的请求地址 —— 飞书不像 Telegram 那样
+ * 由网关自己登记。
+ */
+function LarkHint({ values }: { values: ImValues }) {
+  const { t } = useTranslation()
+  if (values['im.lark.mode'] !== 'webhook') {
+    return <div className="set-hint">{t('imLarkWsNote')}</div>
+  }
+  const base = String(values['im.callbackBaseURL'] ?? '').trim().replace(/\/+$/, '')
+  if (!base) return <div className="set-hint warn">{t('imLarkWebhookNeedsBase')}</div>
+  return <div className="set-hint">{t('imLarkWebhookURL')}<code>{`${base}/api/v1/im/lark/webhook`}</code></div>
 }
 
 function StateTag({ s }: { s: ImStatus }) {
