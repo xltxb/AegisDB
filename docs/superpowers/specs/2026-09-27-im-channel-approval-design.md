@@ -568,3 +568,37 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   webhook 模式缺密钥、长连接拿不到受控拨号器这类纯配置错在任何网络请求之前就报。
 - `isSecretKey` 认得 `encryptKey`：它名字里没有 secret / token，但同样能伪造飞书推送。
 - 新增配置键 `im.lark.apiBase`（私有化部署与测试用）。它走出站 URL 校验（https + 非私网），生产环境指向内网需部署配置 `webhook.allow_private: true`（`VELA_WEBHOOK_ALLOW_PRIVATE`）。
+
+## 21. 第 4 期（钉钉交互审批）实现记录
+
+- **不用官方 Stream SDK 的客户端，只用它的数据类型**：`dingtalk-stream-sdk-go` v0.9.1 的 `client` 写死
+  `http.DefaultTransport` 与 `websocket.DefaultDialer`（注入不了受控出站客户端）、在 Debug 级把含 `clientSecret`
+  的请求体打进进程全局 logger、断线重连跑在 `context.Background()` 上（`Reload` 之后旧连接不退出，继续分走事件）。
+  Stream 协议由适配器自己实现（换连接地址 → 拨 `endpoint?ticket=` → JSON 帧：`SYSTEM ping` 原样回、`SYSTEM
+  disconnect` 换连接、`CALLBACK` 处理后带 `messageId` 回执），拨号走受控拨号器，钉钉下发的连接地址也过出站校验；
+  帧与载荷用 SDK 的 `payload` / `chatbot` / `card` 类型，假网关用同一套。不上报 `localIp`。回调处理器 panic 时
+  照样回执该帧（不回的话钉钉会重推，再 panic 一次）。
+- **只有 Stream，没有 webhook**：钉钉的 HTTP 回调要分别处理机器人消息（`timestamp` + `sign`）与另行登记的卡片回调
+  路由；Stream 已覆盖全部场景且不需要公网入口。钉钉不实现 `Webhooker`，`/api/v1/im/dingtalk/webhook` 一律 403。
+  没有 `im.dingtalk.mode` 键。
+- **互动卡片高级版 + 管理员搭的模板**：Stream 卡片回调只支持高级版，高级版只能用卡片平台的模板。新增配置键
+  `im.dingtalk.cardTemplateId`。模板变量 `title` / `summary` / `reason` / `command` / `consoleUrl` / `status`
+  （`pending` | `done`）/ `result` / `tip`，全部用纯文本组件；按钮回传参数 `act` = `a` | `r`。没填模板 ID 时 `Run`
+  在任何网络请求之前报错。
+- **卡片标识**：`outTrackId` = `aegis-<ApNo>-<16 位十六进制>`，点击回调只凭它认单；认人只凭回调的 `userId`
+  （`userIdType` 为 userid），unionId 的点击不认。投放到 `dtv1.card//IM_ROBOT.<userid>`，不许转发。
+- **投放结果逐个检查**：接口 200 但 `deliverResults[].success=false`（对方不在可见范围内）按发送失败处理，不记卡片。
+- **点击的提示写回卡片的 `tip` 变量**：钉钉卡片回调没有 toast。
+- **收卡只改 `status` / `result` / `tip`**（`updateCardDataByKey`），卡片其余内容保留 —— 与飞书整张替换不同。
+- **私聊回复走机器人单聊接口**（`/v1.0/robot/oToMessages/batchSend`），不用事件里带来的 `sessionWebhook` 地址。
+  只理 `conversationType=1`、`msgtype=text`、带 `senderStaffId` 的消息；按 `msgId` 去重（最近 512 条）。
+- **没有机器人名**：钉钉没有按 robotCode 查机器人名称的接口，`*App` 不实现 `BotNamer`。
+- **access token** 缓存到过期前 5 分钟；钉钉回 401 时换新 token 重试一次。
+- **永久性错误停循环**：凭据被拒、没开权限、开放平台地址填错（3xx / 4xx、解析不了的 2xx、被出站校验拒绝）、没填模板；
+  钉钉下发的 Stream 连接地址没过出站校验（非 DNS 错误），或换连接的响应缺 endpoint / ticket、scheme 不对，同样是
+  永久性错误，`Run` 返回、设置页显示原因。限流码（含 `QpsLimit` / `Throttl`）、429、5xx、网络错误与 DNS 解析失败
+  退避重试。Client Secret 在所有错误里换成 `<client-secret>`。
+- 新配置键：`im.dingtalk.clientID`、`clientSecret`🔒、`robotCode`（缺省 = clientID）、`cardTemplateId`、`apiBase`
+  （缺省 `https://api.dingtalk.com`，走出站 URL 校验）。
+- 重试退避、拒绝重定向、取受控拨号器、消息去重抽成 `imchannel` 的 `Retry` / `Sleep` / `NoRedirects` /
+  `GuardedDial` / `Recent`，飞书与 Telegram 改用它们。
