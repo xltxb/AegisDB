@@ -11,6 +11,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
+	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 )
 
 type Call struct {
@@ -39,6 +42,14 @@ type Server struct {
 	tenant  string
 	rotated int
 	nextMsg int
+
+	// 长连接(ws.go)
+	conn      *websocket.Conn
+	writeMu   sync.Mutex
+	connects  int
+	waiting   map[string]chan larkws.Response
+	nextFrame int
+	nextEvent int
 }
 
 func New(t testing.TB) *Server {
@@ -46,6 +57,7 @@ func New(t testing.TB) *Server {
 		AppID: "cli_test_app", AppSecret: "test-app-secret-0000", BotName: "AegisDB 测试机器人",
 		VerificationToken: "test-verification-token", EncryptKey: "test-encrypt-key",
 		fail: map[string]Failure{}, tenant: "t-tenant-0", nextMsg: 100,
+		waiting: map[string]chan larkws.Response{},
 	}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	t.Cleanup(s.Close)
@@ -73,6 +85,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/ws" {
+		s.upgrade(w, r)
+		return
+	}
 	var params map[string]any
 	_ = json.NewDecoder(r.Body).Decode(&params)
 	if params == nil {
@@ -90,6 +106,8 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/open-apis/im/v1/messages/"):
 		method = "patch"
 		params["message_id"] = strings.TrimPrefix(r.URL.Path, "/open-apis/im/v1/messages/")
+	case r.Method == http.MethodPost && r.URL.Path == "/callback/ws/endpoint":
+		method = "wsEndpoint"
 	default:
 		http.NotFound(w, r)
 		return
@@ -105,6 +123,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusBadRequest
 		}
 		writeJSON(w, status, map[string]any{"code": f.Code, "msg": f.Msg})
+		return
+	}
+	if method == "wsEndpoint" {
+		s.endpoint(w, params)
 		return
 	}
 	if method == "token" {

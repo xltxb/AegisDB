@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
+
 	"velagateway/internal/imchannel"
 )
 
@@ -56,7 +58,9 @@ type App struct {
 	verifyToken string
 	client      *http.Client
 	validate    func(string) error
-	bot         atomic.Value // string:Run 里查到的应用名
+	bot         atomic.Value                // string:Run 里查到的应用名
+	disp        *dispatcher.EventDispatcher // 长连接与 webhook 共用;处理函数从 ctx 里取 sink
+	seen        recent                      // 已处理的私聊 message_id
 
 	tokMu  sync.Mutex
 	tok    string
@@ -90,6 +94,7 @@ func newApp(d imchannel.Deps, n *Channel) *App {
 		client:      d.HTTP, validate: d.ValidateURL,
 	}
 	a.bot.Store("")
+	a.disp = a.newDispatcher()
 	return a
 }
 
