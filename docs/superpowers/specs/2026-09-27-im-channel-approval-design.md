@@ -542,3 +542,27 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   `Reload`；并发绑定同一平台账号只有一个成功，失败方得到「已绑定到其他网关账户」；代绑拒绝停用账户
   与服务账号；代解绑只在真的删到时写审计。
 - Telegram 群通知不在本期，属于第 6 期。
+
+## 20. 第 3 期（飞书交互审批）实现记录
+
+- **出站不用 SDK，入站用 SDK**：发卡、改卡、查机器人名、回私聊都是几个固定的 OpenAPI，用标准库直接调，
+  与 Telegram 适配器一个写法，测试也能用同一种假服务器；长连接是 protobuf 帧 + 心跳 + 重连，用官方 SDK
+  （`larksuite/oapi-sdk-go/v3` 的 `ws` 包）。SDK 的取连接地址与 WebSocket 拨号都注入网关受控的出站客户端；
+  拿不到受控拨号器就拒绝建立长连接。SDK 的 Debug 日志一律丢弃（会打印含绑定码的事件 payload）。
+- **飞书渠道按配置分两种形态**：只配群机器人 webhook 是只能通知的 `*Channel`；配了 App ID + App Secret 是
+  `*App`（嵌着群通知那一半）。Hub 靠类型断言 `Approver` 判断能否发卡片，只配群通知的飞书不能出现在绑定弹窗里。
+- **收卡整张替换**：飞书改卡片只能整张替换，网关不存卡片原文，所以收起后的卡片只留单号与终态。msgRef 是
+  `<message_id>|<ApNo>`；卡片 `config.update_multi = true` 才能被改写。
+- **按钮 value**：`{"ap": "<ApNo>", "act": "a" | "r"}`，ApNo 白名单 `^[A-Za-z0-9-]{1,32}$`。
+- **`Webhooker` 的返回值改为 `WebhookReply{Status, Body}`**：飞书的 URL 校验要回 challenge，卡片回调的 toast
+  在响应体里。Telegram 不受影响。
+- **webhook 不用 SDK 的 `dispatcher.Handle`**：它的签名比较不是常量时间、验签失败回 500（飞书会重投）、允许
+  未加密请求只靠 Token 过关。网关自己做：只收加密请求 → 解密 → 常量时间比对 Verification Token →
+  （URL 校验到此回 challenge，飞书不给它签名）→ 常量时间验签 → 交给同一个分发器。任何一步失败都是同一个 403。
+- **私聊按 `message_id` 去重**（最近 512 条）：飞书没及时收到确认会重推，绑定码第二次到达时已被消费。
+- **原因改用 `plain_text`**：群通知与交互卡片都是。lark_md 会把发起人写的 markdown 链接渲染成真链接。
+- **tenant_access_token** 缓存到过期前 5 分钟；飞书回 `99991661` / `99991663` 时换新 token 重试一次。
+- **永久性错误停循环**：飞书明确拒绝（code 非零，频控 `99991400` 除外）或开放平台地址回了 4xx，`Run` 返回
+  错误，设置页显示原因。
+- `isSecretKey` 认得 `encryptKey`：它名字里没有 secret / token，但同样能伪造飞书推送。
+- 新增配置键 `im.lark.apiBase`（私有化部署与测试用）。
