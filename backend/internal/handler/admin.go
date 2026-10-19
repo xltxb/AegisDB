@@ -24,6 +24,12 @@ import (
 // telegramWebhookSecretRe 约束 Telegram 渠道的 webhook secret。
 var telegramWebhookSecretRe = regexp.MustCompile(`^[A-Za-z0-9_-]{32,256}$`)
 
+// dingtalkTemplateRe 约束钉钉卡片模板 ID(形如 dac1dbec-….schema)。
+var dingtalkTemplateRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
+
+// dingtalkRobotCodeRe 约束钉钉机器人的 robotCode(企业内部应用默认即 Client ID)。
+var dingtalkRobotCodeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
+
 // encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
 // 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
 // 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
@@ -833,7 +839,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateIPAllowlist(sv)
 			case "im.callbackBaseURL":
 				verr = service.ValidateCallbackBaseURL(sv)
-			case "im.telegram.apiBase", "im.lark.apiBase":
+			case "im.telegram.apiBase", "im.lark.apiBase", "im.dingtalk.apiBase":
 				verr = service.ValidateOutboundURL(sv)
 			case "im.telegram.webhookSecret":
 				// 到这里的一定是真要换的新明文(空值已在上面按「保持原值」跳过),
@@ -852,6 +858,14 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			case "im.lark.domain":
 				if sv != "feishu" && sv != "lark" {
 					verr = fmt.Errorf("只能是 feishu 或 lark")
+				}
+			case "im.dingtalk.cardTemplateId":
+				if !dingtalkTemplateRe.MatchString(sv) {
+					verr = fmt.Errorf("卡片模板 ID 只能含字母、数字、.、_ 或 -,最长 128 位")
+				}
+			case "im.dingtalk.robotCode":
+				if !dingtalkRobotCodeRe.MatchString(sv) {
+					verr = fmt.Errorf("robotCode 只能含字母、数字、_ 或 -,最长 64 位")
 				}
 			}
 			if verr != nil {

@@ -12,6 +12,7 @@ import (
 
 	"velagateway/internal/gateway"
 	"velagateway/internal/imchannel"
+	"velagateway/internal/imchannel/dingtalk"
 	"velagateway/internal/imchannel/lark"
 	"velagateway/internal/imchannel/telegram"
 	"velagateway/internal/model"
@@ -101,6 +102,8 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 	s.IM.Register(imchannel.Lark, imchannel.Caps{Notify: true, Approve: true}, lark.New)
 	// Telegram:第 2 期起能做交互审批;群通知在第 6 期。
 	s.IM.Register(imchannel.Telegram, imchannel.Caps{Approve: true}, telegram.New)
+	// 钉钉:第 4 期起能做交互审批(Stream 长连接);群通知在第 6 期。
+	s.IM.Register(imchannel.DingTalk, imchannel.Caps{Approve: true}, dingtalk.New)
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
 	if m := repo.MaxApprovalSeq(); m >= 2294 {
