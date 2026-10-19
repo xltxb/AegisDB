@@ -246,6 +246,10 @@ func TestRequest_AWrongOpenPlatformAddressIsPermanent(t *testing.T) {
 	if _, err := a.token(context.Background()); !permanent(err) {
 		t.Fatalf("a redirect must be permanent, got %v", err)
 	}
+	srv.SetFail("token", dttest.Failure{Raw: "{}"})
+	if _, err := a.token(context.Background()); !permanent(err) || !strings.Contains(err.Error(), "检查开放平台地址") {
+		t.Fatalf("a 200 JSON without accessToken must be permanent and point at the address, got %v", err)
+	}
 	a.validate = func(string) error { return errors.New("目标解析到内网/环回地址，已拒绝(防 SSRF)") }
 	if _, err := a.token(context.Background()); !permanent(err) {
 		t.Fatalf("a refused open-platform address must be permanent, got %v", err)
@@ -255,5 +259,24 @@ func TestRequest_AWrongOpenPlatformAddressIsPermanent(t *testing.T) {
 	}
 	if _, err := a.token(context.Background()); err == nil || permanent(err) {
 		t.Fatalf("a DNS lookup failure is transient, got %v", err)
+	}
+}
+
+func TestSendCard_AResponseWithoutDeliverResultsIsPermanent(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	srv.SetFail("deliver", dttest.Failure{Raw: `{"success":true,"result":{}}`})
+	_, err := a.SendCard(context.Background(), "staff1", imchannel.ApprovalCard{ApNo: "AP-1"})
+	if err == nil || !permanent(err) {
+		t.Fatalf("err = %v, want a permanent error", err)
+	}
+}
+
+func TestCloseCard_AFailedUpdateIsAnError(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	srv.SetFail("update", dttest.Failure{Raw: `{"success":false,"result":false}`})
+	if err := a.CloseCard(context.Background(), testTrack, imchannel.CardState{}); err == nil {
+		t.Fatal("success=false must not count as closed")
 	}
 }

@@ -162,7 +162,9 @@ func (a *App) session(ctx context.Context, sink imchannel.ActionSink) error {
 
 	w := &frameWriter{conn: conn}
 	var handlers sync.WaitGroup
-	defer handlers.Wait() // 先等处理中的回调写完回执,再关连接
+	// 连接正常断开时,等处理中的回调把回执写完再返回。Reload(ctx 取消)时 AfterFunc 已经把连接
+	// 关了,处理中的回调写回执会失败,钉钉会重投该帧:点击是幂等的,重投的绑定码最多多收一句「无效或已过期」。
+	defer handlers.Wait()
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {

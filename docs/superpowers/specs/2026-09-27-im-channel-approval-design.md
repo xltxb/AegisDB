@@ -585,8 +585,8 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   `im.dingtalk.cardTemplateId`。模板变量 `title` / `summary` / `reason` / `command` / `consoleUrl` / `status`
   （`pending` | `done`）/ `result` / `tip`，全部用纯文本组件；按钮回传参数 `act` = `a` | `r`。没填模板 ID 时 `Run`
   在任何网络请求之前报错。
-- **卡片标识**：`outTrackId` = `aegis-<ApNo>-<16 位十六进制>`，点击回调只凭它认单；认人只凭回调的 `userId`
-  （`userIdType` 为 userid），unionId 的点击不认。投放到 `dtv1.card//IM_ROBOT.<userid>`，不许转发。
+- **卡片标识**：`outTrackId` = `aegis-<ApNo>-<16 位十六进制>`，点击回调只凭它认单；认人只凭回调的 `userId`；
+  unionId（`userIdType=2`）的点击不认。投放到 `dtv1.card//IM_ROBOT.<userid>`，不许转发。
 - **投放结果逐个检查**：接口 200 但 `deliverResults[].success=false`（对方不在可见范围内）按发送失败处理，不记卡片。
 - **点击的提示写回卡片的 `tip` 变量**：钉钉卡片回调没有 toast。
 - **收卡只改 `status` / `result` / `tip`**（`updateCardDataByKey`），卡片其余内容保留 —— 与飞书整张替换不同。

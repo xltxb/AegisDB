@@ -284,6 +284,15 @@ func TestRun_AWrongOpenPlatformAddressStopsTheLoop(t *testing.T) {
 	}
 }
 
+func TestRun_ATokenResponseWithoutATokenStopsTheLoop(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	srv.SetFail("token", dttest.Failure{Raw: "{}"})
+	if err := runUntilError(t, a); err == nil || !strings.Contains(err.Error(), "检查开放平台地址") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestRun_RefusesBeforeAnyRequestWhenTheCardTemplateIsMissing(t *testing.T) {
 	srv := dttest.New(t)
 	a := newTestApp(t, srv, kv{"im.dingtalk.cardTemplateId": ""})

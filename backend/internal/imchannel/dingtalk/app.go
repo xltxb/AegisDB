@@ -201,7 +201,9 @@ func (a *App) token(ctx context.Context) (string, error) {
 		ExpireIn    int    `json:"expireIn"`
 	}
 	if json.Unmarshal(raw, &r) != nil || r.AccessToken == "" {
-		return "", errors.New("钉钉 accessToken 响应里没有 token")
+		// 2xx 却没有 token:多半是开放平台地址填成了别的服务(旧的 oapi 域名、会回 200 JSON 的网关)。
+		// 当暂时错误会无限重试且 LastError 为空,按永久错误报给设置页。
+		return "", &apiError{Path: pathToken, HTTP: http.StatusOK, Msg: "响应里没有 accessToken,检查开放平台地址"}
 	}
 	a.tok = r.AccessToken
 	a.tokExp = time.Now().Add(time.Duration(max(r.ExpireIn-300, 60)) * time.Second)
@@ -263,7 +265,7 @@ func (a *App) SendCard(ctx context.Context, userID string, c imchannel.ApprovalC
 	// 接口成功不等于投放成功:对方不在应用可见范围内时钉钉照样回 200,只在 deliverResults 里说
 	// 失败。当成功的话,库里会记下一张根本不存在的卡片。
 	if len(r.Result.DeliverResults) == 0 {
-		return "", errors.New("钉钉投放卡片:响应里没有投放结果")
+		return "", &apiError{Path: pathDeliver, HTTP: http.StatusOK, Msg: "响应里没有投放结果,检查开放平台地址"}
 	}
 	for _, d := range r.Result.DeliverResults {
 		if !d.Success {
@@ -278,12 +280,23 @@ func (a *App) CloseCard(ctx context.Context, ref string, final imchannel.CardSta
 	if _, ok := trackApNo(ref); !ok {
 		return fmt.Errorf("无法识别的卡片引用 %q", ref)
 	}
-	_, err := a.call(ctx, http.MethodPut, pathCard, map[string]any{
+	raw, err := a.call(ctx, http.MethodPut, pathCard, map[string]any{
 		"outTrackId":        ref,
 		"cardData":          map[string]any{"cardParamMap": closedParams(final)},
 		"cardUpdateOptions": map[string]any{"updateCardDataByKey": true},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	// HTTP 200 不等于更新成功:UpdateCardResponseBody 带 success 字段。明说失败就报错,
+	// 免得把没收起来的卡片记成已收起。字段缺失按成功处理(与老版本/私有化兼容)。
+	var r struct {
+		Success *bool `json:"success"`
+	}
+	if json.Unmarshal(raw, &r) == nil && r.Success != nil && !*r.Success {
+		return fmt.Errorf("钉钉更新卡片失败: 响应 success=false")
+	}
+	return nil
 }
 
 // sendText 以机器人身份给 userID 发一条单聊文本(绑定结果的回复)。
