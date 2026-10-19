@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -101,13 +102,15 @@ func (a *App) open(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// 2xx 却给不出能用的地址:多半是开放平台地址指错了地方,重试也一样 —— 按 errBadBase 停下,
+	// 交给设置页,别在 WARN 里无限重连。
 	var ep payload.ConnectionEndpointResponse
 	if json.Unmarshal(raw, &ep) != nil || ep.Valid() != nil {
-		return "", errors.New("钉钉没有返回长连接地址")
+		return "", fmt.Errorf("%w: 钉钉没有返回长连接地址", errBadBase)
 	}
 	u, err := url.Parse(ep.Endpoint)
 	if err != nil || (u.Scheme != "wss" && u.Scheme != "ws") || u.Host == "" {
-		return "", fmt.Errorf("钉钉返回的长连接地址无法使用: %q", ep.Endpoint)
+		return "", fmt.Errorf("%w: 钉钉返回的长连接地址无法使用: %q", errBadBase, ep.Endpoint)
 	}
 	// 长连接地址是钉钉下发的,不是管理员填的;仍过一遍出站校验(wss 按 https、ws 按 http 查),
 	// 拨号本身也走受控拨号器 —— 两道都拦内网。
@@ -116,7 +119,12 @@ func (a *App) open(ctx context.Context) (string, error) {
 		check.Scheme = "http"
 	}
 	if err := a.validate(check.String()); err != nil {
-		return "", err
+		// 同 request:DNS 解析失败可能是一时的,照常重试;其余(解析到内网等)是出站校验拒绝,永久性。
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) {
+			return "", err
+		}
+		return "", fmt.Errorf("%w: 长连接地址 %v", errBadBase, err)
 	}
 	q := u.Query()
 	q.Set("ticket", ep.Ticket)
@@ -180,6 +188,8 @@ func (a *App) session(ctx context.Context, sink imchannel.ActionSink) error {
 				defer func() {
 					if p := recover(); p != nil {
 						slog.Error("dingtalk: callback handler panicked", "topic", df.GetTopic(), "panic", p)
+						// 照样回执:不回的话钉钉会重推同一帧,再 panic 一次。
+						w.send(fallbackAck(&df))
 					}
 				}()
 				w.send(a.handle(ctx, sink, &df))
@@ -230,6 +240,23 @@ func ack(df *payload.DataFrame, code int, data string) *payload.DataFrameRespons
 	return r
 }
 
+// fallbackAck 是处理出错时的回执:卡片回调照常回「无法识别的操作」,其余只确认收到。
+func fallbackAck(df *payload.DataFrame) *payload.DataFrameResponse {
+	if df.GetTopic() == payload.CardInstanceCallbackTopic {
+		return tipAck(df, "无法识别的操作")
+	}
+	return ack(df, payload.DataFrameResponseStatusCodeKOK, "")
+}
+
+// tipAck 是卡片回调的应答:把 tip 写回卡片(只改这个变量)。
+func tipAck(df *payload.DataFrame, tip string) *payload.DataFrameResponse {
+	b, _ := json.Marshal(map[string]any{"response": card.CardResponse{
+		CardUpdateOptions: &card.CardUpdateOptions{UpdateCardDataByKey: true},
+		CardData:          &card.CardDataDto{CardParamMap: map[string]string{paramTip: tip}},
+	}})
+	return ack(df, payload.DataFrameResponseStatusCodeKOK, string(b))
+}
+
 func (a *App) handle(ctx context.Context, sink imchannel.ActionSink, df *payload.DataFrame) *payload.DataFrameResponse {
 	switch df.GetTopic() {
 	case payload.CardInstanceCallbackTopic:
@@ -255,11 +282,7 @@ func (a *App) onCard(ctx context.Context, sink imchannel.ActionSink, df *payload
 			tip = sink.OnAction(ctx, imchannel.Action{PlatformUserID: req.UserId, ApNo: apNo, Approve: act == "a"}).Toast
 		}
 	}
-	b, _ := json.Marshal(map[string]any{"response": card.CardResponse{
-		CardUpdateOptions: &card.CardUpdateOptions{UpdateCardDataByKey: true},
-		CardData:          &card.CardDataDto{CardParamMap: map[string]string{paramTip: tip}},
-	}})
-	return ack(df, payload.DataFrameResponseStatusCodeKOK, string(b))
+	return tipAck(df, tip)
 }
 
 // onMessage 只理组织内用户发来的单聊文本。群里的任何文字都不触发任何逻辑 —— 绑定码发在群里就是

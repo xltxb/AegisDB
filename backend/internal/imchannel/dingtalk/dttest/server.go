@@ -54,6 +54,7 @@ type Server struct {
 	waiting   map[string]chan payload.DataFrameResponse
 	nextFrame int
 	nextMsg   int
+	endpoint  string // 非空时 open 下发它,而不是自己的 /connect
 }
 
 func New(t testing.TB) *Server {
@@ -174,8 +175,12 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		s.nextTicket++
 		ticket := fmt.Sprintf("ticket-%d", s.nextTicket)
 		s.tickets[ticket] = true
+		endpoint := s.endpoint
 		s.mu.Unlock()
-		writeJSON(w, http.StatusOK, map[string]any{"endpoint": "ws" + strings.TrimPrefix(s.URL, "http") + "/connect", "ticket": ticket})
+		if endpoint == "" {
+			endpoint = "ws" + strings.TrimPrefix(s.URL, "http") + "/connect"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"endpoint": endpoint, "ticket": ticket})
 		return
 	}
 	if r.Header.Get("x-acs-dingtalk-access-token") != token {

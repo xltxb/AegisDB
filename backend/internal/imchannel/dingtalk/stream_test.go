@@ -310,3 +310,79 @@ func TestRun_RefusesAClientWithoutAGuardedDialer(t *testing.T) {
 		t.Fatalf("%d requests went out before the configuration error", n)
 	}
 }
+
+// 钉钉下发的长连接地址被出站校验拒绝(解析到内网)是永久性的:Run 停下交出原因,不无限重连;
+// 校验拿到的是 http(s) 形式(ws → http、wss → https)。
+func TestRun_AnEndpointRejectedByTheOutboundCheckStopsTheLoop(t *testing.T) {
+	for _, c := range []struct{ endpoint, checked string }{
+		{"ws://10.0.0.5:9000/connect", "http://10.0.0.5:9000"},
+		{"wss://10.0.0.5/connect", "https://10.0.0.5"},
+	} {
+		srv := dttest.New(t)
+		a := newTestApp(t, srv, nil)
+		srv.SetEndpoint(c.endpoint)
+		var mu sync.Mutex
+		var checked []string
+		a.validate = func(u string) error {
+			mu.Lock()
+			checked = append(checked, u)
+			mu.Unlock()
+			if strings.Contains(u, "10.0.0.5") {
+				return errors.New("解析到内网地址")
+			}
+			return nil
+		}
+		err := runUntilError(t, a)
+		if !errors.Is(err, errBadBase) || !strings.Contains(err.Error(), "内网") {
+			t.Fatalf("%s: err = %v", c.endpoint, err)
+		}
+		if srv.ConnectCount() != 0 {
+			t.Fatalf("%s: a rejected endpoint must not be dialled", c.endpoint)
+		}
+		mu.Lock()
+		got := checked
+		mu.Unlock()
+		found := false
+		for _, u := range got {
+			found = found || u == c.checked
+		}
+		if !found {
+			t.Fatalf("%s: validated %q, want %s", c.endpoint, got, c.checked)
+		}
+	}
+}
+
+func TestRun_AnOpenResponseWithoutATicketStopsTheLoop(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	srv.SetFail("open", dttest.Failure{Raw: `{"endpoint":"ws://127.0.0.1:1/connect"}`})
+	if err := runUntilError(t, a); err == nil || !strings.Contains(err.Error(), "没有返回长连接地址") {
+		t.Fatalf("err = %v", err)
+	}
+	if srv.ConnectCount() != 0 {
+		t.Fatal("no connection without a ticket")
+	}
+}
+
+func TestRun_AnUnusableEndpointStopsTheLoop(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	srv.SetEndpoint("https://example.com/connect")
+	if err := runUntilError(t, a); err == nil || !strings.Contains(err.Error(), "无法使用") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// panicSink 处理点击时 panic:适配器仍要回执,不然钉钉会重推同一帧。
+type panicSink struct{ recSink }
+
+func (*panicSink) OnAction(context.Context, imchannel.Action) imchannel.ActionResult { panic("boom") }
+
+func TestRun_APanickingHandlerStillAcknowledgesTheFrame(t *testing.T) {
+	srv := dttest.New(t)
+	a := newTestApp(t, srv, nil)
+	startRun(t, a, &panicSink{})
+	if tip := srv.Click(t, "staff1", testTrack, "a"); tip != "无法识别的操作" {
+		t.Fatalf("tip after a panic = %q", tip)
+	}
+}

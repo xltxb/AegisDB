@@ -58,7 +58,11 @@ func (s *Server) readLoop(conn *websocket.Conn) {
 		ch := s.waiting[resp.GetHeader(payload.DataFrameHeaderKMessageId)]
 		s.mu.Unlock()
 		if ch != nil {
-			ch <- resp
+			// 不阻塞:适配器若对同一帧回了两次执,第二次丢掉,别把读循环卡死。
+			select {
+			case ch <- resp:
+			default:
+			}
 		}
 	}
 }
@@ -231,4 +235,11 @@ func (s *Server) DropConnection() {
 	if conn != nil {
 		conn.Close()
 	}
+}
+
+// SetEndpoint 让之后的 open 下发这个长连接地址(扮演一个被劫持或指向内网的下发)。空串恢复默认。
+func (s *Server) SetEndpoint(endpoint string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endpoint = endpoint
 }
