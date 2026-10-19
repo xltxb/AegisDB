@@ -33,7 +33,8 @@ export const IM_COMMON: FieldDef[] = [
 
 /**
  * 每个渠道自己的配置项。表单初值、保存载荷、渲染都从这张表派生 —— 接一个新渠道只在
- * 这里加一项,不必再去动设置页。飞书群通知（第 1 期）与交互审批（第 3 期）、Telegram 交互审批（第 2 期）。
+ * 这里加一项,不必再去动设置页。飞书群通知（第 1 期）与交互审批（第 3 期）、Telegram 交互审批（第 2 期）、
+ * 钉钉交互审批（第 4 期）。
  */
 export const IM_CHANNELS: Record<string, ChannelDef> = {
   lark: {
@@ -66,6 +67,15 @@ export const IM_CHANNELS: Record<string, ChannelDef> = {
       },
       { key: 'im.telegram.webhookSecret', label: 'imTgSecret', placeholderKey: 'imTgSecretPh', secret: true },
       { key: 'im.telegram.apiBase', label: 'imTgApiBase', placeholder: 'https://api.telegram.org' },
+    ],
+  },
+  dingtalk: {
+    approval: [
+      { key: 'im.dingtalk.clientID', label: 'imDtClientID', placeholderKey: 'imDtClientIDPh' },
+      { key: 'im.dingtalk.clientSecret', label: 'imDtClientSecret', placeholderKey: 'imDtClientSecretPh', secret: true },
+      { key: 'im.dingtalk.robotCode', label: 'imDtRobotCode', placeholderKey: 'imDtRobotCodePh' },
+      { key: 'im.dingtalk.cardTemplateId', label: 'imDtTemplate', placeholderKey: 'imDtTemplatePh' },
+      { key: 'im.dingtalk.apiBase', label: 'imDtApiBase', placeholder: 'https://api.dingtalk.com' },
     ],
   },
 }
@@ -139,7 +149,8 @@ export default function ImChannelsPanel({
                 extra={
                   s.kind === 'telegram' ? <TelegramHint values={values} />
                     : s.kind === 'lark' ? <LarkHint values={values} />
-                      : undefined
+                      : s.kind === 'dingtalk' ? <DingTalkHint />
+                        : undefined
                 }
               />
             )}
@@ -246,6 +257,15 @@ function LarkHint({ values }: { values: ImValues }) {
   const base = String(values['im.callbackBaseURL'] ?? '').trim().replace(/\/+$/, '')
   if (!base) return <div className="set-hint warn">{t('imLarkWebhookNeedsBase')}</div>
   return <div className="set-hint">{t('imLarkWebhookURL')}<code>{`${base}/api/v1/im/lark/webhook`}</code></div>
+}
+
+/**
+ * 钉钉只有 Stream 一种接收方式,不需要公网入口;要让管理员知道的是:机器人得设成 Stream 模式,
+ * 卡片模板得按手册搭(变量名与网关一一对应,搭错了卡片发不出去或按钮点了没反应)。
+ */
+function DingTalkHint() {
+  const { t } = useTranslation()
+  return <div className="set-hint">{t('imDtStreamNote')}</div>
 }
 
 function StateTag({ s }: { s: ImStatus }) {

@@ -929,6 +929,16 @@ export const en: Dict = {
   imLarkWsNote: 'Long connection: in Events & Callbacks set the subscription mode to "long connection", then add the event im.message.receive_v1 and the callback card.action.trigger. Safe with several gateway instances.',
   imLarkWebhookURL: 'Enter this URL as both the event and the callback request URL: ',
   imLarkWebhookNeedsBase: 'Webhook mode needs the callback base URL above.',
+  imDtClientID: 'Client ID',
+  imDtClientIDPh: 'Developer console › Credentials (formerly AppKey)',
+  imDtClientSecret: 'Client Secret',
+  imDtClientSecretPh: 'On the same page as the Client ID (formerly AppSecret)',
+  imDtRobotCode: 'RobotCode',
+  imDtRobotCodePh: 'Blank = the Client ID (the default for internal apps)',
+  imDtTemplate: 'Card template ID',
+  imDtTemplatePh: 'Card platform › Templates, e.g. xxxx.schema',
+  imDtApiBase: 'Open platform URL',
+  imDtStreamNote: 'Stream mode: set the bot\'s message receiving mode to Stream in the developer console and grant the interactive-card permissions; build the card template as the setup guide describes — the variable names must match. No public endpoint needed; safe with several gateway instances.',
   // The audit webhook forwarding test button (see whSendTest below) reuses this
   // "Sending" copy too, so it stays.
   larkSending: 'Sending',
