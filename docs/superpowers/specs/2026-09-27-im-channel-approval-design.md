@@ -565,4 +565,4 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
 - **永久性错误停循环**：飞书明确拒绝（code 非零，频控 `99991400` 除外）或开放平台地址回了 4xx，`Run` 返回
   错误，设置页显示原因。
 - `isSecretKey` 认得 `encryptKey`：它名字里没有 secret / token，但同样能伪造飞书推送。
-- 新增配置键 `im.lark.apiBase`（私有化部署与测试用）。
+- 新增配置键 `im.lark.apiBase`（私有化部署与测试用）。它走出站 URL 校验（https + 非私网），生产环境指向内网需部署配置 `webhook.allow_private: true`（`VELA_WEBHOOK_ALLOW_PRIVATE`）。
