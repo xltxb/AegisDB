@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -64,7 +63,7 @@ type App struct {
 	validate    func(string) error
 	bot         atomic.Value                // string:Run 里查到的应用名
 	disp        *dispatcher.EventDispatcher // 长连接与 webhook 共用;处理函数从 ctx 里取 sink
-	seen        recent                      // 已处理的私聊 message_id
+	seen        imchannel.Recent            // 已处理的私聊 message_id
 
 	tokMu  sync.Mutex
 	tok    string
@@ -95,23 +94,11 @@ func newApp(d imchannel.Deps, n *Channel) *App {
 		Channel: n, appID: appID, appSecret: secret, base: base, mode: mode,
 		encryptKey:  strings.TrimSpace(d.Settings.Secret(key("encryptKey"))),
 		verifyToken: strings.TrimSpace(d.Settings.Secret(key("verificationToken"))),
-		client:      noRedirects(d.HTTP), validate: d.ValidateURL,
+		client:      imchannel.NoRedirects(d.HTTP), validate: d.ValidateURL,
 	}
 	a.bot.Store("")
 	a.disp = a.newDispatcher()
 	return a
-}
-
-// noRedirects 复制一份出站客户端(Transport 即受控拨号器照旧共用),遇到 3xx 不跟随、把它
-// 原样交回来。网关的出站客户端本来就拒绝跟随,但它报的是一个普通错误,与网络错误分不开,
-// 只能当暂时的无限重试;拿到 3xx 响应本身,request 才能把它判成「开放平台地址填错」。
-func noRedirects(c *http.Client) *http.Client {
-	if c == nil {
-		return nil
-	}
-	cp := *c
-	cp.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &cp
 }
 
 // BotName 返回 Run 里查到并缓存的应用名。Hub 锁内调用,所以不做 I/O。
@@ -254,29 +241,6 @@ func (a *App) scrub(err error) error {
 		return err
 	}
 	return errors.New(strings.ReplaceAll(err.Error(), a.appSecret, "<app-secret>"))
-}
-
-// retry 反复调 fn 直到成功、遇到永久性错误或 ctx 结束(后者返回 nil)。
-func (a *App) retry(ctx context.Context, fn func() error) error {
-	backoff := time.Second
-	for {
-		err := fn()
-		if err == nil || permanent(err) {
-			return err
-		}
-		if ctx.Err() != nil {
-			return nil
-		}
-		slog.Warn("lark: call failed, retrying", "err", err, "retryIn", backoff)
-		t := time.NewTimer(backoff)
-		select {
-		case <-t.C:
-		case <-ctx.Done():
-			t.Stop()
-			return nil
-		}
-		backoff = min(backoff*2, 30*time.Second)
-	}
 }
 
 // botInfo 查应用名:绑定弹窗用它告诉用户私聊谁。查不到说明应用没开机器人能力 —— 那样

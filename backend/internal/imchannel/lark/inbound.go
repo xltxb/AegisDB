@@ -6,11 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
-	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -49,11 +46,11 @@ func (a *App) Run(ctx context.Context, sink imchannel.ActionSink) error {
 		if a.encryptKey == "" || a.verifyToken == "" {
 			return errors.New("webhook 模式需要配置 Encrypt Key 与 Verification Token")
 		}
-	} else if _, err := guardedDial(a.client); err != nil {
+	} else if _, err := imchannel.GuardedDial(a.client); err != nil {
 		return err
 	}
 	var name string
-	err := a.retry(ctx, func() error {
+	err := imchannel.Retry(ctx, "lark", permanent, func() error {
 		n, err := a.botInfo(ctx)
 		name = n
 		return err
@@ -73,7 +70,7 @@ func (a *App) Run(ctx context.Context, sink imchannel.ActionSink) error {
 // stream 用官方 SDK 维持长连接。SDK 的两条出网路径都换成网关受控的:取连接地址走 a.client,
 // WebSocket 拨号走同一个 Transport 的 DialContext。
 func (a *App) stream(ctx context.Context) error {
-	dial, err := guardedDial(a.client)
+	dial, err := imchannel.GuardedDial(a.client)
 	if err != nil {
 		return err
 	}
@@ -95,15 +92,6 @@ func (a *App) stream(ctx context.Context) error {
 		return nil
 	}
 	return a.scrub(err)
-}
-
-// guardedDial 取出网关出站客户端里带 SSRF 拦截的拨号器。拿不到就拒绝,不退回默认拨号器 ——
-// 那样长连接就绕开了内网拦截。
-func guardedDial(c *http.Client) (func(ctx context.Context, network, addr string) (net.Conn, error), error) {
-	if t, ok := c.Transport.(*http.Transport); ok && t.DialContext != nil {
-		return t.DialContext, nil
-	}
-	return nil, errors.New("出站客户端没有受控的拨号器,拒绝建立长连接")
 }
 
 // newDispatcher 建事件分发器:私聊消息与卡片回调。签名与 Token 不在这里验 —— 长连接本身
@@ -154,7 +142,7 @@ func (a *App) onMessage(ctx context.Context, ev *larkim.P2MessageReceiveV1) erro
 	}
 	openID := str(s.SenderId.OpenId)
 	sink := sinkFrom(ctx)
-	if openID == "" || sink == nil || !a.seen.first(str(m.MessageId)) {
+	if openID == "" || sink == nil || !a.seen.First(str(m.MessageId)) {
 		return nil
 	}
 	var body struct {
@@ -185,38 +173,6 @@ func str(p *string) string {
 		return ""
 	}
 	return *p
-}
-
-// recent 记住最近处理过的消息 ID。飞书没及时收到确认会重推同一条消息;绑定码第二次到达时
-// 已被消费,不去重的话用户会在「已绑定」之后又收到一句「无效或已过期」。
-type recent struct {
-	mu    sync.Mutex
-	ids   map[string]struct{}
-	order []string
-}
-
-const recentMax = 512
-
-// first 报告 id 是不是第一次出现。空 id 不去重。
-func (r *recent) first(id string) bool {
-	if id == "" {
-		return true
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.ids == nil {
-		r.ids = map[string]struct{}{}
-	}
-	if _, dup := r.ids[id]; dup {
-		return false
-	}
-	r.ids[id] = struct{}{}
-	r.order = append(r.order, id)
-	if len(r.order) > recentMax {
-		delete(r.ids, r.order[0])
-		r.order = r.order[1:]
-	}
-	return true
 }
 
 // sdkLogger 把 SDK 的日志接进 slog。Debug 一律丢弃:SDK 在 Debug 级会把整条事件 payload

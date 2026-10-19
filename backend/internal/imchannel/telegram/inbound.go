@@ -32,7 +32,7 @@ const startReply = "你好,我是数据库网关的审批机器人。\n" +
 // setWebhook 被拒 —— 改配置之前重试多少次都一样),或 webhook 模式缺配置。其它错误一律退避重试。
 func (c *Channel) Run(ctx context.Context, sink imchannel.ActionSink) error {
 	var me User
-	if err := c.retry(ctx, func() error { return c.call(ctx, c.client, "getMe", map[string]any{}, &me) }); err != nil {
+	if err := imchannel.Retry(ctx, "telegram", isPermanent, func() error { return c.call(ctx, c.client, "getMe", map[string]any{}, &me) }); err != nil {
 		return err
 	}
 	if ctx.Err() != nil {
@@ -49,7 +49,7 @@ func (c *Channel) runWebhook(ctx context.Context) error {
 	if c.hookURL == "" || c.secret == "" {
 		return errors.New("webhook 模式需要配置回调根地址(im.callbackBaseURL)与 webhook secret")
 	}
-	err := c.retry(ctx, func() error {
+	err := imchannel.Retry(ctx, "telegram", isPermanent, func() error {
 		return c.call(ctx, c.client, "setWebhook", map[string]any{
 			"url": c.hookURL, "secret_token": c.secret, "allowed_updates": allowedUpdates,
 		}, nil)
@@ -64,7 +64,7 @@ func (c *Channel) runWebhook(ctx context.Context) error {
 
 func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) error {
 	// 切回 polling 时 Telegram 上可能还登记着上一次的 webhook,不删掉它 getUpdates 会一直 409。
-	err := c.retry(ctx, func() error {
+	err := imchannel.Retry(ctx, "telegram", isPermanent, func() error {
 		return c.call(ctx, c.client, "deleteWebhook", map[string]any{"drop_pending_updates": false}, nil)
 	})
 	if err != nil || ctx.Err() != nil {
@@ -87,7 +87,7 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 			}
 			// 409 = 另一个实例在 getUpdates,或 webhook 又被人登记上了。退避,不要互相踢。
 			slog.Warn("telegram: getUpdates failed", "err", err, "retryIn", backoff)
-			if !sleep(ctx, backoff) {
+			if !imchannel.Sleep(ctx, backoff) {
 				return nil
 			}
 			backoff = min(backoff*2, 30*time.Second)
@@ -108,36 +108,6 @@ func (c *Channel) runPolling(ctx context.Context, sink imchannel.ActionSink) err
 		}
 	}
 	return nil
-}
-
-// retry 反复调 fn 直到成功、遇到永久性错误(4xx,409/429 除外)或 ctx 结束(后者返回 nil)。
-func (c *Channel) retry(ctx context.Context, fn func() error) error {
-	backoff := time.Second
-	for {
-		err := fn()
-		if err == nil || isPermanent(err) {
-			return err
-		}
-		if ctx.Err() != nil {
-			return nil
-		}
-		slog.Warn("telegram: call failed, retrying", "err", err, "retryIn", backoff)
-		if !sleep(ctx, backoff) {
-			return nil
-		}
-		backoff = min(backoff*2, 30*time.Second)
-	}
-}
-
-func sleep(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }
 
 // HandleWebhook 实现 imchannel.Webhooker。只有 webhook 模式、且配了 secret 时才收;
