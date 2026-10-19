@@ -142,21 +142,21 @@ func sleep(ctx context.Context, d time.Duration) bool {
 
 // HandleWebhook 实现 imchannel.Webhooker。只有 webhook 模式、且配了 secret 时才收;
 // secret 用常量时间比较。鉴权通过后一律 200 —— Telegram 会重投非 2xx 的请求。
-func (c *Channel) HandleWebhook(ctx context.Context, header http.Header, body []byte, sink imchannel.ActionSink) int {
+func (c *Channel) HandleWebhook(ctx context.Context, header http.Header, body []byte, sink imchannel.ActionSink) imchannel.WebhookReply {
 	if c.mode != modeWebhook || c.secret == "" {
-		return http.StatusForbidden
+		return imchannel.Reply(http.StatusForbidden)
 	}
 	got := header.Get("X-Telegram-Bot-Api-Secret-Token")
 	if subtle.ConstantTimeCompare([]byte(got), []byte(c.secret)) != 1 {
-		return http.StatusForbidden
+		return imchannel.Reply(http.StatusForbidden)
 	}
 	var u Update
 	if err := json.Unmarshal(body, &u); err != nil {
 		slog.Warn("telegram: webhook body unparsable", "err", err)
-		return http.StatusOK
+		return imchannel.Reply(http.StatusOK)
 	}
 	c.dispatch(ctx, u, sink)
-	return http.StatusOK
+	return imchannel.Reply(http.StatusOK)
 }
 
 func (c *Channel) dispatch(ctx context.Context, u Update, sink imchannel.ActionSink) {

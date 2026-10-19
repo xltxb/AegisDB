@@ -193,21 +193,21 @@ func TestHandleWebhook_AuthenticatesThenDispatches(t *testing.T) {
 	ctx := context.Background()
 
 	polling := newChannel(t, srv, map[string]string{"im.telegram.webhookSecret": "s3"})
-	if got := polling.HandleWebhook(ctx, hdr("s3"), body, sk); got != http.StatusForbidden {
+	if got := polling.HandleWebhook(ctx, hdr("s3"), body, sk); got.Status != http.StatusForbidden {
 		t.Fatalf("polling mode must refuse webhooks, got %d", got)
 	}
 	noSecret := newChannel(t, srv, map[string]string{"im.telegram.mode": "webhook"})
-	if got := noSecret.HandleWebhook(ctx, hdr(""), body, sk); got != http.StatusForbidden {
+	if got := noSecret.HandleWebhook(ctx, hdr(""), body, sk); got.Status != http.StatusForbidden {
 		t.Fatalf("no configured secret must refuse everything, got %d", got)
 	}
 	ch := newChannel(t, srv, map[string]string{"im.telegram.mode": "webhook", "im.telegram.webhookSecret": "s3"})
-	if got := ch.HandleWebhook(ctx, hdr("nope"), body, sk); got != http.StatusForbidden {
+	if got := ch.HandleWebhook(ctx, hdr("nope"), body, sk); got.Status != http.StatusForbidden {
 		t.Fatalf("wrong secret, got %d", got)
 	}
-	if got := ch.HandleWebhook(ctx, hdr("s3"), []byte("{not json"), sk); got != http.StatusOK {
+	if got := ch.HandleWebhook(ctx, hdr("s3"), []byte("{not json"), sk); got.Status != http.StatusOK {
 		t.Fatalf("an authenticated but unparsable body is acknowledged, got %d", got)
 	}
-	if got := ch.HandleWebhook(ctx, hdr("s3"), body, sk); got != http.StatusOK {
+	if got := ch.HandleWebhook(ctx, hdr("s3"), body, sk); got.Status != http.StatusOK {
 		t.Fatalf("good request, got %d", got)
 	}
 	if acts, _ := sk.snapshot(); len(acts) != 1 || acts[0].ApNo != "AP-3" {

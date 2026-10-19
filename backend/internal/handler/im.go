@@ -108,5 +108,10 @@ func (h *Handler) IMWebhook(c *gin.Context) {
 		c.Status(http.StatusBadRequest)
 		return
 	}
-	c.Status(h.Svc.IM.ServeWebhook(c.Request.Context(), c.Param("channel"), c.Request.Header, body))
+	r := h.Svc.IM.ServeWebhook(c.Request.Context(), c.Param("channel"), c.Request.Header, body)
+	if len(r.Body) > 0 {
+		c.Data(r.Status, "application/json; charset=utf-8", r.Body)
+		return
+	}
+	c.Status(r.Status)
 }

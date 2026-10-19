@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -9,7 +10,8 @@ import (
 	"velagateway/internal/imchannel/imtest"
 )
 
-func (a *testApp) postIMWebhook(channel string, header map[string]string, body string) int {
+// postIMWebhookFull 直接打网关的 webhook 入口(不带 JWT),返回状态码与响应体。
+func (a *testApp) postIMWebhookFull(channel string, header map[string]string, body string) (int, string) {
 	a.t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, a.srv.URL+"/api/v1/im/"+channel+"/webhook", bytes.NewReader([]byte(body)))
 	for k, v := range header {
@@ -19,8 +21,15 @@ func (a *testApp) postIMWebhook(channel string, header map[string]string, body s
 	if err != nil {
 		a.t.Fatalf("webhook: %v", err)
 	}
-	res.Body.Close()
-	return res.StatusCode
+	defer res.Body.Close()
+	b, _ := io.ReadAll(res.Body)
+	return res.StatusCode, string(b)
+}
+
+func (a *testApp) postIMWebhook(channel string, header map[string]string, body string) int {
+	a.t.Helper()
+	code, _ := a.postIMWebhookFull(channel, header, body)
+	return code
 }
 
 func (a *testApp) webhookFake(token string) *imtest.Fake {
@@ -38,8 +47,12 @@ func TestIMWebhook_ApprovesThroughTheSameDecisionPath(t *testing.T) {
 	app.bindIM("zhangwei@vela.io", "fake", "p-zw")
 	ap := app.submitProdHighRisk(admin)
 
-	eq(t, app.postIMWebhook("fake", map[string]string{"X-Fake-Secret": "s3"},
-		`{"pid":"p-zw","apNo":"`+ap.ApNo+`","approve":true}`), http.StatusOK, "accepted")
+	code, respBody := app.postIMWebhookFull("fake", map[string]string{"X-Fake-Secret": "s3"},
+		`{"pid":"p-zw","apNo":"`+ap.ApNo+`","approve":true}`)
+	eq(t, code, http.StatusOK, "accepted")
+	if !strings.Contains(respBody, `"toast"`) {
+		t.Fatalf("the channel's reply body must reach the platform, got %q", respBody)
+	}
 	eq(t, app.approvalRow(admin, ap.ApNo).Status, "approved", "decided via webhook")
 	if toasts := f.WebhookToasts(); len(toasts) != 1 || toasts[0] != "已批准,请发起人回控制台执行" {
 		t.Fatalf("toasts = %q", toasts)

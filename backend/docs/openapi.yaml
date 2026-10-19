@@ -1870,4 +1870,4 @@ paths:
         Telegram 等平台把按钮点击与私聊推到这里。渠道未开交互审批、secret 不符、来源不在
         im.callbackAllowIPs(非空时)一律 403;鉴权通过后无论处理成败都回 200。
       parameters: [{ name: channel, in: path, required: true, schema: { type: string } }]
-      responses: { '200': { description: OK }, '403': { description: 鉴权失败 }, '404': { description: 未知渠道 } }
+      responses: { '200': { description: '已受理。部分渠道(飞书)在响应体里回 JSON:URL 校验的 challenge,或卡片回调的 toast' }, '403': { description: 鉴权失败 }, '404': { description: 未知渠道 } }

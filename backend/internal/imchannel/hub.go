@@ -537,7 +537,7 @@ func (h *Hub) Flush() { h.work.Wait() }
 // 这是一扇在 JWT 之外、能驱动审批的门,所以每一步都失败朝严:渠道没登记 → 404;
 // 不能审批、没配置、交互审批没打开、不收 webhook、Hub 还没有 sink → 403。真伪由渠道
 // 自己验(Webhooker)。渠道 panic 时回 200:一个解析不了的请求,重投一万次也一样。
-func (h *Hub) ServeWebhook(ctx context.Context, kind string, header http.Header, body []byte) (status int) {
+func (h *Hub) ServeWebhook(ctx context.Context, kind string, header http.Header, body []byte) (reply WebhookReply) {
 	h.mu.Lock()
 	e := h.entries[kind]
 	var wh Webhooker
@@ -547,15 +547,15 @@ func (h *Hub) ServeWebhook(ctx context.Context, kind string, header http.Header,
 	sink := h.sink
 	h.mu.Unlock()
 	if e == nil {
-		return http.StatusNotFound
+		return Reply(http.StatusNotFound)
 	}
 	if wh == nil || sink == nil || !h.deps.Settings.Bool(Key(kind, "approval")) {
-		return http.StatusForbidden
+		return Reply(http.StatusForbidden)
 	}
 	defer func() {
 		if p := recover(); p != nil {
 			_ = panicErr(kind, "webhook", p)
-			status = http.StatusOK
+			reply = Reply(http.StatusOK)
 		}
 	}()
 	return wh.HandleWebhook(ctx, header, body, pinnedSink{kind: kind, next: sink})

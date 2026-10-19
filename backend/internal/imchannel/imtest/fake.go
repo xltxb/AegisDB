@@ -167,9 +167,9 @@ func (f *Fake) Notified() []imchannel.ApprovalCard {
 
 // HandleWebhook 模拟一个「平台推点击过来」的渠道。body 是 {"pid","apNo","approve"}。
 // 它故意把 Channel 填成一个错的值 —— Hub 必须把它钉回来。
-func (f *Fake) HandleWebhook(ctx context.Context, h http.Header, body []byte, sink imchannel.ActionSink) int {
+func (f *Fake) HandleWebhook(ctx context.Context, h http.Header, body []byte, sink imchannel.ActionSink) imchannel.WebhookReply {
 	if f.WebhookSecret == "" || subtle.ConstantTimeCompare([]byte(h.Get("X-Fake-Secret")), []byte(f.WebhookSecret)) != 1 {
-		return http.StatusForbidden
+		return imchannel.Reply(http.StatusForbidden)
 	}
 	var in struct {
 		PID     string `json:"pid"`
@@ -177,13 +177,14 @@ func (f *Fake) HandleWebhook(ctx context.Context, h http.Header, body []byte, si
 		Approve bool   `json:"approve"`
 	}
 	if json.Unmarshal(body, &in) != nil {
-		return http.StatusOK
+		return imchannel.Reply(http.StatusOK)
 	}
 	res := sink.OnAction(ctx, imchannel.Action{Channel: "spoofed", PlatformUserID: in.PID, ApNo: in.ApNo, Approve: in.Approve})
 	f.mu.Lock()
 	f.webhookToasts = append(f.webhookToasts, res.Toast)
 	f.mu.Unlock()
-	return http.StatusOK
+	b, _ := json.Marshal(map[string]string{"toast": res.Toast})
+	return imchannel.WebhookReply{Status: http.StatusOK, Body: b}
 }
 
 func (f *Fake) WebhookToasts() []string {
