@@ -602,3 +602,34 @@ POST   /api/v1/im/:channel/webhook                 webhook 入口（JWT 之外�
   （缺省 `https://api.dingtalk.com`，走出站 URL 校验）。
 - 重试退避、拒绝重定向、取受控拨号器、消息去重抽成 `imchannel` 的 `Retry` / `Sleep` / `NoRedirects` /
   `GuardedDial` / `Recent`，飞书与 Telegram 改用它们。
+
+## 22. 第 5 期（Slack 交互审批）实现记录
+
+- **不用 `slack-go/slack`，自己实现 Socket Mode**：v0.30.1 的 `socketmode` 能注入拨号器与 HTTP 客户端，硬伤不在 SSRF，
+  而在错误分类 —— 它只把 `invalid_auth` / `account_inactive` / `not_authed` / `token_revoked` 当致命，
+  `not_allowed_token_type`（两种 token 填反）、`missing_scope`、API 地址填错都以最长 5 分钟的退避无限重连，设置页看不到原因。
+  协议由适配器自己实现（`apps.connections.open` 换地址 → 拨 `wss` → `hello` 忽略、`disconnect` 换连接、信封回
+  `{"envelope_id"}` 确认），拨号走受控拨号器，Slack 下发的地址也过出站校验。没有新依赖。
+- **先确认、再处理**：Slack 要 3 秒内确认信封。处理用脱离取消的 ctx（`Reload` 不丢一次已确认的点击）；点击幂等、私聊按
+  `event_id` 去重（最近 512 条）。`interactive` 与 `events_api` 之外的信封只确认。
+- **webhook 模式**：Interactivity 与 Event Subscriptions 共用 `/api/v1/im/slack/webhook`，按 `Content-Type` 分辨。
+  `v0=HMAC-SHA256(signingSecret, "v0:<ts>:<body>")` 常量时间比对、时间戳 ±5 分钟，任何一步不过都是同一个 403；之后一律 200。
+  `url_verification` 回 challenge（限 `[A-Za-z0-9_-]{1,128}`）。判定同步做完再回 200，回点击者的消息放到协程里发。
+- **卡片全是不解析的文本**：外部文本用 `plain_text`、命令用 `rich_text_preformatted`，发起人写的链接、`<!channel>`、SQL
+  里的 `<` `&` ``` 原样显示；只有顶层 `text`（通知预览）与机器人发的纯文本按 mrkdwn 转义 `& < >`。
+- **按钮**：`action_id` `aegis_approve` / `aegis_reject` / `aegis_open`（链接按钮，被点时 Slack 照样回调，网关只确认），
+  `value` = `ap:<ApNo>:a|r`，那组按钮的 `block_id` = `aegis_actions`。认人只凭 `user.id`。
+- **点击结果是「仅你可见」的消息**（`chat.postEphemeral`）：Slack 的按钮没有 toast。
+- **收卡保留原文**：msgRef = `<D 频道>|<ts>|<ApNo>`。`conversations.history`（`latest=<ts>&inclusive=true&limit=1`）取回原
+  blocks，把 `aegis_actions` 换成一行终态；取不到或 Slack 不收（`invalid_blocks`）时退回「单号 + 终态」；`message_not_found`
+  算收起。
+- **机器人名取 `auth.test` 的 `user`**：`Run` 一开始调它，顺带验证 Bot Token、拿到机器人自己的成员 ID（私聊里忽略自己）；
+  没有 `bot_id`（用户 token）按永久性错误报。
+- **永久性错误停循环**：`ok:false` 的错误码（`ratelimited` / `internal_error` / `fatal_error` / `service_unavailable` /
+  `request_timeout` 除外）、API 地址填错（3xx / 4xx、解析不了或没有 `ok` 的 2xx、被出站校验拒绝）、Slack 下发的地址不能用、
+  `disconnect` 的 `link_disabled`。429、5xx、网络错误与 DNS 解析失败退避重试。缺 App Token（Socket Mode）、缺 Signing Secret
+  （webhook）、拿不到受控拨号器在任何网络请求之前报。三个密钥在所有错误里换成 `<bot-token>` / `<app-token>` / `<signing-secret>`。
+- 新配置键：`im.slack.botToken`🔒、`appToken`🔒、`mode`（`socket` | `webhook`）、`signingSecret`🔒、`apiBase`（缺省
+  `https://slack.com/api`，走出站 URL 校验）。保存时按前缀校验两种 token（`xoxb-` / `xapp-`），Signing Secret 限 16–128 位字母数字。
+- 所需权限：`chat:write`、`im:write`、`im:history`；bot 事件 `message.im`；App Home 的 Messages Tab 允许用户发消息；Interactivity。
+  Socket Mode 另需 `connections:write` 的 App-Level Token。

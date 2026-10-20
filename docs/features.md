@@ -152,7 +152,7 @@
   详情里能看到判定分层、审批链、那次执行的输出与影响行数（迁移 0032 起单独存 `exec_status`）。
 - **IM 渠道审批**：审批卡片私信给审批链上已绑定该渠道的成员，点按钮即可通过 / 驳回（不执行）；
   平台账号经一次性绑定码映射到网关账户，判定与控制台是同一处（`DecideBlockFor`）；多渠道可同时开，
-  任一处决定后其余卡片自动收起。目前支持飞书**群通知**与**交互审批**(长连接 / webhook)、Telegram **交互审批**(long polling / webhook)、钉钉**交互审批**(Stream 长连接)，其余渠道分期接入。
+  任一处决定后其余卡片自动收起。目前支持飞书**群通知**与**交互审批**(长连接 / webhook)、Telegram **交互审批**(long polling / webhook)、钉钉**交互审批**(Stream 长连接)、Slack **交互审批**(Socket Mode / webhook)，其余渠道分期接入。
   见 `docs/external-approval-setup.md` 与 ADR 0020。
 
 ### SQL 脚本

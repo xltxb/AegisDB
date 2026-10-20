@@ -16,7 +16,7 @@
 | 飞书 | ✅ 自定义机器人 webhook | ✅ 开放平台应用(长连接 / webhook) |
 | Telegram | 规划中(第 6 期) | ✅ long polling / webhook |
 | 钉钉 | 规划中(第 6 期) | ✅ 企业内部应用(Stream 长连接) |
-| Slack | 规划中 | 规划中(第 5 期) |
+| Slack | 规划中(第 6 期) | ✅ Slack 应用(Socket Mode / webhook) |
 | 企业微信 | 规划中 | 不支持(平台群机器人无回调) |
 
 ## 飞书群通知
@@ -89,6 +89,30 @@
 7. 卡片里的「通过 / 驳回」只做决定,不执行;决定后所有渠道上这张单的卡片都会收起。钉钉卡片收起时只隐藏按钮、显示结果,
    单号、命令、原因原样保留。只理组织内成员发给机器人的单聊文本:群里的消息、外部联系人的消息一律不理。
 
+## Slack 交互审批
+
+1. 在 api.slack.com/apps 用 **From scratch** 建一个应用,选要装进的工作区。
+2. **OAuth & Permissions** › Bot Token Scopes 加 `chat:write`(发卡片、改卡片、回消息)、`im:write`(打开与成员的私聊)、
+   `im:history`(收私聊里的绑定码;收卡时读回卡片原文)。**Install to Workspace**,复制 **Bot User OAuth Token**(`xoxb-` 开头)。
+3. **App Home** › 打开「Messages Tab」,勾选「Allow users to send Slash commands and messages from the messages tab」——
+   不勾的话成员没法私聊机器人,也就没法绑定。
+4. **Interactivity & Shortcuts** 打开 Interactivity;**Event Subscriptions** 打开,在「Subscribe to bot events」里加 `message.im`。
+5. 选接收方式:
+   - **Socket Mode(默认)**:**Socket Mode** 页打开 Socket Mode;**Basic Information** › App-Level Tokens 建一个带
+     `connections:write` 的 token(`xapp-` 开头)。网关主动连 Slack,不需要公网入口,多实例部署也安全 —— Slack 把每个事件只投给其中一个连接。
+     打开 Socket Mode 后,上面两处的 Request URL 不用填。
+   - **Webhook**:不开 Socket Mode;**Basic Information** › App Credentials 复制 **Signing Secret**。在网关「回调根地址」填一个
+     Slack 能访问到的公网 HTTPS 地址,把 `<回调根地址>/api/v1/im/slack/webhook` 同时填进「Interactivity & Shortcuts」与
+     「Event Subscriptions」的 Request URL(保存 Event Subscriptions 时 Slack 会发一次校验,网关自动应答)。网关只认签名正确、
+     时间戳在 ±5 分钟内的请求。
+6. 网关「设置 › IM 渠道 › Slack」打开「交互审批」,填 Bot User OAuth Token,选接收方式,再填 App-Level Token(Socket Mode)或
+   Signing Secret(webhook)。两种 token 填反、填成用户 token(`xoxp-`)会在保存时被拒。保存。
+7. 状态显示「运行中」且没有错误提示即已连通。token 错误、token 类型不对、缺权限、应用后台关掉了 Socket Mode、Web API 地址填错时,
+   状态会显示错误原因。「Web API 地址」一般留空(`https://slack.com/api`);它与其他出站地址走同一套校验。
+8. 卡片里的「通过 / 驳回」只做决定,不执行。点击结果以一条**只有点击者看得见**的消息回复(Slack 的按钮没有弹出提示)。工单一结束
+   (无论在哪里决定),所有人手上的卡片按钮都会换成一行结果,单号、命令、原因原样保留。只理成员发给机器人的私聊文本:频道里的消息、
+   机器人发的消息一律不理。
+
 ## Telegram 交互审批
 
 1. 在 Telegram 里找 **@BotFather**,`/newbot` 建一个机器人,拿到 bot token。
@@ -123,8 +147,10 @@
 2. 用**自己的** IM 账号私聊对应渠道的机器人,发送这串码。机器人回复「已绑定到 张三(zhang@…)」即完成。
    飞书里在搜索框搜机器人的名字(绑定弹窗里显示的那个)打开单聊。
    钉钉里搜索应用的机器人名即可打开单聊(钉钉没有查询机器人名称的接口,绑定弹窗不显示机器人名)。
+   Slack 里在侧栏「Apps」下找到这个应用(或搜索绑定弹窗里显示的机器人名),在它的 Messages 标签页发码。
 
 管理员可在「权限 › 用户详情 › IM 绑定」里代绑或解绑(换号、离职回收、绑错时用),两个动作都写审计。
+代绑 Slack 账号需要对方的**成员 ID**(`U` 开头;对方在自己的 Slack 资料页 › ⋮ › Copy member ID 可以拿到),不是显示名。
 
 点击卡片时:
 
