@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 type Call struct {
@@ -54,6 +56,14 @@ type Server struct {
 	tickets    map[string]bool
 	nextTicket int
 	endpoint   string // 非空时 apps.connections.open 下发它,而不是自己的 /link
+
+	// Socket Mode(socket.go)
+	conn      *websocket.Conn
+	writeMu   sync.Mutex
+	connects  int
+	waiting   map[string]chan struct{}
+	nextEnv   int
+	nextEvent int
 }
 
 func New(t testing.TB) *Server {
@@ -61,6 +71,7 @@ func New(t testing.TB) *Server {
 		BotToken: "xoxb-1-test-bot-token-0000", AppToken: "xapp-1-test-app-token-0000",
 		SigningSecret: "8f742231b10e8888abcd99edf5d7d85a", BotUserID: "U0BOT0001", BotName: "aegisbot",
 		fail: map[string]Failure{}, messages: map[string]string{}, tickets: map[string]bool{},
+		waiting: map[string]chan struct{}{},
 	}
 	s.Server = httptest.NewServer(http.HandlerFunc(s.handle))
 	t.Cleanup(s.Close)
@@ -94,6 +105,10 @@ func (s *Server) rejectToken(w http.ResponseWriter, got string) {
 }
 
 func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/link" {
+		s.upgrade(w, r)
+		return
+	}
 	method, isAPI := strings.CutPrefix(r.URL.Path, "/api/")
 	if !isAPI || r.Method != http.MethodPost {
 		http.NotFound(w, r)

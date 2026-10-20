@@ -110,11 +110,11 @@ func (e *apiError) Error() string {
 	return s
 }
 
-// permanent 判断重试无望的错误:Slack 明确拒绝(token 错或类型不对、缺权限 …)、API 地址填错(回了
+// permanent 判断重试无望的错误:应用关掉了 Socket Mode、Slack 明确拒绝(token 错或类型不对、缺权限 …)、API 地址填错(回了
 // 3xx / 4xx、回了解析不了或没有 ok 字段的 2xx、被出站防护拒绝)。限流、429、5xx、Slack 自己说的
 // 临时错误、网络错误(含 DNS 解析失败)是暂时的。
 func permanent(err error) bool {
-	if errors.Is(err, errBadBase) {
+	if errors.Is(err, errBadBase) || errors.Is(err, errLinkDisabled) {
 		return true
 	}
 	var ae *apiError
