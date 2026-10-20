@@ -298,3 +298,9 @@ func (s *Server) SignedHeaders(body, contentType string) map[string]string {
 		"X-Slack-Signature":         Sign(s.SigningSecret, ts, body),
 	}
 }
+
+// InteractionForm 把交互载荷编码成 Slack 推 webhook 时的表单体:payload=<JSON>。
+func InteractionForm(payload map[string]any) string {
+	b, _ := json.Marshal(payload)
+	return url.Values{"payload": {string(b)}}.Encode()
+}
