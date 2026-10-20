@@ -30,6 +30,15 @@ var dingtalkTemplateRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 // dingtalkRobotCodeRe 约束钉钉机器人的 robotCode(企业内部应用默认即 Client ID)。
 var dingtalkRobotCodeRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
+// slackBotTokenRe / slackAppTokenRe:Slack 后台同时给出 xoxb-(Bot)、xapp-(App-Level)、xoxp-(用户)三种
+// token,填反是最常见的配置错 —— Slack 只回一句 not_allowed_token_type。保存时按前缀拦下。
+var (
+	slackBotTokenRe = regexp.MustCompile(`^xoxb-[A-Za-z0-9-]{10,250}$`)
+	slackAppTokenRe = regexp.MustCompile(`^xapp-[A-Za-z0-9-]{10,250}$`)
+	// slackSigningSecretRe 约束 Slack 应用的 Signing Secret(Basic Information › App Credentials 里那串)。
+	slackSigningSecretRe = regexp.MustCompile(`^[A-Za-z0-9]{16,128}$`)
+)
+
 // encryptedSetting 决定一个设置键是否加密落库:im.* 下凡是看起来像密钥的键一律加密。
 // 这些键的值能冒充网关去发卡片、收回调 —— 一份库备份不该交出能用的凭据。每接一个渠道
 // 都会新增几个密钥,靠一张手写的表迟早会漏掉一个。
@@ -839,7 +848,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 				verr = service.ValidateIPAllowlist(sv)
 			case "im.callbackBaseURL":
 				verr = service.ValidateCallbackBaseURL(sv)
-			case "im.telegram.apiBase", "im.lark.apiBase", "im.dingtalk.apiBase":
+			case "im.telegram.apiBase", "im.lark.apiBase", "im.dingtalk.apiBase", "im.slack.apiBase":
 				verr = service.ValidateOutboundURL(sv)
 			case "im.telegram.webhookSecret":
 				// 到这里的一定是真要换的新明文(空值已在上面按「保持原值」跳过),
@@ -866,6 +875,23 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			case "im.dingtalk.robotCode":
 				if !dingtalkRobotCodeRe.MatchString(sv) {
 					verr = fmt.Errorf("robotCode 只能含字母、数字、_ 或 -,最长 64 位")
+				}
+			case "im.slack.mode":
+				if sv != "socket" && sv != "webhook" {
+					verr = fmt.Errorf("只能是 socket 或 webhook")
+				}
+			case "im.slack.botToken":
+				// 到这里的一定是真要换的新明文(空值已在上面按「保持原值」跳过),校验在加密之前。
+				if !slackBotTokenRe.MatchString(sv) {
+					verr = fmt.Errorf("Bot User OAuth Token 应以 xoxb- 开头(应用后台 › OAuth & Permissions)")
+				}
+			case "im.slack.appToken":
+				if !slackAppTokenRe.MatchString(sv) {
+					verr = fmt.Errorf("App-Level Token 应以 xapp- 开头(应用后台 › Basic Information › App-Level Tokens)")
+				}
+			case "im.slack.signingSecret":
+				if !slackSigningSecretRe.MatchString(sv) {
+					verr = fmt.Errorf("Signing Secret 应为 16-128 位字母或数字(应用后台 › Basic Information › App Credentials)")
 				}
 			}
 			if verr != nil {

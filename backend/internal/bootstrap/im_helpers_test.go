@@ -1,7 +1,10 @@
 package bootstrap
 
 import (
+	"encoding/json"
+	"net/http"
 	"sort"
+	"time"
 
 	"velagateway/internal/imchannel"
 	"velagateway/internal/imchannel/imtest"
@@ -53,4 +56,27 @@ func sentPIDs(sent []imtest.Sent) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// channelStatus 轮询设置页状态,直到 kind 那一行满足 match。
+func (a *testApp) channelStatus(token, kind string, match func(running bool, lastError string) bool) (bool, string) {
+	a.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		r := a.do(http.MethodGet, "/api/v1/settings/im/status", token, nil)
+		var rows []struct {
+			Kind      string `json:"kind"`
+			Running   bool   `json:"running"`
+			LastError string `json:"lastError"`
+		}
+		_ = json.Unmarshal(r.Data, &rows)
+		for _, row := range rows {
+			if row.Kind == kind && match(row.Running, row.LastError) {
+				return row.Running, row.LastError
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	a.t.Fatalf("the %s status never reached the expected state", kind)
+	return false, ""
 }

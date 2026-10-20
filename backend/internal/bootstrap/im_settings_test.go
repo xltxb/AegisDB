@@ -21,7 +21,7 @@ func TestIMSettings_StatusListsChannels(t *testing.T) {
 		Running    bool   `json:"running"`
 	}
 	_ = json.Unmarshal(r.Data, &rows)
-	var sawLark, sawDingTalk, sawFake bool
+	var sawLark, sawDingTalk, sawSlack, sawFake bool
 	for _, row := range rows {
 		switch row.Kind {
 		case "lark":
@@ -34,11 +34,16 @@ func TestIMSettings_StatusListsChannels(t *testing.T) {
 			if !row.CanApprove {
 				t.Error("dingtalk does interactive approval since phase 4")
 			}
+		case "slack":
+			sawSlack = true
+			if !row.CanApprove {
+				t.Error("slack does interactive approval since phase 5")
+			}
 		case "fake":
 			sawFake = row.Approval && row.Running
 		}
 	}
-	if !sawLark || !sawDingTalk || !sawFake {
+	if !sawLark || !sawDingTalk || !sawSlack || !sawFake {
 		t.Fatalf("status = %s", r.Data)
 	}
 }

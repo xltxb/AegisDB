@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"velagateway/internal/imchannel/dingtalk/dttest"
 )
@@ -31,24 +30,7 @@ func (a *testApp) dingtalkIM(token string, extra map[string]any) *dttest.Server 
 // dingtalkStatus 轮询设置页状态,直到钉钉那一行满足 match。
 func (a *testApp) dingtalkStatus(token string, match func(running bool, lastError string) bool) (bool, string) {
 	a.t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		r := a.do(http.MethodGet, "/api/v1/settings/im/status", token, nil)
-		var rows []struct {
-			Kind      string `json:"kind"`
-			Running   bool   `json:"running"`
-			LastError string `json:"lastError"`
-		}
-		_ = json.Unmarshal(r.Data, &rows)
-		for _, row := range rows {
-			if row.Kind == "dingtalk" && match(row.Running, row.LastError) {
-				return row.Running, row.LastError
-			}
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	a.t.Fatal("the DingTalk status never reached the expected state")
-	return false, ""
+	return a.channelStatus(token, "dingtalk", match)
 }
 
 func TestDingTalk_BindApproveAndCloseEndToEnd(t *testing.T) {
