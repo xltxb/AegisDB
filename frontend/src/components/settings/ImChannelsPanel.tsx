@@ -34,7 +34,7 @@ export const IM_COMMON: FieldDef[] = [
 /**
  * 每个渠道自己的配置项。表单初值、保存载荷、渲染都从这张表派生 —— 接一个新渠道只在
  * 这里加一项,不必再去动设置页。飞书群通知（第 1 期）与交互审批（第 3 期）、Telegram 交互审批（第 2 期）、
- * 钉钉交互审批（第 4 期）。
+ * 钉钉交互审批（第 4 期）、Slack 交互审批（第 5 期）。
  */
 export const IM_CHANNELS: Record<string, ChannelDef> = {
   lark: {
@@ -76,6 +76,18 @@ export const IM_CHANNELS: Record<string, ChannelDef> = {
       { key: 'im.dingtalk.robotCode', label: 'imDtRobotCode', placeholderKey: 'imDtRobotCodePh' },
       { key: 'im.dingtalk.cardTemplateId', label: 'imDtTemplate', placeholderKey: 'imDtTemplatePh' },
       { key: 'im.dingtalk.apiBase', label: 'imDtApiBase', placeholder: 'https://api.dingtalk.com' },
+    ],
+  },
+  slack: {
+    approval: [
+      { key: 'im.slack.botToken', label: 'imSlBotToken', placeholderKey: 'imSlBotTokenPh', secret: true },
+      {
+        key: 'im.slack.mode', label: 'imSlMode', defaultValue: 'socket',
+        options: [{ value: 'socket', labelKey: 'imSlModeSocket' }, { value: 'webhook', labelKey: 'imSlModeWebhook' }],
+      },
+      { key: 'im.slack.appToken', label: 'imSlAppToken', placeholderKey: 'imSlAppTokenPh', secret: true },
+      { key: 'im.slack.signingSecret', label: 'imSlSigningSecret', placeholderKey: 'imSlSigningSecretPh', secret: true },
+      { key: 'im.slack.apiBase', label: 'imSlApiBase', placeholder: 'https://slack.com/api' },
     ],
   },
 }
@@ -150,7 +162,8 @@ export default function ImChannelsPanel({
                   s.kind === 'telegram' ? <TelegramHint values={values} />
                     : s.kind === 'lark' ? <LarkHint values={values} />
                       : s.kind === 'dingtalk' ? <DingTalkHint />
-                        : undefined
+                        : s.kind === 'slack' ? <SlackHint values={values} />
+                          : undefined
                 }
               />
             )}
@@ -266,6 +279,21 @@ function LarkHint({ values }: { values: ImValues }) {
 function DingTalkHint() {
   const { t } = useTranslation()
   return <div className="set-hint">{t('imDtStreamNote')}</div>
+}
+
+/**
+ * Slack 两种接收方式各要管理员在应用后台做一件事:Socket Mode 要打开 Socket Mode 并建 App-Level Token,
+ * webhook 要把这个地址同时填进「Interactivity & Shortcuts」与「Event Subscriptions」的 Request URL ——
+ * Slack 不像 Telegram 那样由网关自己登记。
+ */
+function SlackHint({ values }: { values: ImValues }) {
+  const { t } = useTranslation()
+  if (values['im.slack.mode'] !== 'webhook') {
+    return <div className="set-hint">{t('imSlSocketNote')}</div>
+  }
+  const base = String(values['im.callbackBaseURL'] ?? '').trim().replace(/\/+$/, '')
+  if (!base) return <div className="set-hint warn">{t('imSlWebhookNeedsBase')}</div>
+  return <div className="set-hint">{t('imSlWebhookURL')}<code>{`${base}/api/v1/im/slack/webhook`}</code></div>
 }
 
 function StateTag({ s }: { s: ImStatus }) {
