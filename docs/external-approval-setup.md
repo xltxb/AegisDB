@@ -102,8 +102,9 @@
      `connections:write` 的 token(`xapp-` 开头)。网关主动连 Slack,不需要公网入口,多实例部署也安全 —— Slack 把每个事件只投给其中一个连接。
      打开 Socket Mode 后,上面两处的 Request URL 不用填。
    - **Webhook**:不开 Socket Mode;**Basic Information** › App Credentials 复制 **Signing Secret**。在网关「回调根地址」填一个
-     Slack 能访问到的公网 HTTPS 地址,把 `<回调根地址>/api/v1/im/slack/webhook` 同时填进「Interactivity & Shortcuts」与
-     「Event Subscriptions」的 Request URL(保存 Event Subscriptions 时 Slack 会发一次校验,网关自动应答)。网关只认签名正确、
+     Slack 能访问到的公网 HTTPS 地址。**先做完第 6 步并保存**,再把 `<回调根地址>/api/v1/im/slack/webhook` 同时填进
+     「Interactivity & Shortcuts」与「Event Subscriptions」的 Request URL —— 保存 Event Subscriptions 时 Slack 会立刻发一次校验,
+     网关只有在已打开交互审批、接收方式为 webhook、填好 Signing Secret 时才会应答,否则 Slack 报校验失败。网关只认签名正确、
      时间戳在 ±5 分钟内的请求。
 6. 网关「设置 › IM 渠道 › Slack」打开「交互审批」,填 Bot User OAuth Token,选接收方式,再填 App-Level Token(Socket Mode)或
    Signing Secret(webhook)。两种 token 填反、填成用户 token(`xoxp-`)会在保存时被拒。保存。

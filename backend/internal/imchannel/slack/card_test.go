@@ -225,3 +225,14 @@ func TestClosedBlocks_WithoutTheOriginalKeepTheTicketAndTheOutcome(t *testing.T)
 		}
 	}
 }
+
+func TestCardBlocks_AConsoleURLSlackWouldRefuseLeavesOutOnlyTheLinkButton(t *testing.T) {
+	// Slack 以 invalid_blocks 拒收带非法 url 的整张卡片:控制台地址填错不能让审批人收不到卡片。
+	for _, bad := range []string{"aegis.corp:5173", "gw.corp.io/approvals", "javascript:alert(1)", "ftp://gw.corp.io", "https://"} {
+		for _, b := range decodeBlocks(t, cardBlocks(imchannel.ApprovalCard{ApNo: "AP-1", ConsoleURL: bad})) {
+			if b.Type == "actions" && len(b.Elements) != 2 {
+				t.Errorf("console URL %q must not become a link button", bad)
+			}
+		}
+	}
+}

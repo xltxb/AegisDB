@@ -2,6 +2,7 @@ package slack
 
 import (
 	"encoding/json"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -105,11 +106,21 @@ func cardBlocks(c imchannel.ApprovalCard) []any {
 		button("✅ 通过", actionApprove, "primary", "ap:"+c.ApNo+":a"),
 		button("❌ 驳回", actionReject, "danger", "ap:"+c.ApNo+":r"),
 	}
-	// 超长的链接不放:一颗按钮的 URL 超限,Slack 会拒收整张卡片。
-	if c.ConsoleURL != "" && len(c.ConsoleURL) <= urlLimit {
+	// 超长或不是 http(s) 绝对地址的链接不放:一颗按钮的 URL 不合法,Slack 会拒收整张卡片。
+	if linkable(c.ConsoleURL) {
 		buttons = append(buttons, map[string]any{"type": "button", "action_id": actionOpen, "text": plain("前往控制台"), "url": c.ConsoleURL})
 	}
 	return append(blocks, map[string]any{"type": "actions", "block_id": blockActions, "elements": buttons}, footerBlock())
+}
+
+// linkable 判断控制台地址能否做成链接按钮。notify.consoleURL 保存时不校验,填成 aegis.corp:5173
+// 这种没有协议的值在飞书、Telegram 里无害,在 Slack 里会让每张卡片都以 invalid_blocks 发不出去。
+func linkable(s string) bool {
+	if s == "" || len(s) > urlLimit {
+		return false
+	}
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
 var mrkdwnEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
