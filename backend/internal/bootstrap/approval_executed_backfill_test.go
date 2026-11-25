@@ -9,11 +9,16 @@ package bootstrap
 
 import (
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"aegisdb/internal/model"
 )
+
+// 单号用递增的序号,不取时钟:macOS 的时钟只有微秒精度,UnixNano()%100000 只剩 100 个值,
+// 连造两张就可能撞上 ap_no 的唯一约束(issue #133)。
+var oldTicketSeq atomic.Int64
 
 // oldBehaviourTicket 造一张"旧行为下已经跑过"的工单:结果里是真实的执行输出,
 // executed_at 空着 —— 正是升级前的数据长的样子。
@@ -21,7 +26,7 @@ func (a *testApp) oldBehaviourTicket(result string) *model.Approval {
 	a.t.Helper()
 	decided := time.Now().Add(-72 * time.Hour)
 	ap := &model.Approval{
-		ApNo: "AP-OLD-" + itoa(time.Now().UnixNano()%100000), InitiatorID: 1, Initiator: "林伟",
+		ApNo: "AP-OLD-" + itoa(oldTicketSeq.Add(1)), InitiatorID: 1, Initiator: "林伟",
 		Command: "DROP TABLE t_history", Status: model.StatusApproved, RiskLevel: model.RiskHigh,
 		Result: result, DecidedAt: &decided,
 	}
