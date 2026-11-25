@@ -14,7 +14,7 @@ import ProjectsPanel from '@/components/settings/ProjectsPanel'
 import BrandPanel from '@/components/settings/BrandPanel'
 import BrandMark from '@/components/BrandMark'
 import { brandText } from '@/lib/brand'
-import { APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
+import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -69,7 +69,7 @@ type Num = number | ''
 const num = (n: number): Num => n
 
 const INITIAL = {
-  apprTimeout: 'auto-escalate' as string,
+  apprTimeout: APPROVAL_TIMEOUT_FALLBACK as string,
   allowSelf: false,
   ttl: '8h' as string,
   idle: true,
@@ -176,7 +176,7 @@ function formOf(g: Record<string, string | undefined>): Form {
     // unchanged) and just remember whether one is on file. (R3)
     larkSecret: '',
     consoleURL: parse<string>(g['notify.consoleURL'], ''),
-    apprTimeout: keyOf(parse<string>(g['approval.onTimeout'], 'auto-escalate'), APPROVAL_TIMEOUT_KEYS, 'auto-escalate'),
+    apprTimeout: keyOf(parse<string>(g['approval.onTimeout'], ''), APPROVAL_TIMEOUT_KEYS, APPROVAL_TIMEOUT_FALLBACK),
     ttl: keyOf(parse<string>(g['security.sessionTTL'], '8h'), SESSION_TTL_KEYS, '8h'),
     ipAllow: parse<string>(g['security.ipAllowlist'], ''),
     ipAllowEnabled: parse<boolean>(g['security.ipAllowEnabled'], false),
@@ -232,7 +232,7 @@ function formOf(g: Record<string, string | undefined>): Form {
 function settingsPayload(f: Form) {
   // The model holds the stored key, so saving needs no reverse lookup against
   // the current language (EF11).
-  const onTimeout = keyOf(f.apprTimeout, APPROVAL_TIMEOUT_KEYS, 'auto-escalate')
+  const onTimeout = keyOf(f.apprTimeout, APPROVAL_TIMEOUT_KEYS, APPROVAL_TIMEOUT_FALLBACK)
   const ttlKey = keyOf(f.ttl, SESSION_TTL_KEYS, '8h')
   return {
     'approval.onTimeout': onTimeout,
@@ -570,7 +570,7 @@ export default function SettingsView() {
           {/* Approval */}
           <section style={showOn('approval')} className="card">
             <Head icon={GitPullRequestArrow} title="setAppr" desc="setApprSub" />
-            <Row title="setApprTimeout" desc="setApprTimeoutD"><div className="w180"><VSelect value={labelOf(f.apprTimeout, t)} options={APPROVAL_TIMEOUT_KEYS.map((k) => labelOf(k, t))} onChange={(l) => patch({ apprTimeout: keyForLabel(l, APPROVAL_TIMEOUT_KEYS, t, 'auto-escalate') })} /></div></Row>
+            <Row title="setApprTimeout" desc="setApprTimeoutD"><div className="w180"><VSelect value={labelOf(f.apprTimeout, t)} options={APPROVAL_TIMEOUT_KEYS.map((k) => labelOf(k, t))} onChange={(l) => patch({ apprTimeout: keyForLabel(l, APPROVAL_TIMEOUT_KEYS, t, APPROVAL_TIMEOUT_FALLBACK) })} /></div></Row>
             <Row title="setDefApprovers" desc="setDefApproversD"><div className="approvers">{approvers.map((a) => <span key={a.id} className="apv"><span className="ava">{a.initials}</span>{a.name}</span>)}{!approvers.length && <span className="apv-empty">{t('setApproversEmpty')}</span>}<a className="apv-manage" onClick={goPerms}>{t('setApproversManage')}</a></div></Row>
             <Row title="setSelfApprove" desc="setSelfApproveD"><VSwitch {...sw('allowSelf')} /></Row>
             {/* External 飞书审批(审批魔方) */}

@@ -211,7 +211,7 @@ v, win := s.judge(u, conn, stmts)<span class="c">                               
   <li><strong>通过不等于执行</strong>（ADR 0010）：普通单停在「待执行」，由够得到该实例、自己有权执行的人点执行，届时按执行人重新过标签、MFA 与判定；一张单只执行一次。</li>
   <li>发布单的审批只授权流水线，执行归执行阶段；执行窗口批准即生效；敏感导出批准即入队。</li>
   <li>新单推送飞书卡片；可选外发审批魔方，结果经 <code class="inl">/approvals/lark/callback</code> 回来，共享密钥校验并核对任务号。</li>
-  <li>超时策略：保持等待（默认）/ 自动作废 / 自动升级（站内通知默认审批人 + 飞书卡片，每张单一次，单子仍待审批），每 60 秒扫描 <code class="inl">tbl_approval</code>。</li>
+  <li>超时策略：保持等待 / 自动作废 / 自动升级（站内通知默认审批人 + 飞书卡片，每张单一次，单子仍待审批）；初始化写入自动升级、720 分钟，库里没有这项设置时按保持等待。每 60 秒扫描 <code class="inl">tbl_approval</code>。</li>
   <li>发布单失败或终止时，它名下待审批的单在同一事务里作废。</li>
 </ul>
 <p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">后台定时任务（<code class="inl">cmd/server/main.go</code>）：</p>

@@ -39,3 +39,22 @@ test('升级通知按界面语言显示', async ({ page }) => {
   await expect(item).toContainText('raised by 李雷 on order-cluster is overdue')
   await expect(item.locator('.pic')).toHaveClass(/warn/)
 })
+
+// issue #134:没有这项设置(或存着不认识的值)时后端按「保持等待」处理,界面要照实显示;
+// 保存是整份提交的,显示成「自动升级」会把没人选过的值写进去。
+for (const [name, stored] of [['没有', {}], ['不认识', { 'approval.onTimeout': '"explode"' }]] as const) {
+  test(`审批超时处理:存的值${name}时显示并保存「保持等待」`, async ({ page }) => {
+    const saved: any[] = []
+    await stubCommon(page)
+    await page.route('**/api/v1/settings', (r) => {
+      if (r.request().method() === 'PUT') { saved.push(r.request().postDataJSON()); return r.fulfill(envelope({ ok: true })) }
+      return r.fulfill(envelope({ settings: stored, secretsSet: {} }))
+    })
+    await page.goto('/#/admin/settings?tab=approval')
+    const row = page.locator('.srow:visible', { hasText: '审批超时处理' })
+    await expect(row.locator('.w180')).toContainText('保持等待')
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect.poll(() => saved.length).toBeGreaterThan(0)
+    expect(Object.assign({}, ...saved)['approval.onTimeout']).toBe('keep-waiting')
+  })
+}
