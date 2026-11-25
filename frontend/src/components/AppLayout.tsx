@@ -245,9 +245,22 @@ export default function AppLayout() {
   // ---- 审批机器人绑定。打开菜单时才问一次有没有开着的渠道;没有、或读不到,就不显示这一项 ----
   const [chatBindings, setChatBindings] = useState<ChatBinding[]>([])
   const [chatOpen, setChatOpen] = useState(false)
+  const chatSeq = useRef(0) // 菜单与弹窗都来问:只认最后一次的答复
+  const loadChat = useEvent(async () => {
+    const mine = ++chatSeq.current
+    const list = await api.chatBindings()
+    if (mine === chatSeq.current) setChatBindings(list ?? [])
+  })
+  // 解绑成了就当场改过来,不指望接下来那次重读一定成功;在路上的旧答复作废。
+  function onChatUnbound(channel: string) {
+    chatSeq.current++
+    setChatBindings((l) => l.map((b) => (b.channel === channel ? { ...b, bound: false, boundAt: undefined } : b)))
+  }
   function toggleUserMenu() {
     setUserMenuOpen(!userMenuOpen)
-    if (!userMenuOpen) api.chatBindings().then((l) => setChatBindings(l ?? []), () => setChatBindings([]))
+    if (userMenuOpen) return
+    setChatBindings([]) // 不拿上一次打开时的答复先顶着
+    loadChat().catch(() => { /* 读不到就不显示 */ })
   }
 
   // 窄屏(手机宽度)下顶栏放不下的次要按钮收进这个「更多」菜单:语言、深色、前后台切换、网关状态。
@@ -598,7 +611,7 @@ export default function AppLayout() {
       )}
       <MfaModal open={mfaOpen} enabled={mfaBound} onClose={() => setMfaOpen(false)} onChanged={onMfaChanged} />
       <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
-      <ChatBindModal open={chatOpen} bindings={chatBindings} onChange={setChatBindings} onClose={() => setChatOpen(false)} />
+      <ChatBindModal open={chatOpen} bindings={chatBindings} reload={loadChat} onUnbound={onChatUnbound} onClose={() => setChatOpen(false)} />
     </>
   )
 }

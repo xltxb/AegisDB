@@ -76,6 +76,74 @@ test.describe('审批机器人绑定', () => {
     await expect(page.getByTestId('menu-chat')).toHaveCount(0)
   })
 
+  test('再次打开菜单:等到这一次的答复才显示;迟到的旧答复不算', async ({ page }) => {
+    await stubBind(page, { list: [] })
+    const replies: ((list: unknown[]) => void)[] = []
+    await page.route('**/api/v1/auth/chat-bindings', async (r) => {
+      const list = await new Promise<unknown[]>((done) => replies.push(done))
+      await r.fulfill(envelope(list))
+    })
+    const open = async (n: number) => {
+      await page.locator('.avatar').click()
+      await expect.poll(() => replies.length).toBe(n)
+    }
+    const close = () => page.locator('.um-mask').click({ position: { x: 600, y: 300 } })
+    await page.goto('/#/dashboard')
+    await open(1)
+    replies[0]([unbound])
+    await expect(page.getByTestId('menu-chat')).toBeVisible()
+    await close()
+    await open(2) // 渠道可能已经关了:不拿上一次的答复先顶着
+    await expect(page.getByTestId('menu-password')).toBeVisible()
+    await expect(page.getByTestId('menu-chat')).toHaveCount(0, { timeout: 500 })
+    await close()
+    await open(3)
+    const third = page.waitForResponse('**/api/v1/auth/chat-bindings')
+    replies[2]([])
+    await third
+    const second = page.waitForResponse('**/api/v1/auth/chat-bindings')
+    replies[1]([unbound]) // 第二次的答复这时才到
+    await second
+    await page.waitForTimeout(300)
+    await expect(page.getByTestId('menu-chat')).toHaveCount(0)
+  })
+
+  test('解绑成了、重读却失败:不报失败,也不显示成还绑着', async ({ page }) => {
+    const s = await stubBind(page, { list: [bound] })
+    await openBind(page)
+    let reread = 0
+    await page.route('**/api/v1/auth/chat-bindings', (r) => { reread++; return r.fulfill(fail(50000, '读不到')) })
+    await page.getByTestId('chat-unbind-lark').click()
+    await page.getByTestId('confirm-ok').click()
+    await expect.poll(() => reread).toBeGreaterThan(0)
+    await expect(page.getByTestId('chat-state-lark')).toHaveText('未绑定')
+    await expect(page.getByText('读不到')).toHaveCount(0)
+    await expect(page.getByTestId('chat-gen-lark')).toBeEnabled()
+    expect(s.removed).toEqual(['DELETE'])
+  })
+
+  test('启用了 MFA 的账号重新生成:还有效的码不藏起来,可以取消', async ({ page }) => {
+    const s = await stubBind(page, { list: [unbound], mfa: true, code: (b) => (b.mfaCode === '654321' ? envelope({ code: 'ZZ99YY88XX', expiresAt: '', botName: '' }) : undefined) })
+    await openBind(page)
+    const gen = async (mfa: string) => {
+      await page.getByTestId('chat-gen-lark').click()
+      await page.getByTestId('chat-mfa').fill(mfa)
+      await page.getByTestId('chat-mfa-submit').click()
+    }
+    await gen('123456')
+    await expect(page.getByTestId('chat-code')).toHaveText(CODE)
+    await page.getByTestId('chat-gen-lark').click()
+    await expect(page.getByTestId('chat-mfa')).toBeVisible()
+    await expect(page.getByTestId('chat-code')).toHaveText(CODE)
+    await page.getByTestId('chat-mfa').fill('11')
+    await page.getByTestId('chat-mfa-cancel').click()
+    await expect(page.getByTestId('chat-mfa')).toHaveCount(0)
+    await expect(page.getByTestId('chat-code')).toHaveText(CODE)
+    expect(s.codes.length).toBe(1)
+    await gen('654321')
+    await expect(page.getByTestId('chat-code')).toHaveText('ZZ99YY88XX')
+  })
+
   test('生成码、写明 10 分钟内有效与怎么用;绑上之后自动变成已绑定;解绑要确认', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     const s = await stubBind(page, { list: [unbound] })
@@ -229,7 +297,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
     await expect(page.getByTestId('chat-lark-appid')).toHaveCount(0)
     // 开关处就写明,不必先打开
     await expect(panel).toContainText('用户 IP 白名单管不到卡片上的点击')
-    await expect(panel).toContainText('停用账号才会使绑定失效')
+    await expect(panel).toContainText('离职的人,在管理员于网关里停用其账号之前,聊天绑定仍然有效')
     await expect(panel).toContainText('SSO')
 
     await page.getByRole('button', { name: '保存设置' }).click()
@@ -251,7 +319,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
     await expect(page.getByTestId('chat-lark-unverified')).toContainText('未验证')
     await page.getByTestId('chat-card-lang').click()
     await page.getByTestId('chat-card-lang').locator('.opt', { hasText: 'English' }).click()
-    await expect(panel).toContainText('保存后')
+    await expect(panel).toContainText('保存后才生效')
 
     await page.getByRole('button', { name: '保存设置' }).click()
     await expect.poll(() => s.saved.length).toBe(1)
@@ -335,6 +403,8 @@ test.describe('设置 › 审批 › 审批机器人', () => {
 
   test('发测试卡片:即点即发;没绑定的说原因', async ({ page }) => {
     const s = await openSettings(page, { settings: ON, secret: true, status: { enabled: true, state: 'connected', detail: '', botName: '' } })
+    // 改了字段还没保存时,旁边的「已连接」说的是旧配置:这句话要一直在
+    await expect(page.getByTestId('chat-panel')).toContainText('状态与测试卡片用的是已保存的配置')
     await page.getByTestId('chat-lark-test').click()
     await expect(page.getByTestId('chat-lark-msg')).toContainText('已发送')
     expect(s.tests).toEqual([{ channel: 'lark' }])

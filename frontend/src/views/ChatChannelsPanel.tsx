@@ -142,7 +142,7 @@ function Channel({ channel, desc, on, onToggle, status, children }: {
               {status ? t('chatSt_' + status.state) : '—'}{reason && <span className="chwhy">{reason}</span>}
             </span>
           </div>
-          {status && !status.enabled && <div className="rd">{t('chatSaveFirst')}</div>}
+          <div className="rd">{t('chatSaveFirst')}</div>
           <div className="lkfoot">
             <span className={clsx('lkmsg', test.state)} data-testid={`chat-${channel}-msg`}>{test.msg}</span>
             <VButton variant="secondary" height="34px" disabled={test.state === 'sending'} data-testid={`chat-${channel}-test`} onClick={sendTest}>{t('chatTest')}</VButton>

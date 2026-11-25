@@ -17,7 +17,8 @@ import './ChatBindModal.scoped.css'
 interface Props {
   open: boolean
   bindings: ChatBinding[]
-  onChange: (l: ChatBinding[]) => void
+  reload: () => Promise<void>
+  onUnbound: (channel: string) => void
   onClose: () => void
 }
 
@@ -28,9 +29,8 @@ export default function ChatBindModal({ open, ...rest }: Props) {
   return open ? <Body {...rest} /> : null
 }
 
-function Body({ bindings, onChange, onClose }: Omit<Props, 'open'>) {
+function Body({ bindings, reload, onUnbound, onClose }: Omit<Props, 'open'>) {
   const { t } = useI18n()
-  const reload = useEvent(async () => { onChange((await api.chatBindings()) ?? []) })
   return (
     <div className="chatbind-overlay" data-testid="chat-bind-modal">
       <div className="chatbind-mask" onClick={onClose} />
@@ -45,7 +45,7 @@ function Body({ bindings, onChange, onClose }: Omit<Props, 'open'>) {
             </div>
             <div className="x" onClick={onClose}><X size={18} /></div>
           </div>
-          {bindings.map((b) => <ChannelRow key={b.channel} b={b} reload={reload} />)}
+          {bindings.map((b) => <ChannelRow key={b.channel} b={b} reload={reload} onUnbound={() => onUnbound(b.channel)} />)}
           {!bindings.length && <div className="none">{t('chatBindNone')}</div>}
         </div>
         <div className="footer">
@@ -61,7 +61,7 @@ function Body({ bindings, onChange, onClose }: Omit<Props, 'open'>) {
 const CODE_TTL_MS = 10 * 60 * 1000
 const POLL_MS = 3000
 
-function ChannelRow({ b, reload }: { b: ChatBinding; reload: () => Promise<void> }) {
+function ChannelRow({ b, reload, onUnbound }: { b: ChatBinding; reload: () => Promise<void>; onUnbound: () => void }) {
   const { t } = useI18n()
   const { notify, notifyError } = useUIStore.getState()
   const name = t('chatCh_' + b.channel)
@@ -108,6 +108,7 @@ function ChannelRow({ b, reload }: { b: ChatBinding; reload: () => Promise<void>
     if (mfa.length !== 6) { setErr(t('mfaNeedCurrent6')); return }
     void generate(mfa)
   }
+  function cancelMfa() { setAskMfa(false); setMfa(''); setErr('') }
   async function copy() {
     const done = await copyText(code)
     notify(t(done ? 'copied' : 'chatCopyFailed'), done ? 'success' : 'error')
@@ -117,7 +118,8 @@ function ChannelRow({ b, reload }: { b: ChatBinding; reload: () => Promise<void>
     setBusy(true)
     try {
       await api.chatUnbind(b.channel)
-      await reload()
+      onUnbound()
+      reload().catch(() => { /* 已经解绑了,重读不成不算失败 */ })
     } catch (e) {
       notifyError(e, t('actionFailed'))
     } finally { setBusy(false) }
@@ -136,6 +138,17 @@ function ChannelRow({ b, reload }: { b: ChatBinding; reload: () => Promise<void>
           : !askMfa && <VButton variant="secondary" height="34px" disabled={busy} data-testid={`chat-gen-${b.channel}`} onClick={start}>{code ? t('chatRegen') : t('chatGen')}</VButton>}
       </div>
 
+      {code && (
+        <div className="codebox">
+          <div className="coderow">
+            <code className="code" data-testid="chat-code">{code}</code>
+            <VButton variant="secondary" height="34px" data-testid="chat-code-copy" onClick={copy}><Copy size={13} />{t('chatCopy')}</VButton>
+          </div>
+          <div className="valid">{t('chatCodeValid')}</div>
+          <div className="how">{t('chatHow_' + b.channel)}</div>
+        </div>
+      )}
+
       {askMfa && (
         <>
           <div className="cl">{t('mfaCurrentCode')}</div>
@@ -146,19 +159,9 @@ function ChannelRow({ b, reload }: { b: ChatBinding; reload: () => Promise<void>
               onKeyUp={(e) => { if (e.key === 'Enter') submitMfa() }}
             />
             <VButton variant="primary" height="44px" disabled={busy} data-testid="chat-mfa-submit" onClick={submitMfa}>{t('chatGen')}</VButton>
+            <VButton variant="secondary" height="44px" data-testid="chat-mfa-cancel" onClick={cancelMfa}>{t('btnCancel')}</VButton>
           </div>
         </>
-      )}
-
-      {code && !askMfa && (
-        <div className="codebox">
-          <div className="coderow">
-            <code className="code" data-testid="chat-code">{code}</code>
-            <VButton variant="secondary" height="34px" data-testid="chat-code-copy" onClick={copy}><Copy size={13} />{t('chatCopy')}</VButton>
-          </div>
-          <div className="valid">{t('chatCodeValid')}</div>
-          <div className="how">{t('chatHow_' + b.channel)}</div>
-        </div>
       )}
       {err && <div className="err" data-testid="chat-err">{err}</div>}
     </div>
