@@ -305,17 +305,34 @@ func TestRenderCard_Size(t *testing.T) {
 			}
 		})
 	}
-	t.Run("别的字段过长也不超", func(t *testing.T) {
-		c := pendingCard()
-		c.Title, c.Reason, c.Outcome = strings.Repeat("\"", 9000), strings.Repeat("\"", 90000), ""
-		for i := 0; i < 12; i++ {
-			c.Fields = append(c.Fields, chat.Field{Label: fmt.Sprint("f", i), Value: strings.Repeat("\"", 9000)})
-		}
-		if n := sizeInBody(RenderCard(c)); n > maxCardBytes {
-			t.Fatalf("%d 字节", n)
-		}
-		if m := decode(t, c); !strings.Contains(body(m), chat.Tr("zh", "partial")) {
-			t.Error("没写未显示全文")
+	// 语句截没了还放不下,就从后往前丢字段;按钮与提示留着。用最占地方的字符(< 占 6 字节)。
+	t.Run("别的内容过长也不超", func(t *testing.T) {
+		for _, unit := range []string{"<", `"`, "&", "😀", "\x01"} {
+			big := func(n int) string { return strings.Repeat(unit, n) }
+			for _, fields := range []int{0, 12, 60} {
+				for _, url := range []string{"https://gw/#/approvals", "https://gw/?" + strings.Repeat("&", 8000)} {
+					c := pendingCard()
+					c.Title, c.Reason, c.Statement, c.DetailURL = big(500), big(5000), big(10000), url
+					c.Fields = nil
+					for i := 0; i < fields; i++ {
+						c.Fields = append(c.Fields, chat.Field{Label: fmt.Sprint("f", i) + big(500), Value: big(500)})
+					}
+					if n := sizeInBody(RenderCard(c)); n > maxCardBytes {
+						t.Fatalf("%q × %d:%d 字节", unit, fields, n)
+					}
+					m := decode(t, c)
+					if !strings.Contains(body(m), chat.Tr("zh", "partial")) || button(m, "通过") == nil || button(m, "拒绝") == nil {
+						t.Errorf("%q × %d:按钮或提示没了", unit, fields)
+					}
+					if fields > 0 && !strings.Contains(body(m), "f0") {
+						t.Errorf("%q × %d:该从后往前丢", unit, fields)
+					}
+					c.Outcome = big(500)
+					if n := sizeInBody(RenderCard(c)); n > maxCardBytes {
+						t.Fatalf("已结束 %q × %d:%d 字节", unit, fields, n)
+					}
+				}
+			}
 		}
 	})
 	t.Run("平常的长语句不动", func(t *testing.T) {
@@ -325,4 +342,32 @@ func TestRenderCard_Size(t *testing.T) {
 			t.Error("放得下就不该截")
 		}
 	})
+}
+
+// 同一张卡片里组件的名字不能重复,重了飞书不收。
+func TestRenderCard_UniqueNames(t *testing.T) {
+	for _, c := range []chat.Card{pendingCard(), {Title: "t", Token: "x", Test: true}} {
+		names := map[any]bool{}
+		walk(decode(t, c), func(m map[string]any) {
+			if n, ok := m["name"]; ok {
+				if names[n] {
+					t.Errorf("名字重复:%v", n)
+				}
+				names[n] = true
+			}
+		})
+	}
+}
+
+// 回复里有别人起的名字:不当链接、加粗、@ 解析。
+func TestRenderReply(t *testing.T) {
+	for _, evil := range []string{"[x](http://evil)", "**b** _i_ ~~s~~ `c`", `<at user_id="all">x</at>`, "${t}", "a\nb"} {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(renderReply("已绑定 "+evil)), &m); err != nil {
+			t.Fatal(err)
+		}
+		if body(m) != "已绑定 "+evil+"\n" || len(byTag(m, "plain_text")) != 1 {
+			t.Errorf("%q → %v", evil, m)
+		}
+	}
 }

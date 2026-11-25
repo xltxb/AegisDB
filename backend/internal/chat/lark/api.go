@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -74,32 +75,46 @@ func newHTTPClient(base string) *http.Client {
 
 // scrubber 把密钥从要给人看的文字里去掉。平台的报错可能把请求原样念回来,所以去的是值,不是字段名。
 type scrubber struct {
-	mu     sync.Mutex
-	fixed  []string
-	recent []string // 用过的租户令牌;旧的早已失效,只留最近几个
+	mu    sync.Mutex
+	fixed []string
+	// 租户令牌与长连接的票据分开记,各自只留最近几个,最新的在末尾。不能放一起:令牌有效近两小时,其间
+	// 连不上会换许多次票据,会把还在用的令牌挤出去。当前的令牌总是最后记下的那个,所以总在。
+	tokens, tickets []string
 }
+
+const (
+	maxTokens  = 4
+	maxTickets = 32
+)
 
 var (
 	urlQuery   = regexp.MustCompile(`((?:wss?|https?)://[^\s"'?]+)\?[^\s"']*`)
 	bearerWord = regexp.MustCompile(`(?i)\bbearer\s+\S+`)
 )
 
-func (s *scrubber) remember(secret string) {
-	if secret == "" {
-		return
-	}
+func (s *scrubber) token(secret string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.recent = append(s.recent, secret); len(s.recent) > 16 {
-		s.recent = s.recent[1:]
-	}
+	s.tokens = keepLast(s.tokens, secret, maxTokens)
+}
+
+func (s *scrubber) ticket(secret string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tickets = keepLast(s.tickets, secret, maxTickets)
+}
+
+// keepLast 把 v 放到末尾;已有的挪过来,不重复占位。
+func keepLast(list []string, v string, max int) []string {
+	list = append(slices.DeleteFunc(list, func(x string) bool { return x == v }), v)
+	return list[len(list)-min(len(list), max):]
 }
 
 // text 去掉密钥之后再截短:反过来,截断处会剩下半个密钥。
 func (s *scrubber) text(msg string, extra ...string) string {
 	msg = urlQuery.ReplaceAllString(msg, "$1?***")
 	s.mu.Lock()
-	secrets := append(append(append([]string(nil), s.fixed...), s.recent...), extra...)
+	secrets := slices.Concat(s.fixed, s.tokens, s.tickets, extra)
 	s.mu.Unlock()
 	for _, sec := range secrets {
 		if sec == "" {
@@ -206,7 +221,7 @@ func (t *Transport) tenantToken(ctx context.Context) (string, error) {
 	if out.Token == "" {
 		return "", errors.New("no tenant_access_token in response")
 	}
-	t.scrub.remember(out.Token)
+	t.scrub.token(out.Token)
 	t.token, t.tokenUntil = out.Token, time.Now().Add(time.Duration(out.Expire)*time.Second-5*time.Minute)
 	return t.token, nil
 }
@@ -283,10 +298,9 @@ func (t *Transport) Update(ctx context.Context, r chat.Ref, c chat.Card) error {
 	return clean
 }
 
-// reply 回一句话。文本消息会解析 <at> 标签,里面的名字是别人起的,把尖括号换掉。
+// reply 回一句话。
 func (t *Transport) reply(ctx context.Context, chatID, text string) error {
-	content := marshal(map[string]string{"text": strings.ReplaceAll(text, "<", "\uff1c")})
-	if _, err := t.post(ctx, "chat_id", chatID, "text", content); err != nil {
+	if _, err := t.post(ctx, "chat_id", chatID, "interactive", renderReply(text)); err != nil {
 		return t.scrub.wrap("reply", err)
 	}
 	return nil

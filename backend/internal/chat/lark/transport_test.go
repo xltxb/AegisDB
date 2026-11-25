@@ -369,6 +369,53 @@ func TestScrub(t *testing.T) {
 	}
 }
 
+// 还在用的租户令牌不能被长连接的票据挤出去:令牌有效近两小时,其间连不上会重试许多次。
+func TestScrub_TokenOutlivesReconnects(t *testing.T) {
+	f := newFake(t)
+	f.upgrade = func(http.ResponseWriter, *http.Request) bool { panic(http.ErrAbortHandler) }
+	n := 0
+	f.bootstrap = func(w http.ResponseWriter) {
+		n++
+		fmt.Fprintf(w, `{"code":0,"data":{"URL":"%s/ws?device_id=device-%d&access_key=accesskey-%d&ticket=%s-%d"}}`,
+			strings.Replace(f.URL, "http", "ws", 1), n, n, testTicket, n)
+	}
+	tr := f.transport()
+	if _, err := tr.Send(context.Background(), "ou", pendingCard()); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 60; i++ {
+		if err := tr.Run(context.Background(), &fakeHandler{}, func(chat.State, string) {}); err == nil {
+			t.Fatal("应报错")
+		}
+	}
+	f.im = code(230001, "bad token "+testTenant+"-1")
+	_, err := tr.Send(context.Background(), "ou", pendingCard())
+	if err == nil {
+		t.Fatal("应报错")
+	}
+	noSecrets(t, "错误", err.Error())
+	if f.tokens != 1 {
+		t.Fatalf("要测的是同一个令牌,换了 %d 次", f.tokens)
+	}
+
+	// 最近一次连接的票据也还认得;反过来,令牌换得再勤也有界,当前这个总在。
+	noSecrets(t, "票据", tr.scrub.text(fmt.Sprintf("%s-%d", testTicket, n)))
+	for i := 0; i < 100; i++ {
+		tr.scrub.token(fmt.Sprint("tenant-token-", i))
+		tr.scrub.token("tenant-token-keep")
+	}
+	if got := tr.scrub.text("x tenant-token-99 tenant-token-keep"); strings.Contains(got, "tenant-token") {
+		t.Errorf("当前与上一个令牌 → %s", got)
+	}
+	for i := 0; i < 100; i++ {
+		tr.scrub.ticket("same-ticket-value")
+	}
+	if len(tr.scrub.tokens) > maxTokens || len(tr.scrub.tickets) > maxTickets ||
+		strings.Count(strings.Join(tr.scrub.tickets, " "), "same-ticket-value") != 1 {
+		t.Errorf("应有界且不重复:%d %v", len(tr.scrub.tokens), tr.scrub.tickets)
+	}
+}
+
 func TestSend_TimesOut(t *testing.T) {
 	f := newFake(t)
 	block := make(chan struct{})
@@ -812,8 +859,8 @@ func TestText(t *testing.T) {
 		t.Errorf("OnText = %v", texts)
 	}
 	r := f.calls()[0]
-	if r.Method != http.MethodPost || r.Query != "receive_id_type=chat_id" || r.Body["receive_id"] != "oc_1" || r.Body["msg_type"] != "text" ||
-		r.Body["content"] != `{"text":"reply to ABCD-1234"}` {
+	if r.Method != http.MethodPost || r.Query != "receive_id_type=chat_id" || r.Body["receive_id"] != "oc_1" || r.Body["msg_type"] != "interactive" ||
+		r.Body["content"] != renderReply("reply to ABCD-1234") {
 		t.Errorf("回复 = %+v", r)
 	}
 
@@ -947,8 +994,8 @@ func TestText_PanicAndReplyFailure(t *testing.T) {
 	if !strings.Contains(all, chat.Tr("zh", "bind.failed")) {
 		t.Errorf("panic 之后应请他再试:%s", all)
 	}
-	if strings.Contains(all, "<at") {
-		t.Errorf("回复里的标签要失效:%s", all)
+	if !strings.Contains(all, `"tag":"plain_text"`) {
+		t.Errorf("回复不该解析任何标记:%s", all)
 	}
 	noSecrets(t, "日志", logs.String())
 	if !strings.Contains(logs.String(), "230001") {
@@ -1031,6 +1078,46 @@ func TestClick_Reason(t *testing.T) {
 		_, clicks := h.seen()
 		if got := clicks[len(clicks)-1]; got.Reason != tc.want || string(got.Action) != tc.action {
 			t.Errorf("%v → %q", tc.form, got.Reason)
+		}
+	}
+}
+
+// 表单提交的回调里带不带 value 没有在真平台上验证过;不带时从按钮的名字里认,两种都要能拒绝。
+func TestClick_NameFallback(t *testing.T) {
+	f, h := newFake(t), &fakeHandler{}
+	s := start(t, f, f.transport(), h)
+	c := pendingCard()
+	name, _ := button(decode(t, c), "拒绝")["name"].(string)
+	click := func(value any, name string) (string, int) {
+		e := clickEvent(value, obj{"reason": "不合规"})
+		a := e["event"].(obj)["action"].(obj)
+		a["name"] = name
+		if value == nil {
+			delete(a, "value")
+		}
+		data, _ := s.event(e)
+		_, clicks := h.seen()
+		return string(data), len(clicks)
+	}
+	want := chat.Click{Channel: chat.Lark, BotID: testApp, AccountID: "ou_9", Token: c.Token, Action: chat.ActReject, Reason: "不合规"}
+	for i, value := range []any{obj{"t": c.Token, "a": "reject"}, nil, obj{}} {
+		if _, n := click(value, name); n != i+1 {
+			t.Fatalf("值 %v 没交给处理方", value)
+		}
+		if _, clicks := h.seen(); clicks[i] != want {
+			t.Errorf("值 %v → %+v", value, clicks[i])
+		}
+	}
+	for _, bad := range []string{"", "reject", "reject_", "confirm_" + c.Token, "approve_" + c.Token, "test_" + c.Token, "x" + name, "Reject_" + c.Token,
+		name + " ", name + "\n", name + "/..", "reject_" + strings.Repeat("x", 129), "reject_汉字"} {
+		if data, n := click(nil, bad); n != 3 || !strings.Contains(data, chat.Tr("zh", "click.invalid")) {
+			t.Errorf("名字 %q → %s", bad, data)
+		}
+	}
+	// 有值就只认值:值是坏的不拿名字去补。
+	for _, value := range []any{obj{"t": c.Token}, obj{"a": "reject"}, obj{"x": 1}, obj{"t": 1, "a": "reject"}} {
+		if _, n := click(value, name); n != 3 {
+			t.Errorf("值 %v 不该靠名字补上", value)
 		}
 	}
 }

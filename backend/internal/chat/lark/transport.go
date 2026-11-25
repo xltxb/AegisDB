@@ -114,6 +114,7 @@ func New(region, appID, appSecret string, opts ...Option) *Transport {
 	}
 	t.http = newHTTPClient(t.base)
 	// 长连接里的事件不加密、不签名(连接本身已按应用密钥认证),所以两个参数都空着。
+	// 构造时 SDK 会往标准输出写一行「event-dispatch is ready」,那时还换不了它的日志;每个 Transport 一次。
 	t.events = dispatcher.NewEventDispatcher("", "")
 	t.events.Config.Logger = sdkLog{t.scrub}
 	t.events.OnP2MessageReceiveV1(func(_ context.Context, e *larkim.P2MessageReceiveV1) error { return t.onText(e) })
@@ -245,7 +246,7 @@ func (b bootstrap) Do(req *http.Request) (*http.Response, error) {
 			for _, vs := range u.Query() {
 				for _, v := range vs {
 					if len(v) >= 8 { // 票据;短的是设备号一类,遮了反而看不懂
-						b.t.scrub.remember(v)
+						b.t.scrub.ticket(v)
 					}
 				}
 			}
@@ -396,15 +397,22 @@ func (t *Transport) onClick(e *callback.CardActionTriggerEvent) *callback.CardAc
 }
 
 // parseClick 把回调变成一次点击。身份只取自 operator.open_id;按钮的值里只认令牌和动作,多一样都不收。
+//
+// 表单提交的回调带不带按钮的 value,没有在真平台上验证过;不带的话「拒绝」就永远点不动。所以没有值时从
+// 按钮的名字里认(见 rejectName)。只认拒绝:表单提交按钮只有它一个,通过从不走这条路。
 func (t *Transport) parseClick(e *callback.CardActionTriggerEvent) (chat.Click, bool) {
 	ev := e.Event
 	if ev == nil || !t.mine(e.EventV2Base) || ev.Host != "im_message" || ev.Operator == nil || ev.Operator.OpenID == "" ||
 		ev.Action == nil || ev.Context == nil || ev.Context.OpenMessageID == "" || ev.Context.OpenChatID == "" {
 		return chat.Click{}, false
 	}
-	token, ok1 := ev.Action.Value["t"].(string)
-	action, ok2 := ev.Action.Value["a"].(string)
-	if !ok1 || !ok2 || len(ev.Action.Value) != 2 || len(token) > maxTokenLen {
+	value := ev.Action.Value
+	if m := rejectNameShape.FindStringSubmatch(ev.Action.Name); len(value) == 0 && m != nil {
+		value = obj{"t": m[1], "a": string(chat.ActReject)}
+	}
+	token, ok1 := value["t"].(string)
+	action, ok2 := value["a"].(string)
+	if !ok1 || !ok2 || len(value) != 2 || len(token) > maxTokenLen {
 		return chat.Click{}, false
 	}
 	c := chat.Click{Channel: chat.Lark, BotID: t.appID, AccountID: ev.Operator.OpenID, Token: token, Action: chat.Action(action)}

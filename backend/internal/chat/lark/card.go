@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -30,6 +31,7 @@ const (
 	maxTitleRunes  = 100
 	maxFieldRunes  = 300
 	maxReasonRunes = 1000
+	maxURLBytes    = 1000
 
 	// 拒绝原因输入框:它的名字就是回调 form_value 里的键。
 	reasonInput    = "reason"
@@ -64,10 +66,25 @@ func RenderCard(c chat.Card) string {
 		return out
 	}
 	c.Partial = true
+	out = fitStatement(&c)
+	// 语句截没了还放不下:从后往前丢字段。剩下的标题、原因、结论、地址各有上限,
+	// 全用最占地方的字符(一个 6 字节)也不到 2 万,一定放得下。
+	for sizeInBody(out) > maxCardBytes && len(c.Fields) > 0 {
+		c.Fields = c.Fields[:len(c.Fields)-1]
+		out = encode(c)
+	}
+	return out
+}
+
+// fitStatement 把语句截到放得下为止,最短截到只剩省略号。
+func fitStatement(c *chat.Card) string {
+	if c.Statement == "" {
+		return encode(*c)
+	}
 	stmt := []rune(c.Statement)
 	at := func(n int) string {
 		c.Statement = string(stmt[:n]) + "…"
-		return encode(c)
+		return encode(*c)
 	}
 	// 第一个放不下的长度,前一个就是最长的放得下的。
 	n := sort.Search(len(stmt), func(n int) bool { return sizeInBody(at(n)) > maxCardBytes })
@@ -110,8 +127,7 @@ func encode(c chat.Card) string {
 // 表单里,为的是带上原因输入框。Confirming 在这里用不上。
 func buttons(c chat.Card, tr func(string) string) []obj {
 	press := func(label, kind string, a chat.Action) obj {
-		return obj{"tag": "button", "text": plain(tr(label)), "type": kind, "name": string(a),
-			"value": obj{"t": c.Token, "a": string(a)}}
+		return obj{"tag": "button", "text": plain(tr(label)), "type": kind, "value": obj{"t": c.Token, "a": string(a)}}
 	}
 	var row, els []obj
 	switch {
@@ -126,7 +142,7 @@ func buttons(c chat.Card, tr func(string) string) []obj {
 		approve["confirm"] = obj{"title": plain(tr("btn.confirm")), "text": plain(ask)}
 		row = append(row, approve)
 	}
-	if u, err := url.Parse(c.DetailURL); err == nil && u.Host != "" && (u.Scheme == "https" || u.Scheme == "http") {
+	if u, err := url.Parse(c.DetailURL); err == nil && len(c.DetailURL) <= maxURLBytes && u.Host != "" && (u.Scheme == "https" || u.Scheme == "http") {
 		row = append(row, obj{"tag": "button", "text": plain(tr("btn.detail")), "type": "default", "url": c.DetailURL})
 	}
 	if len(row) > 0 {
@@ -134,7 +150,7 @@ func buttons(c chat.Card, tr func(string) string) []obj {
 	}
 	if c.Token != "" && !c.Test {
 		reject := press("btn.reject", "danger", chat.ActReject)
-		reject["action_type"] = "form_submit"
+		reject["action_type"], reject["name"] = "form_submit", rejectName(c.Token)
 		els = append(els, obj{"tag": "form", "name": "reject_form", "elements": []obj{
 			{"tag": "input", "name": reasonInput, "required": false, "max_length": maxRejectRunes,
 				"placeholder": plain(tr("reject.placeholder"))},
@@ -142,6 +158,17 @@ func buttons(c chat.Card, tr func(string) string) []obj {
 		}})
 	}
 	return els
+}
+
+// rejectName 是表单里「拒绝」按钮的名字。它带着与值相同的令牌,给不带 value 的回调用(见 parseClick)。
+func rejectName(token string) string { return string(chat.ActReject) + "_" + token }
+
+var rejectNameShape = regexp.MustCompile(`^` + string(chat.ActReject) + `_([A-Za-z0-9_-]{1,128})$`)
+
+// renderReply 画出一句话的回复。用只有一段 plain_text 的卡片,不用文本消息:文本消息会解析 <at>、链接与
+// 加粗,而话里有别人起的名字。
+func renderReply(s string) string {
+	return marshal(obj{"config": obj{"enable_forward": false}, "elements": []obj{div(visible(s))}})
 }
 
 func template(c chat.Card) string {
