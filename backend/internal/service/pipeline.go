@@ -413,7 +413,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
-		Reason: clip(req.Reason, 400), Precheck: precheckJSON(pre),
+		Reason: clip(req.Reason, releaseReasonMax), Precheck: precheckJSON(pre),
 		CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
 		Source:   orDefault(origin.Source, model.ReleaseSourceConsole),
@@ -804,7 +804,8 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 		return failStage(model.RelLogApCreateFail, "err", err.Error())
 	}
 	s.Webhook.SendLarkApproval(ap)
-	s.queueChatCards(ap, releaseLabelTruncated(rel, body))
+	// 单子上的正文、原因有一样是截断的,卡片就不是全文。
+	s.queueChatCards(ap, releaseLabelTruncated(rel, body) || releaseReasonTruncated(rel))
 	s.recordAuditFrom(model.AuditSourceRelease, creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
 		status: model.RunWaiting, approvalID: ap.ID, approvalNo: ap.ApNo,
@@ -1264,6 +1265,15 @@ func releaseApprovalLabel(rel *model.Release, body string) string {
 func releaseLabelTruncated(rel *model.Release, body string) bool {
 	_, truncated := releaseLabelBody(rel, body)
 	return truncated
+}
+
+// releaseReasonMax 是提交时发布原因最多留的字数。
+const releaseReasonMax = 400
+
+// releaseReasonTruncated 报告发布原因在提交时是不是被截断过:clip 截断后比上限多一个省略号,没截断的
+// 不会超过上限。接上单号之后离审批单的列宽(512)还远,那里不会再截。
+func releaseReasonTruncated(rel *model.Release) bool {
+	return utf8.RuneCountInString(rel.Reason) > releaseReasonMax
 }
 
 // releaseLabelBody 是审批单标签里正文的那一段,与它截断没有。先遮口令再截断(见 safeClip),

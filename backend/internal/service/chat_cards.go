@@ -132,7 +132,8 @@ func (s *Services) buildChatCard(ap *model.Approval, ch chat.Channel, lang strin
 	c := chat.Card{
 		Title: chat.Tr(lang, "title."+kind) + " · " + ap.ApNo,
 		Risk:  ap.RiskLevel, Lang: lang, DetailURL: s.chatDetailURL(),
-		Partial: !withSQL || sourceTruncated || ap.ScriptUploadID > 0,
+		// 在线变更单:站内审批页上还有数据量与前置检查的提示,卡片上没有。
+		Partial: !withSQL || sourceTruncated || ap.ScriptUploadID > 0 || ap.OSCJobID > 0,
 	}
 	add := func(key, value string) {
 		c.Fields = append(c.Fields, chat.Field{Label: chat.Tr(lang, "field."+key), Value: value})
@@ -144,11 +145,17 @@ func (s *Services) buildChatCard(ap *model.Approval, ch chat.Channel, lang strin
 		add("database", ap.Database)
 	}
 	add("env", strings.ToUpper(ap.Env))
+	if withSQL && ap.TierCode != "" {
+		add("tier", strings.ToUpper(ap.TierCode))
+	}
 	add("risk", chatRiskLabel(lang, ap.RiskLevel))
 	add("initiator", ap.Initiator)
+	if ap.OSCJobID > 0 {
+		add("method", chat.Tr(lang, "method.osc"))
+	}
 	if withSQL {
 		if ap.Notice != "" {
-			add("notice", ap.Notice)
+			add("notice", chatRefText(lang, ap.NoticeRef, ap.Notice))
 		}
 		// 先遮口令再截断,理由见 safeClip。
 		full := sqlutil.RedactSecrets(ap.Command)
@@ -163,7 +170,7 @@ func (s *Services) buildChatCard(ap *model.Approval, ch chat.Channel, lang strin
 		// 窗口可能刚被改过,这张单批的仍是当时那一版。
 		if ref := ap.CommandRef; ref != nil && len(ref.Parts) > 0 {
 			add("window", ref.Args["name"])
-			add("schedule", model.RenderApText(&ref.Parts[0]))
+			add("schedule", chatRefText(lang, &ref.Parts[0], model.RenderApText(&ref.Parts[0])))
 		}
 	case ap.ExportJobID > 0:
 		what := "export.raw"
@@ -203,6 +210,33 @@ func chatRiskLabel(lang, level string) string {
 	return level
 }
 
+// chatRefArgs 是卡片上会出现的系统句子(chat 文案表的 ref.* 键)的参数,按占位符的顺序。
+var chatRefArgs = map[string][]string{
+	model.WinOnce:         {"start", "end"},
+	model.WinOnceUnset:    {},
+	model.WinDaily:        {"start", "end", "tz"},
+	model.WinWeekly:       {"days", "start", "end", "tz"},
+	model.WinUnknownModel: {},
+	ruleOSCBigDirect:      {"table", "rows", "size", "why"},
+}
+
+// chatRefText 把单子上存的一句系统的话用卡片语言再说一遍;没有机器可读形式、或不认识的,用单子上存的
+// 那句中文(canonical)。参数是数据,原样带出。
+func chatRefText(lang string, ref *model.RuleRef, canonical string) string {
+	if ref == nil {
+		return canonical
+	}
+	names, ok := chatRefArgs[ref.Code]
+	if !ok {
+		return canonical
+	}
+	args := make([]any, len(names))
+	for i, n := range names {
+		args[i] = ref.Args[n]
+	}
+	return chat.Tr(lang, "ref."+ref.Code, args...)
+}
+
 // chatDetailURL 是「查看详情」指向的地址;没配 notify.consoleURL 为空。与群卡片同一个落点。
 func (s *Services) chatDetailURL() string {
 	base := strings.TrimRight(strings.TrimSpace(s.settingString("notify.consoleURL", "")), "/")
@@ -232,7 +266,11 @@ func (s *Services) chatOutcome(ap *model.Approval, lang string) (text string, se
 	case model.StatusCancelled:
 		// 窗口改过之后另起了新单,旧单是被顶替的,没有人撤回过它。窗口删了则是一并撤回(站内同一口径)。
 		if ap.WindowID > 0 {
-			if w, werr := s.Repo.GetExecWindow(ap.WindowID); werr == nil && w.ApprovalID != ap.ID {
+			w, err := s.Repo.GetExecWindow(ap.WindowID)
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				return "", false, err // 读不出来不等于删了
+			}
+			if err == nil && w.ApprovalID != ap.ID {
 				return chat.Tr(lang, "outcome.voided"), true, nil
 			}
 		}
@@ -378,7 +416,7 @@ func (s *Services) convergeChatCard(ctx context.Context, t chat.Transport, bot s
 	card := s.sentChatCard(ap, row)
 	outcome, settled, err := s.chatOutcome(ap, card.Lang)
 	if err != nil {
-		slog.Error("读审批步骤失败", "card", row.ID, "err", err)
+		slog.Error("读审批结论失败", "card", row.ID, "err", err)
 		return nil
 	}
 	attempts := row.Attempts + 1
@@ -404,13 +442,14 @@ func (s *Services) convergeChatCard(ctx context.Context, t chat.Transport, bot s
 	return err
 }
 
-// chatCallFailed 记下一次失败;次数用完就不再试。
+// chatCallFailed 记下一次失败;次数用完就不再试。下次时间从此刻重新算:调用之前记的那个没算上调用本身
+// 花掉的时间,一次拖到超时的调用会让重试紧接着就来。
 func (s *Services) chatCallFailed(row *model.ChatCard, ap *model.Approval, attempts int, what string, err error) {
 	text, state := chatErrText(err), row.State
 	if attempts >= chatMaxAttempts {
 		state = model.ChatCardFailed
 	}
-	s.setChatCard(row, state, map[string]any{"last_error": text})
+	s.setChatCard(row, state, map[string]any{"last_error": text, "next_at": time.Now().Add(chatRetryAfter(attempts))})
 	slog.Warn(what, "channel", row.Channel, "apNo", ap.ApNo, "user", row.UserID, "attempt", attempts, "err", text)
 }
 

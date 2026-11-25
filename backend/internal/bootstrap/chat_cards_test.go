@@ -832,15 +832,17 @@ func TestChatCards_SourceTruncated(t *testing.T) {
 		{"name": "人工审批", "type": "approve"}, {"name": "执行变更", "type": "execute"},
 	})
 	for name, c := range map[string]struct {
-		sql  string
-		want bool
+		sql, reason string
+		want        bool
 	}{
-		"超过 4000 字": {"SELECT 1 /* " + strings.Repeat("a", 4100) + " */;", true},
-		"短正文":       {"SELECT 1;", false},
+		"超过 4000 字": {"SELECT 1 /* " + strings.Repeat("a", 4100) + " */;", "r", true},
+		"短正文":       {"SELECT 1;", "r", false},
+		"原因被截断":     {"SELECT 1;", strings.Repeat("原", 401), true}, // 提交时只留 400 字
+		"原因恰好放得下":   {"SELECT 1;", strings.Repeat("原", 400), false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := app.submitRelease(token, map[string]any{"title": "长正文", "pipelineId": pid,
-				"connectionId": app.connIDByEnv(token, "staging"), "sql": c.sql, "reason": "r"})
+				"connectionId": app.connIDByEnv(token, "staging"), "sql": c.sql, "reason": c.reason})
 			eq(t, r.Code, 0, r.Msg)
 			var rel releaseView
 			_ = json.Unmarshal(r.Data, &rel)
@@ -978,4 +980,26 @@ func TestChatCards_ClosedMeanwhile(t *testing.T) {
 			t.Errorf("更新途中收场的: %+v", row)
 		}
 	}
+}
+
+// 退避从失败那一刻算起:一次拖了很久才失败的调用,不能让下一次紧接着就来。
+func TestChatCards_BackoffCountsFromFailure(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	slow := func() error { time.Sleep(1500 * time.Millisecond); return errors.New("slow") }
+	id, _ := app.submitCommand()
+	app.repo.DB().Where("approval_id = ? AND user_id <> ?", id, app.storedUser(owner1).ID).Delete(&model.ChatCard{})
+	check := func(what string) {
+		t.Helper()
+		app.sweepCards()
+		if left := time.Until(app.cardOf(id, owner1).NextAt); left < 4500*time.Millisecond || left > 5*time.Second {
+			t.Errorf("%s:失败后还应等 5 秒,实际 %s", what, left)
+		}
+	}
+	lark.setHooks(func(context.Context, string, chat.Card) error { return slow() }, nil)
+	check("发送")
+	lark.setHooks(nil, func(context.Context, chat.Ref, chat.Card) error { return slow() })
+	app.dueCards()
+	app.sweepCards()
+	eq(t, app.cancel(app.login(cardAdmin, "aegisdb123"), id).Code, 0, "撤回")
+	check("更新")
 }

@@ -42,7 +42,7 @@ func cardDB(t *testing.T) (*Services, *gorm.DB) {
 // cardTicket 是一张字段齐全的单;mutate 改成各类单子。
 func cardTicket(mutate func(*model.Approval)) *model.Approval {
 	ap := &model.Approval{
-		ID: 1, ApNo: "AP-1024", Instance: "order-cluster", Env: "prod", RiskLevel: model.RiskHigh, Database: "orders_db",
+		ID: 1, ApNo: "AP-1024", Instance: "order-cluster", Env: "prod", RiskLevel: model.RiskHigh, Database: "orders_db", TierCode: "prod",
 		Command: "DROP TABLE orders_2024_q3;", Reason: "清理过期表", Initiator: "李雷", Status: model.StatusPending,
 	}
 	if mutate != nil {
@@ -86,15 +86,15 @@ func TestChatCard_LarkCarriesEverything(t *testing.T) {
 	if c.Risk != model.RiskHigh || c.Lang != "zh" {
 		t.Errorf("风险 / 语言: %q %q", c.Risk, c.Lang)
 	}
-	for label, want := range map[string]string{"单号": "AP-1024", "类型": "高危命令", "实例": "order-cluster", "数据库": "orders_db",
+	for label, want := range map[string]string{"单号": "AP-1024", "类型": "高危命令", "实例": "order-cluster", "数据库": "orders_db", "判定分层": "PROD",
 		"环境": "PROD", "风险": "高危", "发起人": "李雷", "注意": "将直接执行,可能长时间锁表"} {
 		if got := fieldsOf(c)[label]; got != want {
 			t.Errorf("%s = %q,应为 %q", label, got, want)
 		}
 	}
 	// 站内审批页上有的它都有,所以这两处空着时才不出现
-	if f := fieldsOf(s.buildChatCard(cardTicket(func(a *model.Approval) { a.Database = "" }), chat.Lark, "zh", false, false)); len(f) != 6 {
-		t.Errorf("没有库、没有提示时的字段: %v", f)
+	if f := fieldsOf(s.buildChatCard(cardTicket(func(a *model.Approval) { a.Database, a.TierCode = "", "" }), chat.Lark, "zh", false, false)); len(f) != 6 {
+		t.Errorf("没有库、没有分层、没有提示时的字段: %v", f)
 	}
 }
 
@@ -135,6 +135,8 @@ func TestChatCard_TelegramWithoutSQL(t *testing.T) {
 		leaks  []string
 	}{
 		"命令": {func(a *model.Approval) { a.Notice = "大表 t_big 将直接执行" }, nil, []string{"DROP", "清理过期表", "orders_db", "t_big"}},
+		"在线变更": {func(a *model.Approval) { a.OSCJobID = 3; a.Command = "ALTER TABLE t_big ADD INDEX i(c)" },
+			map[string]string{"执行方式": "在线变更"}, []string{"ALTER", "t_big"}},
 		"脚本": {func(a *model.Approval) { a.ScriptUploadID = 9; a.Command = "\\i fix.sql\nDELETE FROM t" }, nil, []string{"fix.sql", "DELETE"}},
 		"发布单": {func(a *model.Approval) {
 			a.ReleaseID = 4
@@ -201,8 +203,10 @@ func TestChatCard_Partial(t *testing.T) {
 		"脚本单":        {func(a *model.Approval) { a.ScriptUploadID = 1 }, false, true},
 		"单子存的就是截断内容": {func(a *model.Approval) { a.ReleaseID = 1 }, true, true},
 		"发布单没截断":     {func(a *model.Approval) { a.ReleaseID = 1 }, false, false},
-		"窗口单":        {windowTicket, false, false},
-		"只因遮掉口令":     {func(a *model.Approval) { a.Command = "CREATE USER a IDENTIFIED BY 'p@ss'" }, false, false},
+		// 站内审批页上还有数据量与前置检查的提示,卡片上没有
+		"在线变更单":  {func(a *model.Approval) { a.OSCJobID = 3 }, false, true},
+		"窗口单":    {windowTicket, false, false},
+		"只因遮掉口令": {func(a *model.Approval) { a.Command = "CREATE USER a IDENTIFIED BY 'p@ss'" }, false, false},
 	} {
 		for _, ch := range chat.Channels { // Telegram 开了带 SQL,和 Lark 同一套判断
 			card := s.buildChatCard(cardTicket(c.mutate), ch, "zh", c.truncated, true)
@@ -397,5 +401,74 @@ func TestQueueChatCards(t *testing.T) {
 	}
 	if err := s.Repo.QueueChatCards([]model.ChatCard{{ApprovalID: 1, UserID: u.ID, Channel: "lark", NextAt: time.Now()}}); err != nil {
 		t.Errorf("重复排队应跳过而不是报错: %v", err)
+	}
+}
+
+// 在线变更单写明执行方式:只写一句 ALTER 的话,看不出它不是直接执行。
+func TestChatCard_OnlineChangeTag(t *testing.T) {
+	s, _ := cardDB(t)
+	osc := cardTicket(func(a *model.Approval) { a.OSCJobID = 3 })
+	for lang, want := range map[string][2]string{"zh": {"执行方式", "在线变更"}, "en": {"Runs as", "Online change"}} {
+		for _, ch := range chat.Channels {
+			if got := fieldsOf(s.buildChatCard(osc, ch, lang, false, false))[want[0]]; got != want[1] {
+				t.Errorf("%s/%s: %q", ch, lang, got)
+			}
+		}
+	}
+	if _, has := fieldsOf(s.buildChatCard(cardTicket(nil), chat.Lark, "zh", false, false))["执行方式"]; has {
+		t.Error("普通命令不该有这一项")
+	}
+}
+
+// 系统自己的话跟着卡片语言走;中文就是单子上存的那一句。
+func TestChatCard_SystemTextFollowsLanguage(t *testing.T) {
+	s, _ := cardDB(t)
+	for code, c := range map[string]struct {
+		args []string
+		en   string
+	}{
+		model.WinOnce:         {[]string{"start", "A", "end", "B"}, "One-off A → B"},
+		model.WinOnceUnset:    {nil, "One-off (time not set)"},
+		model.WinDaily:        {[]string{"start", "A", "end", "B", "tz", "Z"}, "Recurring daily A-B (Z)"},
+		model.WinWeekly:       {[]string{"days", "1,5", "start", "A", "end", "B", "tz", "Z"}, "Recurring on weekdays 1,5 (1 = Mon) A-B (Z)"},
+		model.WinUnknownModel: {nil, "(unknown schedule type)"},
+	} {
+		ref := model.NewRuleRef(code, c.args...)
+		ap := cardTicket(func(a *model.Approval) { windowTicket(a); a.CommandRef.Parts = []model.RuleRef{*ref} })
+		if got := fieldsOf(s.buildChatCard(ap, chat.Telegram, "en", false, false))["Schedule"]; got != c.en {
+			t.Errorf("%s en = %q", code, got)
+		}
+		if got := fieldsOf(s.buildChatCard(ap, chat.Telegram, "zh", false, false))["时间段"]; got != model.RenderApText(ref) || got == "" {
+			t.Errorf("%s zh = %q,单子上是 %q", code, got, model.RenderApText(ref))
+		}
+	}
+	d := OSCDecision{Table: "t", Rows: 12345, Bytes: 1 << 30}
+	d.Parsed.Unsupported = "WHY"
+	ap := cardTicket(func(a *model.Approval) { a.Notice, a.NoticeRef = bigDirectNotice(d) })
+	if got := fieldsOf(s.buildChatCard(ap, chat.Lark, "zh", false, false))["注意"]; got != ap.Notice {
+		t.Errorf("zh 提示 %q", got)
+	}
+	if got := fieldsOf(s.buildChatCard(ap, chat.Lark, "en", false, false))["Notice"]; !strings.HasPrefix(got, "Table t has about 12,345 rows / ") || !strings.Contains(got, "WHY") {
+		t.Errorf("en 提示 %q", got)
+	}
+	// 认不出的 code 退回单子上存的原句
+	ap.NoticeRef = model.NewRuleRef("someNewCode")
+	if got := fieldsOf(s.buildChatCard(ap, chat.Lark, "en", false, false))["Notice"]; got != ap.Notice {
+		t.Errorf("认不出的提示 %q", got)
+	}
+}
+
+// 窗口读不出来不等于窗口删了:报错等下一轮,不写下猜出来的结论。
+func TestChatOutcome_WindowReadError(t *testing.T) {
+	s, db := cardDB(t)
+	ap := cardTicket(func(a *model.Approval) { windowTicket(a); a.Status = model.StatusCancelled })
+	if text, _, err := s.chatOutcome(ap, "zh"); err != nil || text != "已撤回" {
+		t.Errorf("窗口删了: %q %v", text, err)
+	}
+	if err := db.Migrator().DropTable(&model.ExecWindow{}); err != nil {
+		t.Fatal(err)
+	}
+	if text, _, err := s.chatOutcome(ap, "zh"); err == nil {
+		t.Errorf("窗口读不出来却写了结论: %q", text)
 	}
 }

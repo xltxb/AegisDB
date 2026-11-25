@@ -30,9 +30,21 @@ var texts = map[string]map[string]string{
 		"field.window":    "窗口",
 		"field.schedule":  "时间段",
 		"field.export":    "导出内容",
+		"field.tier":      "判定分层",
+		"field.method":    "执行方式",
+
+		"method.osc": "在线变更",
 
 		"export.raw":    "原值",
 		"export.masked": "按脱敏导出",
+
+		// 单子上存着的系统句子,键是 ref. + 它的 code。中文与单子上存的那句一字不差(有用例钉着)。
+		"ref.winOnce":         "一次性 %s → %s",
+		"ref.winOnceUnset":    "一次性(时间未设置)",
+		"ref.winDaily":        "班车 每天 %s-%s (%s)",
+		"ref.winWeekly":       "班车 周%s %s-%s (%s)",
+		"ref.winUnknownModel": "(未知时间模型)",
+		"ref.oscBigDirect":    "表 %s 约 %s 行 / %s,这条 DDL 将直接执行(在线变更不支持:%s),可能长时间锁表",
 
 		"risk.high": "高危",
 		"risk.mid":  "中危",
@@ -89,9 +101,20 @@ var texts = map[string]map[string]string{
 		"field.window":    "Window",
 		"field.schedule":  "Schedule",
 		"field.export":    "Exports",
+		"field.tier":      "Judged tier",
+		"field.method":    "Runs as",
+
+		"method.osc": "Online change",
 
 		"export.raw":    "Original values",
 		"export.masked": "Masked",
+
+		"ref.winOnce":         "One-off %s → %s",
+		"ref.winOnceUnset":    "One-off (time not set)",
+		"ref.winDaily":        "Recurring daily %s-%s (%s)",
+		"ref.winWeekly":       "Recurring on weekdays %s (1 = Mon) %s-%s (%s)",
+		"ref.winUnknownModel": "(unknown schedule type)",
+		"ref.oscBigDirect":    "Table %s has about %s rows / %s; this DDL runs directly (online change does not support it: %s) and may lock the table for a long time",
 
 		"risk.high": "High",
 		"risk.mid":  "Medium",

@@ -126,12 +126,15 @@ func (s *Services) OSCRoute(ctx context.Context, conn *model.Connection, stmt st
 	return d
 }
 
+// ruleOSCBigDirect:大表上在线变更做不了、将直接执行的 DDL(前端 ruleText.oscBigDirect;args: table, rows, size, why)。
+const ruleOSCBigDirect = "oscBigDirect"
+
 // bigDirectNotice 是"大表直接 DDL"那句提示(规范中文;界面按 RuleRef 用读者的语言)。
 func bigDirectNotice(d OSCDecision) (string, *model.RuleRef) {
 	why := d.Parsed.Unsupported
 	msg := fmt.Sprintf("表 %s 约 %s 行 / %s,这条 DDL 将直接执行(在线变更不支持:%s),可能长时间锁表",
 		d.Table, thousands(d.Rows), humanBytes(int(d.Bytes)), why)
-	return msg, model.NewRuleRef("oscBigDirect", "table", d.Table, "rows", thousands(d.Rows), "size", humanBytes(int(d.Bytes)), "why", why)
+	return msg, model.NewRuleRef(ruleOSCBigDirect, "table", d.Table, "rows", thousands(d.Rows), "size", humanBytes(int(d.Bytes)), "why", why)
 }
 
 func thousands(n int64) string {
