@@ -321,8 +321,8 @@ func (r *Repo) UpdateRelease(id int64, fields map[string]any) error {
 	return r.db.Model(&model.Release{}).Where("id = ?", id).Updates(fields).Error
 }
 
-// FinishRelease writes a release's terminal state and, when skipUnrun is set,
-// marks every stage the run never reached as skipped — in ONE transaction.
+// FinishRelease writes a release's terminal state and, when settle is set, settles
+// its stages (see settleStages) — in ONE transaction.
 //
 // Written one after the other (as they used to be) a reader in between saw a
 // failed release whose later stages were still pending, and a process dying there
@@ -331,7 +331,7 @@ func (r *Repo) UpdateRelease(id int64, fields map[string]any) error {
 //
 // from != "" makes it a claim: nothing is written unless the release is still in
 // that state. The result reports whether this caller's write took effect.
-func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, skipUnrun bool, now time.Time) (bool, error) {
+func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, settle bool, now time.Time) (bool, error) {
 	done := false
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		q := tx.Model(&model.Release{}).Where("id = ?", id)
@@ -345,10 +345,8 @@ func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, skipU
 		if from != "" && res.RowsAffected != 1 {
 			return nil
 		}
-		if skipUnrun {
-			if err := tx.Model(&model.ReleaseStage{}).
-				Where("release_id = ? AND status IN ?", id, []string{model.RunPending, model.RunWaiting}).
-				Updates(map[string]any{"status": model.RunSkipped, "finished_at": now}).Error; err != nil {
+		if settle {
+			if err := settleStages(tx, []int64{id}, now); err != nil {
 				return err
 			}
 		}
@@ -359,6 +357,20 @@ func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, skipU
 		return false, err
 	}
 	return done, nil
+}
+
+// settleStages closes the stages of releases that ended without completing: one
+// cut off mid-run failed, one never reached is skipped. Pending and waiting rows
+// on a finished release are debris, not work.
+func settleStages(tx *gorm.DB, releaseIDs []int64, now time.Time) error {
+	if err := tx.Model(&model.ReleaseStage{}).
+		Where("release_id IN ? AND status = ?", releaseIDs, model.RunRunning).
+		Updates(map[string]any{"status": model.RunFailed, "finished_at": now}).Error; err != nil {
+		return err
+	}
+	return tx.Model(&model.ReleaseStage{}).
+		Where("release_id IN ? AND status IN ?", releaseIDs, []string{model.RunPending, model.RunWaiting}).
+		Updates(map[string]any{"status": model.RunSkipped, "finished_at": now}).Error
 }
 
 // WaitingApprovalStages returns the approve stages currently blocking a release,
@@ -394,24 +406,34 @@ func (r *Repo) WaitingConfirmStages() ([]model.ReleaseStage, error) {
 // re-running it is the one outcome worse than reporting a failure.
 func (r *Repo) FailStuckReleases() (int64, error) {
 	now := time.Now()
-	res := r.db.Model(&model.Release{}).Where("status = ?", model.RunRunning).
-		Updates(map[string]any{
-			"status":      model.RunFailed,
-			"error":       model.RenderRelLog(model.NewRuleRef(model.RelErrRestart)),
-			"error_ref":   `{"code":"` + model.RelErrRestart + `"}`,
-			"finished_at": now,
-		})
-	if res.Error != nil {
-		return 0, res.Error
-	}
-	if res.RowsAffected > 0 {
-		if err := r.db.Model(&model.ReleaseStage{}).
-			Where("status = ?", model.RunRunning).
-			Updates(map[string]any{"status": model.RunFailed, "finished_at": now}).Error; err != nil {
-			return res.RowsAffected, err
+	var n int64
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		var ids []int64
+		if err := tx.Model(&model.Release{}).Where("status = ?", model.RunRunning).Pluck("id", &ids).Error; err != nil {
+			return err
 		}
+		for _, batch := range chunkIDs(ids) {
+			res := tx.Model(&model.Release{}).Where("id IN ? AND status = ?", batch, model.RunRunning).
+				Updates(map[string]any{
+					"status":      model.RunFailed,
+					"error":       model.RenderRelLog(model.NewRuleRef(model.RelErrRestart)),
+					"error_ref":   `{"code":"` + model.RelErrRestart + `"}`,
+					"finished_at": now,
+				})
+			if res.Error != nil {
+				return res.Error
+			}
+			n += res.RowsAffected
+			if err := settleStages(tx, batch, now); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
-	return res.RowsAffected, nil
+	return n, nil
 }
 
 // PendingReleases lists runs that were queued but never started (the in-memory
