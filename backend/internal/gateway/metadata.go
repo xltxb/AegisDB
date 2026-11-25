@@ -98,15 +98,18 @@ func realMetadataOnce(conn *model.Connection) ([]MetaTableRow, []MetaColumnRow, 
 // ---------------------------------------------------------------- MySQL 家族
 
 // mysqlSystemSchemas 是不入清单的库。它们是服务器自己的东西,不是用户的数据 ——
-// 收进来只会让搜索结果里永远混着几百张 performance_schema 的表。
-const mysqlSystemSchemas = `('information_schema','performance_schema','mysql','sys')`
+// 收进来只会让搜索结果里永远混着几百张 performance_schema 的表。metrics_schema 是 TiDB 的。
+//
+// 比较前要先 LOWER:TiDB 的系统库名是大写的,库名比较又区分大小写,不转就一个也滤不掉
+// (issue #92)。
+const mysqlSystemSchemas = `('information_schema','performance_schema','mysql','sys','metrics_schema')`
 
 func realMetadataMySQL(ctx context.Context, db *sql.DB) ([]MetaTableRow, []MetaColumnRow, error) {
 	started := time.Now()
 	trows, err := db.QueryContext(ctx,
 		`SELECT table_schema, table_name, table_type, IFNULL(table_comment,'')
 		 FROM information_schema.tables
-		 WHERE table_schema NOT IN `+mysqlSystemSchemas+`
+		 WHERE LOWER(table_schema) NOT IN `+mysqlSystemSchemas+`
 		 ORDER BY table_schema, table_name`)
 	if err != nil {
 		return nil, nil, err
@@ -135,7 +138,7 @@ func realMetadataMySQL(ctx context.Context, db *sql.DB) ([]MetaTableRow, []MetaC
 		`SELECT table_schema, table_name, ordinal_position, column_name, column_type,
 		        is_nullable, IFNULL(column_default,''), IFNULL(column_comment,''), column_key
 		 FROM information_schema.columns
-		 WHERE table_schema NOT IN `+mysqlSystemSchemas+`
+		 WHERE LOWER(table_schema) NOT IN `+mysqlSystemSchemas+`
 		 ORDER BY table_schema, table_name, ordinal_position`)
 	if err != nil {
 		return nil, nil, err

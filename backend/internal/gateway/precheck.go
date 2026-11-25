@@ -178,7 +178,7 @@ func liveTableQuery(conn *model.Connection) string {
 			        WHERE table_schema = DATABASE()`
 		}
 		return `SELECT table_schema, table_name FROM information_schema.tables
-		        WHERE table_schema NOT IN ` + mysqlSystemSchemas
+		        WHERE LOWER(table_schema) NOT IN ` + mysqlSystemSchemas
 	case familyPostgres:
 		return `SELECT n.nspname, c.relname
 		        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
