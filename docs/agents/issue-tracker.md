@@ -1,9 +1,22 @@
-# Issue tracker: Local Markdown
+# Issue tracker: GitHub Issues + local Markdown
 
-Issues and PRDs for this repo live as markdown files in `.scratch/`.
-（远端是 GitHub（`origin`，主干 `main`），但不使用 GitHub Issues，工单以本地 markdown 形式管理。）
+| What | Where |
+| ---- | ----- |
+| Problems to fix (bugs, security, stale docs, code smells) | GitHub Issues on `xltxb/AegisDB` |
+| Feature PRDs and their implementation issues | Local markdown in `.scratch/` (gitignored, never committed) |
 
-## Conventions
+## Fixing a problem: issue → branch → PR
+
+1. **Open an issue** with `gh issue create`: symptom, reproduction steps, impact. Search first (`gh issue list --state all --search "..."`) so as not to file a duplicate.
+2. **Branch** from the latest `main`: `fix/<slug>` (or `docs/<slug>`, `chore/<slug>`). Never commit to `main` directly.
+3. **Open a PR** against `main` with `gh pr create`. Put `Closes #<N>` in the body, and say which tests ran and what was not verified.
+4. **Merge through the PR** with a merge commit, once the relevant tests pass. Don't merge locally and push `main`.
+
+The repo is **public**. For an exploitable vulnerability, ask the user before putting any detail in an issue, branch name, commit or PR.
+
+Labels on GitHub: type (`bug`, `security`, `documentation`, ...), area (`backend`, `frontend`, `migration`) and the triage roles in `triage-labels.md`. Check `gh label list` first: not every triage role exists there as a label.
+
+## Feature PRDs and implementation issues
 
 - One feature per directory: `.scratch/<feature-slug>/`
 - The PRD is `.scratch/<feature-slug>/PRD.md`
@@ -13,8 +26,8 @@ Issues and PRDs for this repo live as markdown files in `.scratch/`.
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
+A problem to fix: create a GitHub issue. A feature PRD or its breakdown: create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
 
 ## When a skill says "fetch the relevant ticket"
 
-Read the file at the referenced path. The user will normally pass the path or the issue number directly.
+`#<N>` or a GitHub URL: `gh issue view <N> --comments`. A path: read the file. The user will normally pass one of these.

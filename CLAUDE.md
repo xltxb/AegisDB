@@ -7,7 +7,8 @@
 
 ### Issue tracker
 
-工单与 PRD 以本地 markdown 形式存于 `.scratch/<feature>/`（远端是 GitHub，但不使用 GitHub Issues）。
+修复问题一律先开 GitHub issue（`xltxb/AegisDB`），再开分支修，最后提 PR 合并；不直接往 `main` 提交。
+功能的 PRD 与拆分工单仍以本地 markdown 形式存于 `.scratch/<feature>/`（不入库）。
 See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
