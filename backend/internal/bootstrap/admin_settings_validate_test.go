@@ -70,6 +70,15 @@ func frontendSettingsPayload() map[string]any {
 		"notify.larkWebhook":              "",
 		"notify.larkSecret":               "",
 		"notify.consoleURL":               "",
+		"chat.cardLang":                   "zh",
+		"chat.lark.enabled":               false,
+		"chat.lark.region":                "feishu",
+		"chat.lark.appId":                 "",
+		"chat.lark.appSecret":             "",
+		"chat.telegram.enabled":           false,
+		"chat.telegram.botToken":          "",
+		"chat.telegram.includeSql":        false,
+		"chat.telegram.proxyToken":        "",
 	}
 }
 

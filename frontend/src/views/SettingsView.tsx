@@ -15,7 +15,7 @@ import BrandPanel from '@/components/settings/BrandPanel'
 import BrandMark from '@/components/BrandMark'
 import ChatChannelsPanel from './ChatChannelsPanel'
 import { brandText } from '@/lib/brand'
-import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, CHAT_LANG_KEYS, CHAT_REGION_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
+import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, CHAT_LANG_KEYS, CHAT_REGION_KEYS, CHAT_SECRETS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -142,11 +142,18 @@ const INITIAL = {
   chatLarkRegion: 'feishu' as string,
   chatLarkAppId: '',
   chatLarkAppSecret: '',
+  chatTelegramEnabled: false,
+  chatTelegramBotToken: '',
+  chatTelegramIncludeSql: false,
+  chatTelegramProxy: '', // 键名是 proxyToken:代理地址可能带口令,按密钥存
 }
 export type SettingsForm = typeof INITIAL
 type Form = SettingsForm
 /** 表单里取值为某一类型的那些字段 */
 type KeysOf<V> = { [K in keyof Form]: Form[K] extends V ? (V extends Form[K] ? K : never) : never }[keyof Form]
+
+/** 这一页上的机密:设置键 → 表单里的字段 */
+const SECRETS = { 'notify.larkSecret': 'larkSecret', ...CHAT_SECRETS } as const satisfies Record<string, KeysOf<string>>
 
 // 数值设置的读与存都过它:默认值和上下界各只写一次。以前每个数值设置把默认值写在
 // 三处(ref 初始化、读取、保存)、上下界写在两处(保存、模板的 min/max),漏改一处就
@@ -220,6 +227,10 @@ function formOf(g: Record<string, string | undefined>): Form {
     chatLarkRegion: keyOf(parse<string>(g['chat.lark.region'], ''), CHAT_REGION_KEYS, 'feishu'),
     chatLarkAppId: parse<string>(g['chat.lark.appId'], ''),
     chatLarkAppSecret: '', // 密钥不回显,留空 = 不改
+    chatTelegramEnabled: parse<boolean>(g['chat.telegram.enabled'], false),
+    chatTelegramBotToken: '',
+    chatTelegramIncludeSql: parse<boolean>(g['chat.telegram.includeSql'], false),
+    chatTelegramProxy: '',
   }
 }
 
@@ -286,6 +297,10 @@ function settingsPayload(f: Form) {
     'chat.lark.region': keyOf(f.chatLarkRegion, CHAT_REGION_KEYS, 'feishu'),
     'chat.lark.appId': f.chatLarkAppId.trim(),
     'chat.lark.appSecret': f.chatLarkAppSecret.trim(),
+    'chat.telegram.enabled': f.chatTelegramEnabled,
+    'chat.telegram.botToken': f.chatTelegramBotToken.trim(),
+    'chat.telegram.includeSql': f.chatTelegramIncludeSql,
+    'chat.telegram.proxyToken': f.chatTelegramProxy.trim(),
   }
 }
 // 改没改过:和读进来 / 上次保存时的那一份比。两个 IP 白名单在各自的弹窗里即存即生效,不算在内。
@@ -401,8 +416,7 @@ export default function SettingsView() {
     notify(t('settingsSaved'), 'success')
   }
 
-  const [hasLarkSecret, setHasLarkSecret] = useState(false)
-  const [hasChatSecret, setHasChatSecret] = useState(false)
+  const [secretsSet, setSecretsSet] = useState<Record<string, boolean>>({})
   const [larkTest, setLarkTest, larkTestRef] = useStateRef<{ state: 'idle' | 'sending' | 'ok' | 'err'; msg: string }>({ state: 'idle', msg: '' })
   async function testLark() {
     if (larkTestRef.current.state === 'sending') return
@@ -415,12 +429,12 @@ export default function SettingsView() {
   }
   // 清除一个已配置的密钥(工单 02 第 8 条):后端约定 null = 清除,"" = 不改。即点即存,不等底部的保存 ——
   // 清除是一个明确的动作,与"这次没填"是两回事。
-  async function clearSecret(key: 'notify.larkSecret' | 'chat.lark.appSecret') {
+  async function clearSecret(key: keyof typeof SECRETS) {
     if (!(await confirmAction(t('secretClearConfirm')))) return
     try {
       await api.saveSettings({ [key]: null })
-      if (key === 'notify.larkSecret') { setHasLarkSecret(false); patch({ larkSecret: '' }) }
-      else { setHasChatSecret(false); patch({ chatLarkAppSecret: '' }) }
+      setSecretsSet((v) => ({ ...v, [key]: false }))
+      setter(SECRETS[key])('')
       notify(t('secretCleared'), 'success')
     } catch (e) {
       notifyError(e, t('saveFailed'))
@@ -439,8 +453,7 @@ export default function SettingsView() {
       try {
         const s = await api.settings()
         setF(formOf(s.settings || {}))
-        setHasLarkSecret(!!s.secretsSet?.['notify.larkSecret'])
-        setHasChatSecret(!!s.secretsSet?.['chat.lark.appSecret'])
+        setSecretsSet(s.secretsSet ?? {})
         setAdminIpEnabled(parse<boolean>(s.settings?.['security.adminIpAllowEnabled'], false))
         setAdminIpList(parse<string>(s.settings?.['security.adminIpAllowlist'], ''))
         setAdminIpForcedOff(!!(s as any).adminIpAllowlistForcedOff)
@@ -456,7 +469,11 @@ export default function SettingsView() {
       const p = settingsPayload(fRef.current)
       await api.saveSettings(p)
       // 存进去的密钥不留在页面里
-      if (p['chat.lark.appSecret']) { setHasChatSecret(true); patch({ chatLarkAppSecret: '' }) }
+      for (const key of Object.keys(CHAT_SECRETS) as (keyof typeof CHAT_SECRETS)[]) {
+        if (!p[key]) continue
+        setSecretsSet((v) => ({ ...v, [key]: true }))
+        setter(CHAT_SECRETS[key])('')
+      }
       takeBaseline()
       setSaves((v) => v + 1)
       setSaved(true)
@@ -564,7 +581,7 @@ export default function SettingsView() {
           </section>
           <ChatChannelsPanel
             style={showOn('approval')} active={activeTab === 'approval'} saves={saves} f={f} patch={patch}
-            secrets={{ lark: hasChatSecret }} onClearSecret={() => clearSecret('chat.lark.appSecret')}
+            secretsSet={secretsSet} onClearSecret={clearSecret}
           />
 
           {/* Security */}
@@ -615,7 +632,7 @@ export default function SettingsView() {
             {f.lark && (
               <div className="larkcfg">
                 <div className="lkrow"><label className="lkl">{t('larkWebhook')}</label><input {...tx('larkWebhook')} className="lkin" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxxx" /></div>
-                <div className="lkrow"><label className="lkl">{t('larkSecret')}</label><input {...tx('larkSecret')} type="password" className="lkin" placeholder={hasLarkSecret ? t('secretConfiguredPh') : t('larkSecretPh')} />{hasLarkSecret && <VButton height="36px" onClick={() => clearSecret('notify.larkSecret')}>{t('secretClear')}</VButton>}</div>
+                <div className="lkrow"><label className="lkl">{t('larkSecret')}</label><input {...tx('larkSecret')} type="password" className="lkin" placeholder={secretsSet['notify.larkSecret'] ? t('secretConfiguredPh') : t('larkSecretPh')} />{secretsSet['notify.larkSecret'] && <VButton height="36px" onClick={() => clearSecret('notify.larkSecret')}>{t('secretClear')}</VButton>}</div>
                 <div className="lkrow"><label className="lkl">{t('larkConsole')}</label><input {...tx('consoleURL')} className="lkin" placeholder="https://gw.corp.io" /></div>
                 <div className="lkfoot">
                   <span className={clsx('lkmsg', larkTest.state)}>{larkTest.state === 'sending' ? t('larkSending') : larkTest.msg}</span>

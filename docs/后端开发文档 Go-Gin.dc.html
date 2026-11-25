@@ -100,7 +100,7 @@
 │  ├─ sqlparse/         <span class="c"># SQL 解析器收敛层</span>
 │  ├─ review/           <span class="c"># 数据库规范审查规则</span>
 │  ├─ osc/              <span class="c"># MySQL 在线表结构变更</span>
-│  ├─ chat/             <span class="c"># 聊天审批卡片：渠道接口、卡片模型；lark/ 是飞书长连接</span>
+│  ├─ chat/             <span class="c"># 聊天审批卡片：渠道接口、卡片模型；lark/ 是飞书长连接，telegram/ 是长轮询</span>
 │  ├─ schemadiff/       <span class="c"># 表结构对比</span>
 │  ├─ storemigrate/     <span class="c"># 存储库 MySQL → PostgreSQL 搬迁</span>
 │  └─ apimsg/ metrics/ presence/   <span class="c"># 报错文案身份、延迟统计、在线用户</span>
@@ -213,7 +213,7 @@ v, win := s.judge(u, conn, stmts)<span class="c">                               
   <li>新单推送飞书群机器人通知（只通知）；审批在站内或聊天卡片上决策；发布单另可由持 <code class="inl">release:approve</code> 的开放接口凭据代批（须点名链上审批人，规则同控制台）。</li>
   <li>超时策略：保持等待 / 自动作废 / 自动升级（站内通知默认审批人 + 飞书卡片，每张单一次，单子仍待审批）；初始化写入自动升级、720 分钟，库里没有这项设置时按保持等待。每 60 秒扫描 <code class="inl">tbl_approval</code>。</li>
   <li>发布单失败或终止时，它名下待审批的单在同一事务里作废。</li>
-  <li><strong>聊天审批卡片</strong>（ADR 0021，默认关闭）：<code class="inl">internal/chat</code> 只管收发，不认识审批；绑定、排队、点击、连接管理在 <code class="inl">service/chat_*.go</code>。建单只写 <code class="inl">tbl_chat_card</code> 的 queued 行，发送与收敛由扫描做，渠道出事不影响建单与站内审批。点击核对令牌、绑定、在职、菜单之后走同一个决定核心，<code class="inl">decided_via</code> 记渠道。</li>
+  <li><strong>聊天审批卡片</strong>（ADR 0021，默认关闭）：<code class="inl">internal/chat</code> 只管收发，不认识审批；绑定、排队、点击、连接管理在 <code class="inl">service/chat_*.go</code>。建单只写 <code class="inl">tbl_chat_card</code> 的 queued 行，发送与收敛由扫描做，渠道出事不影响建单与站内审批。点击核对令牌、绑定、在职、菜单之后走同一个决定核心，<code class="inl">decided_via</code> 记渠道。Telegram 默认不带 SQL，可配代理；同一机器人在别处也连着时报冲突，不抢。</li>
 </ul>
 <p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">后台定时任务（<code class="inl">cmd/server/main.go</code>）：</p>
 <table class="t">

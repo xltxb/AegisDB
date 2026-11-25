@@ -855,7 +855,8 @@ paths:
       summary: 本人在各审批机器人渠道上的绑定状态
       description: |
         只列开着的渠道,一个都没开是空数组。每项:`channel`(lark / telegram)、`botName`、`bound`、
-        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。不返回聊天账号与机器人的标识。
+        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。`botName` 在 telegram 是机器人的用户名
+        (没连上为空),在 lark 恒为空。不返回聊天账号与机器人的标识。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/chat-bindings/{channel}/code:
     post:

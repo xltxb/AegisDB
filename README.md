@@ -106,7 +106,7 @@ AegisDB/
 │  │  ├─ sqlparse/       SQL 解析器（只用来让判定更严）
 │  │  ├─ review/         数据库规范审查规则
 │  │  ├─ osc/            MySQL 在线表结构变更
-│  │  ├─ chat/           聊天审批卡片的渠道（Lark）
+│  │  ├─ chat/           聊天审批卡片的渠道（Lark、Telegram）
 │  │  ├─ schemadiff/     表结构对比
 │  │  └─ storemigrate/   存储库 MySQL → PostgreSQL 搬迁
 │  ├─ migrations/        MySQL 迁移；pg/ 下是 PostgreSQL 基线
@@ -173,7 +173,7 @@ MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，�
   一张单只能执行一次，执行前重新判定。单据最终状态以数据库返回的结果为准。
 - 例外：发布单由流水线推进，敏感导出单批准后由后台任务执行，执行窗口单批准后窗口生效。
 - 网关在执行途中重启的单子判失败并写明「结果未知，请到库上核实」，不会重跑。
-- 审批可在站内进行，也可在聊天里的审批卡片上直接通过 / 拒绝（Lark / 飞书，默认关闭，见 `docs/chat-approval-setup.md`）：
+- 审批可在站内进行，也可在聊天里的审批卡片上直接通过 / 拒绝（Lark / 飞书、Telegram，默认关闭，见 `docs/chat-approval-setup.md`）：
   网关主动连出去，不需要公网入口；审批人先用一次性绑定码绑定聊天账号，规则与站内完全一致。
 - 发布单另可由持 `release:approve` 的开放接口凭据代批（须点名链上审批人，规则同控制台）。新单与超时升级会推送飞书群机器人（Webhook）通知。
 
