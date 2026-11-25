@@ -39,6 +39,20 @@ func TestExternalApprovalRemoved(t *testing.T) {
 		"approval.external.callbackAllowIPs": "10.1.2.3,10.9.0.0/16",
 	}).Code, 0, "老的 approval.external.* 键仍被收下")
 
+	// 这两个键没有代码再读,但新写进去的值仍必须是密文,不能以明文落库。
+	stored, err := app.repo.AllSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, plain := range map[string]string{"approval.external.token": "tok-xyz", "approval.external.callbackSecret": oldSecret} {
+		v, ok := stored[k]
+		if !ok || v == "" {
+			t.Errorf("%s 应已入库", k)
+		} else if strings.Contains(v, plain) {
+			t.Errorf("%s 不该以明文落库:%s", k, v)
+		}
+	}
+
 	ap := app.submitProdHighRisk(token)
 
 	// 回调路由已删:带着对的旧密钥也是 404,单子仍待审批。

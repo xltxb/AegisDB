@@ -35,8 +35,6 @@
    160px 的槽位就装不下,数值框会压出卡片边缘。 */
 .lkin { flex: 1; min-width: 0; height: 36px; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); padding: 0 12px; font: 500 12.5px var(--font-mono); color: var(--text-strong); outline: none; }
 .lkin:focus { border-color: var(--accent-text); }
-.lkhint { margin: -4px 0 2px 140px; font: 500 11.5px var(--font-body); color: var(--text-faint); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.lkhint .mono { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
 .larkcfg:last-child { border-bottom: none; }
 .lkfoot { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
 .lkmsg { flex: 1; font: 600 12px var(--font-mono); color: var(--text-muted); }
