@@ -63,14 +63,12 @@ const allTabs = tabGroups.flatMap((g) => g.tabs)
 const BIZ_APPLY_URL = 'https://srd.bssrvc66.com/service-center/query/db-gateway-grant'
 const bizInt = (v: unknown, def: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : def }
 
-const policyOpts = ['strict', 'approve-1', 'audit-only']
 
 /** 数字输入框的值:清空时是 ''(不是 0)—— 保存时由各自的 clamp 兜底。 */
 type Num = number | ''
 const num = (n: number): Num => n
 
 const INITIAL = {
-  policy: 'strict',
   apprTimeout: 'auto-escalate' as string,
   escalate: true,
   allowSelf: false,
@@ -168,7 +166,6 @@ function parse<T>(raw: string | undefined, def: T): T {
 /** 服务端存着的那份设置 → 表单。两个 IP 白名单之外的密钥类字段一律留空(见各处注释)。 */
 function formOf(g: Record<string, string | undefined>): Form {
   return {
-    policy: parse(g['gateway.defaultPolicy'], 'strict'),
     escalate: parse(g['approval.escalate'], true),
     allowSelf: parse(g['approval.allowSelfApprove'], false),
     mfa: parse(g['security.requireMFA'], true),
@@ -244,7 +241,6 @@ function settingsPayload(f: Form) {
   const onTimeout = keyOf(f.apprTimeout, APPROVAL_TIMEOUT_KEYS, 'auto-escalate')
   const ttlKey = keyOf(f.ttl, SESSION_TTL_KEYS, '8h')
   return {
-    'gateway.defaultPolicy': f.policy,
     'approval.onTimeout': onTimeout,
     'approval.escalate': f.escalate,
     'approval.allowSelfApprove': f.allowSelf,
@@ -522,7 +518,6 @@ export default function SettingsView() {
           {/* Gateway */}
           <section style={showOn('gateway')} className="card">
             <Head icon={Shield} title="setGw" desc="setGwSub" />
-            <Row title="setDefPolicy" desc="setDefPolicyD"><div className="w180"><VSelect value={f.policy} onChange={setter('policy')} options={policyOpts} /></div></Row>
             {/* 无 WHERE 的 DELETE / UPDATE 按分层开关(迁移 0030),开关在【环境分层】页 ——
                 判定的另外两层也在那套按分层的规则里,不该有第二个能改同一件事的地方。 */}
             <Row title="setStrict" desc="setStrictD"><Link className="srlink" to="/admin/env-tiers">{t('pStrictGo')}</Link></Row>

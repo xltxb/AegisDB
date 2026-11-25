@@ -269,7 +269,7 @@ export default function TerminalView() {
     const tier = envtier.tierOf(cn.env)
     // 解析不出分层的按中档处理:没有分层意味着这台实例的管控级别**未知**,不是无害。
     const level = tier?.dangerBanner ? 'danger' : (!tier || tier.requireMfa) ? 'warn' : 'ok'
-    return { level, env: cn.env.toUpperCase(), name: cn.name, role: cn.defaultRole, policy: cn.policy }
+    return { level, env: cn.env.toUpperCase(), name: cn.name, role: cn.defaultRole }
   })()
 
   const patchTab = (id: number, p: Partial<Tab>) => setTabs((l) => l.map((x) => (x.id === id ? { ...x, ...p } : x)))

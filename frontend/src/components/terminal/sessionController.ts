@@ -384,7 +384,7 @@ export function createSession(initial: SessionProps) {
   function banner() {
     const cn = props.conn
     const me = auth().me
-    out(c(ANSI.gray, t('termConnected', { conn: `${cn.env}-${cn.name}`, role: cn.defaultRole, policy: cn.policy, user: me?.name || '' })))
+    out(c(ANSI.gray, t('termConnected', { conn: `${cn.env}-${cn.name}`, role: cn.defaultRole, user: me?.name || '' })))
     out(c(ANSI.gray, t('termHelpLine', { bs: '\\' })))
   }
 
@@ -819,7 +819,7 @@ export function createSession(initial: SessionProps) {
           '--------------',
           row('stInstance', `${cn.env}-${cn.name} (${cn.engine})`),
           row('stDatabase', targetDb.value || cn.database || '-'),
-          row('stRole', `${cn.defaultRole} · ${cn.policy}`),
+          row('stRole', cn.defaultRole),
           row('stUser', auth().me?.name || '-'),
           row('stPager', pager ? pager.text : t('stStdout')),
           row('stTee', tee ? tee.name : t('stOff')),

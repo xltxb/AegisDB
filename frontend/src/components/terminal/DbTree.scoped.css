@@ -49,9 +49,6 @@
 }
 .inst:hover { color: var(--text-body); }
 .inst.active { background: var(--accent-subtle); border: 1px solid var(--accent-subtle-border); color: var(--accent-text); }
-.tag { margin-left: auto; font: 600 10px var(--font-mono); }
-.tag.danger { color: var(--danger-text); }
-.tag.warn { color: var(--warning-text); }
 .ind2 { padding-left: 20px; padding-top: 2px; }
 .db { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 7px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; }
 .tcnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }

@@ -9,15 +9,14 @@ import { useEnvTierStore } from '@/stores/envtier'
 // listed here with no driver behind them: such a connection saves fine and then
 // behaves as a simulated one.
 export const engineOpts = engineLabels()
-export const policyOpts = ['strict', 'approve-1', 'audit-only']
 
 export interface ConnDraft {
   name: string; host: string; engine: string; envLabel: string
-  policy: string; username: string; password: string; database: string
+  username: string; password: string; database: string
 }
 
 export const blankDraft = (envLabel = ''): ConnDraft =>
-  ({ name: '', host: '', engine: engineOpts[0], envLabel, policy: 'strict', username: '', password: '', database: '' })
+  ({ name: '', host: '', engine: engineOpts[0], envLabel, username: '', password: '', database: '' })
 
 // 保存之后探一下。回失败原因,'' = 通了。
 //

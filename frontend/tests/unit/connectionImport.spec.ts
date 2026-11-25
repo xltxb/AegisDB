@@ -15,7 +15,7 @@ test('parses a well-formed sheet into creatable rows', () => {
   expect(rows).toHaveLength(2)
   expect(rows[0]).toMatchObject({
     name: 'orders-primary', engine: 'mysql', env: 'prod',
-    host: '10.20.3.12:3306', policy: 'strict', database: 'orders',
+    host: '10.20.3.12:3306', database: 'orders',
     username: 'app_ro', password: 's3cret',
   })
 })
@@ -76,10 +76,14 @@ test('an empty environment list falls back to the built-ins', () => {
   expect(rows).toHaveLength(1)
 })
 
-test('an unknown gateway policy is rejected', () => {
-  const { errors } = parseConnectionImport([HEADER, 'x,mysql,dev,h:3306,wide-open,d,u,p'].join('\n'))
-  expect(errors).toHaveLength(1)
-  expect(errors[0].message).toContain('wide-open')
+// 网关策略从不参与判定,已去掉(issue #123)。旧表格里还带着 policy 列的照常导入,那一列忽略。
+test('the policy column of older sheets is ignored', () => {
+  const { rows, errors } = parseConnectionImport([HEADER, 'x,mysql,dev,h:3306,wide-open,d,u,p'].join('\n'))
+  expect(errors).toEqual([])
+  expect(rows).toHaveLength(1)
+  expect(rows[0]).not.toHaveProperty('policy')
+  expect(rows[0]).toMatchObject({ host: 'h:3306', database: 'd', username: 'u', password: 'p' })
+  expect(IMPORT_TEMPLATE).not.toContain('policy')
 })
 
 test('the required columns must be present', () => {

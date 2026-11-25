@@ -268,7 +268,8 @@ type ConnectionCreateReq struct {
 	Engine   string `json:"engine" binding:"required"`
 	Host     string `json:"host" binding:"required"` // host:port
 	Env      string `json:"env" binding:"required"`  // prod|staging|dev
-	Policy   string `json:"policy" binding:"required"`
+	// Policy 不参与判定,界面上已拿掉;可以不传(新建落 strict)。传了仍校验。
+	Policy   string `json:"policy"`
 	Username string `json:"username"` // real-execution credentials (optional)
 	Password string `json:"password"`
 	Database string `json:"database"` // default schema / sqlite file
@@ -286,7 +287,8 @@ type ConnectionUpdateReq struct {
 	Engine   string `json:"engine" binding:"required"`
 	Host     string `json:"host" binding:"required"`
 	Env      string `json:"env" binding:"required"`
-	Policy   string `json:"policy" binding:"required"`
+	// Policy 不参与判定;不传 = 保持原值。
+	Policy   string `json:"policy"`
 	Username string `json:"username"`
 	Password string `json:"password"` // empty = keep existing
 	Database string `json:"database"`

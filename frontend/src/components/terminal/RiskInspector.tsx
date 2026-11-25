@@ -59,7 +59,6 @@ export default function RiskInspector({ risk, riskCommands, conn, chain, onColla
         <div className="row"><span>{t('targetInst')}</span><b className="mono">{conn ? conn.env + '-' + conn.name : '—'}</b></div>
         <div className="row"><span>{t('dbLabel')}</span><b className="mono">{conn?.engine || '—'}</b></div>
         <div className="row"><span>{t('connRole')}</span><b className="mono azure">{conn?.defaultRole || '—'}</b></div>
-        <div className="row"><span>{t('gwPolicy')}</span><b className="mono">{conn?.policy || '—'}</b></div>
       </div>
 
       <div className="sechead">

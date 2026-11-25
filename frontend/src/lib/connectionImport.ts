@@ -7,7 +7,7 @@
 // anything is created — a sheet that is half-applied and then fails leaves the
 // estate in a state nobody asked for.
 //
-// The server still validates every row (environment whitelist, policy whitelist,
+// The server still validates every row (environment whitelist,
 // credential encryption). This is the earlier, friendlier gate, not a substitute:
 // it reports the offending LINE so a long sheet can be corrected in one pass.
 
@@ -21,8 +21,6 @@
  * server, after some rows of the sheet had already been created.
  */
 export const IMPORT_ENVS = ['prod', 'gli', 'staging', 'dev'] as const
-/** Gateway policies an instance may carry; mirrors the backend's validPolicies. */
-export const IMPORT_POLICIES = ['strict', 'approve-1', 'audit-only'] as const
 
 export interface ImportRow {
   /** 1-based line in the pasted text, so a server-side failure can point at it. */
@@ -31,7 +29,6 @@ export interface ImportRow {
   engine: string
   env: string
   host: string
-  policy: string
   database: string
   username: string
   password: string
@@ -50,14 +47,15 @@ export interface ImportParse {
 
 /** Columns without which a row cannot describe an instance. */
 const REQUIRED = ['name', 'engine', 'env', 'host'] as const
-/** Every column the importer understands; anything else is ignored. */
-const KNOWN = [...REQUIRED, 'policy', 'database', 'username', 'password'] as const
+/** Every column the importer understands; anything else is ignored — including the
+ *  `policy` column of older sheets, which never took part in any judgement. */
+const KNOWN = [...REQUIRED, 'database', 'username', 'password'] as const
 
 /** A ready-to-edit example, also used as the UI's "download template". */
 export const IMPORT_TEMPLATE = [
-  'name,engine,env,host,policy,database,username,password',
-  'orders-primary,mysql,prod,10.20.3.12:3306,strict,orders,app_ro,change-me',
-  'analytics-read,postgres,dev,10.20.3.13:5432,audit-only,analytics,readonly,change-me',
+  'name,engine,env,host,database,username,password',
+  'orders-primary,mysql,prod,10.20.3.12:3306,orders,app_ro,change-me',
+  'analytics-read,postgres,dev,10.20.3.13:5432,analytics,readonly,change-me',
 ].join('\n')
 
 /** splitCsvLine handles quoted fields and doubled quotes inside them, which any
@@ -121,7 +119,7 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
     const row: ImportRow = {
       line,
       name: get('name'), engine: get('engine').toLowerCase(), env: get('env').toLowerCase(),
-      host: get('host'), policy: get('policy').toLowerCase() || 'strict',
+      host: get('host'),
       database: get('database'), username: get('username'), password: get('password'),
     }
 
@@ -132,10 +130,6 @@ export function parseConnectionImport(text: string, envs?: readonly string[]): I
     }
     if (!validEnvs.includes(row.env)) {
       errors.push({ line, message: tr('ciBadEnv', { line, v: `"${row.env}"`, list: validEnvs.join(' / ') }) })
-      continue
-    }
-    if (!(IMPORT_POLICIES as readonly string[]).includes(row.policy)) {
-      errors.push({ line, message: tr('ciBadPolicy', { line, v: `"${row.policy}"`, list: IMPORT_POLICIES.join(' / ') }) })
       continue
     }
     rows.push(row)

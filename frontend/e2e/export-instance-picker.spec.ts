@@ -157,10 +157,10 @@ test('a non-searchable VSelect still has no search box', async ({ page }) => {
   // parallel full-suite run that extra work is what made this test flake.
   await stubCommon(page)
   await page.route('**/api/v1/settings', (r) => r.fulfill(envelope({ settings: {}, secretsSet: {} })))
-  await page.goto('/#/settings')
+  await page.goto('/#/settings?tab=approval')
   // Wait for the page skeleton before asking for a control inside it.
   await expect(page.locator('.tabs .tab').first()).toBeVisible({ timeout: 15000 })
-  const sel = page.locator('.vsel .control').first()
+  const sel = page.locator('.vsel .control:visible').first()
   await expect(sel).toBeVisible({ timeout: 15000 })
   await sel.click()
   await expect(page.locator('.vsel .menu')).toBeVisible()

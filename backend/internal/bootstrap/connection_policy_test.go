@@ -74,3 +74,44 @@ func TestConnection_RejectsUnknownEnvironment(t *testing.T) {
 		eq(t, app.do(http.MethodPost, "/api/v1/connections", token, body(env)).Code, 0, "create env="+env)
 	}
 }
+
+// issue #123:网关策略不参与判定,已从界面上拿掉 —— 新建、编辑都可以不传。新建落 strict(列非空),
+// 编辑保持原值;传了仍校验。
+func TestConnection_PolicyIsOptional(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	policyOf := func(r apiResp) string {
+		t.Helper()
+		var c struct {
+			ID     int64  `json:"id"`
+			Policy string `json:"policy"`
+		}
+		_ = json.Unmarshal(r.Data, &c)
+		return c.Policy
+	}
+	body := func(policy string) map[string]any {
+		b := map[string]any{"name": "no-policy", "engine": "MySQL 8.0", "host": "10.9.9.9:3306", "env": "dev"}
+		if policy != "" {
+			b["policy"] = policy
+		}
+		return b
+	}
+	r := app.do(http.MethodPost, "/api/v1/connections", admin, body(""))
+	eq(t, r.Code, 0, "不传 policy 可以新建")
+	eq(t, policyOf(r), "strict", "新建缺省 strict")
+	var c struct {
+		ID int64 `json:"id"`
+	}
+	_ = json.Unmarshal(r.Data, &c)
+
+	put := func(policy string) apiResp {
+		return app.do(http.MethodPut, "/api/v1/connections/"+itoa(c.ID), admin, body(policy))
+	}
+	eq(t, put("audit-only").Code, 0, "传了照样能改")
+	r = put("")
+	eq(t, r.Code, 0, "不传 policy 可以编辑")
+	eq(t, policyOf(r), "audit-only", "编辑缺省保持原值")
+	if put("bogus").Code == 0 {
+		t.Error("传了就要合法")
+	}
+}
