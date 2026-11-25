@@ -321,6 +321,46 @@ func (r *Repo) UpdateRelease(id int64, fields map[string]any) error {
 	return r.db.Model(&model.Release{}).Where("id = ?", id).Updates(fields).Error
 }
 
+// FinishRelease writes a release's terminal state and, when skipUnrun is set,
+// marks every stage the run never reached as skipped — in ONE transaction.
+//
+// Written one after the other (as they used to be) a reader in between saw a
+// failed release whose later stages were still pending, and a process dying there
+// left it that way for good (issue #107). Skipping first is no better: a resumed
+// run passes over skipped stages and would report the failed release as a success.
+//
+// from != "" makes it a claim: nothing is written unless the release is still in
+// that state. The result reports whether this caller's write took effect.
+func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, skipUnrun bool, now time.Time) (bool, error) {
+	done := false
+	err := r.db.Transaction(func(tx *gorm.DB) error {
+		q := tx.Model(&model.Release{}).Where("id = ?", id)
+		if from != "" {
+			q = q.Where("status = ?", from)
+		}
+		res := q.Updates(fields)
+		if res.Error != nil {
+			return res.Error
+		}
+		if from != "" && res.RowsAffected != 1 {
+			return nil
+		}
+		if skipUnrun {
+			if err := tx.Model(&model.ReleaseStage{}).
+				Where("release_id = ? AND status IN ?", id, []string{model.RunPending, model.RunWaiting}).
+				Updates(map[string]any{"status": model.RunSkipped, "finished_at": now}).Error; err != nil {
+				return err
+			}
+		}
+		done = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return done, nil
+}
+
 // WaitingApprovalStages returns the approve stages currently blocking a release,
 // which is what the sweeper polls to notice a decided ticket.
 func (r *Repo) WaitingApprovalStages() ([]model.ReleaseStage, error) {

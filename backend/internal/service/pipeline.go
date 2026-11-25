@@ -1211,13 +1211,14 @@ func (s *Services) stageNotify(rel *model.Release, conn *model.Connection) stage
 // A failed terminal also SKIPS every stage the run never reached: a dead
 // release whose later stages read 待执行 forever looks like a run that is
 // still coming — the same debris AbortRelease already tidies, so every
-// terminal path tidies it the same way.
+// terminal path tidies it the same way, and in the same transaction (see
+// Repo.FinishRelease).
 func (s *Services) finishRelease(rel *model.Release, status string, errRef *model.RuleRef) {
 	now := time.Now()
 	errMsg := model.RenderRelLog(errRef)
-	_ = s.Repo.UpdateRelease(rel.ID, releaseErrFields(errRef, map[string]any{"status": status, "finished_at": now}))
-	if status != model.RunSuccess {
-		s.skipUnrunStages(rel.ID, now)
+	fields := releaseErrFields(errRef, map[string]any{"status": status, "finished_at": now})
+	if _, err := s.Repo.FinishRelease(rel.ID, "", fields, status != model.RunSuccess, now); err != nil {
+		slog.Error("发布单终态写库失败", "release", rel.RelNo, "status", status, "err", err)
 	}
 	if status == model.RunSuccess {
 		s.notify(rel.CreatorID, model.NotifReleaseDone, apimsg.T("发布完成"),
@@ -1449,28 +1450,18 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 	if rel.Status != model.RunPending && rel.Status != model.RunWaiting {
 		return apimsg.Errorf("发布单当前状态(%s)不可终止", rel.Status)
 	}
-	claimed, err := s.Repo.ClaimRelease(rel.ID, rel.Status, model.RunAborted, nil)
+	now := time.Now()
+	fields := releaseErrFields(model.NewRuleRef(model.RelErrAborted, "who", u.Name),
+		map[string]any{"status": model.RunAborted, "finished_at": now})
+	claimed, err := s.Repo.FinishRelease(rel.ID, rel.Status, fields, true, now)
 	if err != nil || !claimed {
 		return ErrAlreadyDecided
 	}
-	now := time.Now()
-	_ = s.Repo.UpdateRelease(rel.ID, releaseErrFields(model.NewRuleRef(model.RelErrAborted, "who", u.Name), map[string]any{"finished_at": now}))
 	// The pending approval a parked run raised is voided WITH the run: leaving
 	// it in the approvers' queue invites a decision on a change that no longer
 	// exists — and the sweeper would then try to resume a corpse.
 	s.voidReleaseApprovals(rel)
-	s.skipUnrunStages(rel.ID, now)
 	return nil
-}
-
-// skipUnrunStages marks every stage a terminal run never reached as skipped —
-// pending and waiting rows on a finished release are debris, not work.
-func (s *Services) skipUnrunStages(releaseID int64, now time.Time) {
-	for _, st := range s.stagesOf(releaseID) {
-		if st.Status == model.RunPending || st.Status == model.RunWaiting {
-			_ = s.Repo.UpdateReleaseStage(st.ID, map[string]any{"status": model.RunSkipped, "finished_at": now})
-		}
-	}
 }
 
 // voidReleaseApprovals expires every still-pending ticket this release raised,

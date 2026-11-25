@@ -395,7 +395,6 @@ cd frontend && npm run test:e2e
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
 - 需要真实数据库的用例默认跳过，设置 `AEGISDB_TEST_MYSQL`、`AEGISDB_TEST_PG`、
   `AEGISDB_TEST_ORACLE`、`AEGISDB_TEST_STORE_PG`、`AEGISDB_OSC_TEST_DSN` 等变量后启用。
-- **已知不稳定**：`TestBackupStageRefusesDestructiveVerbs` 会偶发失败。
 
 ### 开发约定
 
