@@ -114,7 +114,7 @@ func (s *Services) ConfirmTodos(u *model.User) []ConfirmTodo {
 			continue
 		}
 		// 终态发布单上残留的 waiting 阶段不算待办：它点不动（ClaimReleaseStage 会失败），
-		// 列出来只会让人反复点一条已经死掉的流水线。终止时 skipUnrunStages 会清掉它们，
+		// 列出来只会让人反复点一条已经死掉的流水线。终止时 FinishRelease 会清掉它们，
 		// 这里是兜底 —— 一条永远点不动的待办比没有待办更糟。
 		switch rel.Status {
 		case model.RunPending, model.RunRunning, model.RunWaiting:
