@@ -9,6 +9,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // Channel 是一个聊天渠道。它的值会落库(tbl_chat_*、tbl_approval.decided_via),不要改。
@@ -63,10 +64,14 @@ type ClickResult struct {
 	Card  *Card
 }
 
+// CardWithin 是 OnClick 返回之后,渠道把 ClickResult.Card 换上去的时限:过了就不许再换,也不许再试。
+// 那张卡片可能带着按钮,而单子这时可能已经有了结论 —— 上层按这个时限等它落定,再去写结论。
+const CardWithin = 10 * time.Second
+
 // Handler 是渠道收到东西之后交给谁(由 service 实现)。
 type Handler interface {
-	// OnText 处理一条私聊文字,返回要回给对方的话(空 = 不回)。
-	OnText(ctx context.Context, ch Channel, botID, accountID, chatID, text string) (reply string)
+	// OnText 处理一条私聊文字,返回要回给对方的话(空 = 不回);bound 是这一句绑上了账号,回话值得优先送到。
+	OnText(ctx context.Context, ch Channel, botID, accountID, chatID, text string) (reply string, bound bool)
 	OnClick(ctx context.Context, c Click) ClickResult
 }
 
@@ -95,3 +100,18 @@ type Transport interface {
 
 // ErrGone:那条消息再也更新不了了(被删、超期),不必重试。渠道可以用 %w 包上平台的原因。
 var ErrGone = errors.New("chat: message can no longer be updated")
+
+// Run 断开的原因里,管理员改得了、值得在状态里说人话的两种;渠道用 %w 包上。
+var (
+	ErrCredentials = errors.New("chat: credentials rejected")
+	ErrWebhook     = errors.New("chat: the bot has a webhook set")
+)
+
+// RetryAfter 是平台要求过多久再来;没有这个要求为 0。渠道的错误实现 RetryAfter() time.Duration 即可。
+func RetryAfter(err error) time.Duration {
+	var r interface{ RetryAfter() time.Duration }
+	if errors.As(err, &r) {
+		return r.RetryAfter()
+	}
+	return 0
+}

@@ -1434,22 +1434,29 @@
   // ---- Approval bots (chat approval cards) ----
   btnClose: 'Close',
   chatBindTitle: 'Approval bots', chatBindDesc: 'Link your chat account to your gateway account. Requests that need your approval are sent to you privately and can be handled on the card. Without a link, approve in the gateway as usual.',
-  chatBindNone: 'No approval bot is turned on right now.', chatCh_lark: 'Lark (Feishu)',
+  chatBindNone: 'No approval bot is turned on right now.', chatCh_lark: 'Lark (Feishu)', chatCh_telegram: 'Telegram',
   chatGen: 'Generate code', chatRegen: 'Regenerate', chatCopy: 'Copy', chatCopyFailed: 'Copy failed. Select the code and copy it manually',
   chatCodeValid: 'Valid for 10 minutes, single use. Generating a new code voids this one.', chatCodeExpired: 'The binding code has expired. Generate a new one.',
   chatHow_lark: 'Find the approval bot in Lark (Feishu) and send it this code in a private chat; codes sent in group chats are ignored. This page updates once you are linked. If the bot does not reply, ask an administrator to check its connection status.',
+  chatHowLink: 'Open the link above and press Start in Telegram to link your account. If it does not open:',
+  chatHow_telegram: 'Find the approval bot in Telegram and send it the code above in a private chat; codes sent in group chats are ignored. This page updates once you are linked. If the bot does not reply, ask an administrator to check its connection status.',
   chatBoundAt: 'Linked at {at}', chatUnbind: 'Unlink',
   chatUnbindConfirm: 'Unlink the 「{channel}」 approval bot? You will stop receiving approval cards, and cards you already received can no longer be used.',
   chatPanelSub: 'Approvers get cards in chat and approve or reject there. The gateway connects out; no public endpoint is needed',
-  chatEnable: '{channel} approval bot', chatLarkD: 'Uses the long connection of a custom app. Once enabled, users link their account under “Approval bots” in the user menu (top right). Group-bot webhook notifications keep working separately.',
+  chatEnable: '{channel} approval bot', chatDesc_lark: 'Uses the long connection of a custom app.',
+  chatDesc_telegram: 'Long-polls api.telegram.org with the bot token, through a proxy if needed. One bot serves one environment only.',
+  chatCommon: 'Applies to all channels', chatCommonD: 'Once any channel is enabled, users link their chat account under “Approval bots” in the user menu (top right). Group-bot webhook notifications keep working separately.',
   chatNoteIp: 'The user IP allowlist does not cover clicks on cards: a click counts wherever the approver is.',
   chatNoteLeave: 'When someone leaves the company, their chat link keeps working until an administrator disables their account in the gateway. This also applies to people who sign in through SSO only: disabling them on the company side is not enough.',
   chatRegion: 'Region', chatRegionFeishu: 'China (Feishu, feishu.cn)', chatRegionLark: 'International (Lark, larksuite.com) · not verified',
   chatRegionUnverified: 'International is not verified: the official docs do not say that it supports long connections. Check with a test app before enabling it.',
-  chatSecretPh: 'App Secret of the custom app', chatStatus: 'Connection', chatSaveFirst: 'Changes take effect after you save. Status and test cards use the saved configuration.',
-  chatSt_off: 'Off', chatSt_connecting: 'Connecting', chatSt_connected: 'Connected', chatSt_conflict: 'Conflict: this app is also connected elsewhere', chatSt_error: 'Error',
+  chatSecretPh: 'App Secret of the custom app', chatTokenPh: 'Token from BotFather, e.g. 123456789:AA…',
+  chatProxy: 'Proxy URL', chatProxyPh: 'Optional: http://, https:// or socks5://; blank = direct',
+  chatSql: 'Include SQL on cards', chatSqlD: 'When on, statements are sent to Telegram\'s servers (passwords masked), along with reasons, database names and so on. When off, cards carry no statement, reason or release title and say that they do not show the full content; they can still be approved directly. Only affects cards sent afterwards.',
+  chatStatus: 'Connection', chatSaveFirst: 'Changes take effect after you save. Status and test cards use the saved configuration.',
+  chatSt_off: 'Off', chatSt_connecting: 'Connecting', chatSt_connected: 'Connected', chatSt_conflict: 'Conflict: this bot is also connected elsewhere', chatSt_error: 'Error',
   chatTest: 'Send me a test card', chatTestSent: 'Sent. Check {channel}.',
-  chatCardLang: 'Card language', chatCardLangD: 'Language of the cards and replies sent to chat, for everyone', chatLangZh: 'Chinese', chatLangEn: 'English',
+  chatCardLang: 'Card language', chatCardLangD: 'Language of the cards and replies on every channel, for everyone', chatLangZh: 'Chinese', chatLangEn: 'English',
   apDecidedVia: 'Decided via {channel}', apRejectReason: 'Reason for rejecting',
   pmChatHint: 'Removes this user\'s links on all approval bots. Disabling the account, resetting the password or resetting MFA unlinks automatically.',
   pmChatUnbind: 'Remove chat links', pmChatUnbound: 'Chat links removed',
@@ -1473,6 +1480,8 @@
     m964803c2: '{0} — {1}',
     // %s …其余 %d 个
     m758aeeb3: '{0} … {1} more',
+    // %s 不像机器人令牌(形如 123456789:AA…)
+    m6c388194: '{0} does not look like a bot token (e.g. 123456789:AA…)',
     // %s 不是合法的 http(s) 地址:%s
     ma74d0dc7: '{0} is not a valid http(s) address: {1}',
     // %s 不能为空值(null)
@@ -1483,6 +1492,8 @@
     m425988b7: 'Invalid value for {0}',
     // %s 只能是 %s
     m319ea174: '{0} must be one of {1}',
+    // %s 只能是 http、https 或 socks5 的代理地址(如 socks5://用户:口令@主机:1080)
+    m05b1d914: '{0} must be an http, https or socks5 proxy URL (e.g. socks5://user:password{\'@\'}host:1080)',
     // %s 只能是字母、数字、下划线和短横线,最多 64 个字符
     m0b63f98e: '{0} may contain only letters, digits, underscores and hyphens, up to 64 characters',
     // %s 在 %s 上发起的审批超过时限仍未处理，请跟进
@@ -1591,6 +1602,8 @@
     m5a67c2af: 'The API credential is disabled',
     // API 凭据无效
     m8c418900: 'Invalid API credential',
+    // Bot Token 或代理地址的格式不对,请重新填写
+    m2271f1c0: 'The Bot Token or the proxy URL is malformed. Enter it again',
     // CSRF 校验失败,请刷新页面后重试
     mecb94d0c: 'CSRF check failed. Refresh the page and try again',
     // Cookie 名只能由字母、数字、_ . - 组成:%s
@@ -2085,6 +2098,8 @@
     mdb4c55c5: 'The App Secret is required to enable the Lark approval bot',
     // 启用 SSO 必须填写%s
     mf395a22c: 'Enabling SSO requires {0}',
+    // 启用 Telegram 审批机器人必须填写 Bot Token
+    m1617704a: 'The Bot Token is required to enable the Telegram approval bot',
     // 命令名不能为空,且不超过 32 个字符
     m146ca168: 'The command name cannot be empty and must be at most 32 characters',
     // 命令被拒绝:能力矩阵禁止
@@ -2499,6 +2514,8 @@
     ma3549434: 'No menu permission',
     // 显式设置 query_dop 会让单条 SQL 在短时间内吃掉过多资源 —— DWS 本身已按 DN 并行
     m3bc8dd9a: 'Setting query_dop explicitly lets one SQL consume too many resources in a short time; DWS already parallelizes by DN',
+    // 暂时读不出审批链,请稍后再试
+    m3b97a4a0: 'The approval chain cannot be read right now. Please try again later',
     // 更新失败
     m8f8818f0: 'Update failed',
     // 更新失败:%s
@@ -2541,6 +2558,8 @@
     md2a3f3a9: 'Could not read dependent objects, so they were not recompiled: {0}',
     // 未配置真实执行凭据
     mf52fe686: 'No real execution credentials configured',
+    // 机器人令牌无效或已被撤销,请重新填写
+    m16a562fa: 'The bot token is invalid or has been revoked. Enter it again',
     // 来源 IP 不在允许列表内
     mffa84872: 'Your source IP is not on the allowlist',
     // 来源 IP 不在该凭据的白名单内
@@ -2577,6 +2596,8 @@
     me6a262d1: 'You do not have permission to review execution windows',
     // 没有填写 App ID 或 App Secret
     m94d595ab: 'The App ID or App Secret is missing',
+    // 没有填写 Bot Token
+    mb697d9fc: 'The Bot Token is missing',
     // 没有这个审批机器人渠道
     m1f930af0: 'No such approval bot channel',
     // 没有选定库,无法确定表 %s 的数据量
@@ -3065,6 +3086,8 @@
     m9b89824d: 'This online change is not running',
     // 这个审批机器人没有开启
     mf8988eed: 'This approval bot is turned off',
+    // 这个机器人设置了 webhook,网关收不到消息;请先在原来使用它的地方删除 webhook
+    m8d8b1127: 'This bot has a webhook set, so the gateway receives nothing. Delete the webhook where the bot was used before',
     // 这个终端标签已关闭,语句没有执行
     mfe89908a: 'This terminal tab is closed; the statement was not executed',
     // 这份结果已过期(暂存 10 分钟),请重新执行查询

@@ -21,6 +21,7 @@ import (
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/chat"
 	"aegisdb/internal/chat/lark"
+	"aegisdb/internal/chat/telegram"
 	"aegisdb/internal/dto"
 	"aegisdb/internal/model"
 	"aegisdb/pkg/crypto"
@@ -63,10 +64,11 @@ func (t chatTimings) after(n int) time.Duration {
 
 // ---------------------------------------------------------------- 设置
 
-// ChatConfig 是一个渠道此刻的连接配置。AppSecret 是明文:不要打印整个值。
+// ChatConfig 是一个渠道此刻的连接配置。AppSecret、BotToken、Proxy 是明文机密:不要打印整个值。
 type ChatConfig struct {
 	Enabled                  bool
-	Region, AppID, AppSecret string
+	Region, AppID, AppSecret string // Lark
+	BotToken, Proxy          string // Telegram;Proxy 空 = 直连
 	// Problem 非空:开着却没法连,这是给人看的原因。
 	Problem string
 }
@@ -114,31 +116,64 @@ func chatText(raw string) string {
 
 // chatConfig 读一个渠道的配置。关着的一律是零值:关着时改 App ID 不算变化。
 func (s *Services) chatConfig(ch chat.Channel) (ChatConfig, error) {
-	if ch != chat.Lark {
-		return ChatConfig{}, nil
-	}
 	all, err := s.chatSettings()
-	if err != nil || all["chat.lark.enabled"] != "true" {
+	if err != nil || all["chat."+string(ch)+".enabled"] != "true" {
 		return ChatConfig{}, err
 	}
-	c := ChatConfig{Enabled: true, Region: chatText(all["chat.lark.region"]), AppID: chatText(all["chat.lark.appId"])}
-	if c.Region != "lark" {
-		c.Region = "feishu"
+	c := ChatConfig{Enabled: true}
+	secret := func(key string) string {
+		plain, derr := crypto.DecryptSecret(chatText(all[key]))
+		if derr != nil { // 解密的错误不带出去,里面没有对人有用的东西
+			c.Problem = apimsg.Text("密钥无法解密")
+		}
+		return strings.TrimSpace(plain)
 	}
-	// 解密的错误不带出去,里面没有对人有用的东西。
-	secret, derr := crypto.DecryptSecret(chatText(all["chat.lark.appSecret"]))
-	c.AppSecret = strings.TrimSpace(secret)
-	switch {
-	case derr != nil:
-		c.Problem = apimsg.Text("密钥无法解密")
-	case c.AppID == "" || c.AppSecret == "":
-		c.Problem = apimsg.Text("没有填写 App ID 或 App Secret")
+	switch ch {
+	case chat.Lark:
+		c.Region, c.AppID = chatText(all["chat.lark.region"]), chatText(all["chat.lark.appId"])
+		if c.Region != "lark" {
+			c.Region = "feishu"
+		}
+		if c.AppSecret = secret("chat.lark.appSecret"); c.Problem == "" && (c.AppID == "" || c.AppSecret == "") {
+			c.Problem = apimsg.Text("没有填写 App ID 或 App Secret")
+		}
+	case chat.Telegram:
+		c.BotToken, c.Proxy = secret("chat.telegram.botToken"), secret("chat.telegram.proxyToken")
+		_, perr := telegram.ParseProxy(c.Proxy)
+		switch {
+		case c.Problem != "":
+		case c.BotToken == "":
+			c.Problem = apimsg.Text("没有填写 Bot Token")
+		case perr != nil || !telegram.ValidToken(c.BotToken): // 有人直接改了库
+			c.Problem = apimsg.Text("Bot Token 或代理地址的格式不对,请重新填写")
+		}
+	default:
+		return ChatConfig{}, nil
 	}
 	return c, nil
 }
 
-// newChatTransport 按配置建一个渠道。
-func (s *Services) newChatTransport(_ chat.Channel, c ChatConfig) chat.Transport { return s.newLark(c) }
+// newChatTransport 按配置建一个渠道;建不成返回 nil。
+func (s *Services) newChatTransport(ch chat.Channel, c ChatConfig) chat.Transport {
+	switch ch {
+	case chat.Lark:
+		return s.newLark(c)
+	case chat.Telegram:
+		return s.newTelegram(c)
+	}
+	return nil
+}
+
+func (s *Services) newTelegram(c ChatConfig, opts ...telegram.Option) chat.Transport {
+	// 记号按机器人保管:令牌的前半就是机器人的标识,换了令牌、代理也还是它。
+	bot, _, _ := strings.Cut(c.BotToken, ":")
+	seen, _ := s.chatSeen.LoadOrStore(bot, telegram.NewSeen())
+	t, err := telegram.New(c.BotToken, c.Proxy, append(opts, telegram.WithLang(s.quickCardLang), telegram.WithSeen(seen.(*chat.Seen)))...)
+	if err != nil {
+		return nil // 格式已在 chatConfig 里核对过
+	}
+	return t
+}
 
 func (s *Services) newLark(c ChatConfig, opts ...lark.Option) chat.Transport {
 	return lark.New(c.Region, c.AppID, c.AppSecret, append(opts, lark.WithLang(s.quickCardLang))...)
@@ -355,9 +390,10 @@ func (s *Services) runChatConn(ctx context.Context, conn *chatConn, timing chatT
 func (s *Services) chatSession(ctx context.Context, conn *chatConn) (up time.Duration, err error) {
 	rt := &s.chatRun
 	var (
-		live        = true // 下面几样由 rt.mu 保护
-		last        chat.State
-		connectedAt time.Time
+		live  = true // 下面几样由 rt.mu 保护
+		last  chat.State
+		since time.Time     // 这一段从什么时候连着;零值 = 此刻没连着
+		total time.Duration // 已经结束的各段加起来
 	)
 	set := func(st chat.State, detail string) { // 要持 rt.mu
 		if rt.conns[conn.ch] == conn {
@@ -375,14 +411,14 @@ func (s *Services) chatSession(ctx context.Context, conn *chatConn) (up time.Dur
 		rt.mu.Lock()
 		defer rt.mu.Unlock()
 		live = false
-		if !connectedAt.IsZero() {
-			up = time.Since(connectedAt)
+		if up = total; !since.IsZero() {
+			up += time.Since(since)
 		}
 		if conn.t == nil && rt.conns[conn.ch] == conn {
 			s.SetChatTransport(conn.ch, nil) // 新的没建成,换下来的旧渠道不能还顶在那里
 		}
 		if last != chat.StateConflict {
-			set(chat.StateError, err.Error())
+			set(chat.StateError, chatReason(err))
 		}
 	}()
 	if conn.t == nil {
@@ -397,11 +433,29 @@ func (s *Services) chatSession(ctx context.Context, conn *chatConn) (up time.Dur
 			return
 		}
 		last = st
-		if st == chat.StateConnected {
-			connectedAt = time.Now()
+		switch {
+		case st == chat.StateConnected && since.IsZero(): // 轮询的渠道每一轮都报,只认第一次
+			since = time.Now()
+		case st != chat.StateConnected && !since.IsZero():
+			total += time.Since(since)
+			since = time.Time{}
+		}
+		if st == chat.StateConnecting && detail == "" {
+			detail = rt.status[conn.ch].detail // 重连期间仍看得到上一次为什么断
 		}
 		set(st, detail)
 	})
+}
+
+// chatReason 是断开的原因在状态里的样子:管理员改得了的几种说人话,其余是渠道的原话。
+func chatReason(err error) string {
+	switch {
+	case errors.Is(err, chat.ErrCredentials):
+		return apimsg.Text("机器人令牌无效或已被撤销,请重新填写")
+	case errors.Is(err, chat.ErrWebhook):
+		return apimsg.Text("这个机器人设置了 webhook,网关收不到消息;请先在原来使用它的地方删除 webhook")
+	}
+	return err.Error()
 }
 
 // openChat 建渠道对象并登记。建好时这条连接已经被换掉的,不登记。
@@ -437,6 +491,12 @@ func logChatPanic(ch chat.Channel) {
 
 // ---------------------------------------------------------------- 测试卡片
 
+// chatTester 是测试卡片的频控键。
+type chatTester struct {
+	user int64
+	ch   chat.Channel
+}
+
 // SendChatTest 发一张测试卡片给 u 自己。按钮只有「测试」:令牌形状是真的、库里却没有,点了只回一句提示
 // (见 OnClick 里的 ActTest),不碰任何单子。
 func (s *Services) SendChatTest(ctx context.Context, u *model.User, ch chat.Channel) error {
@@ -452,12 +512,10 @@ func (s *Services) SendChatTest(ctx context.Context, u *model.User, ch chat.Chan
 	if b == nil || b.BotID != bot {
 		return ErrChatNotBound
 	}
-	// 借失败计数表:一次就「锁」住,到点自动放开。
-	now := time.Now()
-	if s.chatTests.locked(u.ID, now) {
+	// 借失败计数表:一个窗口里只有第一次返回真。查与记是同一步,同时来的几次只放行一次。
+	if !s.chatTests.fail(chatTester{u.ID, ch}, time.Now()) {
 		return ErrChatTestTooOften
 	}
-	s.chatTests.fail(u.ID, now)
 	token, err := newChatToken()
 	if err != nil {
 		return err

@@ -39,6 +39,7 @@ const (
 	chatCodeWindow   = 15 * time.Minute
 	chatCodeLockout  = 15 * time.Minute
 	chatCodeMaxFails = 10 // 同一聊天账号一个窗口里错这么多次就锁
+	chatReplyMax     = 12 // 同一聊天账号一分钟里,没绑上的回话最多这么多句(比输错的上限多,锁住那句说得出来)
 	chatCodeMaxGens  = 10 // 同一用户一个窗口里最多生成这么多次
 
 	// 去掉容易看错的 0 / O、1 / I / L;31 个字符 10 位约 49.5 bit。
@@ -208,24 +209,30 @@ func (s *Services) NewChatBindCode(u *model.User, ch chat.Channel, mfaCode strin
 // RedeemChatBindCode 处理发给机器人的一条私聊文字,返回要回的话。botID / accountID / chatID 由渠道从
 // 平台的事件里取。认「CODE」与「/start CODE」(Telegram 深链)两种写法,其余文字回用法说明。
 func (s *Services) RedeemChatBindCode(ch chat.Channel, botID, accountID, chatID, text string) (reply string) {
+	reply, _ = s.redeemChatBindCode(ch, botID, accountID, chatID, text)
+	return reply
+}
+
+// redeemChatBindCode 另外报告绑上了没有。
+func (s *Services) redeemChatBindCode(ch chat.Channel, botID, accountID, chatID, text string) (reply string, bound bool) {
 	say := func(key string, args ...any) string { return chat.Tr(s.cardLang(), key, args...) }
 	// 渠道刚关、机器人刚换时,旧连接上可能还有消息进来。
 	if botID == "" || botID != s.chatBotID(ch) {
-		return say("bind.off")
+		return say("bind.off"), false
 	}
 	code, ok := parseChatCode(text)
 	if !ok {
-		return say("bind.usage")
+		return say("bind.usage"), false
 	}
 	who := chatAccount{ch, botID, accountID}
 	now := time.Now()
 	// 查与记是两步,并发的几条消息可能多试几次;码有约 49 bit,多这几次无碍(MFA 的计数同样如此)。
 	if s.chatCodeFails.locked(who, now) {
-		return say("bind.locked")
+		return say("bind.locked"), false
 	}
 	if accountID == "" || len(accountID) > chatIDMax || len(botID) > chatIDMax || len(chatID) > chatIDMax {
 		slog.Error("聊天标识为空或过长,无法绑定", "channel", ch)
-		return say("bind.failed")
+		return say("bind.failed"), false
 	}
 	u, err := s.Repo.RedeemChatBindCode(chatCodeHash(code), string(ch), botID, accountID, chatID, now)
 	switch {
@@ -233,19 +240,19 @@ func (s *Services) RedeemChatBindCode(ch chat.Channel, botID, accountID, chatID,
 		if s.chatCodeFails.fail(who, now) {
 			slog.Warn("同一聊天账号绑定码连续输错,已锁定", "channel", ch, "minutes", int(chatCodeLockout/time.Minute))
 		}
-		return say("bind.invalid")
+		return say("bind.invalid"), false
 	case errors.Is(err, repository.ErrChatAccountTaken):
-		return say("bind.taken")
+		return say("bind.taken"), false
 	case err != nil:
 		slog.Error("绑定聊天账号失败", "channel", ch, "err", err)
-		return say("bind.failed")
+		return say("bind.failed"), false
 	}
 	// 这里没有 HTTP 请求给 u 盖来源,显式记 auth:这是本人给自己加了一把凭据。
 	s.recordAuditSrc(model.AuditSourceAuth, u, nil, "chat.bind 绑定审批机器人 channel="+ch.Name()+" account="+chatAccountMark(accountID)+" user="+u.Email,
 		model.RiskMid, model.ResultExecuted, "", "")
 	s.notify(u.ID, model.NotifChatBound, apimsg.T("已绑定审批机器人"),
 		apimsg.Sprintf("你的账号已绑定 %s 审批机器人,可以直接在聊天里审批。\n不是你本人操作的话,请立即在右上角用户菜单的「审批机器人」里解绑,并联系管理员。", ch.Name()), "")
-	return say("bind.done", u.Name)
+	return say("bind.done", u.Name), true
 }
 
 // UnbindChat 解除一个用户的聊天绑定(ch 为空 = 全部渠道),没用掉的绑定码一并作废。渠道关着、机器人

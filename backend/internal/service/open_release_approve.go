@@ -5,7 +5,7 @@ package service
 // 它不是第二套审批规则。三条口径与控制台那条完全一样,只是"谁在点"换了一种证明方式:
 //
 //   - 凭据只证明"这个外部系统可信",不证明"这个人可以批"。请求里必须点名审批人(账号邮箱),
-//     那个人必须在这张审批单的链上、不是发起人 —— 判断走 DecideBlockFor,和控制台按钮同一处。
+//     那个人必须在这张审批单的链上、不是发起人 —— 判断走 decideBlock(DecideBlockFor 同一处),和控制台按钮同一处。
 //     凭据本身从来不是审批人:拿到一把凭据不等于能以任何人的名义批任何单。
 //   - 凭据能碰哪些发布单,按它的服务账号的实例范围算(和 /open/instances 同一个口径),
 //     不要求是本凭据提交的 —— 外部审批系统通常不是提单的那个系统。
@@ -17,6 +17,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -31,6 +32,9 @@ const (
 	OpenActionApprove = "approve"
 	OpenActionReject  = "reject"
 )
+
+// ErrChainUnreadable:审批链暂时读不出来,是网关自己的问题,不是调用方的。
+var ErrChainUnreadable = errors.New("暂时读不出审批链,请稍后再试")
 
 // DecideReleaseForClient 让外部系统以审批链上某个人的名义决定一张发布单当前的审批阶段。
 func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, relNo string, req dto.OpenDecideReq) (*dto.OpenDecideResp, error) {
@@ -83,7 +87,14 @@ func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, re
 		return nil, apimsg.Errorf("审批人账号 %s 是服务账号或已停用,不能审批", account)
 	}
 
-	switch block := s.DecideBlockFor(approver, ap); block {
+	block, berr := s.decideBlock(approver, ap)
+	if berr != nil {
+		// 审批链读不出来不等于不在链上:不这么答复,也不这么记。
+		audit(model.ResultRejected, "审批链读不出来,没有做决定")
+		slog.Error("读审批链失败", "apNo", ap.ApNo, "err", berr)
+		return nil, ErrChainUnreadable
+	}
+	switch block {
 	case BlockNone:
 	case BlockNotPending:
 		return s.openDecided(out, ap.ID, rel.ID), nil

@@ -8,10 +8,13 @@ package bootstrap
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 type openDecide struct {
@@ -286,5 +289,38 @@ func TestOpenApproveWithoutApprovalStage(t *testing.T) {
 	eq(t, rr.Code, 40001, "no approval stage to decide")
 	if !strings.Contains(rr.Msg, "审批阶段") {
 		t.Errorf("should say there is no approval stage, got %q", rr.Msg)
+	}
+}
+
+// 审批链暂时读不出来,不等于不在链上:不按拒绝答复、不按拒绝记审计,单子不动,恢复之后照常。
+func TestOpenApproveChainUnreadable(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	token := app.approverCredential(admin, "oa-broken", nil, []string{"release:approve"}, 0)
+	rel := app.consoleReleaseAwaitingL2(admin, "链读不出来")
+	const name = "test:open_chain"
+	if err := app.repo.DB().Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "tbl_approval_step" {
+			_ = tx.AddError(errors.New("injected-db-detail"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve")
+	_ = app.repo.DB().Callback().Query().Remove(name)
+	if r.Code != 50000 || strings.Contains(r.Msg, "审批链上") || strings.Contains(r.Msg, "injected") {
+		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
+	}
+	rows := app.auditCommandsLike("open.release.approve")
+	if len(rows) != 1 || !strings.Contains(rows[0], "审批链读不出来") {
+		t.Errorf("每次调用都要留痕: %v", rows)
+	}
+	for _, row := range rows {
+		if strings.Contains(row, "不在") || strings.Contains(row, "injected") {
+			t.Errorf("审计: %s", row)
+		}
+	}
+	if r, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve"); r.Code != 0 {
+		t.Errorf("恢复之后: %d %s", r.Code, r.Msg)
 	}
 }

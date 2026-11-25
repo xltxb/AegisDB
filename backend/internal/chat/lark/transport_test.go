@@ -523,14 +523,14 @@ type fakeHandler struct {
 	click  func(ctx context.Context, c chat.Click) chat.ClickResult
 }
 
-func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) string {
+func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) (string, bool) {
 	h.mu.Lock()
 	h.texts = append(h.texts, strings.Join([]string{string(ch), botID, accountID, chatID, text}, "|"))
 	h.mu.Unlock()
 	if h.text != nil {
-		return h.text(text)
+		return h.text(text), false
 	}
-	return "reply to " + text
+	return "reply to " + text, false
 }
 
 func (h *fakeHandler) OnClick(ctx context.Context, c chat.Click) chat.ClickResult {
@@ -1003,28 +1003,6 @@ func TestText_PanicAndReplyFailure(t *testing.T) {
 	}
 }
 
-func TestSeen(t *testing.T) {
-	now := time.Unix(1000, 0)
-	s := newSeen(3, time.Minute)
-	s.now = func() time.Time { return now }
-	if s.again("a") || !s.again("a") {
-		t.Error("第二次才算重复")
-	}
-	now = now.Add(2 * time.Minute)
-	if s.again("a") {
-		t.Error("过期之后不算")
-	}
-	for _, id := range []string{"b", "c", "d"} {
-		s.again(id)
-	}
-	if len(s.at) != 3 || len(s.order) != 3 {
-		t.Errorf("应有界:%d %d", len(s.at), len(s.order))
-	}
-	if !s.again("d") || !s.again("b") || s.again("a") {
-		t.Error("满了先忘最早的")
-	}
-}
-
 // ---------------------------------------------------------------- 点击
 
 func TestClick(t *testing.T) {
@@ -1192,6 +1170,29 @@ func TestClick_Slow(t *testing.T) {
 	}
 	if err := <-s.done; err == nil {
 		t.Error("断线应返回错误")
+	}
+}
+
+// 先答了「正在处理」、做完却是拒绝:另发一句说原因,只发给点的人本人。
+func TestClick_SlowRefusal(t *testing.T) {
+	f := newFake(t)
+	block := make(chan struct{})
+	h := &fakeHandler{click: func(context.Context, chat.Click) chat.ClickResult {
+		<-block
+		return chat.ClickResult{Toast: "你不在这张审批单的审批链上。"}
+	}}
+	tr := f.transport()
+	tr.answerWithin = 20 * time.Millisecond
+	s := start(t, f, tr, h)
+	s.event(clickEvent(obj{"t": "tok", "a": "confirm"}, nil))
+	if n := len(f.calls()); n != 0 {
+		t.Errorf("还没做完就发了 %d 句", n)
+	}
+	close(block)
+	eventually(t, "说原因", func() bool { return len(f.calls()) == 1 })
+	r := f.calls()[0]
+	if r.Query != "receive_id_type=open_id" || r.Body["receive_id"] == "" || r.Body["content"] != renderReply("你不在这张审批单的审批链上。") {
+		t.Errorf("请求 %+v", r)
 	}
 }
 

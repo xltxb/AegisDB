@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"aegisdb/internal/apimsg"
+	"aegisdb/internal/chat/telegram"
 	"aegisdb/internal/service"
 )
 
@@ -202,6 +203,26 @@ func chatAppID(key string, v any) (any, error) {
 
 var chatAppIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
 
+// chatBotToken:同 trimmedSecret,另外要像一个机器人令牌 —— 它会拼进请求的地址。报错不带值。
+func chatBotToken(key string, v any) (any, error) {
+	nv, err := trimmedSecret(key, v)
+	if s, ok := nv.(string); ok && err == nil && s != "" && !telegram.ValidToken(s) {
+		return nil, apimsg.Errorf("%s 不像机器人令牌(形如 123456789:AA…)", key)
+	}
+	return nv, err
+}
+
+// chatProxy:同 trimmedSecret,另外要是一个代理地址。它可能带口令,按密钥处理,报错不带值。
+func chatProxy(key string, v any) (any, error) {
+	nv, err := trimmedSecret(key, v)
+	if s, ok := nv.(string); ok && err == nil {
+		if _, perr := telegram.ParseProxy(s); perr != nil {
+			return nil, apimsg.Errorf("%s 只能是 http、https 或 socks5 的代理地址(如 socks5://用户:口令@主机:1080)", key)
+		}
+	}
+	return nv, err
+}
+
 // passthrough:由专门的整体校验负责的键(业务查询那一组,见 service.CheckBizQuerySettings)。
 func passthrough(_ string, v any) (any, error) { return v, nil }
 
@@ -297,6 +318,11 @@ var settingSchema = map[string]settingCheck{
 	"chat.lark.region":    oneOf("feishu", "lark"),
 	"chat.lark.appId":     chatAppID,
 	"chat.lark.appSecret": trimmedSecret,
+
+	"chat.telegram.enabled":    boolean,
+	"chat.telegram.botToken":   chatBotToken,
+	"chat.telegram.includeSql": boolean,
+	"chat.telegram.proxyToken": chatProxy,
 
 	// 业务方数据查询:类型与范围由 service.CheckBizQuerySettings 叠到当前值上整体校验
 	service.SettingBizDefaultMaxRows:  passthrough,

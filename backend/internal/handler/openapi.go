@@ -144,6 +144,8 @@ func (h *Handler) OpenDecideRelease(c *gin.Context) {
 		resp.Fail(c, resp.CodeForbidden, "该服务账号的实例范围不包含这张发布单的实例")
 	case errors.Is(err, service.ErrNotFound):
 		resp.Fail(c, resp.CodeBadRequest, "发布单不存在")
+	case errors.Is(err, service.ErrChainUnreadable):
+		resp.FailErr(c, resp.CodeInternalError, err)
 	default:
 		resp.FailErr(c, resp.CodeBadRequest, err)
 	}

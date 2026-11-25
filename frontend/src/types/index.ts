@@ -403,8 +403,8 @@ export interface Approval {
   steps: ApprovalStep[]
 }
 
-/** 聊天审批机器人的渠道。后端另有 telegram,界面上还没有它。 */
-export type ChatChannel = 'lark'
+/** 聊天审批机器人的渠道。 */
+export type ChatChannel = 'lark' | 'telegram'
 
 /** 本人在一个开着的渠道上的绑定状态。 */
 export interface ChatBinding {

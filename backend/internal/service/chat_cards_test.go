@@ -462,7 +462,7 @@ func TestChatCard_SystemTextFollowsLanguage(t *testing.T) {
 func TestChatOutcome_WindowReadError(t *testing.T) {
 	s, db := cardDB(t)
 	ap := cardTicket(func(a *model.Approval) { windowTicket(a); a.Status = model.StatusCancelled })
-	if text, _, err := s.chatOutcome(ap, "zh"); err != nil || text != "已撤回" {
+	if text, _, err := s.chatOutcome(ap, "zh"); err != nil || text != "⚪ 已撤回" {
 		t.Errorf("窗口删了: %q %v", text, err)
 	}
 	if err := db.Migrator().DropTable(&model.ExecWindow{}); err != nil {

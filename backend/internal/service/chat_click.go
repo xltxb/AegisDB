@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"log/slog"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -20,9 +21,19 @@ import (
 
 var _ chat.Handler = (*Services)(nil)
 
-// OnText 处理一条私聊文字:只有兑换绑定码这一件事。
-func (s *Services) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) string {
-	return s.RedeemChatBindCode(ch, botID, accountID, chatID, text)
+// OnText 处理一条私聊文字:只有兑换绑定码这一件事。没绑上的回话有频控:谁都能给机器人发消息,不能让它跟着
+// 刷,把发卡片要用的平台额度花在这上面。
+func (s *Services) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) (reply string, bound bool) {
+	reply, bound = s.redeemChatBindCode(ch, botID, accountID, chatID, text)
+	if bound {
+		return reply, true
+	}
+	who, now := chatAccount{ch, botID, accountID}, time.Now()
+	if s.chatReplies.locked(who, now) {
+		return "", false
+	}
+	s.chatReplies.fail(who, now)
+	return reply, false
 }
 
 // OnClick 处理一次按钮点击。
@@ -55,8 +66,15 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return retry(err)
 	}
-	if err != nil || row.BotID != c.BotID || row.Channel != string(c.Channel) {
+	var cardID int64
+	stale := "unknown token"
+	if err == nil {
+		cardID = row.ID
+	}
+	if err != nil {
 		row = nil
+	} else if row.BotID != c.BotID || row.Channel != string(c.Channel) {
+		row, stale = nil, "other bot"
 	}
 	u, err := s.ChatUserOf(c.Channel, c.BotID, c.AccountID)
 	if err != nil {
@@ -65,13 +83,19 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 	if u == nil {
 		return say("click.unbound")
 	}
-	if row == nil {
-		return say("click.invalid")
-	}
 	// 有身份却没资格的点击值得留一行;认不出来的不记,不然谁都能刷日志。任何一行都不带令牌。
+	log := func(why string) {
+		if s.chatRefusals.fail(chatRefusal{c.Channel, u.ID, cardID, why}, time.Now()) {
+			slog.Warn("卡片点击被拒", "channel", c.Channel, "user", u.ID, "card", cardID, "why", why)
+		}
+	}
 	refuse := func(key string) chat.ClickResult {
-		slog.Warn("卡片点击被拒", "channel", c.Channel, "user", u.ID, "card", row.ID, "why", key)
+		log(key)
 		return say(key)
+	}
+	if row == nil {
+		log(stale)
+		return say("click.invalid")
 	}
 	if row.UserID != u.ID {
 		return refuse("click.invalid")
@@ -108,6 +132,7 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 	case model.ChatCardSent, model.ChatCardQueued, model.ChatCardFailed:
 		// 后两种也算:消息送到了、应答却丢了,库里就停在「待发」或「失败」,而按钮在人家手里。
 	default:
+		log("closed card")
 		return say("click.invalid")
 	}
 	block, err := s.decideBlock(u, ap)
@@ -122,6 +147,14 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 		// 库里只有令牌的摘要,换上去的卡片接着用点击带来的这一个。
 		card := s.sentChatCard(ap, row)
 		card.Token, card.Confirming = c.Token, c.Action == chat.ActApprove
+		// 画好了再让扫描等:从这里到返回不再读库,等的时限才算得准。
+		now, err := s.holdChatCard(row)
+		if err != nil {
+			return retry(err)
+		}
+		if now.Status != model.StatusPending {
+			return handled(now)
+		}
 		return chat.ClickResult{OK: true, Card: &card}
 	}
 
@@ -160,12 +193,13 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 
 // hasMenu 报告一个用户此刻有没有某个菜单,与 middleware.MenuGuard 同一口径。
 func (s *Services) hasMenu(u *model.User, key string) (bool, error) {
-	// EffectiveRoleIDs 读不出成员关系时只算主角色。那样只会少给、不会多给,但「库暂时读不出来」会被
-	// 说成「没有权限」,所以先单独读一次。
-	if _, err := s.Repo.RoleIDsOfUser(u.ID); err != nil {
+	// 角色读不全就不往下算:少了成员关系会把「库暂时读不出来」说成「没有权限」,角色表读不出来则会把已经
+	// 删掉的角色也算上,多给权限。
+	roles, err := s.Repo.EffectiveRoles(u)
+	if err != nil {
 		return false, err
 	}
-	menus, err := s.Repo.MenusForRoles(s.Repo.EffectiveRoleIDs(u))
+	menus, err := s.Repo.MenusForRoles(roles)
 	return menus[key], err
 }
 
@@ -196,4 +230,33 @@ func chatTokenShaped(token string) bool {
 	b, err := base64.RawURLEncoding.DecodeString(token)
 	// 解码会跳过换行,所以长度也要对得上。
 	return err == nil && len(b) == chatTokenBytes && len(token) == base64.RawURLEncoding.EncodedLen(chatTokenBytes)
+}
+
+// chatRefusal 是被拒点击的日志的频控键:同一个渠道上、同一个人、同一张卡片(认不出的是 0)、同一种原因。
+type chatRefusal struct {
+	ch         chat.Channel
+	user, card int64
+	why        string
+}
+
+// chatAnswerSlack 是扫描在 chat.CardWithin 之外多等的:留给这里读库,以及平台晚一点才落定的更新。
+// 变量只为测试能缩短它。
+var chatAnswerSlack = 5 * time.Second
+
+// holdChatCard 让扫描等渠道把二次确认的应答换上去之后,再去收敛这张卡片;返回此刻的单子。
+//
+// 应答里的卡片带着按钮,而它到平台的那一刻单子可能已经有了结论。扫描若先写下结论并收场,晚到的按钮就盖在
+// 上面,再没人去改。顺序不能换:先推迟,再读单子 —— 读到仍待审批,单子离开待审批就在推迟之后,那以后的
+// 扫描都看得到这个推迟;读到已有结论,就不给按钮。
+func (s *Services) holdChatCard(row *model.ChatCard) (*model.Approval, error) {
+	began := time.Now()
+	// 没改到(刚被扫描收场)不要紧,下面会读到结论。
+	if err := s.Repo.HoldChatCard(row.ID, began.Add(chat.CardWithin+chatAnswerSlack)); err != nil {
+		return nil, err
+	}
+	ap, err := s.Repo.GetApproval(row.ApprovalID)
+	if err == nil && time.Since(began) > chatAnswerSlack/2 {
+		return nil, errors.New("too slow to answer")
+	}
+	return ap, err
 }

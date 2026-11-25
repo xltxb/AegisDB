@@ -12,12 +12,10 @@ package lark
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
-	"unicode"
 
 	"aegisdb/internal/chat"
 )
@@ -51,14 +49,14 @@ func RenderCard(c chat.Card) string {
 		cut = true
 		return string(r[:n]) + "…"
 	}
-	c.Title = clip(oneLine(c.Title), maxTitleRunes)
-	c.Reason = clip(oneLine(c.Reason), maxReasonRunes)
-	c.Outcome = clip(oneLine(c.Outcome), maxFieldRunes)
+	c.Title = clip(chat.OneLine(c.Title), maxTitleRunes)
+	c.Reason = clip(chat.OneLine(c.Reason), maxReasonRunes)
+	c.Outcome = clip(chat.OneLine(c.Outcome), maxFieldRunes)
 	fields := make([]chat.Field, len(c.Fields))
 	for i, f := range c.Fields {
-		fields[i] = chat.Field{Label: oneLine(f.Label), Value: clip(oneLine(f.Value), maxFieldRunes)}
+		fields[i] = chat.Field{Label: chat.OneLine(f.Label), Value: clip(chat.OneLine(f.Value), maxFieldRunes)}
 	}
-	c.Fields, c.Statement = fields, visible(c.Statement)
+	c.Fields, c.Statement = fields, chat.Visible(c.Statement)
 	c.Partial = c.Partial || cut
 
 	out := encode(c)
@@ -168,7 +166,7 @@ var rejectNameShape = regexp.MustCompile(`^` + string(chat.ActReject) + `_([A-Za
 // renderReply 画出一句话的回复。用只有一段 plain_text 的卡片,不用文本消息:文本消息会解析 <at>、链接与
 // 加粗,而话里有别人起的名字。
 func renderReply(s string) string {
-	return marshal(obj{"config": obj{"enable_forward": false}, "elements": []obj{div(visible(s))}})
+	return marshal(obj{"config": obj{"enable_forward": false}, "elements": []obj{div(chat.Visible(s))}})
 }
 
 func template(c chat.Card) string {
@@ -186,29 +184,6 @@ func template(c chat.Card) string {
 func plain(s string) obj { return obj{"tag": "plain_text", "content": s} }
 
 func div(s string) obj { return obj{"tag": "div", "text": plain(s)} }
-
-// visible 让看不见的字符露出来:双向控制符能让语句显示成另一句话,零宽字符能藏东西。换行与制表保留,
-// 零宽连接符也保留(表情和一些文字靠它们组合)。
-func visible(s string) string {
-	s = strings.ReplaceAll(strings.ToValidUTF8(s, "�"), "\r\n", "\n")
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\n' || r == '\t' || r == '‌' || r == '‍':
-			b.WriteRune(r)
-		case unicode.In(r, unicode.Cc, unicode.Cf, unicode.Zl, unicode.Zp):
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-// oneLine 用于只该占一行的值:里面的换行能伪造出卡片上的下一行。
-func oneLine(s string) string {
-	return visible(strings.Join(strings.Fields(strings.ToValidUTF8(s, "�")), " "))
-}
 
 // marshal 不做 HTML 转义:卡片不进网页,转义只会让 < > & 白占地方。
 func marshal(v any) string {

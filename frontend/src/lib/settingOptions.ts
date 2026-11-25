@@ -21,6 +21,14 @@ export const CHAT_LANG_KEYS = ['zh', 'en'] as const
 /** `chat.lark.region`:国内版 / 国际版。 */
 export const CHAT_REGION_KEYS = ['feishu', 'lark'] as const
 
+/** 聊天审批机器人的机密:设置键 → 设置页表单里的字段。不回显;空串 = 不改,null = 清除。 */
+export const CHAT_SECRETS = {
+  'chat.lark.appSecret': 'chatLarkAppSecret',
+  'chat.telegram.botToken': 'chatTelegramBotToken',
+  'chat.telegram.proxyToken': 'chatTelegramProxy',
+} as const
+export type ChatSecretKey = keyof typeof CHAT_SECRETS
+
 export type ApprovalTimeoutKey = (typeof APPROVAL_TIMEOUT_KEYS)[number]
 export type SessionTTLKey = (typeof SESSION_TTL_KEYS)[number]
 

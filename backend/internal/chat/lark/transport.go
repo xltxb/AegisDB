@@ -63,7 +63,7 @@ type Transport struct {
 	token      string
 	tokenUntil time.Time
 
-	seen          *seen
+	seen          *chat.Seen
 	texts, clicks chan struct{} // 同时在处理的条数
 
 	events *dispatcher.EventDispatcher
@@ -102,7 +102,7 @@ func New(region, appID, appSecret string, opts ...Option) *Transport {
 		scrub:        &scrubber{fixed: []string{appSecret}},
 		answerWithin: answerWithin,
 		tokenLock:    make(chan struct{}, 1),
-		seen:         newSeen(seenMax, seenFor),
+		seen:         chat.NewSeen(seenMax, seenFor),
 		texts:        make(chan struct{}, 16),
 		clicks:       make(chan struct{}, 32),
 	}
@@ -331,7 +331,7 @@ func (t *Transport) onText(e *larkim.P2MessageReceiveV1) error {
 		return errBusy
 	}
 	// 认重放要在占到位子之后:没占到的那次不算处理过。
-	if t.seen.again(id) {
+	if t.seen.Again(id) {
 		<-t.texts
 		return nil
 	}
@@ -339,7 +339,7 @@ func (t *Transport) onText(e *larkim.P2MessageReceiveV1) error {
 	go func() {
 		defer run.wg.Done()
 		defer func() { <-t.texts }()
-		reply := t.safeText(run, account, chatID, content.Text)
+		reply, _ := t.safeText(run, account, chatID, content.Text)
 		if reply == "" {
 			return
 		}
@@ -350,7 +350,7 @@ func (t *Transport) onText(e *larkim.P2MessageReceiveV1) error {
 	return nil
 }
 
-func (t *Transport) safeText(run *running, account, chatID, text string) (reply string) {
+func (t *Transport) safeText(run *running, account, chatID, text string) (reply string, bound bool) {
 	defer func() {
 		if recover() != nil {
 			logPanic()
@@ -403,6 +403,17 @@ func (t *Transport) onClick(e *callback.CardActionTriggerEvent) *callback.CardAc
 		}
 		return out
 	case <-timer.C:
+		// 提示的机会用在「正在处理」上了:做完没有卡片可更新的(多半是被拒),另发一句说原因。按点的人发,只到他
+		// 的私聊。
+		run.wg.Add(1)
+		go func() {
+			defer run.wg.Done()
+			if res := <-done; res.Card == nil && res.Toast != "" {
+				if _, err := t.post(run.ctx, "open_id", c.AccountID, "interactive", renderReply(res.Toast)); err != nil {
+					slog.Warn("Lark 回复失败", "err", t.scrub.wrap("reply", err, c.Token))
+				}
+			}
+		}()
 		return t.toast("info", t.say("click.processing"))
 	}
 }
@@ -467,42 +478,4 @@ func str(p *string) string {
 		return ""
 	}
 	return *p
-}
-
-// seen 记住近期处理过的消息号,认出重推的。有界:满了先忘最早的。
-type seen struct {
-	mu    sync.Mutex
-	max   int
-	ttl   time.Duration
-	now   func() time.Time
-	at    map[string]time.Time
-	order []string // 按先后
-}
-
-func newSeen(max int, ttl time.Duration) *seen {
-	return &seen{max: max, ttl: ttl, now: time.Now, at: map[string]time.Time{}}
-}
-
-// again 记下一个号,报告它是不是已经见过。
-func (s *seen) again(id string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	now := s.now()
-	for len(s.order) > 0 && now.Sub(s.at[s.order[0]]) >= s.ttl {
-		s.forget()
-	}
-	if _, ok := s.at[id]; ok {
-		return true
-	}
-	if len(s.order) >= s.max {
-		s.forget()
-	}
-	s.at[id] = now
-	s.order = append(s.order, id)
-	return false
-}
-
-func (s *seen) forget() {
-	delete(s.at, s.order[0])
-	s.order = s.order[1:]
 }

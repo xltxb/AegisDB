@@ -35,6 +35,7 @@
 .coderow { display: flex; align-items: center; gap: 10px; }
 .code { flex: 1; min-width: 0; font: 700 20px var(--font-mono); letter-spacing: 3px; color: var(--text-strong); user-select: all; overflow-wrap: anywhere; }
 .valid { margin-top: 8px; font: 600 12px var(--font-body); color: var(--warning-text); }
+a.link { display: block; margin-top: 8px; font: 600 12px/1.5 var(--font-mono); color: var(--accent-text); overflow-wrap: anywhere; }
 .how { margin-top: 4px; font: 400 12px/1.6 var(--font-body); color: var(--text-muted); }
 .err { margin-top: 10px; font: 600 12px var(--font-body); color: var(--danger-text); }
 .footer { margin-top: 16px; flex-shrink: 0; display: flex; justify-content: flex-end; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }

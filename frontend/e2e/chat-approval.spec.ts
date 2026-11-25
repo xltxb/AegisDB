@@ -1,15 +1,16 @@
 import { test, expect, type Locator, type Page } from '@playwright/test'
 import { envelope, stubCommon, ME } from './helpers'
 
-// 聊天审批卡片(.scratch/chat-approval-cards/PRD.md)的界面:用户菜单里的绑定、设置 › 审批里的 Lark
+// 聊天审批卡片(.scratch/chat-approval-cards/PRD.md)的界面:用户菜单里的绑定、设置 › 审批里的各
 // 渠道、审批页上的拒绝原因与决定渠道、用户管理里的替人解绑。
 
 const CODE = 'AB2CD3EF4G'
 const CJK = /[一-鿿]/
 
-const fail = (code: number, msg: string) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ code, msg, data: null }) })
+const fail = (code: number, msg: string, msgRef?: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ code, msg, msgRef, data: null }) })
 const unbound = { channel: 'lark', botName: '', bound: false }
 const bound = { channel: 'lark', botName: '', bound: true, boundAt: '2026-11-25T11:40:00Z' }
+const tgUnbound = { channel: 'telegram', botName: 'aegis_appr_bot', bound: false }
 
 const english = (page: Page) => page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
 
@@ -23,18 +24,19 @@ async function expectEnglish(box: Locator) {
 
 // ---------------------------------------------------------------- 绑定
 
-interface BindStub { state: { list: unknown[] }; codes: any[]; removed: string[] }
+interface BindStub { state: { list: unknown[] }; codes: any[]; asked: string[]; removed: string[] }
 
-async function stubBind(page: Page, opts: { list: unknown[]; mfa?: boolean; code?: (body: any) => object | undefined }): Promise<BindStub> {
-  const s: BindStub = { state: { list: opts.list }, codes: [], removed: [] }
+async function stubBind(page: Page, opts: { list: unknown[]; mfa?: boolean; botName?: string; code?: (body: any) => object | undefined }): Promise<BindStub> {
+  const s: BindStub = { state: { list: opts.list }, codes: [], asked: [], removed: [] }
   await stubCommon(page)
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, mfaEnabled: !!opts.mfa })))
   await page.route('**/api/v1/dashboard**', (r) => r.fulfill(envelope({})))
   await page.route('**/api/v1/auth/chat-bindings', (r) => r.fulfill(envelope(s.state.list)))
-  await page.route('**/api/v1/auth/chat-bindings/lark/code', (r) => {
+  await page.route('**/api/v1/auth/chat-bindings/*/code', (r) => {
     const body = r.request().postDataJSON()
     s.codes.push(body)
-    return r.fulfill((opts.code?.(body) ?? envelope({ code: CODE, expiresAt: '2026-11-25T12:00:00Z', botName: '' })) as never)
+    s.asked.push(new URL(r.request().url()).pathname)
+    return r.fulfill((opts.code?.(body) ?? envelope({ code: CODE, expiresAt: '2026-11-25T12:00:00Z', botName: opts.botName ?? '' })) as never)
   })
   await page.route('**/api/v1/auth/chat-bindings/lark', (r) => {
     s.removed.push(r.request().method())
@@ -253,16 +255,79 @@ test.describe('审批机器人绑定', () => {
     await expect(modal).toContainText('10 minutes')
     await expectEnglish(modal)
   })
+
+  test('Telegram:打开链接即可绑定,码也看得见;Lark 没有链接', async ({ page }) => {
+    const s = await stubBind(page, { list: [unbound, tgUnbound], botName: 'aegis_appr_bot' })
+    await openBind(page)
+    const modal = page.getByTestId('chat-bind-modal')
+    await expect(modal).toContainText('Lark（飞书）')
+    await expect(page.getByTestId('chat-state-telegram')).toHaveText('未绑定')
+    await page.getByTestId('chat-gen-lark').click()
+    await expect(page.getByTestId('chat-code')).toHaveText(CODE)
+    await expect(page.getByTestId('chat-link')).toHaveCount(0) // 给了机器人名也没有:不是 Telegram
+
+    await page.getByTestId('chat-gen-telegram').click()
+    const link = page.getByTestId('chat-link')
+    await expect(link).toHaveAttribute('href', `https://t.me/aegis_appr_bot?start=${CODE}`)
+    await expect(link).toHaveText(`https://t.me/aegis_appr_bot?start=${CODE}`)
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', /noopener/)
+    await expect(page.getByTestId('chat-code')).toHaveCount(2)
+    await expect(modal).toContainText('Telegram')
+    expect(s.asked).toEqual(['/api/v1/auth/chat-bindings/lark/code', '/api/v1/auth/chat-bindings/telegram/code'])
+
+    s.state.list = [unbound, { ...tgUnbound, bound: true, boundAt: '2026-11-25T11:40:00Z' }]
+    await expect(page.getByTestId('chat-state-telegram')).toHaveText('已绑定', { timeout: 10_000 })
+    await expect(link).toHaveCount(0)
+  })
+
+  for (const botName of ['', 'evil/../x?start=1#', 'a b', 'abcd', 'a'.repeat(33), null, undefined] as string[]) {
+    test(`Telegram:机器人名是「${botName}」时不给链接,改说把码发给它`, async ({ page }) => {
+      await stubBind(page, { list: [{ ...tgUnbound, botName }], code: () => envelope({ code: CODE, expiresAt: '2026-11-25T12:00:00Z', botName }) })
+      await openBind(page)
+      await page.getByTestId('chat-gen-telegram').click()
+      await expect(page.getByTestId('chat-code')).toHaveText(CODE)
+      await expect(page.getByTestId('chat-bind-modal')).toContainText('私聊把上面的码发给它')
+      await expect(page.getByTestId('chat-link')).toHaveCount(0)
+      await expect(page.getByTestId('chat-bind-modal').locator('a')).toHaveCount(0)
+    })
+  }
+
+  test('Telegram:码里的特殊字符不会改动链接', async ({ page }) => {
+    await stubBind(page, { list: [tgUnbound], code: () => envelope({ code: 'A&b=c#d', expiresAt: '', botName: 'aegis_appr_bot' }) })
+    await openBind(page)
+    await page.getByTestId('chat-gen-telegram').click()
+    await expect(page.getByTestId('chat-link')).toHaveAttribute('href', 'https://t.me/aegis_appr_bot?start=A%26b%3Dc%23d')
+  })
+
+  test('机器人还没连上:说出后端的原因,没有码', async ({ page }) => {
+    await english(page)
+    await stubBind(page, { list: [{ ...tgUnbound, botName: '' }], code: () => fail(40001, '审批机器人还没连上,请稍后再试', { code: 'm9ec49329' }) })
+    await openBind(page)
+    await page.getByTestId('chat-gen-telegram').click()
+    await expect(page.getByTestId('chat-err')).toHaveText(/not connected yet/i)
+    await expect(page.getByTestId('chat-code')).toHaveCount(0)
+    await expect(page.getByTestId('chat-gen-telegram')).toBeEnabled()
+  })
+
+  test('英文界面:Telegram 这一块全是英文', async ({ page }) => {
+    await english(page)
+    await stubBind(page, { list: [tgUnbound], botName: 'aegis_appr_bot' })
+    await openBind(page)
+    await page.getByTestId('chat-gen-telegram').click()
+    await expect(page.getByTestId('chat-link')).toBeVisible()
+    await expectEnglish(page.getByTestId('chat-bind-modal'))
+  })
 })
 
 // ---------------------------------------------------------------- 设置
 
 const ST_OFF = { enabled: false, state: 'off', detail: '', botName: '' }
 
-interface SetStub { saved: Record<string, any>[]; tests: any[]; asked: () => number; status: { value: unknown } }
+interface SetStub { saved: Record<string, any>[]; tests: any[]; asked: () => number; status: { value: unknown }; tg: { value: unknown } }
 
-async function openSettings(page: Page, opts: { settings?: Record<string, string>; secret?: boolean; status?: unknown; save?: (b: any) => object | undefined; tab?: string } = {}): Promise<SetStub> {
-  const s = { saved: [] as Record<string, any>[], tests: [] as any[], n: 0, status: { value: opts.status ?? ST_OFF } }
+async function openSettings(page: Page, opts: { settings?: Record<string, string>; secrets?: string[]; status?: unknown; tg?: unknown; save?: (b: any) => object | undefined; tab?: string } = {}): Promise<SetStub> {
+  const s = { saved: [] as Record<string, any>[], tests: [] as any[], n: 0, status: { value: opts.status ?? ST_OFF }, tg: { value: opts.tg ?? ST_OFF } }
   await stubCommon(page)
   await page.route('**/api/v1/settings', (r) => {
     if (r.request().method() === 'PUT') {
@@ -270,21 +335,27 @@ async function openSettings(page: Page, opts: { settings?: Record<string, string
       s.saved.push(body)
       return r.fulfill((opts.save?.(body) ?? envelope({ ok: true })) as never)
     }
-    return r.fulfill(envelope({ settings: opts.settings ?? {}, secretsSet: { 'chat.lark.appSecret': !!opts.secret } }))
+    return r.fulfill(envelope({ settings: opts.settings ?? {}, secretsSet: Object.fromEntries((opts.secrets ?? []).map((k) => [k, true])) }))
   })
   await page.route('**/api/v1/settings/chat-status', (r) => {
     s.n++
-    return r.fulfill(envelope({ lark: s.status.value, telegram: ST_OFF }))
+    return r.fulfill(envelope({ lark: s.status.value, telegram: s.tg.value }))
   })
   await page.route('**/api/v1/settings/chat-test', (r) => { s.tests.push(r.request().postDataJSON()); return r.fulfill(envelope({ ok: true })) })
   await page.goto(`/#/admin/settings?tab=${opts.tab ?? 'approval'}`)
   await expect(page.locator('.savebar')).toBeVisible()
-  return { saved: s.saved, tests: s.tests, asked: () => s.n, status: s.status }
+  return { saved: s.saved, tests: s.tests, asked: () => s.n, status: s.status, tg: s.tg }
 }
 
 const ON = {
   'chat.cardLang': '"en"', 'chat.lark.enabled': 'true', 'chat.lark.region': '"lark"', 'chat.lark.appId': '"cli_a1"',
 }
+const LARK_SECRET = 'chat.lark.appSecret'
+const TG_TOKEN = 'chat.telegram.botToken'
+const TG_PROXY = 'chat.telegram.proxyToken'
+const TG_ON = { 'chat.telegram.enabled': 'true' }
+const TG_OFF_PART = { 'chat.telegram.enabled': false, 'chat.telegram.botToken': '', 'chat.telegram.includeSql': false, 'chat.telegram.proxyToken': '' }
+const LARK_OFF_PART = { 'chat.lark.enabled': false, 'chat.lark.region': 'feishu', 'chat.lark.appId': '', 'chat.lark.appSecret': '' }
 const chatPart = (b: Record<string, any>) => Object.fromEntries(Object.entries(b).filter(([k]) => k.startsWith('chat.')))
 
 test.describe('设置 › 审批 › 审批机器人', () => {
@@ -292,18 +363,23 @@ test.describe('设置 › 审批 › 审批机器人', () => {
     const s = await openSettings(page)
     const panel = page.getByTestId('chat-panel')
     await expect(panel).toBeVisible()
-    await expect(panel).not.toContainText('Telegram')
-    await expect(page.getByTestId('chat-lark-enabled')).not.toHaveClass(/on/)
+    for (const ch of ['lark', 'telegram']) await expect(page.getByTestId(`chat-${ch}-enabled`)).not.toHaveClass(/on/)
     await expect(page.getByTestId('chat-lark-appid')).toHaveCount(0)
-    // 开关处就写明,不必先打开
-    await expect(panel).toContainText('用户 IP 白名单管不到卡片上的点击')
-    await expect(panel).toContainText('离职的人,在管理员于网关里停用其账号之前,聊天绑定仍然有效')
+    await expect(page.getByTestId('chat-telegram-token')).toHaveCount(0)
+    // 开关处就写明,不必先打开;对两个渠道都算数,只说一遍,和卡片语言一起排在各渠道前面
+    const text = await panel.innerText()
+    const at = ['用户 IP 白名单管不到卡片上的点击', '离职的人,在管理员于网关里停用其账号之前,聊天绑定仍然有效', '卡片语言']
+    for (const s of at) {
+      expect(text.split(s).length, s).toBe(2)
+      expect(text.indexOf(s), s).toBeLessThan(text.indexOf('Lark（飞书） 审批机器人'))
+    }
+    expect(text.indexOf('Lark（飞书） 审批机器人')).toBeLessThan(text.indexOf('Telegram 审批机器人'))
     await expect(panel).toContainText('SSO')
 
     await page.getByRole('button', { name: '保存设置' }).click()
     await expect.poll(() => s.saved.length).toBe(1)
     expect(chatPart(s.saved[0])).toEqual({
-      'chat.cardLang': 'zh', 'chat.lark.enabled': false, 'chat.lark.region': 'feishu', 'chat.lark.appId': '', 'chat.lark.appSecret': '',
+      'chat.cardLang': 'zh', ...LARK_OFF_PART, ...TG_OFF_PART,
     })
   })
 
@@ -324,7 +400,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
     await page.getByRole('button', { name: '保存设置' }).click()
     await expect.poll(() => s.saved.length).toBe(1)
     expect(chatPart(s.saved[0])).toEqual({
-      'chat.cardLang': 'en', 'chat.lark.enabled': true, 'chat.lark.region': 'lark', 'chat.lark.appId': 'cli_b2', 'chat.lark.appSecret': 's3cret',
+      'chat.cardLang': 'en', 'chat.lark.enabled': true, 'chat.lark.region': 'lark', 'chat.lark.appId': 'cli_b2', 'chat.lark.appSecret': 's3cret', ...TG_OFF_PART,
     })
     await expect(page.getByTestId('chat-lark-secret')).toHaveValue('')
     await expect(page.getByTestId('chat-lark-secret')).toHaveAttribute('placeholder', /已配置/)
@@ -334,7 +410,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
   })
 
   test('已配置的密钥:留空不改;清除要确认,传 null', async ({ page }) => {
-    const s = await openSettings(page, { settings: ON, secret: true })
+    const s = await openSettings(page, { settings: ON, secrets: [LARK_SECRET] })
     await expect(page.getByTestId('chat-lark-appid')).toHaveValue('cli_a1')
     await expect(page.getByTestId('chat-lark-unverified')).toBeVisible() // 读回来的就是国际版
     await page.getByTestId('chat-lark-secret-clear').click()
@@ -347,7 +423,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
     await page.getByRole('button', { name: '保存设置' }).click()
     await expect.poll(() => s.saved.length).toBe(2)
     expect(chatPart(s.saved[1])).toEqual({
-      'chat.cardLang': 'en', 'chat.lark.enabled': true, 'chat.lark.region': 'lark', 'chat.lark.appId': 'cli_a1', 'chat.lark.appSecret': '',
+      'chat.cardLang': 'en', 'chat.lark.enabled': true, 'chat.lark.region': 'lark', 'chat.lark.appId': 'cli_a1', 'chat.lark.appSecret': '', ...TG_OFF_PART,
     })
   })
 
@@ -361,7 +437,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
   })
 
   test('状态:连上 / 出错带原因;只在这一页上轮询;保存后马上重取', async ({ page }) => {
-    const s = await openSettings(page, { settings: ON, secret: true, status: { enabled: true, state: 'connecting', detail: '', botName: '' } })
+    const s = await openSettings(page, { settings: ON, secrets: [LARK_SECRET], status: { enabled: true, state: 'connecting', detail: '', botName: '' } })
     const st = page.getByTestId('chat-lark-status')
     await expect(st).toContainText('连接中')
     s.status.value = { enabled: true, state: 'connected', detail: '', botName: '' }
@@ -383,7 +459,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
   })
 
   test('别的页签上不问状态;页面藏到后台时停、回来接着问', async ({ page }) => {
-    const s = await openSettings(page, { tab: 'notify', settings: ON, secret: true })
+    const s = await openSettings(page, { tab: 'notify', settings: ON, secrets: [LARK_SECRET] })
     await page.waitForTimeout(500)
     expect(s.asked()).toBe(0)
     await page.locator('.tab', { hasText: '审批' }).click()
@@ -402,7 +478,7 @@ test.describe('设置 › 审批 › 审批机器人', () => {
   })
 
   test('发测试卡片:即点即发;没绑定的说原因', async ({ page }) => {
-    const s = await openSettings(page, { settings: ON, secret: true, status: { enabled: true, state: 'connected', detail: '', botName: '' } })
+    const s = await openSettings(page, { settings: ON, secrets: [LARK_SECRET], status: { enabled: true, state: 'connected', detail: '', botName: '' } })
     // 改了字段还没保存时,旁边的「已连接」说的是旧配置:这句话要一直在
     await expect(page.getByTestId('chat-panel')).toContainText('状态与测试卡片用的是已保存的配置')
     await page.getByTestId('chat-lark-test').click()
@@ -417,13 +493,103 @@ test.describe('设置 › 审批 › 审批机器人', () => {
   test('英文界面:这一块全是英文,网关写的原因也翻译', async ({ page }) => {
     await english(page)
     await openSettings(page, {
-      settings: ON, secret: true,
+      settings: ON, secrets: [LARK_SECRET],
       status: { enabled: true, state: 'error', detail: '密钥无法解密', detailRef: { code: 'm5d4b86df' }, botName: '' },
     })
     const panel = page.getByTestId('chat-panel')
     await expect(page.getByTestId('chat-lark-status')).toContainText('Error')
     await expect(page.getByTestId('chat-lark-unverified')).toContainText(/not verified/i)
     await expect(panel).toContainText(/IP allowlist/)
+    await expectEnglish(panel)
+  })
+
+  test('Telegram:打开、填写、保存;带 SQL 默认关着并写明语句会到 Telegram 的服务器;机密存完不留在框里', async ({ page }) => {
+    const s = await openSettings(page)
+    await page.getByTestId('chat-telegram-enabled').click()
+    const panel = page.getByTestId('chat-panel')
+    const sql = page.getByTestId('chat-telegram-sql')
+    await expect(sql).not.toHaveClass(/on/)
+    await expect(panel).toContainText('语句会发到 Telegram 的服务器')
+    await expect(panel).toContainText('关着时,卡片上没有语句、原因')
+    await expect(page.getByTestId('chat-telegram-proxy')).toHaveAttribute('placeholder', /socks5/)
+    for (const id of ['token', 'proxy']) await expect(page.getByTestId(`chat-telegram-${id}`)).toHaveAttribute('type', 'password')
+    await page.getByTestId('chat-telegram-token').fill(' 123456789:AAbb ')
+    await page.getByTestId('chat-telegram-proxy').fill(' socks5://u:p@10.0.0.9:1080 ')
+    await sql.click()
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect.poll(() => s.saved.length).toBe(1)
+    expect(chatPart(s.saved[0])).toEqual({
+      'chat.cardLang': 'zh', ...LARK_OFF_PART,
+      'chat.telegram.enabled': true, 'chat.telegram.botToken': '123456789:AAbb', 'chat.telegram.includeSql': true, 'chat.telegram.proxyToken': 'socks5://u:p@10.0.0.9:1080',
+    })
+    for (const id of ['token', 'proxy']) {
+      await expect(page.getByTestId(`chat-telegram-${id}`)).toHaveValue('')
+      await expect(page.getByTestId(`chat-telegram-${id}`)).toHaveAttribute('placeholder', /已配置/)
+      await expect(page.getByTestId(`chat-telegram-${id}-clear`)).toBeVisible()
+    }
+    await page.getByRole('button', { name: '保存设置' }).click()
+    await expect.poll(() => s.saved.length).toBe(2)
+    expect(s.saved[1]).toMatchObject({ [TG_TOKEN]: '', [TG_PROXY]: '', 'chat.telegram.includeSql': true }) // 留空 = 不改
+  })
+
+  test('Telegram:两个机密分开清除,各传各的 null;读回来的开关照旧', async ({ page }) => {
+    const s = await openSettings(page, { settings: { ...TG_ON, 'chat.telegram.includeSql': 'true' }, secrets: [TG_TOKEN, TG_PROXY] })
+    await expect(page.getByTestId('chat-telegram-sql')).toHaveClass(/on/)
+    await page.getByTestId('chat-telegram-token').fill('123456789:new')
+    await page.getByTestId('chat-telegram-proxy-clear').click()
+    await page.getByTestId('confirm-ok').click()
+    await expect.poll(() => s.saved).toEqual([{ [TG_PROXY]: null }])
+    await expect(page.getByTestId('chat-telegram-proxy-clear')).toHaveCount(0)
+    await expect(page.getByTestId('chat-telegram-token')).toHaveValue('123456789:new') // 另一个不受影响
+    await page.getByTestId('chat-telegram-token-clear').click()
+    await page.getByTestId('confirm-ok').click()
+    await expect.poll(() => s.saved).toEqual([{ [TG_PROXY]: null }, { [TG_TOKEN]: null }])
+    await expect(page.getByTestId('chat-telegram-token')).toHaveValue('')
+    await expect(page.getByTestId('chat-telegram-token-clear')).toHaveCount(0)
+  })
+
+  test('Telegram:只配了令牌时,代理没有「清除」;Lark 的也不受影响', async ({ page }) => {
+    await openSettings(page, { settings: { ...ON, ...TG_ON }, secrets: [TG_TOKEN] })
+    await expect(page.getByTestId('chat-telegram-token-clear')).toBeVisible()
+    await expect(page.getByTestId('chat-telegram-proxy-clear')).toHaveCount(0)
+    await expect(page.getByTestId('chat-lark-secret-clear')).toHaveCount(0)
+  })
+
+  test('Telegram:清除被拒(开着时令牌不能清)说出原因,仍算已配置', async ({ page }) => {
+    await openSettings(page, { settings: TG_ON, secrets: [TG_TOKEN], save: () => fail(40001, '启用 Telegram 审批机器人必须填写 Bot Token') })
+    await page.getByTestId('chat-telegram-token-clear').click()
+    await page.getByTestId('confirm-ok').click()
+    await expect(page.getByText('启用 Telegram 审批机器人必须填写 Bot Token')).toBeVisible()
+    await expect(page.getByTestId('chat-telegram-token-clear')).toBeVisible()
+  })
+
+  test('两个渠道的状态与测试卡片各管各的;冲突说的是机器人在别处也连着', async ({ page }) => {
+    const s = await openSettings(page, {
+      settings: { ...ON, ...TG_ON }, secrets: [LARK_SECRET, TG_TOKEN],
+      status: { enabled: true, state: 'connected', detail: '', botName: '' },
+      tg: { enabled: true, state: 'conflict', detail: 'telegram: getUpdates: code 409: Conflict', botName: 'aegis_appr_bot' },
+    })
+    await expect(page.getByTestId('chat-lark-status')).toHaveText('已连接')
+    const st = page.getByTestId('chat-telegram-status')
+    await expect(st).toContainText('冲突:这个机器人在别处也连着')
+    await expect(st).toContainText('code 409')
+    s.tg.value = { enabled: true, state: 'error', detail: '这个机器人设置了 webhook,网关收不到消息;请先在原来使用它的地方删除 webhook', detailRef: { code: 'm8d8b1127' }, botName: '' }
+    await expect(st).toContainText('删除 webhook', { timeout: 10_000 })
+    await page.getByTestId('chat-telegram-test').click()
+    await expect(page.getByTestId('chat-telegram-msg')).toHaveText('已发送,请到 Telegram 里查看。')
+    await expect(page.getByTestId('chat-lark-msg')).toHaveText('')
+    expect(s.tests).toEqual([{ channel: 'telegram' }])
+  })
+
+  test('英文界面:Telegram 这一块全是英文,webhook 的原因也翻译', async ({ page }) => {
+    await english(page)
+    await openSettings(page, {
+      settings: TG_ON, secrets: [TG_TOKEN],
+      tg: { enabled: true, state: 'error', detail: '这个机器人设置了 webhook,网关收不到消息;请先在原来使用它的地方删除 webhook', detailRef: { code: 'm8d8b1127' }, botName: '' },
+    })
+    const panel = page.getByTestId('chat-panel')
+    await expect(page.getByTestId('chat-telegram-status')).toContainText('This bot has a webhook set')
+    await expect(panel).toContainText(/statements are sent to Telegram's servers/)
     await expectEnglish(panel)
   })
 })

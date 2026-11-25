@@ -461,34 +461,34 @@ func TestChatCards_ConvergeOnEveryExit(t *testing.T) {
 		want       string
 		timed      bool
 	}{
-		{"通过", "command", decide("approve"), "已由 Zhang Wei 通过", true},
-		{"驳回", "command", decide("reject"), "已由 Zhang Wei 拒绝", true},
-		{"发起人撤回", "command", func(id int64) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "已撤回", false},
+		{"通过", "command", decide("approve"), "✅ 已由 Zhang Wei 通过", true},
+		{"驳回", "command", decide("reject"), "❌ 已由 Zhang Wei 拒绝", true},
+		{"发起人撤回", "command", func(id int64) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "⚪ 已撤回", false},
 		{"窗口改动", "window", func(id int64) {
 			now := time.Now()
 			eq(t, app.do(http.MethodPut, "/api/v1/exec-windows/"+itoa(windowOf(id)), admin,
 				windowBody(app.connIDByEnv(admin, "prod"), "orders_db", "改后", now.Add(-time.Minute), now.Add(2*time.Hour))).Code, 0, "改窗口")
-		}, "已作废", false},
+		}, "⚪ 已作废", false},
 		{"窗口删除", "window", func(id int64) {
 			eq(t, app.do(http.MethodDelete, "/api/v1/exec-windows/"+itoa(windowOf(id)), admin, nil).Code, 0, "删窗口")
-		}, "已撤回", false},
-		{"窗口单由发起人撤回", "window", func(id int64) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "已撤回", false},
+		}, "⚪ 已撤回", false},
+		{"窗口单由发起人撤回", "window", func(id int64) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "⚪ 已撤回", false},
 		{"超时作废", "command", func(int64) {
 			app.setting("approval.onTimeout", `"auto-reject"`)
 			app.setting("approval.timeoutMinutes", "0")
 			app.svc.SweepApprovalTimeouts()
 			app.setting("approval.onTimeout", `"keep-waiting"`)
-		}, "已作废", false},
+		}, "⚪ 已作废", false},
 		{"发布单终止", "release", func(id int64) {
 			ap, _ := app.repo.GetApproval(id)
 			eq(t, app.do(http.MethodPost, "/api/v1/releases/"+itoa(ap.ReleaseID)+"/abort", admin, nil).Code, 0, "终止")
-		}, "已作废", false},
+		}, "⚪ 已作废", false},
 		{"启动清理孤儿单", "command", func(id int64) {
 			app.repo.DB().Model(&model.Approval{}).Where("id = ?", id).Update("release_id", 987654)
 			if _, err := app.repo.VoidOrphanReleaseTickets(); err != nil {
 				t.Fatal(err)
 			}
-		}, "已作废", false},
+		}, "⚪ 已作废", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			id, no := app.raise(c.kind)
@@ -574,7 +574,7 @@ func TestChatCards_OutcomeFromStatus(t *testing.T) {
 	eq(t, app.cancel(app.login(cardAdmin, "aegisdb123"), id).Code, 0, "撤回")
 	app.sweepCards()
 	ups := lark.updates()
-	if len(ups) != 2 || ups[0].Card.Outcome != "已撤回" {
+	if len(ups) != 2 || ups[0].Card.Outcome != "⚪ 已撤回" {
 		t.Errorf("更新: %+v", ups)
 	}
 }
@@ -593,7 +593,7 @@ func TestChatCards_DeciderNotRecordedYet(t *testing.T) {
 	}
 	app.dueCards()
 	app.sweepCards()
-	if ups := lark.updates(); len(ups) != 2 || ups[0].Card.Outcome != "已通过" {
+	if ups := lark.updates(); len(ups) != 2 || ups[0].Card.Outcome != "✅ 已通过" {
 		t.Errorf("一直等不到时: %+v", ups)
 	}
 
@@ -604,7 +604,7 @@ func TestChatCards_DeciderNotRecordedYet(t *testing.T) {
 	_ = app.repo.DecideStepBy(id, app.storedUser(owner2).ID, model.StatusRejected, time.Now())
 	app.dueCards()
 	app.sweepCards()
-	if ups := lark.updates(); len(ups) != 4 || !strings.HasPrefix(ups[3].Card.Outcome, "已由 Li Na 拒绝 · ") {
+	if ups := lark.updates(); len(ups) != 4 || !strings.HasPrefix(ups[3].Card.Outcome, "❌ 已由 Li Na 拒绝 · ") {
 		t.Errorf("等到之后: %+v", ups)
 	}
 }
@@ -660,6 +660,96 @@ func TestChatCards_OtherBotClosedWithoutUpdate(t *testing.T) {
 	}
 	eq(t, app.cardOf(id, owner1).State, model.ChatCardClosed, "收场")
 }
+
+// 机器人还没就绪(标识要连上才知道):排着的、等收敛的都原样等着,不算失败,也不当成别的机器人的收场。
+func TestChatCards_NotReadyBotWaits(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	sent, _ := app.submitCommand()
+	app.sweepCards()
+	eq(t, app.cancel(app.login(cardAdmin, "aegisdb123"), sent).Code, 0, "撤回")
+	queued, _ := app.submitCommand()
+	lark.setBot("", "")
+	for range 3 {
+		app.dueCards()
+		app.sweepCards()
+	}
+	for what, want := range map[int64]string{sent: model.ChatCardSent, queued: model.ChatCardQueued} {
+		for _, row := range app.cardsOf(what) {
+			if row.State != want || row.Attempts != 0 || row.LastError != "" {
+				t.Errorf("没就绪时动了: %+v", row)
+			}
+		}
+	}
+	if n := len(lark.updates()); n != 0 {
+		t.Errorf("没就绪却更新了 %d 次", n)
+	}
+	lark.setBot(chatBot, "AegisBot")
+	app.dueCards()
+	app.sweepCards()
+	eq(t, app.cardOf(sent, owner1).State, model.ChatCardClosed, "就绪之后收敛")
+	eq(t, app.cardOf(queued, owner1).State, model.ChatCardSent, "就绪之后发出")
+}
+
+// 平台说「过这么久再来」:按它说的等(有上限),其间这个渠道发送与收敛都不去碰,也不算一次尝试;别的渠道照常。
+func TestChatCards_RetryAfter(t *testing.T) {
+	for _, c := range []struct{ asked, min, max time.Duration }{
+		{time.Second, 4 * time.Second, 5 * time.Second}, {40 * time.Second, 39 * time.Second, 40 * time.Second},
+		{time.Hour, 9 * time.Minute, 10 * time.Minute},
+	} {
+		t.Run(c.asked.String(), func(t *testing.T) {
+			app, lark, tg := cardApp(t)
+			app.bindRow(owner1, chat.Telegram, tgBot)
+			ended, _ := app.submitCommand()
+			app.sweepCards()
+			eq(t, app.cancel(app.login(cardAdmin, "aegisdb123"), ended).Code, 0, "撤回")
+			var sends, edits atomic.Int64
+			lark.setHooks(func(context.Context, string, chat.Card) error { sends.Add(1); return retryLater(c.asked) },
+				func(context.Context, chat.Ref, chat.Card) error { edits.Add(1); return nil })
+			id, _ := app.submitCommand()
+			before := len(tg.sends())
+			app.sweepCards()
+			if sends.Load() != 1 || edits.Load() != 0 {
+				t.Errorf("这一轮发了 %d 次、改了 %d 次", sends.Load(), edits.Load())
+			}
+			if len(tg.sends()) != before+1 {
+				t.Error("别的渠道应照常")
+			}
+			waits := 0
+			for _, row := range app.cardsOf(id) {
+				if row.Channel != "lark" {
+					continue
+				}
+				if row.State != model.ChatCardQueued || row.Attempts != 0 {
+					t.Errorf("算成了一次失败: %+v", row)
+				}
+				if left := time.Until(row.NextAt); left > c.min && left <= c.max {
+					waits++
+				}
+			}
+			eq(t, waits, 1, "按平台说的等")
+			if c.asked < 5*time.Second { // 这一种马上就过
+				return
+			}
+			app.dueCards()
+			app.sweepCards()
+			if sends.Load() != 1 || edits.Load() != 0 {
+				t.Errorf("还没到时候就又去了:发 %d 改 %d", sends.Load(), edits.Load())
+			}
+			// 换了机器人,限流不跟着
+			lark.setHooks(nil, nil)
+			lark.setBot("cli_new", "AegisBot")
+			app.repo.DB().Model(&model.ChatBinding{}).Where("channel = 'lark'").Update("bot_id", "cli_new")
+			app.dueCards()
+			app.sweepCards()
+			eq(t, app.cardOf(id, owner1).State, model.ChatCardSent, "新机器人照常")
+		})
+	}
+}
+
+type retryLater time.Duration
+
+func (e retryLater) Error() string             { return "too many requests" }
+func (e retryLater) RetryAfter() time.Duration { return time.Duration(e) }
 
 // 超时升级不另发私聊。
 func TestChatCards_EscalationAddsNone(t *testing.T) {
@@ -873,7 +963,7 @@ func TestChatCards_Language(t *testing.T) {
 	}
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/reject", app.login(owner1, "aegisdb123"), nil).Code, 0, "驳回")
 	app.sweepCards()
-	if ups := lark.updates(); len(ups) != 2 || !strings.HasPrefix(ups[0].Card.Outcome, "Rejected by Zhang Wei · ") {
+	if ups := lark.updates(); len(ups) != 2 || !strings.HasPrefix(ups[0].Card.Outcome, "❌ Rejected by Zhang Wei · ") {
 		t.Errorf("英文结论: %+v", ups)
 	}
 }

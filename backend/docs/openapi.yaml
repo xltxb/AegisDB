@@ -855,7 +855,8 @@ paths:
       summary: 本人在各审批机器人渠道上的绑定状态
       description: |
         只列开着的渠道,一个都没开是空数组。每项:`channel`(lark / telegram)、`botName`、`bound`、
-        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。不返回聊天账号与机器人的标识。
+        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。`botName` 在 telegram 是机器人的用户名
+        (还没认出机器人、令牌失效或挂着 webhook 时为空),在 lark 恒为空。不返回聊天账号与机器人的标识。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/chat-bindings/{channel}/code:
     post:
@@ -2597,7 +2598,9 @@ paths:
 
         聊天审批卡片:`chat.cardLang`(zh / en)、`chat.lark.enabled`、`chat.lark.region`(feishu / lark)、
         `chat.lark.appId`、`chat.lark.appSecret`(密钥,加密存)。开着时缺 App ID 或 App Secret 整次拒绝;
-        保存后马上重连,不用重启。
+        `chat.telegram.enabled`、`chat.telegram.botToken`(密钥,加密存)、`chat.telegram.includeSql`(默认 false,
+        只影响之后发的卡片)、`chat.telegram.proxyToken`(代理地址,http / https / socks5,可带口令,按密钥加密存;
+        从没存过 = 直连,`null` 清除)。开着时缺 Bot Token 整次拒绝。保存后马上重连,不用重启。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/webhook:
     put:
@@ -2641,8 +2644,10 @@ paths:
       summary: '[settings · admin] 各审批机器人渠道的连接状态'
       description: |
         以渠道(lark / telegram)为键,每项:`enabled`(设置里是否开着)、`state`
-        (off / connecting / connected / conflict / error)、`detail`(冲突或出错的原因,可能有
-        `detailRef` 供翻译)、`botName`。不含任何密钥。
+        (off / connecting / connected / conflict / error)、`detail`(冲突或出错的原因;重连期间
+        state 是 connecting,`detail` 仍是上一次断开的原因,连上才清空。可能有 `detailRef` 供翻译)、`botName`
+        (telegram 的用户名;还没认出机器人、令牌失效或挂着 webhook 时为空,lark 恒为空)。
+        不含任何密钥,也不含代理地址。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/chat-test:
     post:
@@ -2650,7 +2655,7 @@ paths:
       summary: '[settings · admin] 给自己发一张测试卡片'
       description: |
         发给当前登录人在该渠道上绑定的聊天账号;按钮只回一句提示,不碰任何审批单。渠道没开、机器人没连上、
-        没有绑定、平台报错返回 `40001`;同一人 5 秒内再发返回 `42900`。
+        没有绑定、平台报错返回 `40001`;同一人在同一渠道 5 秒内再发返回 `42900`。
       requestBody:
         required: true
         content:
@@ -2949,7 +2954,8 @@ paths:
         '200':
           description: |
             OK / 40300 审批人不在链上、是发起人本人,或发布单的实例不在服务账号范围内(msg 说明是哪一条)/
-            40001 发布单不存在、还没走到审批阶段、审批人账号不存在或不可用、action 非法
+            40001 发布单不存在、还没走到审批阶段、审批人账号不存在或不可用、action 非法 /
+            50000 审批链暂时读不出来(没有做决定,可以重试)
           content:
             application/json:
               schema:

@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { useEvent } from '@/hooks/useEvent'
 import { useI18n } from '@/hooks/useI18n'
-import type { ChatBinding } from '@/types'
+import type { ChatBindCode, ChatBinding } from '@/types'
 import './ChatBindModal.scoped.css'
 
 interface Props {
@@ -61,21 +61,29 @@ function Body({ bindings, reload, onUnbound, onClose }: Omit<Props, 'open'>) {
 const CODE_TTL_MS = 10 * 60 * 1000
 const POLL_MS = 3000
 
+/** Telegram 的深链,点开就把码带给机器人;别的渠道、或机器人名不是个用户名时没有。名字来自平台,不直接拼进地址。 */
+function deepLink(channel: string, { code, botName }: ChatBindCode): string {
+  if (channel !== 'telegram' || !/^[A-Za-z0-9_]{5,32}$/.test(botName ?? '')) return ''
+  return `https://t.me/${botName}?start=${encodeURIComponent(code)}`
+}
+
 function ChannelRow({ b, reload, onUnbound }: { b: ChatBinding; reload: () => Promise<void>; onUnbound: () => void }) {
   const { t } = useI18n()
   const { notify, notifyError } = useUIStore.getState()
   const name = t('chatCh_' + b.channel)
-  const [code, setCode] = useState('')
+  const [issued, setIssued] = useState<ChatBindCode | null>(null)
+  const code = issued?.code ?? ''
+  const link = issued ? deepLink(b.channel, issued) : ''
   const [askMfa, setAskMfa] = useState(false)
   const [mfa, setMfa] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
   // 绑上了,码就没用了(它也确实作废了)。
-  if (b.bound && (code || askMfa)) { setCode(''); setAskMfa(false); setMfa('') }
+  if (b.bound && (code || askMfa)) { setIssued(null); setAskMfa(false); setMfa('') }
 
   // 显示着码的时候才问绑上了没有;到点把码收起来。
-  const expire = useEvent(() => { setCode(''); setErr(t('chatCodeExpired')) })
+  const expire = useEvent(() => { setIssued(null); setErr(t('chatCodeExpired')) })
   useEffect(() => {
     if (!code) return
     const poll = setInterval(() => { if (!document.hidden) reload().catch(() => { /* 下一轮再问 */ }) }, POLL_MS)
@@ -90,7 +98,7 @@ function ChannelRow({ b, reload, onUnbound }: { b: ChatBinding; reload: () => Pr
     try {
       const r = await api.chatBindCode(b.channel, mfaCode)
       setAskMfa(false)
-      setCode(r.code)
+      setIssued(r)
     } catch (e: any) {
       if (e?.code === CODE_MFA_REQUIRED) setAskMfa(true) // 页面打开之后才开的 MFA
       else setErr(e?.message || t('actionFailed'))
@@ -145,6 +153,12 @@ function ChannelRow({ b, reload, onUnbound }: { b: ChatBinding; reload: () => Pr
             <VButton variant="secondary" height="34px" data-testid="chat-code-copy" onClick={copy}><Copy size={13} />{t('chatCopy')}</VButton>
           </div>
           <div className="valid">{t('chatCodeValid')}</div>
+          {link && (
+            <>
+              <a className="link" href={link} target="_blank" rel="noopener noreferrer" data-testid="chat-link">{link}</a>
+              <div className="how">{t('chatHowLink')}</div>
+            </>
+          )}
           <div className="how">{t('chatHow_' + b.channel)}</div>
         </div>
       )}
