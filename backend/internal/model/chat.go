@@ -46,13 +46,16 @@ type ChatCard struct {
 	// TokenHash 是按钮令牌的 SHA-256(十六进制);还没发过的卡片为空。
 	TokenHash string `gorm:"column:token_hash;size:64;not null;default:'';index:idx_chat_card_token" json:"-"`
 	// Partial:发出去的那张没显示全文,发卡时定下。SourceTruncated:单子本身存的就是截断内容,建单时定下。
-	Partial         bool      `gorm:"not null;default:false" json:"-"`
-	SourceTruncated bool      `gorm:"column:source_truncated;not null;default:false" json:"-"`
-	Attempts        int       `gorm:"not null;default:0" json:"-"`
-	NextAt          time.Time `gorm:"not null;index:idx_chat_card_state,priority:2" json:"-"`
-	LastError       string    `gorm:"column:last_error;size:255;not null;default:''" json:"-"`
-	CreatedAt       time.Time `json:"-"`
-	UpdatedAt       time.Time `json:"-"`
+	Partial         bool `gorm:"not null;default:false" json:"-"`
+	SourceTruncated bool `gorm:"column:source_truncated;not null;default:false" json:"-"`
+	// WithSQL:发出去的那张带没带语句与原因,发卡时定下。之后改「Telegram 带 SQL」不影响已发出的卡片:
+	// 更新它时照着这一列重画,既不补发语句,也不和已定下的 Partial 对不上。
+	WithSQL   bool      `gorm:"column:with_sql;not null;default:false" json:"-"`
+	Attempts  int       `gorm:"not null;default:0" json:"-"`
+	NextAt    time.Time `gorm:"not null;index:idx_chat_card_state,priority:2" json:"-"`
+	LastError string    `gorm:"column:last_error;size:255;not null;default:''" json:"-"`
+	CreatedAt time.Time `json:"-"`
+	UpdatedAt time.Time `json:"-"`
 }
 
 func (ChatCard) TableName() string { return "tbl_chat_card" }

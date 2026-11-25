@@ -103,6 +103,7 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 	// 能查的事。
 	s.recordAudit(u, conn, ap.Command, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
 	s.Webhook.SendLarkApproval(ap)
+	s.queueChatCards(ap, false)
 	return nil
 }
 

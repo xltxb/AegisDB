@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/dto"
@@ -803,6 +804,7 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 		return failStage(model.RelLogApCreateFail, "err", err.Error())
 	}
 	s.Webhook.SendLarkApproval(ap)
+	s.queueChatCards(ap, releaseLabelTruncated(rel, body))
 	s.recordAuditFrom(model.AuditSourceRelease, creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
 		status: model.RunWaiting, approvalID: ap.ID, approvalNo: ap.ApNo,
@@ -1253,13 +1255,27 @@ func (s *Services) releaseBody(rel *model.Release) (string, error) {
 
 func releaseApprovalLabel(rel *model.Release, body string) string {
 	head := fmt.Sprintf("[发布 %s] %s @ %s/%s\n", rel.RelNo, rel.Title, rel.Instance, rel.Database)
+	text, _ := releaseLabelBody(rel, body)
+	return head + text
+}
+
+// releaseLabelTruncated 报告发布单的审批单上存的正文是不是截断过的。和标签出自同一处:
+// 单子上只有截断后的文字,事后从它身上猜不出来(聊天卡片要写明「未显示全文」)。
+func releaseLabelTruncated(rel *model.Release, body string) bool {
+	_, truncated := releaseLabelBody(rel, body)
+	return truncated
+}
+
+// releaseLabelBody 是审批单标签里正文的那一段,与它截断没有。先遮口令再截断(见 safeClip),
+// 所以"截断没有"也按遮掉之后的长度算。
+func releaseLabelBody(rel *model.Release, body string) (text string, truncated bool) {
+	limit := 4000
 	if rel.ScriptUploadID > 0 {
-		return head + safeClip(strings.Join(strings.Fields(body), " "), 800)
+		body, limit = strings.Join(strings.Fields(body), " "), 800
+	} else if len(body) <= limit {
+		return body, false
 	}
-	if len(body) > 4000 {
-		return head + safeClip(body, 4000)
-	}
-	return head + body
+	return safeClip(body, limit), utf8.RuneCountInString(sqlutil.RedactSecrets(body)) > limit
 }
 
 // ---------------------------------------------------------------- 恢复 / 人工推进

@@ -683,6 +683,7 @@ func (s *Services) createApprovalWith(u *model.User, conn *model.Connection, sql
 		return nil, "", err
 	}
 	s.Webhook.SendLarkApproval(ap) // push an interactive Lark card to the approvers
+	s.queueChatCards(ap, false)
 	return ap, auditID, nil
 }
 

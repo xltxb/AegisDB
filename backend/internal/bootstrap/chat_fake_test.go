@@ -18,6 +18,10 @@ type fakeChat struct {
 	updated   []fakeUpdate
 	sendErr   error // 非 nil 时 Send 一律失败
 	updateErr error
+	// onSend / onUpdate 非 nil 时先于记录被调,不持锁:用来挂起、panic、在发送途中改数据。
+	// 返回错误 = 这一次失败。
+	onSend   func(ctx context.Context, accountID string, c chat.Card) error
+	onUpdate func(ctx context.Context, r chat.Ref, c chat.Card) error
 }
 
 type fakeSent struct {
@@ -58,7 +62,42 @@ func (f *fakeChat) Run(ctx context.Context, _ chat.Handler, onState func(chat.St
 	return ctx.Err()
 }
 
-func (f *fakeChat) Send(_ context.Context, accountID string, c chat.Card) (chat.Ref, error) {
+// setHooks 换掉两个钩子;扫描在别的 goroutine 里跑,不能直接改字段。
+func (f *fakeChat) setHooks(onSend func(context.Context, string, chat.Card) error, onUpdate func(context.Context, chat.Ref, chat.Card) error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend, f.onUpdate = onSend, onUpdate
+}
+
+// setErrs 让 Send / Update 一律失败(nil = 恢复)。
+func (f *fakeChat) setErrs(send, update error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sendErr, f.updateErr = send, update
+}
+
+// sends / updates 是到目前为止发出、更新过的卡片的副本。
+func (f *fakeChat) sends() []fakeSent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]fakeSent(nil), f.sent...)
+}
+
+func (f *fakeChat) updates() []fakeUpdate {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]fakeUpdate(nil), f.updated...)
+}
+
+func (f *fakeChat) Send(ctx context.Context, accountID string, c chat.Card) (chat.Ref, error) {
+	f.mu.Lock()
+	hook := f.onSend
+	f.mu.Unlock()
+	if hook != nil {
+		if err := hook(ctx, accountID, c); err != nil {
+			return chat.Ref{}, err
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.sendErr != nil {
@@ -69,7 +108,15 @@ func (f *fakeChat) Send(_ context.Context, accountID string, c chat.Card) (chat.
 	return ref, nil
 }
 
-func (f *fakeChat) Update(_ context.Context, r chat.Ref, c chat.Card) error {
+func (f *fakeChat) Update(ctx context.Context, r chat.Ref, c chat.Card) error {
+	f.mu.Lock()
+	hook := f.onUpdate
+	f.mu.Unlock()
+	if hook != nil {
+		if err := hook(ctx, r, c); err != nil {
+			return err
+		}
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.updateErr != nil {

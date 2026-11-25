@@ -177,3 +177,54 @@ func (r *Repo) DeleteChatBindings(userID int64, channel string) ([]model.ChatBin
 	}
 	return gone, nil
 }
+
+// ----------------------------------------------------------------- 审批卡片
+
+// ChatBindingsOfUsers 取一批用户在几个渠道上的绑定(不管绑的是哪个机器人)。
+func (r *Repo) ChatBindingsOfUsers(userIDs []int64, channels []string) ([]model.ChatBinding, error) {
+	var bs []model.ChatBinding
+	if len(userIDs) == 0 || len(channels) == 0 {
+		return bs, nil
+	}
+	err := r.db.Where("user_id IN ? AND channel IN ?", userIDs, channels).Order("id").Find(&bs).Error
+	return bs, err
+}
+
+// QueueChatCards 排下一批要发的卡片;已经有的(同一张单、同一个人、同一个渠道)跳过。
+func (r *Repo) QueueChatCards(cards []model.ChatCard) error {
+	if len(cards) == 0 {
+		return nil
+	}
+	return r.db.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "approval_id"}, {Name: "user_id"}, {Name: "channel"}},
+		DoNothing: true,
+	}).Create(&cards).Error
+}
+
+// QueuedChatCards 是一个渠道上到期该发的卡片。
+func (r *Repo) QueuedChatCards(channel string, now time.Time, limit int) ([]model.ChatCard, error) {
+	return r.dueChatCards(model.ChatCardQueued, channel, now, limit, "")
+}
+
+// EndedChatCards 是一个渠道上已发出、单子却已不在待审批(或已不存在)、到期该更新的卡片。
+func (r *Repo) EndedChatCards(channel string, now time.Time, limit int) ([]model.ChatCard, error) {
+	return r.dueChatCards(model.ChatCardSent, channel, now, limit,
+		"approval_id NOT IN (SELECT id FROM tbl_approval WHERE status = '"+model.StatusPending+"')")
+}
+
+func (r *Repo) dueChatCards(state, channel string, now time.Time, limit int, extra string) ([]model.ChatCard, error) {
+	q := r.db.Where("state = ? AND next_at <= ? AND channel = ?", state, now, channel)
+	if extra != "" {
+		q = q.Where(extra)
+	}
+	var cs []model.ChatCard
+	err := q.Order("next_at, id").Limit(limit).Find(&cs).Error
+	return cs, err
+}
+
+// UpdateChatCard 改一张卡片,前提是它还处在 from 状态;返回是否真的改到了。
+// 卡片会被后台扫描与按钮点击两处改,谁都不能把对方刚收场的卡片改回去。
+func (r *Repo) UpdateChatCard(id int64, from string, fields map[string]any) (bool, error) {
+	res := r.db.Model(&model.ChatCard{}).Where("id = ? AND state = ?", id, from).Updates(fields)
+	return res.RowsAffected == 1, res.Error
+}

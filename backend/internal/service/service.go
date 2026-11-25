@@ -32,6 +32,7 @@ type Services struct {
 	chatTransports map[chat.Channel]chat.Transport
 	chatCodeFails  *failBook[chatAccount]
 	chatCodeGens   *failBook[int64]
+	chatSweeping   sync.Map // chat.Channel → 正在扫描(chat_cards.go)
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager

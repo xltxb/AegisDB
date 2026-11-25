@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS "tbl_chat_card" (
   "token_hash" citext NOT NULL DEFAULT '' CHECK (char_length("token_hash") <= 64),
   "partial" boolean NOT NULL DEFAULT false,
   "source_truncated" boolean NOT NULL DEFAULT false,
+  "with_sql" boolean NOT NULL DEFAULT false,
   "attempts" integer NOT NULL DEFAULT 0,
   "next_at" timestamptz(3) NOT NULL,
   "last_error" citext NOT NULL DEFAULT '' CHECK (char_length("last_error") <= 255),

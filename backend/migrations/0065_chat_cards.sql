@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS tbl_chat_card (
   token_hash       VARCHAR(64)  NOT NULL DEFAULT '',
   partial          TINYINT(1)   NOT NULL DEFAULT 0,
   source_truncated TINYINT(1)   NOT NULL DEFAULT 0,
+  with_sql         TINYINT(1)   NOT NULL DEFAULT 0,
   attempts         INT          NOT NULL DEFAULT 0,
   next_at          DATETIME(3)  NOT NULL,
   last_error       VARCHAR(255) NOT NULL DEFAULT '',
