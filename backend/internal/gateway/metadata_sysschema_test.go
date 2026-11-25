@@ -25,6 +25,7 @@ func fakeTiDBCatalog(t *testing.T) *sql.DB {
 	for _, s := range []string{
 		`ATTACH ':memory:' AS information_schema`,
 		`CREATE TABLE information_schema.tables (table_schema TEXT, table_name TEXT, table_type TEXT, table_comment TEXT)`,
+		`CREATE TABLE information_schema.schemata (schema_name TEXT)`,
 		`CREATE TABLE information_schema.columns (table_schema TEXT, table_name TEXT, ordinal_position INT, column_name TEXT,
 			column_type TEXT, is_nullable TEXT, column_default TEXT, column_comment TEXT, column_key TEXT)`,
 	} {
@@ -38,6 +39,9 @@ func fakeTiDBCatalog(t *testing.T) *sql.DB {
 		"Orders", // 用户库,大小写要原样保留
 	} {
 		if _, err := db.Exec(`INSERT INTO information_schema.tables VALUES (?, 't', 'BASE TABLE', '')`, schema); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO information_schema.schemata VALUES (?)`, schema); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(`INSERT INTO information_schema.columns VALUES (?, 't', 1, 'id', 'int', 'NO', NULL, '', 'PRI')`, schema); err != nil {
@@ -69,7 +73,32 @@ func TestRealMetadataMySQL_SkipsSystemSchemasInAnyCase(t *testing.T) {
 
 // 预检读实时表名,必须与元数据探查同一个口径。
 func TestLiveTableQueryMySQL_SkipsSystemSchemasInAnyCase(t *testing.T) {
-	rows, err := fakeTiDBCatalog(t).Query(liveTableQuery(&model.Connection{Engine: "TiDB 7.5"}))
+	assertOnlyUserSchema(t, liveTableQuery(&model.Connection{Engine: "TiDB 7.5"}))
+}
+
+// 对象树也是同一个口径:表清单。
+func TestSchemaIntrospectMySQL_SkipsSystemSchemasInAnyCase(t *testing.T) {
+	for _, engine := range []string{"TiDB 7.5", "MySQL 8.0", "MariaDB 11"} {
+		query, _ := schemaIntrospectQuery(&model.Connection{Engine: engine})
+		assertOnlyUserSchema(t, query)
+	}
+}
+
+// 对象树补空库名的那一条。
+func TestMySQLSchemaNames_SkipsSystemSchemasInAnyCase(t *testing.T) {
+	got, err := mysqlSchemaNames(context.Background(), fakeTiDBCatalog(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"Orders"}) {
+		t.Errorf("应只有用户库,实际 %v", got)
+	}
+}
+
+// assertOnlyUserSchema 跑一条"库名, 表名"的查询,结果应只剩用户库。
+func assertOnlyUserSchema(t *testing.T, query string) {
+	t.Helper()
+	rows, err := fakeTiDBCatalog(t).Query(query)
 	if err != nil {
 		t.Fatal(err)
 	}
