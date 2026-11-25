@@ -339,7 +339,7 @@ func (t *Transport) onText(e *larkim.P2MessageReceiveV1) error {
 	go func() {
 		defer run.wg.Done()
 		defer func() { <-t.texts }()
-		reply := t.safeText(run, account, chatID, content.Text)
+		reply, _ := t.safeText(run, account, chatID, content.Text)
 		if reply == "" {
 			return
 		}
@@ -350,7 +350,7 @@ func (t *Transport) onText(e *larkim.P2MessageReceiveV1) error {
 	return nil
 }
 
-func (t *Transport) safeText(run *running, account, chatID, text string) (reply string) {
+func (t *Transport) safeText(run *running, account, chatID, text string) (reply string, bound bool) {
 	defer func() {
 		if recover() != nil {
 			logPanic()

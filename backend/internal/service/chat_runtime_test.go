@@ -813,9 +813,9 @@ func TestNewTelegram_SharesSeen(t *testing.T) {
 
 type countTexts struct{ n *atomic.Int64 }
 
-func (c countTexts) OnText(context.Context, chat.Channel, string, string, string, string) string {
+func (c countTexts) OnText(context.Context, chat.Channel, string, string, string, string) (string, bool) {
 	c.n.Add(1)
-	return ""
+	return "", false
 }
 func (countTexts) OnClick(context.Context, chat.Click) chat.ClickResult { return chat.ClickResult{} }
 

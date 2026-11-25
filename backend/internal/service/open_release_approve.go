@@ -89,7 +89,8 @@ func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, re
 
 	block, berr := s.decideBlock(approver, ap)
 	if berr != nil {
-		// 审批链读不出来不等于不在链上:不按拒绝答复,也不按拒绝记。
+		// 审批链读不出来不等于不在链上:不这么答复,也不这么记。
+		audit(model.ResultRejected, "审批链读不出来,没有做决定")
 		slog.Error("读审批链失败", "apNo", ap.ApNo, "err", berr)
 		return nil, ErrChainUnreadable
 	}

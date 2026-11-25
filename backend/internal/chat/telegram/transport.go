@@ -46,9 +46,15 @@ const (
 	maxTexts    = 100 // 其中文字最多占这么多,余下的留给点击
 	laneMax     = 32  // 一个人排队的上限,多出来的丢掉
 
+	// 同时在处理的上限:每件都要用数据库连接,而给机器人发消息谁都能发,不能让一群陌生人把整个网关的库占满。
+	// 点击不占文字的位子。
+	maxRunningTexts  = 8
+	maxRunningClicks = 32
+
 	// 回话:同时最多这么几句,每句发完还占着位子一会儿。发消息的额度是整个机器人的(约每秒 30 条),要留给卡片。
-	replySlots = 8
-	replyGap   = 500 * time.Millisecond
+	replySlots    = 8
+	ownReplySlots = 2 // 其中留给自己人的:绑上了、点击的原因
+	replyGap      = 500 * time.Millisecond
 
 	seenMax = 4096
 	seenFor = 24 * time.Hour // 平台替人存 update 的期限
@@ -81,8 +87,11 @@ type Transport struct {
 	lanes    map[int64][]job     // 每个人排着的;有键就有一个协程在做
 	changed  chan struct{}       // 有一条处理完了
 
-	replies chan struct{} // 回话的位子
-	quiet   atomic.Int64  // 平台嫌太频繁:这之前(UnixNano)不回话
+	runTexts, runClicks chan struct{} // 正在处理的位子
+	replies             chan struct{} // 回话的位子
+	strangers           chan struct{} // 其中陌生人用得上的;要先占到它
+	quiet               atomic.Int64  // 平台嫌太频繁:这之前(UnixNano)不回话
+	logged              atomic.Int64  // 上一次记「回复失败」的时刻(UnixNano)
 }
 
 type identity struct{ id, name string }
@@ -141,7 +150,8 @@ func New(token, proxyURL string, opts ...Option) (*Transport, error) {
 		inflight: map[int64]time.Time{},
 		lanes:    map[int64][]job{},
 		changed:  make(chan struct{}, 1),
-		replies:  make(chan struct{}, replySlots),
+		runTexts: make(chan struct{}, maxRunningTexts), runClicks: make(chan struct{}, maxRunningClicks),
+		replies: make(chan struct{}, replySlots), strangers: make(chan struct{}, replySlots-ownReplySlots),
 	}
 	for _, o := range opts {
 		o(t)
@@ -457,6 +467,20 @@ func (t *Transport) work(who int64) {
 
 func (t *Transport) one(j job) {
 	defer j.run.wg.Done()
+	if j.text {
+		select {
+		case t.runTexts <- struct{}{}:
+		case <-j.run.ctx.Done(): // 等位子的时候停了:还没开始,能放回去就放回去
+			t.mu.Lock()
+			back := t.putBack(j)
+			t.mu.Unlock()
+			if back {
+				return
+			}
+			t.runTexts <- struct{}{}
+		}
+		defer func() { <-t.runTexts }()
+	}
 	defer t.finish(j)
 	defer func() {
 		if recover() != nil {
@@ -474,16 +498,24 @@ func (t *Transport) unqueue() {
 	for who, queue := range t.lanes {
 		var keep []job
 		for _, j := range queue {
-			if j.id < t.passed {
+			if t.putBack(j) {
+				j.run.wg.Done()
+			} else {
 				keep = append(keep, j)
-				continue
 			}
-			t.seen.Forget(formatID(j.id))
-			t.drop(j)
-			j.run.wg.Done()
 		}
 		t.lanes[who] = keep
 	}
+}
+
+// putBack 把一条还没开始的放回去;offset 已经越过它的放不回去。要持 t.mu。
+func (t *Transport) putBack(j job) bool {
+	if j.id < t.passed {
+		return false
+	}
+	t.seen.Forget(formatID(j.id))
+	t.drop(j)
+	return true
 }
 
 // drop 把一条从没处理完的里面拿掉;要持 t.mu。
@@ -508,36 +540,54 @@ func (t *Transport) finish(j job) {
 
 // onText 处理一条私聊文字。交上去就算处理完;回的那句话另发。
 func (t *Transport) onText(run *running, m *textMessage) {
-	if reply := t.safeText(run, m); reply != "" {
-		t.later(run, m.Chat.ID, reply)
+	if reply, bound := t.safeText(run, m); reply != "" {
+		t.later(run, m.Chat.ID, reply, bound)
 	}
 }
 
 // later 另起一路回一句话,只试一次;位子占满了、平台正嫌太频繁,就不回了。要在一件事处理的途中调(run.wg
 // 还没归零)。
-func (t *Transport) later(run *running, chatID int64, text string) {
-	if time.Now().UnixNano() < t.quiet.Load() {
+//
+// own 是回给自己人的(绑上了、点击的原因):有给它留的位子。失败谁都引得出来,日志一分钟最多一行。
+func (t *Transport) later(run *running, chatID int64, text string, own bool) {
+	if time.Now().UnixNano() < t.quiet.Load() || !own && !take(t.strangers) {
 		return
 	}
-	select {
-	case t.replies <- struct{}{}:
-	default:
+	release := func() {
+		if !own {
+			<-t.strangers
+		}
+	}
+	if !take(t.replies) {
+		release()
 		return
 	}
 	run.wg.Add(1)
 	go func() {
 		defer run.wg.Done()
-		defer time.AfterFunc(replyGap, func() { <-t.replies })
+		defer time.AfterFunc(replyGap, func() { <-t.replies; release() })
 		if err := t.reply(run.ctx, chatID, text); err != nil {
 			if wait := chat.RetryAfter(err); wait > 0 {
 				t.quiet.Store(time.Now().Add(pollWait(wait)).UnixNano())
 			}
-			slog.Warn("Telegram 回复失败", "err", err)
+			if now, last := time.Now().UnixNano(), t.logged.Load(); now-last > int64(time.Minute) && t.logged.CompareAndSwap(last, now) {
+				slog.Warn("Telegram 回复失败", "err", err)
+			}
 		}
 	}()
 }
 
-func (t *Transport) safeText(run *running, m *textMessage) (reply string) {
+// take 占一个位子,不等。
+func take(slots chan struct{}) bool {
+	select {
+	case slots <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func (t *Transport) safeText(run *running, m *textMessage) (reply string, bound bool) {
 	defer func() {
 		if recover() != nil {
 			logPanic()
@@ -567,6 +617,9 @@ func (t *Transport) onClick(run *running, queryID, data string, who, messageID i
 				res <- chat.ClickResult{Toast: t.say("click.retry")}
 			}
 		}()
+		// 等位子也算在应答的时限里:排着队的照样按时先答「正在处理」。
+		t.runClicks <- struct{}{}
+		defer func() { <-t.runClicks }()
 		res <- run.h.OnClick(run.ctx, click)
 	}()
 	var r chat.ClickResult
@@ -588,7 +641,7 @@ func (t *Transport) onClick(run *running, queryID, data string, who, messageID i
 	}
 	if r.Card == nil {
 		if answered && r.Toast != "" { // 弹窗的机会已经用在「正在处理」上了
-			t.later(run, who, r.Toast)
+			t.later(run, who, r.Toast, true)
 		}
 		return
 	}

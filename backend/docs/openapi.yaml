@@ -856,7 +856,7 @@ paths:
       description: |
         只列开着的渠道,一个都没开是空数组。每项:`channel`(lark / telegram)、`botName`、`bound`、
         `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。`botName` 在 telegram 是机器人的用户名
-        (没连上为空),在 lark 恒为空。不返回聊天账号与机器人的标识。
+        (还没认出机器人、令牌失效或挂着 webhook 时为空),在 lark 恒为空。不返回聊天账号与机器人的标识。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/chat-bindings/{channel}/code:
     post:
@@ -2645,7 +2645,8 @@ paths:
       description: |
         以渠道(lark / telegram)为键,每项:`enabled`(设置里是否开着)、`state`
         (off / connecting / connected / conflict / error)、`detail`(冲突或出错的原因;重连期间
-        state 是 connecting,`detail` 仍是上一次断开的原因,连上才清空。可能有 `detailRef` 供翻译)、`botName`。
+        state 是 connecting,`detail` 仍是上一次断开的原因,连上才清空。可能有 `detailRef` 供翻译)、`botName`
+        (telegram 的用户名;还没认出机器人、令牌失效或挂着 webhook 时为空,lark 恒为空)。
         不含任何密钥,也不含代理地址。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/chat-test:
@@ -2953,7 +2954,8 @@ paths:
         '200':
           description: |
             OK / 40300 审批人不在链上、是发起人本人,或发布单的实例不在服务账号范围内(msg 说明是哪一条)/
-            40001 发布单不存在、还没走到审批阶段、审批人账号不存在或不可用、action 非法
+            40001 发布单不存在、还没走到审批阶段、审批人账号不存在或不可用、action 非法 /
+            50000 审批链暂时读不出来(没有做决定,可以重试)
           content:
             application/json:
               schema:

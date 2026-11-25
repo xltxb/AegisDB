@@ -70,8 +70,8 @@ const CardWithin = 10 * time.Second
 
 // Handler 是渠道收到东西之后交给谁(由 service 实现)。
 type Handler interface {
-	// OnText 处理一条私聊文字,返回要回给对方的话(空 = 不回)。
-	OnText(ctx context.Context, ch Channel, botID, accountID, chatID, text string) (reply string)
+	// OnText 处理一条私聊文字,返回要回给对方的话(空 = 不回);bound 是这一句绑上了账号,回话值得优先送到。
+	OnText(ctx context.Context, ch Channel, botID, accountID, chatID, text string) (reply string, bound bool)
 	OnClick(ctx context.Context, c Click) ClickResult
 }
 

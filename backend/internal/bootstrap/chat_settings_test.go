@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -676,4 +677,34 @@ func TestChatSettings_ReadFailureIsInternal(t *testing.T) {
 		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
 	}
 	eq(t, app.settingRaw("chat.cardLang"), `"zh"`, "没存")
+}
+
+// 两次保存同时写一组库里还没有的键:都成功。先 UPDATE、落空再 INSERT 的写法在 MySQL 上会互相等死(拿真库当
+// 存储库时才看得出来,SQLite 只有一个写者)。
+func TestSettings_ConcurrentFirstSaves(t *testing.T) {
+	app := newTestApp(t)
+	for round := range 20 {
+		// 每轮一组从没有过的键:删过的键在 MySQL 上会留下痕迹,锁法就不一样了
+		values := map[string]string{}
+		for _, k := range []string{"a", "b", "c", "d"} {
+			values[fmt.Sprintf("test.round%d.%s", round, k)] = "true"
+		}
+		errs := make(chan error, 4)
+		start := make(chan struct{})
+		for range 4 {
+			go func() {
+				<-start
+				errs <- app.repo.SetSettings(values)
+			}()
+		}
+		close(start)
+		for range 4 {
+			if err := <-errs; err != nil {
+				t.Fatalf("第 %d 轮: %v", round, err)
+			}
+		}
+		for k := range values {
+			eq(t, app.settingRaw(k), "true", k)
+		}
+	}
 }

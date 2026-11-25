@@ -218,7 +218,7 @@ type fakeHandler struct {
 	click  func(chat.Click) chat.ClickResult
 }
 
-func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, bot, account, chatID, text string) string {
+func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, bot, account, chatID, text string) (string, bool) {
 	if ch != chat.Telegram || bot != fmt.Sprint(testBot) {
 		panic("渠道或机器人不对")
 	}
@@ -228,9 +228,9 @@ func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, bot, account, c
 	fn := h.text
 	h.mu.Unlock()
 	if fn == nil {
-		return ""
+		return "", false
 	}
-	return fn(g)
+	return fn(g), g.text == "bind"
 }
 
 func (h *fakeHandler) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
@@ -767,7 +767,7 @@ func TestReplies_FailingDontHoldOthers(t *testing.T) {
 		t.Errorf("用了 %s", d)
 	}
 	// 平台不让发,就先不回了,别接着花发卡片要用的额度;每句只试一次
-	if n := len(f.all("sendMessage")); n > replySlots {
+	if n := len(f.all("sendMessage")); n > replySlots-ownReplySlots {
 		t.Errorf("试着回了 %d 次", n)
 	}
 }
@@ -784,9 +784,9 @@ func TestReplies_Bounded(t *testing.T) {
 		f.push("message", textMsg(i+1, "hi"))
 	}
 	eventually(t, "都处理、都确认", func() bool { texts, _ := h.got(); return len(texts) == 30 && len(f.unconfirmed()) == 0 })
-	eventually(t, "占满", func() bool { return len(f.all("sendMessage")) == replySlots })
+	eventually(t, "占满", func() bool { return len(f.all("sendMessage")) == replySlots-ownReplySlots })
 	time.Sleep(30 * time.Millisecond)
-	if n := len(f.all("sendMessage")); n != replySlots {
+	if n := len(f.all("sendMessage")); n != replySlots-ownReplySlots {
 		t.Errorf("同时在发 %d 句", n)
 	}
 }
@@ -810,6 +810,121 @@ func TestDispatch_TextsLeaveRoomForClicks(t *testing.T) {
 	defer tr.mu.Unlock()
 	if tr.texts > maxTexts {
 		t.Errorf("文字占了 %d 个位子", tr.texts)
+	}
+}
+
+// 同时在处理的文字与点击各有上限:每件都要用数据库连接,不能让一群陌生人把整个网关的库占满。文字占满了,点击
+// 照样进得来;点击排着队时也照样按时先答「正在处理」。
+func TestDispatch_ConcurrencyIsBounded(t *testing.T) {
+	f := newFake(t)
+	var running, peak, clicking, clickPeak atomic.Int32
+	enter := func(n, max *atomic.Int32) {
+		for v := n.Add(1); ; {
+			old := max.Load()
+			if v <= old || max.CompareAndSwap(old, v) {
+				return
+			}
+		}
+	}
+	gate := make(chan struct{})
+	h := &fakeHandler{
+		text: func(gotText) string { enter(&running, &peak); <-gate; running.Add(-1); return "" },
+		click: func(chat.Click) chat.ClickResult {
+			enter(&clicking, &clickPeak)
+			<-gate
+			clicking.Add(-1)
+			return chat.ClickResult{OK: true}
+		},
+	}
+	tr := f.transport()
+	tr.answerWithin = 50 * time.Millisecond
+	f.run(tr, h)
+	for i := range int64(100) {
+		f.push("message", textMsg(i+1, "flood"))
+	}
+	for i := range int64(60) {
+		f.push("callback_query", callback(1000+i, "c:"+testCard))
+	}
+	eventually(t, "点击进得来、排着的也先答了", func() bool {
+		return clicking.Load() == maxRunningClicks && len(f.all("answerCallbackQuery")) == 60
+	})
+	close(gate)
+	eventually(t, "都做完", func() bool {
+		texts, clicks := h.got()
+		return len(texts) == 100 && len(clicks) == 60 && len(f.unconfirmed()) == 0
+	})
+	if p, c := peak.Load(), clickPeak.Load(); p != maxRunningTexts || c != maxRunningClicks {
+		t.Errorf("同时处理 %d 条文字、%d 次点击", p, c)
+	}
+}
+
+// 停下时在等位子的文字也算没开始:留给下一个连接。
+func TestRun_StopPutsBackWaitingTexts(t *testing.T) {
+	f := newFake(t)
+	seen := NewSeen()
+	gate := make(chan struct{})
+	h := &fakeHandler{text: func(gotText) string { <-gate; return "" }}
+	_, stop := f.run(f.transport(WithSeen(seen)), h)
+	for i := range int64(20) {
+		f.push("message", textMsg(i+1, "hi"))
+	}
+	eventually(t, "占满", func() bool { texts, _ := h.got(); return len(texts) >= maxRunningTexts })
+	time.Sleep(30 * time.Millisecond)
+	time.AfterFunc(100*time.Millisecond, func() { close(gate) })
+	_ = stop()
+	if texts, _ := h.got(); len(texts) != maxRunningTexts {
+		t.Fatalf("停下之后还开始了:%d", len(texts))
+	}
+	f.run(f.transport(WithSeen(seen)), h)
+	eventually(t, "接着做", func() bool { texts, _ := h.got(); return len(texts) == 20 && len(f.unconfirmed()) == 0 })
+}
+
+// 陌生人的回话占满了它们的位子,绑上了的、迟到的原因照样送得出去。
+func TestReplies_ReservedForOwnUsers(t *testing.T) {
+	f := newFake(t)
+	release := make(chan struct{})
+	f.hook("sendMessage", func(http.ResponseWriter, *http.Request, call) bool { <-release; return false })
+	defer close(release)
+	h := &fakeHandler{text: func(g gotText) string { return g.text }, click: func(chat.Click) chat.ClickResult {
+		time.Sleep(60 * time.Millisecond)
+		return chat.ClickResult{Toast: "不在链上"}
+	}}
+	tr := f.transport()
+	tr.answerWithin = 10 * time.Millisecond
+	f.run(tr, h)
+	for i := range int64(20) {
+		f.push("message", textMsg(i+1, "stranger"))
+	}
+	eventually(t, "都处理完", func() bool { return len(f.unconfirmed()) == 0 })
+	time.Sleep(30 * time.Millisecond)
+	if n := len(f.all("sendMessage")); n != replySlots-ownReplySlots {
+		t.Errorf("陌生人占了 %d 个位子", n)
+	}
+	f.push("message", textMsg(50, "bind"))
+	f.push("callback_query", callback(51, "c:"+testCard))
+	eventually(t, "自己人的", func() bool {
+		got := map[string]bool{}
+		for _, c := range f.all("sendMessage") {
+			got[c.str("text")] = true
+		}
+		return got["bind"] && got["不在链上"]
+	})
+}
+
+// 回话失败谁都能引出来(拉黑、刷屏),日志一分钟最多一行。
+func TestReplies_FailureLogIsLimited(t *testing.T) {
+	f := newFake(t)
+	logs := captureLog(t)
+	f.hook("sendMessage", always(403, "Forbidden: bot was blocked by the user", 0))
+	h := &fakeHandler{text: func(gotText) string { return "x" }}
+	f.run(f.transport(), h)
+	for i := range int64(5) {
+		f.push("message", textMsg(i+1, "hi"))
+	}
+	eventually(t, "都回过", func() bool { return len(f.all("sendMessage")) == 5 })
+	time.Sleep(50 * time.Millisecond)
+	if n := strings.Count(logs.String(), "Telegram 回复失败"); n != 1 {
+		t.Errorf("记了 %d 行", n)
 	}
 }
 

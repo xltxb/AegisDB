@@ -311,7 +311,11 @@ func TestOpenApproveChainUnreadable(t *testing.T) {
 	if r.Code != 50000 || strings.Contains(r.Msg, "审批链上") || strings.Contains(r.Msg, "injected") {
 		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
 	}
-	for _, row := range app.auditCommandsLike("open.release.approve") {
+	rows := app.auditCommandsLike("open.release.approve")
+	if len(rows) != 1 || !strings.Contains(rows[0], "审批链读不出来") {
+		t.Errorf("每次调用都要留痕: %v", rows)
+	}
+	for _, row := range rows {
 		if strings.Contains(row, "不在") || strings.Contains(row, "injected") {
 			t.Errorf("审计: %s", row)
 		}

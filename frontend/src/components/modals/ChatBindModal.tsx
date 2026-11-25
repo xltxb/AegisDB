@@ -63,7 +63,7 @@ const POLL_MS = 3000
 
 /** Telegram 的深链,点开就把码带给机器人;别的渠道、或机器人名不是个用户名时没有。名字来自平台,不直接拼进地址。 */
 function deepLink(channel: string, { code, botName }: ChatBindCode): string {
-  if (channel !== 'telegram' || !/^[A-Za-z0-9_]+$/.test(botName)) return ''
+  if (channel !== 'telegram' || !/^[A-Za-z0-9_]{5,32}$/.test(botName ?? '')) return ''
   return `https://t.me/${botName}?start=${encodeURIComponent(code)}`
 }
 

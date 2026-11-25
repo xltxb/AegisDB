@@ -511,29 +511,46 @@ func TestChatClick_ResentCardReplacesToken(t *testing.T) {
 
 // 两个收件人同时点:恰好一个成功,审计恰好一条;输的一方得到已处理与结论卡片。
 func TestChatClick_ConcurrentRecipients(t *testing.T) {
-	app, lark, _ := cardApp(t)
+	app, lark, tg := cardApp(t)
 	admin := app.login(cardAdmin, "aegisdb123")
+	for _, email := range []string{owner1, owner2} {
+		app.bindRow(email, chat.Telegram, tgBot)
+	}
+	tgClick := func(email, token string, act chat.Action) chat.ClickResult {
+		return app.svc.OnClick(context.Background(), chat.Click{Channel: chat.Telegram, BotID: tgBot,
+			AccountID: "telegram:" + email, Token: token, Action: act})
+	}
 	for i := 0; i < 20; i++ {
 		ap := app.submitProdHighRisk(admin)
 		app.sweepCards()
 		t1, t2 := cardToken(t, lark, ap.ApNo, "lark:"+owner1), cardToken(t, lark, ap.ApNo, "lark:"+owner2)
+		peer, clickPeer, via := owner2, app.larkClick, "lark"
+		// 一半的轮次里另一方在 Telegram 上;其中一半还是同一个人
+		if i%4 >= 2 {
+			clickPeer, via = tgClick, "telegram"
+			if i%8 >= 4 {
+				peer = owner1
+			}
+			t2 = cardToken(t, tg, ap.ApNo, "telegram:"+peer)
+		}
 		second, secondStatus := chat.ActConfirm, model.StatusApproved
 		if i%2 == 1 {
 			second, secondStatus = chat.ActReject, model.StatusRejected
 		}
 		start, r1, r2 := make(chan struct{}), make(chan chat.ClickResult, 1), make(chan chat.ClickResult, 1)
 		go func() { <-start; r1 <- app.larkClick(owner1, t1, chat.ActConfirm) }()
-		go func() { <-start; r2 <- app.larkClick(owner2, t2, second) }()
+		go func() { <-start; r2 <- clickPeer(peer, t2, second) }()
 		close(start)
 		a, b := <-r1, <-r2
 		if a.OK == b.OK {
 			t.Fatalf("第 %d 轮:应恰好一个成功 %+v %+v", i, a, b)
 		}
-		want, loser := model.StatusApproved, b
+		want, loser, wantVia := model.StatusApproved, b, "lark"
 		if b.OK {
-			want, loser = secondStatus, a
+			want, loser, wantVia = secondStatus, a, via
 		}
 		eq(t, app.ticket(ap.ID).Status, want, "状态")
+		eq(t, app.ticket(ap.ID).DecidedVia, wantVia, "渠道")
 		if loser.Toast != toastHandled || loser.Card == nil || loser.Card.Outcome == "" {
 			t.Errorf("输的一方: %+v", loser)
 		}
@@ -820,6 +837,12 @@ func TestChatClick_LogsStaleCards(t *testing.T) {
 	app.repo.DB().Model(&model.ChatCard{}).Where("approval_id = ?", id).Update("bot_id", "cli_old")
 	click(owner2, peer)
 	eq(t, lines("other bot"), 1, "旧机器人")
+	// 换一个渠道另算
+	app.svc.SetChatTransport(chat.Telegram, newFakeChat(tgBot, "aegis_bot"))
+	app.bindRow(owner1, chat.Telegram, tgBot)
+	app.svc.OnClick(context.Background(), chat.Click{Channel: chat.Telegram, BotID: tgBot, AccountID: "telegram:" + owner1,
+		Token: strings.Repeat("A", 32), Action: chat.ActConfirm})
+	eq(t, lines("unknown token"), 3, "另一个渠道")
 	out := buf.String()
 	if strings.Contains(out, token) || strings.Contains(out, peer) || strings.Contains(out, strings.Repeat("A", 32)) ||
 		strings.Count(out, "level=WARN") != strings.Count(out, "user=") || !strings.Contains(out, "user="+itoa(app.storedUser(owner1).ID)) {
@@ -924,7 +947,7 @@ func TestChatClick_OnText(t *testing.T) {
 	app, _ := chatApp(t)
 	var h chat.Handler = app.svc
 	code := app.bindCode(app.login("chenhao@aegisdb.io", "aegisdb123"))
-	if got := h.OnText(context.Background(), chat.Lark, chatBot, "ou_1", "oc_1", "/start "+code); !strings.Contains(got, boundReply) {
+	if got, bound := h.OnText(context.Background(), chat.Lark, chatBot, "ou_1", "oc_1", "/start "+code); !bound || !strings.Contains(got, boundReply) {
 		t.Errorf("回复: %q", got)
 	}
 	if rows := app.chatRows(app.storedUser("chenhao@aegisdb.io").ID); len(rows) != 1 || rows[0].AccountID != "ou_1" || rows[0].ChatID != "oc_1" {
@@ -936,7 +959,11 @@ func TestChatClick_OnText(t *testing.T) {
 func TestChatClick_OnTextRepliesAreLimited(t *testing.T) {
 	app, _ := chatApp(t)
 	say := func(account, text string) string {
-		return app.svc.OnText(context.Background(), chat.Lark, chatBot, account, "oc_1", text)
+		reply, bound := app.svc.OnText(context.Background(), chat.Lark, chatBot, account, "oc_1", text)
+		if bound != strings.Contains(reply, boundReply) {
+			t.Errorf("bound=%v 而回的是 %q", bound, reply)
+		}
+		return reply
 	}
 	replies := 0
 	for range 40 {

@@ -23,17 +23,17 @@ var _ chat.Handler = (*Services)(nil)
 
 // OnText 处理一条私聊文字:只有兑换绑定码这一件事。没绑上的回话有频控:谁都能给机器人发消息,不能让它跟着
 // 刷,把发卡片要用的平台额度花在这上面。
-func (s *Services) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) string {
-	reply, bound := s.redeemChatBindCode(ch, botID, accountID, chatID, text)
+func (s *Services) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) (reply string, bound bool) {
+	reply, bound = s.redeemChatBindCode(ch, botID, accountID, chatID, text)
 	if bound {
-		return reply
+		return reply, true
 	}
 	who, now := chatAccount{ch, botID, accountID}, time.Now()
 	if s.chatReplies.locked(who, now) {
-		return ""
+		return "", false
 	}
 	s.chatReplies.fail(who, now)
-	return reply
+	return reply, false
 }
 
 // OnClick 处理一次按钮点击。
@@ -85,7 +85,7 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 	}
 	// 有身份却没资格的点击值得留一行;认不出来的不记,不然谁都能刷日志。任何一行都不带令牌。
 	log := func(why string) {
-		if s.chatRefusals.fail(chatRefusal{u.ID, why}, time.Now()) {
+		if s.chatRefusals.fail(chatRefusal{c.Channel, u.ID, cardID, why}, time.Now()) {
 			slog.Warn("卡片点击被拒", "channel", c.Channel, "user", u.ID, "card", cardID, "why", why)
 		}
 	}
@@ -232,10 +232,11 @@ func chatTokenShaped(token string) bool {
 	return err == nil && len(b) == chatTokenBytes && len(token) == base64.RawURLEncoding.EncodedLen(chatTokenBytes)
 }
 
-// chatRefusal 是被拒点击的日志的频控键:同一个人、同一种原因。
+// chatRefusal 是被拒点击的日志的频控键:同一个渠道上、同一个人、同一张卡片(认不出的是 0)、同一种原因。
 type chatRefusal struct {
-	user int64
-	why  string
+	ch         chat.Channel
+	user, card int64
+	why        string
 }
 
 // chatAnswerSlack 是扫描在 chat.CardWithin 之外多等的:留给这里读库,以及平台晚一点才落定的更新。

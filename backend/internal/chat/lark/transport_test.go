@@ -523,14 +523,14 @@ type fakeHandler struct {
 	click  func(ctx context.Context, c chat.Click) chat.ClickResult
 }
 
-func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) string {
+func (h *fakeHandler) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) (string, bool) {
 	h.mu.Lock()
 	h.texts = append(h.texts, strings.Join([]string{string(ch), botID, accountID, chatID, text}, "|"))
 	h.mu.Unlock()
 	if h.text != nil {
-		return h.text(text)
+		return h.text(text), false
 	}
-	return "reply to " + text
+	return "reply to " + text, false
 }
 
 func (h *fakeHandler) OnClick(ctx context.Context, c chat.Click) chat.ClickResult {

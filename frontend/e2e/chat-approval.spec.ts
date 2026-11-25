@@ -281,9 +281,9 @@ test.describe('审批机器人绑定', () => {
     await expect(link).toHaveCount(0)
   })
 
-  for (const botName of ['', 'evil/../x?start=1#', 'a b']) {
+  for (const botName of ['', 'evil/../x?start=1#', 'a b', 'abcd', 'a'.repeat(33), null, undefined] as string[]) {
     test(`Telegram:机器人名是「${botName}」时不给链接,改说把码发给它`, async ({ page }) => {
-      await stubBind(page, { list: [{ ...tgUnbound, botName }], botName })
+      await stubBind(page, { list: [{ ...tgUnbound, botName }], code: () => envelope({ code: CODE, expiresAt: '2026-11-25T12:00:00Z', botName }) })
       await openBind(page)
       await page.getByTestId('chat-gen-telegram').click()
       await expect(page.getByTestId('chat-code')).toHaveText(CODE)
