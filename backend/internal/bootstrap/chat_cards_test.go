@@ -661,6 +661,68 @@ func TestChatCards_OtherBotClosedWithoutUpdate(t *testing.T) {
 	eq(t, app.cardOf(id, owner1).State, model.ChatCardClosed, "收场")
 }
 
+// 机器人还没就绪(标识要连上才知道):排着的、等收敛的都原样等着,不算失败,也不当成别的机器人的收场。
+func TestChatCards_NotReadyBotWaits(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	sent, _ := app.submitCommand()
+	app.sweepCards()
+	eq(t, app.cancel(app.login(cardAdmin, "aegisdb123"), sent).Code, 0, "撤回")
+	queued, _ := app.submitCommand()
+	lark.setBot("", "")
+	for range 3 {
+		app.dueCards()
+		app.sweepCards()
+	}
+	for what, want := range map[int64]string{sent: model.ChatCardSent, queued: model.ChatCardQueued} {
+		for _, row := range app.cardsOf(what) {
+			if row.State != want || row.Attempts != 0 || row.LastError != "" {
+				t.Errorf("没就绪时动了: %+v", row)
+			}
+		}
+	}
+	if n := len(lark.updates()); n != 0 {
+		t.Errorf("没就绪却更新了 %d 次", n)
+	}
+	lark.setBot(chatBot, "AegisBot")
+	app.dueCards()
+	app.sweepCards()
+	eq(t, app.cardOf(sent, owner1).State, model.ChatCardClosed, "就绪之后收敛")
+	eq(t, app.cardOf(queued, owner1).State, model.ChatCardSent, "就绪之后发出")
+}
+
+// 平台说「过这么久再来」:这张按它说的等(有上限),这一轮不再发别的;它没说那么久的,退避照旧。
+func TestChatCards_RetryAfter(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	for _, c := range []struct{ asked, min, max time.Duration }{
+		{time.Second, 4 * time.Second, 5 * time.Second}, {40 * time.Second, 39 * time.Second, 40 * time.Second},
+		{time.Hour, 9 * time.Minute, 10 * time.Minute},
+	} {
+		lark.setErrs(retryLater(c.asked), nil)
+		tries := 0
+		lark.setHooks(func(context.Context, string, chat.Card) error { tries++; return nil }, nil)
+		id, _ := app.submitCommand()
+		app.sweepCards()
+		eq(t, tries, 1, "这一轮不再发别的")
+		waits := 0
+		for _, row := range app.cardsOf(id) {
+			if row.Attempts == 0 {
+				continue
+			}
+			waits++
+			if left := time.Until(row.NextAt); left < c.min || left > c.max {
+				t.Errorf("要求等 %s,实际 %s", c.asked, left)
+			}
+		}
+		eq(t, waits, 1, "只试了一张")
+		app.repo.DB().Where("approval_id = ?", id).Delete(&model.ChatCard{})
+	}
+}
+
+type retryLater time.Duration
+
+func (e retryLater) Error() string             { return "too many requests" }
+func (e retryLater) RetryAfter() time.Duration { return time.Duration(e) }
+
 // 超时升级不另发私聊。
 func TestChatCards_EscalationAddsNone(t *testing.T) {
 	app, lark, _ := cardApp(t)

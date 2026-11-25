@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"aegisdb/internal/apimsg"
+	"aegisdb/internal/chat"
 	"aegisdb/internal/dto"
 	"aegisdb/internal/gateway"
 	"aegisdb/internal/middleware"
@@ -32,6 +33,8 @@ var encryptedSettingKeys = map[string]bool{
 	"approval.external.token":          true,
 	"approval.external.callbackSecret": true,
 	"chat.lark.appSecret":              true,
+	"chat.telegram.botToken":           true,
+	"chat.telegram.proxyToken":         true,
 }
 
 // ---------------------------------------------------------------- Connections
@@ -1301,7 +1304,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		return
 	}
 	// 聊天审批机器人:启用时必填项要齐,不齐这次一项都不存。
-	chatStored, err := h.Repo.SettingsByPrefix(chatLarkPrefix)
+	chatStored, err := h.Repo.SettingsByPrefix("chat.")
 	if err != nil {
 		slog.Error("read chat settings failed", "err", err)
 		resp.Fail(c, resp.CodeInternalError, "保存失败")
@@ -1451,14 +1454,35 @@ func (h *Handler) checkSSOSettings(body map[string]any) (string, error) {
 		next.Enabled, next.BaseURL, next.CookieName), nil
 }
 
-const chatLarkPrefix = "chat.lark."
+// chatRequired 是各渠道开着时必须有的设置。
+var chatRequired = map[chat.Channel][]struct {
+	key     string
+	missing error
+}{
+	chat.Lark: {
+		{"appId", errors.New("启用 Lark 审批机器人必须填写 App ID")},
+		{"appSecret", errors.New("启用 Lark 审批机器人必须填写 App Secret")},
+	},
+	chat.Telegram: {
+		{"botToken", errors.New("启用 Telegram 审批机器人必须填写 Bot Token")},
+	},
+}
 
-// checkChatSettings 按「存进去之后」的样子核对聊天审批机器人:开着就要有 App ID 与 App Secret。
+// checkChatSettings 按「存进去之后」的样子核对聊天审批机器人:开着的渠道必填项要齐。
 //
-// 这次没改到 chat.lark.* 的不核对:设置页每次整包发回来,库里一份坏配置不该挡住改别的设置。关着的
-// 不核对,所以关掉永远放行。
+// 这次没改到的渠道不核对:设置页每次整包发回来,库里一份坏配置不该挡住改别的设置。关着的不核对,所以关掉
+// 永远放行。
 func checkChatSettings(values map[string]any, stored map[string]string) error {
-	const prefix = chatLarkPrefix
+	for _, ch := range chat.Channels {
+		if err := checkChatChannel(ch, values, stored); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkChatChannel(ch chat.Channel, values map[string]any, stored map[string]string) error {
+	prefix := "chat." + string(ch) + "."
 	next, changed := map[string]string{}, false
 	for k, v := range stored {
 		next[k] = v
@@ -1482,11 +1506,10 @@ func checkChatSettings(values map[string]any, stored map[string]string) error {
 	if !changed || next[prefix+"enabled"] != "true" {
 		return nil
 	}
-	if !settingHasValue(next[prefix+"appId"]) {
-		return apimsg.Errorf("启用 Lark 审批机器人必须填写 App ID")
-	}
-	if !settingHasValue(next[prefix+"appSecret"]) {
-		return apimsg.Errorf("启用 Lark 审批机器人必须填写 App Secret")
+	for _, r := range chatRequired[ch] {
+		if !settingHasValue(next[prefix+r.key]) {
+			return r.missing
+		}
 	}
 	return nil
 }

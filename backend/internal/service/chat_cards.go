@@ -38,6 +38,7 @@ const (
 	chatErrWidth       = 255  // tbl_chat_card.last_error 的列宽
 	chatTokenBytes     = 24   // 192 位;base64url 后 32 个字符,连动作一起放得进 Telegram 的 64 字节
 	chatDecisionSettle = 5 * time.Second
+	chatRetryMax       = 10 * time.Minute // 平台要求等再久也只等这么久
 )
 
 // chatBackoff 是第 n 次失败之后等多久再试。
@@ -327,8 +328,8 @@ func (s *Services) sweepChatChannel(ctx context.Context, ch chat.Channel, t chat
 			if ctx.Err() != nil || time.Since(started) > chatSweepBudget {
 				return
 			}
-			// 超时多半是整个渠道不通,这一轮不再逐张去等。
-			if errors.Is(do(&rows[i]), context.DeadlineExceeded) {
+			// 超时多半是整个渠道不通,平台嫌太频繁则发谁都一样:这一轮不再逐张去试。
+			if err := do(&rows[i]); errors.Is(err, context.DeadlineExceeded) || chat.RetryAfter(err) > 0 {
 				return
 			}
 		}
@@ -443,13 +444,14 @@ func (s *Services) convergeChatCard(ctx context.Context, t chat.Transport, bot s
 }
 
 // chatCallFailed 记下一次失败;次数用完就不再试。下次时间从此刻重新算:调用之前记的那个没算上调用本身
-// 花掉的时间,一次拖到超时的调用会让重试紧接着就来。
+// 花掉的时间,一次拖到超时的调用会让重试紧接着就来。平台要求等得更久的按它的,有上限。
 func (s *Services) chatCallFailed(row *model.ChatCard, ap *model.Approval, attempts int, what string, err error) {
 	text, state := chatErrText(err), row.State
 	if attempts >= chatMaxAttempts {
 		state = model.ChatCardFailed
 	}
-	s.setChatCard(row, state, map[string]any{"last_error": text, "next_at": time.Now().Add(chatRetryAfter(attempts))})
+	wait := max(chatRetryAfter(attempts), min(chat.RetryAfter(err), chatRetryMax))
+	s.setChatCard(row, state, map[string]any{"last_error": text, "next_at": time.Now().Add(wait)})
 	slog.Warn(what, "channel", row.Channel, "apNo", ap.ApNo, "user", row.UserID, "attempt", attempts, "err", text)
 }
 

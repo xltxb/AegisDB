@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,8 @@ const (
 	chatStatusURL = "/api/v1/settings/chat-status"
 	chatTestURL   = "/api/v1/settings/chat-test"
 	larkSecret    = "lark-app-secret-0123456789"
+	tgToken       = "123456789:AAtelegram-bot-token_0123456789abc"
+	tgProxy       = "socks5://pxuser:px-pass-0123456789@proxy.corp.example:1080"
 )
 
 // runChat 是能观察 Run 的渠道替身。
@@ -51,8 +54,12 @@ func runChatApp(t *testing.T, shape func(*runChat)) (*testApp, func() []*runChat
 	app := newTestApp(t)
 	var mu sync.Mutex
 	var built []*runChat
-	app.svc.SetChatFactory(func(_ chat.Channel, cfg service.ChatConfig) chat.Transport {
-		f := &runChat{fakeChat: newFakeChat(cfg.AppID, "AegisBot"), cfg: cfg, stopped: make(chan struct{})}
+	app.svc.SetChatFactory(func(ch chat.Channel, cfg service.ChatConfig) chat.Transport {
+		bot := cfg.AppID
+		if ch == chat.Telegram {
+			bot, _, _ = strings.Cut(cfg.BotToken, ":")
+		}
+		f := &runChat{fakeChat: newFakeChat(bot, "AegisBot"), cfg: cfg, stopped: make(chan struct{})}
 		if shape != nil {
 			shape(f)
 		}
@@ -74,6 +81,10 @@ func runChatApp(t *testing.T, shape func(*runChat)) (*testApp, func() []*runChat
 
 func larkOn(appID, secret string) map[string]any {
 	return map[string]any{"chat.lark.enabled": true, "chat.lark.region": "lark", "chat.lark.appId": appID, "chat.lark.appSecret": secret}
+}
+
+func tgOn(token string) map[string]any {
+	return map[string]any{"chat.telegram.enabled": true, "chat.telegram.botToken": token}
 }
 
 func (a *testApp) saveSettings(token string, body map[string]any) apiResp {
@@ -103,9 +114,14 @@ func (a *testApp) chatStatus(token string) map[string]chatStatusView {
 // waitChat 等 Lark 变成某个状态。时限短于轮询设置的 5 秒:等到的是保存时那一声,不是轮询。
 func (a *testApp) waitChat(token, state string) chatStatusView {
 	a.t.Helper()
+	return a.waitChannel(token, chat.Lark, state)
+}
+
+func (a *testApp) waitChannel(token string, ch chat.Channel, state string) chatStatusView {
+	a.t.Helper()
 	var st chatStatusView
 	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(5 * time.Millisecond) {
-		if st = a.chatStatus(token)["lark"]; st.State == state {
+		if st = a.chatStatus(token)[string(ch)]; st.State == state {
 			return st
 		}
 	}
@@ -130,6 +146,7 @@ func TestChatSettings_Seeds(t *testing.T) {
 	for k, want := range map[string]string{
 		"chat.cardLang": `"zh"`, "chat.lark.enabled": "false", "chat.lark.region": `"feishu"`,
 		"chat.lark.appId": `""`, "chat.lark.appSecret": `""`,
+		"chat.telegram.enabled": "false", "chat.telegram.botToken": `""`, "chat.telegram.includeSql": "false", "chat.telegram.proxyToken": `""`,
 	} {
 		eq(t, app.settingRaw(k), want, k)
 	}
@@ -155,14 +172,26 @@ func TestChatSettings_RefusedSavesStoreNothing(t *testing.T) {
 		{"开关不是布尔", "chat.lark.enabled", map[string]any{"chat.lark.enabled": "true"}},
 		{"appId 有怪字符", "chat.lark.appId", map[string]any{"chat.lark.appId": "cli_a?x=1"}},
 		{"appId 太长", "chat.lark.appId", map[string]any{"chat.lark.appId": strings.Repeat("a", 65)}},
-		{"Telegram 的键还没有", "chat.telegram.enabled", map[string]any{"chat.telegram.enabled": true}},
+		{"Telegram 启用、从没存过令牌", "Bot Token", map[string]any{"chat.telegram.enabled": true}},
+		{"Telegram 启用、令牌为空串", "Bot Token", tgOn("")},
+		{"Telegram 启用、令牌全是空白", "Bot Token", tgOn(" \n")},
+		{"Telegram 启用、同时清除令牌", "Bot Token", map[string]any{"chat.telegram.enabled": true, "chat.telegram.botToken": nil}},
+		{"Telegram 令牌不像", "chat.telegram.botToken", tgOn("not-a-token-do-not-echo")},
+		{"Telegram 令牌能拼坏地址", "chat.telegram.botToken", tgOn(tgToken + "/../do-not-echo")},
+		{"Telegram 带 SQL 不是布尔", "chat.telegram.includeSql", map[string]any{"chat.telegram.includeSql": "yes"}},
+		{"Telegram 开关不是布尔", "chat.telegram.enabled", map[string]any{"chat.telegram.enabled": 1}},
+		{"代理的协议不认识", "chat.telegram.proxyToken", map[string]any{"chat.telegram.proxyToken": "ftp://do-not-echo:1"}},
+		{"代理用 socks4", "chat.telegram.proxyToken", map[string]any{"chat.telegram.proxyToken": "socks4://do-not-echo:1"}},
+		{"代理没有协议", "chat.telegram.proxyToken", map[string]any{"chat.telegram.proxyToken": "do-not-echo:3128"}},
+		{"代理没有主机", "chat.telegram.proxyToken", map[string]any{"chat.telegram.proxyToken": "http://"}},
+		{"代理不是字符串", "chat.telegram.proxyToken", map[string]any{"chat.telegram.proxyToken": 7}},
 	} {
 		body := map[string]any{"notify.larkChannel": "x-" + c.what}
 		for k, v := range c.body {
 			body[k] = v
 		}
 		r := app.saveSettings(admin, body)
-		if r.Code != 40001 || !strings.Contains(r.Msg, c.msg) {
+		if r.Code != 40001 || !strings.Contains(r.Msg, c.msg) || strings.Contains(r.Msg, "do-not-echo") {
 			t.Errorf("%s: code=%d msg=%s", c.what, r.Code, r.Msg)
 		}
 		if now := app.chatRowsRaw(); now != before {
@@ -236,6 +265,123 @@ func TestChatSettings_SecretAndMergedChecks(t *testing.T) {
 	eq(t, app.saveSettings(admin, map[string]any{"notify.larkChannel": "ops"}).Code, 0, "改别的")
 	eq(t, app.saveSettings(admin, map[string]any{"chat.cardLang": "en"}).Code, 0, "改语言")
 	eq(t, app.saveSettings(admin, map[string]any{"chat.lark.enabled": false}).Code, 0, "关掉")
+}
+
+// Telegram 的令牌与代理都是机密:落库是密文,接口、审计、状态里都没有。代理空 = 没有,null 才清掉。
+func TestChatSettings_TelegramSecrets(t *testing.T) {
+	app, built := runChatApp(t, nil)
+	admin := app.login(cardAdmin, "aegisdb123")
+	eq(t, app.saveSettings(admin, map[string]any{"chat.telegram.botToken": " " + tgToken + "\n", "chat.telegram.proxyToken": tgProxy + " "}).Code, 0, "先存机密")
+	eq(t, app.saveSettings(admin, map[string]any{"chat.telegram.enabled": true, "chat.telegram.botToken": "", "chat.telegram.proxyToken": ""}).Code, 0, "启用")
+	st := app.waitChannel(admin, chat.Telegram, "connected")
+	if !st.Enabled || st.BotName != "AegisBot" {
+		t.Errorf("状态: %+v", st)
+	}
+	if got := built(); len(got) != 1 || got[0].cfg != (service.ChatConfig{Enabled: true, BotToken: tgToken, Proxy: tgProxy}) {
+		t.Fatalf("渠道配置: %+v", got[0].cfg)
+	}
+	get := app.do(http.MethodGet, settingsURL, admin, nil)
+	var view struct {
+		Settings   map[string]string `json:"settings"`
+		SecretsSet map[string]bool   `json:"secretsSet"`
+	}
+	if err := json.Unmarshal(get.Data, &view); err != nil {
+		t.Fatal(err)
+	}
+	var audits []string
+	for _, like := range []string{"chat.", "telegram", "px-pass", "AAtelegram", "proxy.corp"} {
+		audits = append(audits, app.auditCommandsLike(like)...)
+	}
+	status := app.do(http.MethodGet, chatStatusURL, admin, nil)
+	for k, want := range map[string]string{"chat.telegram.botToken": tgToken, "chat.telegram.proxyToken": tgProxy} {
+		var stored string
+		if err := json.Unmarshal([]byte(app.settingRaw(k)), &stored); err != nil {
+			t.Fatal(err)
+		}
+		if plain, err := crypto.DecryptSecret(stored); !strings.HasPrefix(stored, "enc:") || err != nil || plain != want {
+			t.Errorf("%s 存成 %s(%v)", k, stored, err)
+		}
+		if _, leaked := view.Settings[k]; leaked || !view.SecretsSet[k] {
+			t.Errorf("GET /settings: %s", get.Data)
+		}
+		for _, where := range []string{string(get.Data), string(status.Data), strings.Join(audits, "\n")} {
+			for _, bad := range []string{want, stored, "px-pass", "proxy.corp", "AAtelegram"} {
+				if strings.Contains(where, bad) {
+					t.Errorf("%q 漏在 %s", bad, where)
+				}
+			}
+		}
+		if rows := app.auditCommandsLike(k + "=已修改"); len(rows) != 1 {
+			t.Errorf("审计: %v", rows)
+		}
+	}
+
+	before := app.chatRowsRaw()
+	r := app.saveSettings(admin, map[string]any{"chat.telegram.botToken": nil})
+	if r.Code != 40001 || !strings.Contains(r.Msg, "Bot Token") || r.MsgRef == nil {
+		t.Errorf("开着时清令牌: %d %s", r.Code, r.Msg)
+	}
+	eq(t, app.chatRowsRaw(), before, "没存")
+	// 清掉代理:换连接,直连
+	eq(t, app.saveSettings(admin, map[string]any{"chat.telegram.proxyToken": nil}).Code, 0, "清代理")
+	eq(t, app.settingRaw("chat.telegram.proxyToken"), `""`, "清掉了")
+	for end := time.Now().Add(3 * time.Second); len(built()) < 2; time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("没有换连接")
+		}
+	}
+	eq(t, built()[1].cfg, service.ChatConfig{Enabled: true, BotToken: tgToken}, "直连")
+	// 另一个渠道的坏配置互不牵连;关掉、同时清掉放行
+	app.setting("chat.lark.enabled", "true")
+	eq(t, app.saveSettings(admin, map[string]any{"chat.telegram.enabled": false, "chat.telegram.botToken": nil}).Code, 0, "关掉")
+	app.waitChannel(admin, chat.Telegram, "off")
+}
+
+// 从设置页打开「带 SQL」:只影响之后发的卡片,连接不动。
+func TestChatSettings_IncludeSQLAffectsLaterCardsOnly(t *testing.T) {
+	app, built := runChatApp(t, nil)
+	admin := app.login(cardAdmin, "aegisdb123")
+	bot, _, _ := strings.Cut(tgToken, ":")
+	app.bindRow(owner1, chat.Telegram, bot)
+	eq(t, app.saveSettings(admin, tgOn(tgToken)).Code, 0, "启用")
+	app.waitChannel(admin, chat.Telegram, "connected")
+	tg := built()[0]
+	early, _ := app.submitCommand()
+	app.sweepCards()
+	eq(t, app.saveSettings(admin, map[string]any{"chat.telegram.includeSql": true}).Code, 0, "打开")
+	app.submitCommand()
+	app.sweepCards()
+	sent := tg.sends()
+	if len(sent) != 2 || sent[0].Card.Statement != "" || !sent[0].Card.Partial || !strings.Contains(sent[1].Card.Statement, "DROP TABLE") || sent[1].Card.Reason == "" {
+		t.Fatalf("发出的: %+v", sent)
+	}
+	eq(t, app.cancel(admin, early).Code, 0, "撤回")
+	app.dueCards()
+	app.sweepCards()
+	ups := tg.updates()
+	if len(ups) != 1 || ups[0].Card.Outcome != "已撤回" || ups[0].Card.Statement != "" || ups[0].Card.Reason != "" {
+		t.Errorf("先前那张的更新: %+v", ups)
+	}
+	if rows := app.auditCommandsLike("chat.telegram.includeSql=true"); len(rows) != 1 {
+		t.Errorf("审计: %v", rows)
+	}
+	if n := len(built()); n != 1 {
+		t.Errorf("换了连接:%d", n)
+	}
+}
+
+// 绑定页要机器人的用户名去拼 t.me 链接:列表与绑定码的应答里都有。
+func TestChatBind_TelegramBotName(t *testing.T) {
+	app := newTestApp(t)
+	app.svc.SetChatTransport(chat.Telegram, newFakeChat("42", "aegis_bot"))
+	token := app.login(cardAdmin, "aegisdb123")
+	if _, list := app.chatBindings(token); len(list) != 1 || list[0].Channel != "telegram" || list[0].BotName != "aegis_bot" {
+		t.Errorf("列表: %+v", list)
+	}
+	r := app.do(http.MethodPost, "/api/v1/auth/chat-bindings/telegram/code", token, map[string]any{})
+	if r.Code != 0 || !strings.Contains(string(r.Data), `"botName":"aegis_bot"`) {
+		t.Errorf("绑定码: %d %s", r.Code, r.Data)
+	}
 }
 
 // 保存后数秒内生效:启用就连上,换应用就取消旧连接、换上新的,关掉就撤下。改无关的设置不动它。
@@ -378,6 +524,37 @@ func TestChatTest_SendsToSelf(t *testing.T) {
 	eq(t, app.do(http.MethodPost, chatTestURL, admin, map[string]any{"channel": "lark"}).Code, 42900, "太频繁")
 	if n := len(lark.sends()); n != 1 {
 		t.Errorf("发了 %d 张", n)
+	}
+}
+
+// 频控按人、按渠道分开算;同时来的几次只放行一次。
+func TestChatTest_LimitIsPerChannelAndAtomic(t *testing.T) {
+	app, lark, tg := cardApp(t)
+	app.bindRow(cardAdmin, chat.Telegram, tgBot)
+	u := app.storedUser(cardAdmin)
+	var ok atomic.Int64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			switch err := app.svc.SendChatTest(context.Background(), u, chat.Lark); {
+			case err == nil:
+				ok.Add(1)
+			case !errors.Is(err, service.ErrChatTestTooOften):
+				t.Error(err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	if ok.Load() != 1 || len(lark.sends()) != 1 {
+		t.Errorf("放行了 %d 次,发了 %d 张", ok.Load(), len(lark.sends()))
+	}
+	if err := app.svc.SendChatTest(context.Background(), u, chat.Telegram); err != nil || len(tg.sends()) != 1 {
+		t.Errorf("另一个渠道不受影响: %v", err)
 	}
 }
 

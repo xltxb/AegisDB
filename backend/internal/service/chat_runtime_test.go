@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
@@ -26,6 +27,8 @@ import (
 
 	"aegisdb/internal/chat"
 	"aegisdb/internal/chat/lark"
+	"aegisdb/internal/chat/telegram"
+	"aegisdb/internal/dto"
 	"aegisdb/internal/model"
 	"aegisdb/pkg/crypto"
 )
@@ -88,7 +91,7 @@ func runApp(t *testing.T, tune func(*chatTimings), factory func(r *runRig, cfg C
 	s, _ := cardDB(t)
 	r := &runRig{Services: s, t: t}
 	s.SetChatFactory(func(ch chat.Channel, cfg ChatConfig) chat.Transport {
-		if ch != chat.Lark {
+		if (ch == chat.Telegram) != (cfg.BotToken != "") || (ch == chat.Lark) != (cfg.AppID != "") {
 			t.Errorf("不该建渠道 %s", ch)
 		}
 		return factory(r, cfg)
@@ -129,7 +132,7 @@ func (r *runRig) transports() []*runTransport {
 
 func (r *runRig) set(key string, v any) {
 	r.t.Helper()
-	if key == "chat.lark.appSecret" {
+	if key == "chat.lark.appSecret" || strings.HasPrefix(key, "chat.telegram.") && strings.HasSuffix(key, "Token") {
 		enc, err := crypto.EncryptSecret(v.(string))
 		if err != nil {
 			r.t.Fatal(err)
@@ -571,6 +574,236 @@ func TestRunChat_BackoffResetsOnlyWhenStable(t *testing.T) {
 				t.Errorf("400ms 里重连了 %d 次", n)
 			}
 		})
+	}
+}
+
+// 轮询的渠道每一轮都报一次「已连接」,连上的时长要从第一次算起;离开已连接再回来,几段加在一起。
+func TestRunChat_UptimeAccumulates(t *testing.T) {
+	for name, report := range map[string]func(func(chat.State, string)){
+		"一直连着,反复报": func(on func(chat.State, string)) {
+			for range 6 {
+				on(chat.StateConnected, "")
+				time.Sleep(10 * time.Millisecond)
+			}
+		},
+		"断断续续": func(on func(chat.State, string)) {
+			for range 6 {
+				on(chat.StateConnected, "")
+				time.Sleep(10 * time.Millisecond)
+				on(chat.StateError, "too many requests")
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := runApp(t, func(ct *chatTimings) {
+				ct.backoff, ct.backoffMax, ct.stable = time.Millisecond, time.Hour, 40*time.Millisecond
+			}, scripted(func(_ context.Context, _ int, on func(chat.State, string)) error {
+				report(on)
+				return errors.New("closed")
+			}))
+			r.enable("cli_a")
+			// 清零:每轮约 61ms;不清零:第 11 次之前光等就要 1+2+…+512 ms 以上
+			time.Sleep(1100 * time.Millisecond)
+			if n := r.transports()[0].count(); n < 11 {
+				t.Errorf("退避没有清零:重连了 %d 次", n)
+			}
+		})
+	}
+}
+
+// 重连期间看得到上一次为什么断;连上就清掉,换了配置也清掉。
+func TestRunChat_KeepsReasonWhileReconnecting(t *testing.T) {
+	gate := make(chan struct{})
+	r := runApp(t, nil, scripted(func(ctx context.Context, nth int, on func(chat.State, string)) error {
+		on(chat.StateConnecting, "")
+		if nth == 1 {
+			on(chat.StateConnected, "")
+			return errors.New("closed by peer")
+		}
+		select {
+		case <-gate:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		return stayUp(ctx, nth, on)
+	}))
+	r.enable("cli_a")
+	waitFor(t, "第二次在连", func() bool { tr := r.transports(); return len(tr) == 1 && tr[0].count() == 2 })
+	waitFor(t, "带着原因的「连接中」", func() bool {
+		st := r.ChatStatus()[chat.Lark]
+		return st.State == chat.StateConnecting && st.Detail == "closed by peer"
+	})
+	gate <- struct{}{}
+	r.waitState(chat.StateConnected)
+	if d := r.ChatStatus()[chat.Lark].Detail; d != "" {
+		t.Errorf("连上之后还留着原因: %s", d)
+	}
+}
+
+const runToken = "987654321:AAH_TOKEN-do-not-leak-0123456789xyz"
+
+func (r *runRig) tgStatus() dto.ChatStatus { return r.ChatStatus()[chat.Telegram] }
+
+// Telegram 的配置:机密解了密,代理空着就是没有;解不开、缺令牌、格式不对(直接改了库)不连,说明原因。
+func TestRunChat_TelegramConfig(t *testing.T) {
+	r := runApp(t, nil, scripted(stayUp))
+	logs := captureLogs(t, nil)
+	r.set("chat.telegram.botToken", runToken)
+	r.set("chat.telegram.proxyToken", "socks5://u:px-do-not-leak@10.0.0.5:1080")
+	r.set("chat.telegram.enabled", true)
+	r.ReloadChat()
+	waitFor(t, "连上", func() bool { return r.tgStatus().State == chat.StateConnected })
+	if got := r.transports(); len(got) != 1 || got[0].cfg != (ChatConfig{Enabled: true, BotToken: runToken, Proxy: "socks5://u:px-do-not-leak@10.0.0.5:1080"}) {
+		t.Fatalf("配置: %+v", got[0].cfg)
+	}
+	if st := r.ChatStatus()[chat.Lark]; st.State != chat.StateOff || st.Enabled {
+		t.Errorf("另一个渠道: %+v", st)
+	}
+	problem := func(what string) {
+		t.Helper()
+		r.ReloadChat()
+		waitFor(t, what, func() bool {
+			st := r.tgStatus()
+			return st.State == chat.StateError && strings.Contains(st.Detail, what) && st.DetailRef != nil && st.Enabled && !strings.Contains(st.Detail, "do-not-leak")
+		})
+		if r.chatTransport(chat.Telegram) != nil {
+			t.Errorf("%s:渠道还在", what)
+		}
+	}
+	const broken = `"enc:v2:bm90LXJlYWxseS1lbmNyeXB0ZWQtYXQtYWxsLXNvcnJ5"`
+	if err := r.Repo.SetSetting("chat.telegram.proxyToken", broken); err != nil {
+		t.Fatal(err)
+	}
+	problem("密钥无法解密")
+	r.set("chat.telegram.proxyToken", "gopher://do-not-leak")
+	problem("代理")
+	r.set("chat.telegram.proxyToken", "")
+	r.set("chat.telegram.botToken", "bad do-not-leak")
+	problem("格式")
+	r.set("chat.telegram.botToken", "")
+	problem("没有填写 Bot Token")
+	if err := r.Repo.SetSetting("chat.telegram.botToken", broken); err != nil {
+		t.Fatal(err)
+	}
+	problem("密钥无法解密")
+	r.set("chat.telegram.botToken", runToken)
+	r.ReloadChat()
+	waitFor(t, "改好了就连上", func() bool { return r.tgStatus().State == chat.StateConnected })
+	if got := r.transports(); len(got) != 2 || got[1].cfg != (ChatConfig{Enabled: true, BotToken: runToken}) {
+		t.Errorf("重建: %d", len(got))
+	}
+	if strings.Contains(logs(), "do-not-leak") {
+		t.Errorf("机密进了日志: %s", logs())
+	}
+}
+
+// 真的 Telegram 渠道接上本地的假平台:令牌不对时状态说人话;没认出机器人之前渠道在、标识为空,排着的
+// 卡片等着;认出之后才发。日志与状态里没有令牌。
+func TestRunChat_TelegramEndToEnd(t *testing.T) {
+	var mu sync.Mutex
+	ready := false
+	var sent []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch method := strings.TrimPrefix(req.URL.Path, "/bot"+runToken+"/"); {
+		case !ready:
+			w.WriteHeader(401)
+			fmt.Fprint(w, `{"ok":false,"error_code":401,"description":"Unauthorized"}`)
+		case method == "getMe":
+			fmt.Fprint(w, `{"ok":true,"result":{"id":987654321,"is_bot":true,"username":"aegis_bot"}}`)
+		case method == "getWebhookInfo":
+			fmt.Fprint(w, `{"ok":true,"result":{"url":""}}`)
+		case method == "sendMessage":
+			b, _ := io.ReadAll(req.Body)
+			sent = append(sent, string(b))
+			fmt.Fprint(w, `{"ok":true,"result":{"message_id":7,"chat":{"id":4242,"type":"private"}}}`)
+		default:
+			fmt.Fprint(w, `{"ok":true,"result":[]}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	logs := captureLogs(t, nil)
+	r := runApp(t, nil, func(r *runRig, cfg ChatConfig) chat.Transport {
+		return r.newTelegram(cfg, telegram.WithBaseURL(srv.URL))
+	})
+	r.set("chat.telegram.botToken", runToken)
+	r.set("chat.telegram.enabled", true)
+	r.ReloadChat()
+	waitFor(t, "令牌不对", func() bool {
+		st := r.tgStatus()
+		return strings.Contains(st.Detail, "令牌无效") && st.DetailRef != nil && st.BotName == ""
+	})
+	if r.chatTransport(chat.Telegram) == nil || r.chatBotID(chat.Telegram) != "" {
+		t.Errorf("没认出之前:%q", r.chatBotID(chat.Telegram))
+	}
+	db := r.Repo.DB()
+	ap := cardTicket(nil)
+	row := &model.ChatCard{ApprovalID: 1, UserID: 3, Channel: "telegram", BotID: "987654321", State: model.ChatCardQueued, NextAt: time.Now().Add(-time.Second)}
+	for _, v := range []any{ap, row, &model.User{ID: 3, Email: "a@b.c", Status: "active"},
+		&model.ChatBinding{UserID: 3, Channel: "telegram", BotID: "987654321", AccountID: "4242", ChatID: "4242"}} {
+		if err := db.Create(v).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := func() (c model.ChatCard) { db.Limit(1).Find(&c, row.ID); return c }
+	r.SweepChatCards(context.Background())
+	if c := state(); c.State != model.ChatCardQueued || c.Attempts != 0 {
+		t.Errorf("没就绪时动了: %+v", c)
+	}
+	mu.Lock()
+	ready = true
+	mu.Unlock()
+	waitFor(t, "连上", func() bool {
+		st := r.tgStatus()
+		return st.State == chat.StateConnected && st.BotName == "aegis_bot" && st.Detail == ""
+	})
+	r.SweepChatCards(context.Background())
+	mu.Lock()
+	defer mu.Unlock()
+	if c := state(); c.State != model.ChatCardSent || c.ChatID != "4242" || c.MessageID != "7" || len(sent) != 1 || strings.Contains(sent[0], "DROP") {
+		t.Errorf("就绪之后: %+v %v", c, sent)
+	}
+	if out := logs(); strings.Contains(out, "do-not-leak") || strings.Contains(out, runToken) {
+		t.Errorf("令牌进了日志: %s", out)
+	}
+}
+
+// 令牌不对、机器人挂着 webhook 这两种,管理员改得了:状态里说人话,能随界面语言走。
+func TestRunChat_ReasonsInPlainWords(t *testing.T) {
+	for want, cause := range map[string]error{"令牌无效": chat.ErrCredentials, "webhook": chat.ErrWebhook} {
+		r := runApp(t, func(c *chatTimings) { c.backoff, c.backoffMax = time.Hour, time.Hour }, scripted(
+			func(context.Context, int, func(chat.State, string)) error {
+				return fmt.Errorf("telegram: getMe: %w", cause)
+			}))
+		r.enable("cli_a")
+		r.waitState(chat.StateError)
+		if st := r.ChatStatus()[chat.Lark]; !strings.Contains(st.Detail, want) || st.DetailRef == nil {
+			t.Errorf("%v → %+v", cause, st)
+		}
+	}
+}
+
+// 二次确认的应答拖得太久(库卡住),扫描等它的时间已经不够:不给按钮,请对方再点。
+func TestHoldChatCard_TooSlow(t *testing.T) {
+	s, db := cardDB(t)
+	ap := &model.Approval{ApNo: "AP-1", Status: model.StatusPending}
+	row := &model.ChatCard{UserID: 1, Channel: "telegram", State: model.ChatCardSent, NextAt: time.Now()}
+	if err := s.Repo.CreateApproval(ap, nil); err != nil {
+		t.Fatal(err)
+	}
+	row.ApprovalID = ap.ID
+	if err := db.Create(row).Error; err != nil {
+		t.Fatal(err)
+	}
+	if now, err := s.holdChatCard(row); err != nil || now.Status != model.StatusPending {
+		t.Fatalf("%+v %v", now, err)
+	}
+	old := chatAnswerSlack
+	chatAnswerSlack = 0
+	t.Cleanup(func() { chatAnswerSlack = old })
+	if _, err := s.holdChatCard(row); err == nil {
+		t.Error("来不及了却照样放行")
 	}
 }
 

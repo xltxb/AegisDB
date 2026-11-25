@@ -96,13 +96,17 @@ func TestPackageStaysBusinessFree(t *testing.T) {
 			if strings.HasPrefix(to, "aegisdb/") && to != "aegisdb/internal/chat" && !strings.HasPrefix(to, "aegisdb/internal/chat/") {
 				t.Errorf("%s 引用了 %s", path, to)
 			}
+			// Telegram 只用标准库:少一个依赖,也就少一处会把带令牌的地址写进日志的代码。
+			if host, _, _ := strings.Cut(to, "/"); filepath.Dir(path) == "telegram" && strings.Contains(host, ".") {
+				t.Errorf("%s 引用了第三方库 %s", path, to)
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if checked < 3 || !dirs["lark"] {
+	if checked < 3 || !dirs["lark"] || !dirs["telegram"] {
 		t.Fatalf("只查了 %d 个文件,目录 %v", checked, dirs)
 	}
 }

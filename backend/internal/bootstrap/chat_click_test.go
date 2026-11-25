@@ -615,7 +615,7 @@ func TestChatClick_DatabaseErrors(t *testing.T) {
 		}
 	})
 	for _, c := range []struct{ table, kind string }{
-		{"tbl_chat_card", "command"}, {"tbl_chat_binding", "command"}, {"tbl_user", "command"}, {"tbl_role_member", "command"},
+		{"tbl_chat_card", "command"}, {"tbl_chat_binding", "command"}, {"tbl_user", "command"}, {"tbl_role_member", "command"}, {"tbl_role", "command"},
 		{"tbl_role_menu", "command"}, {"tbl_approval", "command"}, {"tbl_approval_step", "command"}, {"tbl_exec_window", "window"},
 	} {
 		t.Run(c.table, func(t *testing.T) {
@@ -777,7 +777,6 @@ func TestChatClick_Logs(t *testing.T) {
 	app.repo.DB().Logger = gormlogger.New(log.New(&buf, "", 0), gormlogger.Config{LogLevel: gormlogger.Warn, SlowThreshold: time.Minute})
 	t.Cleanup(func() { slog.SetDefault(old); app.repo.DB().Logger = oldDB })
 
-	app.larkClick(owner1, strings.Repeat("A", 32), chat.ActConfirm)
 	app.larkClick(owner1, "junk", chat.ActConfirm)
 	app.larkClick("stranger", token, chat.ActConfirm)
 	app.larkClick("stranger", strings.Repeat("A", 32), chat.ActConfirm)
@@ -789,6 +788,109 @@ func TestChatClick_Logs(t *testing.T) {
 	app.larkClick(owner1, token, chat.ActConfirm)
 	if n := strings.Count(buf.String(), "level=WARN"); n != 2 || strings.Contains(buf.String(), token) {
 		t.Errorf("有身份没资格的各记一行、不带令牌,实际 %d 行: %s", n, buf.String())
+	}
+}
+
+// 认得出是谁、卡片却对不上的(令牌不存在、旧机器人的卡片、已收场的卡片)也记一行,带用户不带令牌;同一个人
+// 同一种一分钟只记一次,别人的照记 —— 不然一个绑定了的人能刷满日志。
+func TestChatClick_LogsStaleCards(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	id, _, token, peer := app.sentCommand(lark)
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	lines := func(why string) int { return strings.Count(buf.String(), "why=\""+why+"\"") }
+	click := func(email, tok string) {
+		t.Helper()
+		if res := app.larkClick(email, tok, chat.ActConfirm); res.OK || res.Toast != toastInvalid {
+			t.Errorf("应答: %+v", res)
+		}
+	}
+	for range 3 {
+		click(owner1, strings.Repeat("A", 32))
+	}
+	eq(t, lines("unknown token"), 1, "令牌不存在")
+	click(owner2, strings.Repeat("A", 32))
+	eq(t, lines("unknown token"), 2, "换一个人")
+	app.repo.DB().Model(&model.ChatCard{}).Where("approval_id = ?", id).Update("state", model.ChatCardClosed)
+	click(owner1, token)
+	click(owner1, token)
+	eq(t, lines("closed card"), 1, "已收场")
+	app.repo.DB().Model(&model.ChatCard{}).Where("approval_id = ?", id).Update("bot_id", "cli_old")
+	click(owner2, peer)
+	eq(t, lines("other bot"), 1, "旧机器人")
+	out := buf.String()
+	if strings.Contains(out, token) || strings.Contains(out, peer) || strings.Contains(out, strings.Repeat("A", 32)) ||
+		strings.Count(out, "level=WARN") != strings.Count(out, "user=") || !strings.Contains(out, "user="+itoa(app.storedUser(owner1).ID)) {
+		t.Errorf("日志: %s", out)
+	}
+}
+
+// 二次确认的应答由渠道去换卡片,可能晚到:其间单子被别人处理、扫描写下结论并收场的话,带按钮的卡片会盖在
+// 结论上,再也没人去改。所以这之后扫描要等应答换完,再收敛一次。
+func TestChatClick_OutcomeFollowsTwoStepAnswer(t *testing.T) {
+	for _, act := range []chat.Action{chat.ActApprove, chat.ActBack} {
+		t.Run(string(act), func(t *testing.T) {
+			app, lark, _ := cardApp(t)
+			id, _, token, _ := app.sentCommand(lark)
+			ref := chat.Ref{ChatID: app.cardOf(id, owner1).ChatID, MessageID: app.cardOf(id, owner1).MessageID}
+			last := func() *chat.Card {
+				var c *chat.Card
+				for _, u := range lark.updates() {
+					if u.Ref == ref {
+						c = &u.Card
+					}
+				}
+				return c
+			}
+			before := time.Now()
+			res := app.larkClick(owner1, token, act)
+			if !res.OK || res.Card == nil {
+				t.Fatalf("应答: %+v", res)
+			}
+			// 应答还在路上,别人在站内通过了
+			eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", app.login(owner2, "aegisdb123"), nil).Code, 0, "通过")
+			app.sweepCards()
+			eq(t, app.cardOf(id, owner2).State, model.ChatCardClosed, "没有应答在路上的照常收敛")
+			if c := last(); c != nil {
+				t.Errorf("应答还在路上就写了结论: %+v", c)
+			}
+			row := app.cardOf(id, owner1)
+			eq(t, row.State, model.ChatCardSent, "还等着收敛")
+			if at := row.NextAt.Sub(before); at < chat.CardWithin || at > chat.CardWithin+10*time.Second {
+				t.Errorf("下次收敛在 %s 之后", at)
+			}
+			// 晚到的应答把按钮换了上去,到点再收敛
+			if err := lark.Update(context.Background(), ref, *res.Card); err != nil {
+				t.Fatal(err)
+			}
+			app.dueCards()
+			app.sweepCards()
+			if c := last(); c == nil || !strings.HasPrefix(c.Outcome, "已由 Li Na 通过") || c.Token != "" {
+				t.Errorf("最后停在: %+v", c)
+			}
+			eq(t, app.cardOf(id, owner1).State, model.ChatCardClosed, "收场")
+		})
+	}
+}
+
+// 单子恰好在二次确认的应答成形之前被处理掉:不再给按钮,直接给结论。
+func TestChatClick_DecidedWhileAnsweringTwoStep(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	id, _, token, _ := app.sentCommand(lark)
+	const name = "test:decided_meanwhile"
+	if err := app.repo.DB().Callback().Update().After("gorm:update").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "tbl_chat_card" {
+			tx.Session(&gorm.Session{NewDB: true}).Exec("UPDATE tbl_approval SET status = ? WHERE id = ?", model.StatusCancelled, id)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res := app.larkClick(owner1, token, chat.ActApprove)
+	_ = app.repo.DB().Callback().Update().Remove(name)
+	if res.OK || res.Toast != toastHandled || res.Card == nil || res.Card.Outcome != "已撤回" || res.Card.Token != "" {
+		t.Errorf("应答: %+v %+v", res, res.Card)
 	}
 }
 

@@ -649,6 +649,11 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"chat.lark.region":    "feishu",
 		"chat.lark.appId":     "",
 		"chat.lark.appSecret": "",
+		// Telegram 默认不带语句:卡片上的内容会留在它的服务器上。
+		"chat.telegram.enabled":    false,
+		"chat.telegram.botToken":   "",
+		"chat.telegram.includeSql": false,
+		"chat.telegram.proxyToken": "",
 	}
 	for k, v := range settings {
 		b, _ := json.Marshal(v)

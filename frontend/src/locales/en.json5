@@ -1473,6 +1473,8 @@
     m964803c2: '{0} — {1}',
     // %s …其余 %d 个
     m758aeeb3: '{0} … {1} more',
+    // %s 不像机器人令牌(形如 123456789:AA…)
+    m6c388194: '{0} does not look like a bot token (e.g. 123456789:AA…)',
     // %s 不是合法的 http(s) 地址:%s
     ma74d0dc7: '{0} is not a valid http(s) address: {1}',
     // %s 不能为空值(null)
@@ -1483,6 +1485,8 @@
     m425988b7: 'Invalid value for {0}',
     // %s 只能是 %s
     m319ea174: '{0} must be one of {1}',
+    // %s 只能是 http、https 或 socks5 的代理地址(如 socks5://用户:口令@主机:1080)
+    m05b1d914: '{0} must be an http, https or socks5 proxy URL (e.g. socks5://user:password{\'@\'}host:1080)',
     // %s 只能是字母、数字、下划线和短横线,最多 64 个字符
     m0b63f98e: '{0} may contain only letters, digits, underscores and hyphens, up to 64 characters',
     // %s 在 %s 上发起的审批超过时限仍未处理，请跟进
@@ -1591,6 +1595,8 @@
     m5a67c2af: 'The API credential is disabled',
     // API 凭据无效
     m8c418900: 'Invalid API credential',
+    // Bot Token 或代理地址的格式不对,请重新填写
+    m2271f1c0: 'The Bot Token or the proxy URL is malformed. Enter it again',
     // CSRF 校验失败,请刷新页面后重试
     mecb94d0c: 'CSRF check failed. Refresh the page and try again',
     // Cookie 名只能由字母、数字、_ . - 组成:%s
@@ -2085,6 +2091,8 @@
     mdb4c55c5: 'The App Secret is required to enable the Lark approval bot',
     // 启用 SSO 必须填写%s
     mf395a22c: 'Enabling SSO requires {0}',
+    // 启用 Telegram 审批机器人必须填写 Bot Token
+    m1617704a: 'The Bot Token is required to enable the Telegram approval bot',
     // 命令名不能为空,且不超过 32 个字符
     m146ca168: 'The command name cannot be empty and must be at most 32 characters',
     // 命令被拒绝:能力矩阵禁止
@@ -2499,6 +2507,8 @@
     ma3549434: 'No menu permission',
     // 显式设置 query_dop 会让单条 SQL 在短时间内吃掉过多资源 —— DWS 本身已按 DN 并行
     m3bc8dd9a: 'Setting query_dop explicitly lets one SQL consume too many resources in a short time; DWS already parallelizes by DN',
+    // 暂时读不出审批链,请稍后再试
+    m3b97a4a0: 'The approval chain cannot be read right now. Please try again later',
     // 更新失败
     m8f8818f0: 'Update failed',
     // 更新失败:%s
@@ -2541,6 +2551,8 @@
     md2a3f3a9: 'Could not read dependent objects, so they were not recompiled: {0}',
     // 未配置真实执行凭据
     mf52fe686: 'No real execution credentials configured',
+    // 机器人令牌无效或已被撤销,请重新填写
+    m16a562fa: 'The bot token is invalid or has been revoked. Enter it again',
     // 来源 IP 不在允许列表内
     mffa84872: 'Your source IP is not on the allowlist',
     // 来源 IP 不在该凭据的白名单内
@@ -2577,6 +2589,8 @@
     me6a262d1: 'You do not have permission to review execution windows',
     // 没有填写 App ID 或 App Secret
     m94d595ab: 'The App ID or App Secret is missing',
+    // 没有填写 Bot Token
+    mb697d9fc: 'The Bot Token is missing',
     // 没有这个审批机器人渠道
     m1f930af0: 'No such approval bot channel',
     // 没有选定库,无法确定表 %s 的数据量
@@ -3065,6 +3079,8 @@
     m9b89824d: 'This online change is not running',
     // 这个审批机器人没有开启
     mf8988eed: 'This approval bot is turned off',
+    // 这个机器人设置了 webhook,网关收不到消息;请先在原来使用它的地方删除 webhook
+    m8d8b1127: 'This bot has a webhook set, so the gateway receives nothing. Delete the webhook where the bot was used before',
     // 这个终端标签已关闭,语句没有执行
     mfe89908a: 'This terminal tab is closed; the statement was not executed',
     // 这份结果已过期(暂存 10 分钟),请重新执行查询
