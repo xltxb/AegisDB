@@ -1506,6 +1506,8 @@
     m8256a1a6: '{0} contains an invalid CIDR range: {1}',
     // %s 驳回了你的命令：%s
     m082ca5d0: '{0} rejected your command: {1}',
+    // %s 驳回了你的命令：%s\n原因：%s
+    m66d48011: '{0} rejected your command: {1}\nReason: {2}',
     // %s, %s
     m43463257: '{0}, {1}',
     // %s.%s 已经在敏感字段列表里(#%d)

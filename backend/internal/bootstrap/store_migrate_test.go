@@ -131,6 +131,20 @@ func TestMigrateStore_MySQLToPG_EndToEnd(t *testing.T) {
 	if code := my.loginCode("LinWei@AegisDB.IO", "aegisdb123"); code != 0 {
 		t.Fatalf("MySQL 上大写邮箱登录 code=%d —— 前提变了,先查清", code)
 	}
+	// 聊天审批卡片的三张表与审批单的两列(迁移 0065):都有内容,空表搬得对不对看不出来。
+	if _, err := my.svc.DecideApprovalVia(my.storedUser("zhangwei@aegisdb.io"),
+		my.submitProdHighRisk(admin).ID, false, "lark", "影响大促"); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		"INSERT INTO tbl_chat_binding(user_id, channel, bot_id, account_id, chat_id, created_at) VALUES (1, 'lark', 'cli_a', 'ou_1', 'oc_1', NOW(3))",
+		"INSERT INTO tbl_chat_bind_code(user_id, channel, code_hash, expires_at) VALUES (1, 'lark', REPEAT('a', 64), NOW(3))",
+		"INSERT INTO tbl_chat_card(approval_id, user_id, channel, partial, next_at, last_error) VALUES (1, 1, 'lark', 1, NOW(3), '超时')",
+	} {
+		if _, err := p.my.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
 	paths := []string{
 		"/api/v1/audit?pageSize=200",
 		"/api/v1/audit?keyword=" + "ORDERS",
@@ -159,6 +173,9 @@ func TestMigrateStore_MySQLToPG_EndToEnd(t *testing.T) {
 	var rows int64
 	for _, tb := range rep.Tables {
 		rows += tb.TargetRows
+		if strings.HasPrefix(tb.Name, "tbl_chat_") && tb.TargetRows != 1 {
+			t.Errorf("%s 搬过去 %d 行,应为 1", tb.Name, tb.TargetRows)
+		}
 	}
 	t.Logf("搬了 %d 张表、%d 行,用时 %s", len(rep.Tables), rows, rep.Took)
 

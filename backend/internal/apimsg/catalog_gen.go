@@ -38,6 +38,7 @@ var catalog = []Entry{
 	{"%s 里有写错的 IP:%s", true},
 	{"%s 里有写错的网段:%s", true},
 	{"%s 驳回了你的命令：%s", true},
+	{"%s 驳回了你的命令：%s\n原因：%s", true},
 	{"%s, %s", true},
 	{"%s.%s 已经在敏感字段列表里(#%d)", true},
 	{"%s:%s", true},

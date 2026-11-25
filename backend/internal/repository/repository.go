@@ -1282,6 +1282,18 @@ func (r *Repo) ClaimApproval(id int64, from, to string) (bool, error) {
 	return res.RowsAffected == 1, res.Error
 }
 
+// ClaimApprovalDecision 是一个人的决定抢占一张待审批的单:pending → approved | rejected,连同决定的
+// 渠道与拒绝原因写进**同一条** UPDATE。返回是否抢到(RowsAffected == 1)。
+//
+// 分成两条写不行:先抢状态再补渠道,抢输的一方补的那一笔会盖掉赢家的值,或者赢家补之前崩了,
+// 留下一张没有渠道的已决定单。
+func (r *Repo) ClaimApprovalDecision(id int64, to, via, rejectReason string) (bool, error) {
+	res := r.db.Model(&model.Approval{}).
+		Where("id = ? AND status = ?", id, model.StatusPending).
+		Updates(map[string]any{"status": to, "decided_via": via, "reject_reason": rejectReason})
+	return res.RowsAffected == 1, res.Error
+}
+
 // ClaimApprovalCancel atomically withdraws a ticket that has NOT run.
 //
 // 它比 ClaimApproval(from→to) 多管一件事:executed_at IS NULL。
