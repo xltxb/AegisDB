@@ -19,10 +19,11 @@ type ChatBinding struct {
 func (ChatBinding) TableName() string { return "tbl_chat_binding" }
 
 // ChatBindCode 是一次性绑定码。库里只有摘要(CodeHash,SHA-256 的十六进制),码本身只显示给本人一次。
+// 一个用户每个渠道一行:重新生成是改写这一行,所以旧码必然作废,行也不会越积越多。
 type ChatBindCode struct {
 	ID        int64      `gorm:"primaryKey;autoIncrement" json:"-"`
-	UserID    int64      `gorm:"not null" json:"-"`
-	Channel   string     `gorm:"size:16;not null" json:"-"`
+	UserID    int64      `gorm:"not null;uniqueIndex:uk_chat_bind_code_user,priority:2" json:"-"`
+	Channel   string     `gorm:"size:16;not null;uniqueIndex:uk_chat_bind_code_user,priority:1" json:"-"`
 	CodeHash  string     `gorm:"column:code_hash;size:64;not null;uniqueIndex:uk_chat_bind_code" json:"-"`
 	ExpiresAt time.Time  `gorm:"not null" json:"-"`
 	UsedAt    *time.Time `json:"-"`

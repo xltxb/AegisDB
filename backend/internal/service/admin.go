@@ -848,6 +848,9 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 			return err
 		}
 	}
+	if req.Status != "" && req.Status != "active" {
+		s.autoUnbindChat(actor, id, apimsg.Text("账号被停用"))
+	}
 	// 状态一变,已发出的会话全部作废。状态检查只挡"此刻不是 active",挡不住恢复:
 	// invited → active 之后,那个没过期的旧 token 又能用了。角色不在此列 —— 权限每次
 	// 请求都按库里的成员关系现算,改角色当场生效,不需要把人踢下线。

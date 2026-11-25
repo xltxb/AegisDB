@@ -2,7 +2,7 @@
 --
 -- tbl_chat_binding:网关账号 ↔ 聊天账号。每个渠道一个用户最多一个绑定,一个聊天账号最多绑一个用户;
 -- bot_id 是绑定时的机器人 / 应用标识,换了机器人旧绑定即失效。
--- tbl_chat_bind_code:一次性绑定码,只存摘要。
+-- tbl_chat_bind_code:一次性绑定码,只存摘要。一个用户每个渠道一行:重新生成就是改写它,旧码随之作废。
 -- tbl_chat_card:要发给一个人的一张卡片,先落库、后台发;按钮令牌只存摘要。
 -- idx_chat_card_state 给每 5 秒一次的扫描用,免得表长大后扫全部已收场的卡片。
 --
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS tbl_chat_bind_code (
   expires_at DATETIME(3) NOT NULL,
   used_at    DATETIME(3) NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_chat_bind_code (code_hash)
+  UNIQUE KEY uk_chat_bind_code (code_hash),
+  UNIQUE KEY uk_chat_bind_code_user (channel, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS tbl_chat_card (

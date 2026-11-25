@@ -740,6 +740,18 @@ type MFASetupResp struct {
 	OtpauthURI string `json:"otpauthUri"`
 }
 
+// ChatBindCodeReq 生成审批机器人绑定码;启用了 MFA 的账号要带 mfaCode。
+type ChatBindCodeReq struct {
+	MfaCode string `json:"mfaCode"`
+}
+
+// ChatBindCodeResp 里的绑定码只显示这一次(库里只有摘要)。
+type ChatBindCodeResp struct {
+	Code      string `json:"code"`
+	ExpiresAt string `json:"expiresAt"` // RFC3339
+	BotName   string `json:"botName"`
+}
+
 // MFACodeReq carries a 6-digit TOTP code for enable/disable.
 type MFACodeReq struct {
 	Code string `json:"code"`

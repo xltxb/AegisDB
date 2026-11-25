@@ -1670,7 +1670,21 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 	if !u.MFAEnabled {
 		return nil
 	}
-	// 失败次数限制(mfa_guard.go):锁定期间不能用任何码关掉第二因子
+	if err := s.spendMFACode(u, code, "关闭 MFA"); err != nil {
+		return err
+	}
+	if err := s.Repo.UpdateUserMFA(u.ID, false, ""); err != nil {
+		return err
+	}
+	// 关掉第二因子是**降低**这个账号的保护等级,比开启它更该留痕(M-8)。
+	s.auditAdminAction(u, "mfa.disable 自助停用 MFA(该账号此后仅凭口令登录)")
+	return nil
+}
+
+// spendMFACode 核对并消费一个当前的 TOTP 码:同一个码只能用一次(R15)。what 是这一步的名字,
+// 触发锁定时写进审计。调用方自己先判这个账号启没启用 MFA。
+func (s *Services) spendMFACode(u *model.User, code, what string) error {
+	// 失败次数限制(mfa_guard.go):锁定期间任何码都不认
 	if s.mfaFails.locked(u.ID, time.Now()) {
 		return ErrMFALocked
 	}
@@ -1679,17 +1693,12 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 	}
 	ok, counter := totp.ValidateWithCounter(u.MFASecret, code, time.Now())
 	if !ok {
-		return s.mfaFailed(u, "关闭 MFA", ErrMFARequired)
+		return s.mfaFailed(u, what, ErrMFARequired)
 	}
 	if !s.Repo.ConsumeMFACounter(u.ID, int64(counter)) {
 		return ErrMFARequired // code already used (e.g. for a step-up)
 	}
 	s.mfaFails.succeed(u.ID)
-	if err := s.Repo.UpdateUserMFA(u.ID, false, ""); err != nil {
-		return err
-	}
-	// 关掉第二因子是**降低**这个账号的保护等级,比开启它更该留痕(M-8)。
-	s.auditAdminAction(u, "mfa.disable 自助停用 MFA(该账号此后仅凭口令登录)")
 	return nil
 }
 
@@ -1720,6 +1729,7 @@ func (s *Services) AdminSetPassword(actor *model.User, id int64, newPassword str
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return err
 	}
+	s.autoUnbindChat(actor, u.ID, apimsg.Text("管理员重置了登录口令"))
 	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
 	// A password reset must invalidate the user's existing sessions (M1).
 	return s.Repo.BumpTokenVersion(u.ID)
@@ -1735,6 +1745,7 @@ func (s *Services) AdminResetMFA(actor *model.User, id int64) error {
 	if err := s.Repo.UpdateUserMFA(id, false, ""); err != nil {
 		return err
 	}
+	s.autoUnbindChat(actor, id, apimsg.Text("管理员重置了 MFA"))
 	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
 	// 解绑多半是因为手机丢了:丢的那台设备上开着的会话不能继续活着,与改口令同理(M1)。
 	return s.Repo.BumpTokenVersion(u.ID)
@@ -1751,6 +1762,7 @@ func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp,
 	if err := s.Repo.UpdateUserMFA(u.ID, true, secret); err != nil {
 		return nil, err
 	}
+	s.autoUnbindChat(actor, u.ID, apimsg.Text("管理员重新绑定了 MFA"))
 	s.auditAdminAction(actor, "admin.mfa.bind user="+u.Email)
 	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, s.Brand().Text(BrandDefaultUI, true))}, nil
 }

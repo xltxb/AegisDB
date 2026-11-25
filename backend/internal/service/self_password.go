@@ -59,6 +59,7 @@ func (s *Services) ChangeOwnPassword(actor *model.User, oldPassword, newPassword
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return "", time.Time{}, err
 	}
+	s.autoUnbindChat(actor, u.ID, apimsg.Text("你修改了登录口令")) // actor 带着请求的来源,u 是新取的、没有
 	if err := s.Repo.BumpTokenVersion(u.ID); err != nil {
 		return "", time.Time{}, err
 	}

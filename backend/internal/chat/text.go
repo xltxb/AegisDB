@@ -38,6 +38,14 @@ var texts = map[string]map[string]string{
 		"outcome.rejected":  "已由 %s 拒绝 · %s",
 		"outcome.cancelled": "已撤回",
 		"outcome.voided":    "已作废",
+
+		"bind.usage":   "请先在网关右上角用户菜单的「审批机器人」里生成绑定码,再把它发给我。",
+		"bind.done":    "已绑定网关账号 %s。之后需要你审批的单子会发到这里。",
+		"bind.invalid": "绑定码无效或已过期,请在网关里重新生成。",
+		"bind.taken":   "这个聊天账号已绑定另一个网关账号,请先在那个账号里解绑。",
+		"bind.locked":  "绑定码输错次数过多,请 15 分钟后再试。",
+		"bind.off":     "这个审批机器人没有开启,暂时不能绑定。",
+		"bind.failed":  "绑定失败,请稍后再试。",
 	},
 	"en": {
 		"title.command": "High-risk command awaiting approval",
@@ -72,6 +80,14 @@ var texts = map[string]map[string]string{
 		"outcome.rejected":  "Rejected by %s · %s",
 		"outcome.cancelled": "Withdrawn",
 		"outcome.voided":    "Voided",
+
+		"bind.usage":   "Generate a binding code under “Approval bots” in the gateway's user menu (top right), then send it to me.",
+		"bind.done":    "Linked to gateway account %s. Requests that need your approval will be sent here.",
+		"bind.invalid": "This binding code is invalid or has expired. Generate a new one in the gateway.",
+		"bind.taken":   "This chat account is already linked to another gateway account. Unlink it there first.",
+		"bind.locked":  "Too many wrong binding codes. Try again in 15 minutes.",
+		"bind.off":     "This approval bot is turned off. Linking is not available right now.",
+		"bind.failed":  "Linking failed. Please try again later.",
 	},
 }
 

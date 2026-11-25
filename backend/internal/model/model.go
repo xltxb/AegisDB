@@ -1637,6 +1637,9 @@ const (
 	NotifReleaseDone   = "release-done"
 	NotifReleaseFailed = "release-failed"
 	NotifReleaseWait   = "release-waiting"
+	// 聊天账号绑上 / 解绑了审批机器人,发给本人。谁能替自己批单变了,本人必须知道。
+	NotifChatBound   = "chat-bound"
+	NotifChatUnbound = "chat-unbound"
 )
 
 // Notification — an in-app message to a single user (e.g. their approval was

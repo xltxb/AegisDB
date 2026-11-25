@@ -30,8 +30,8 @@ type failState struct {
 	lockedUntil time.Time
 }
 
-// failBook 是"窗口期内失败 max 次就锁 lockout"的计数表,按 K 分开计。目前只有 MFA
-// 在用,按用户计。零值不可用:用 newFailBook。
+// failBook 是"窗口期内失败 max 次就锁 lockout"的计数表,按 K 分开计:MFA 按用户计,
+// 绑定码按聊天账号计(chat_binding.go)。零值不可用:用 newFailBook。
 type failBook[K comparable] struct {
 	max     int
 	window  time.Duration

@@ -849,6 +849,41 @@ paths:
       tags: [auth]
       summary: 解绑 TOTP(需当前验证码)
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings:
+    get:
+      tags: [auth]
+      summary: 本人在各审批机器人渠道上的绑定状态
+      description: |
+        只列开着的渠道,一个都没开是空数组。每项:`channel`(lark / telegram)、`botName`、`bound`、
+        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。不返回聊天账号与机器人的标识。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings/{channel}/code:
+    post:
+      tags: [auth]
+      summary: 生成审批机器人的一次性绑定码
+      description: |
+        返回 `code`(只显示这一次)、`expiresAt`(10 分钟后)、`botName`。把码私聊发给机器人即完成绑定。
+        重新生成会作废旧码;改口令、停用、MFA 变更也会作废。
+
+        启用了 MFA 的账号要带 `mfaCode`:没带返回 `42800`,错误或已用过返回 `40001`,连续错误被锁返回
+        `42900`。15 分钟内生成满 10 次也返回 `42900`。渠道没开、机器人没连上、服务账号返回 `40001`。
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string, enum: [lark, telegram] } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mfaCode: { type: string, description: 启用了 MFA 的账号必填 }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings/{channel}:
+    delete:
+      tags: [auth]
+      summary: 本人解除一个渠道的审批机器人绑定
+      description: 没绑定也返回成功。没用掉的绑定码一并作废;解除成功会给本人发站内通知并进审计(`chat.unbind`)。
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string, enum: [lark, telegram] } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/password:
     post:
       tags: [auth]
@@ -2054,6 +2089,15 @@ paths:
     post:
       tags: [users]
       summary: '[perms · admin] 代为生成并绑定 TOTP(返回密钥与 otpauth URI)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/chat-bindings:
+    delete:
+      tags: [users]
+      summary: '[perms · admin] 解除该用户的全部审批机器人绑定'
+      description: |
+        没用掉的绑定码一并作废;本人收到站内通知,动作进审计(`chat.unbind`)。停用账号、重置口令、
+        重置或代绑 MFA 时会自动解绑,不必另调。没有绑定也返回成功;用户不存在返回 `40001`。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/{id}/tags:

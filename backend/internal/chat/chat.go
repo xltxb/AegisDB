@@ -19,6 +19,9 @@ const (
 	Telegram Channel = "telegram"
 )
 
+// Channels 是全部渠道,顺序固定,供列表与校验用。
+var Channels = []Channel{Lark, Telegram}
+
 // Name 是给人看的渠道名:审计操作人「张伟 (Lark)」里的那个词,不随语言变。
 func (c Channel) Name() string {
 	switch c {

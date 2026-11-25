@@ -142,6 +142,10 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/auth/mfa/disable", h.MFADisable)
 		// 自助修改密码(黑盒 2026-10 工单 05):旧密码 + 新密码,成功后其它会话作废、当前会话重签
 		a.POST("/auth/password", h.ChangePassword)
+		// 审批机器人绑定(.scratch/chat-approval-cards):本人的聊天账号。挂在 /auth 下,审计来源因此记 auth
+		a.GET("/auth/chat-bindings", h.ChatBindings)
+		a.POST("/auth/chat-bindings/:channel/code", h.ChatBindCode)
+		a.DELETE("/auth/chat-bindings/:channel", h.ChatUnbind)
 
 		// notifications — every authenticated user has an inbox (no menu gate)
 		a.GET("/notifications", h.ListNotifications)
@@ -324,6 +328,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)
 		a.POST("/users/:id/mfa/reset", menu("perms"), admin, h.ResetUserMFA)
 		a.POST("/users/:id/mfa/bind", menu("perms"), admin, h.BindUserMFA)
+		a.DELETE("/users/:id/chat-bindings", menu("perms"), admin, h.ChatUnbindUser)
 			// Per-user data-access scope (overrides the role scope; see model.UserTag)
 			a.GET("/users/:id/tags", menu("perms"), admin, h.UserTags)
 			a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"aegisdb/internal/apimsg"
+	"aegisdb/internal/chat"
 	"aegisdb/internal/gateway"
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
@@ -26,6 +27,11 @@ type Services struct {
 	// mfaFails:MFA 验证码失败计数(按用户)。见 mfa_guard.go。
 	// 挂在实例上而不是包级变量:每个 Services 各算各的。
 	mfaFails      *failBook[int64]
+	// 聊天渠道与绑定码的频控(chat_binding.go)
+	chatMu         sync.RWMutex
+	chatTransports map[chat.Channel]chat.Transport
+	chatCodeFails  *failBook[chatAccount]
+	chatCodeGens   *failBook[int64]
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager
@@ -76,6 +82,8 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		Webhook:  NewDispatcher(repo),
 
 		mfaFails:      newFailBook[int64](mfaMaxFails, mfaWindow, mfaLockout),
+		chatCodeFails: newFailBook[chatAccount](chatCodeMaxFails, chatCodeWindow, chatCodeLockout),
+		chatCodeGens:  newFailBook[int64](chatCodeMaxGens, chatCodeWindow, chatCodeLockout),
 	}
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
