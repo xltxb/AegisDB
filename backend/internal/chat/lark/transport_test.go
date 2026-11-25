@@ -1227,3 +1227,22 @@ func TestClick_PanicAndBusy(t *testing.T) {
 		t.Error("panic 要留下调用栈")
 	}
 }
+
+// Run 里 panic 了(由调用方恢复):SDK 客户端停在「已在运行」,不换掉就再也连不上。
+func TestRun_PanicDoesNotPoisonClient(t *testing.T) {
+	f := newFake(t)
+	tr := f.transport()
+	good := tr.http.Transport
+	tr.http.Transport = roundTrip(func(*http.Request) (*http.Response, error) { panic("boom") })
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("panic 应当交给调用方")
+			}
+		}()
+		_ = tr.Run(context.Background(), &fakeHandler{}, func(chat.State, string) {})
+	}()
+	tr.http.Transport = good
+	s := start(t, f, tr, &fakeHandler{})
+	eventually(t, "连上", func() bool { return strings.Join(s.states(), ",") == "connecting,connected" })
+}

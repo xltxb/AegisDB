@@ -129,8 +129,6 @@ func (s *Services) OnClick(_ context.Context, c chat.Click) chat.ClickResult {
 	if approve {
 		done = "click.approved"
 	}
-	// 没有 HTTP 请求给 u 盖来源;ClientIP 留空 —— 平台的事件里没有点击者的地址。
-	u.AuditSource = approvalAuditSource(ap)
 	_, err = s.DecideApprovalVia(u, ap.ID, approve, string(c.Channel), c.Reason)
 	var refusal *DecideRefusal
 	switch {

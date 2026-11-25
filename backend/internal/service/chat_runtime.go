@@ -2,7 +2,7 @@ package service
 
 // 聊天渠道的连接管理与设置(.scratch/chat-approval-cards/PRD.md §5.6、§5.7)。
 //
-// 每个渠道两层协程:一层盯设置(superviseChat),设置变了就换连接;一层维持连接(runChatConn),断了退避
+// 每个渠道两层协程:一层盯设置(chatSupervisor),设置变了就换连接;一层维持连接(runChatConn),断了退避
 // 重连。渠道出任何事 —— 连不上、panic、挂住 —— 都停在这里,只反映在状态上。
 //
 // 渠道对象一建好就登记(SetChatTransport),断线期间也不撤:发送走自己的请求,不靠长连接;撤下来的话,
@@ -73,7 +73,17 @@ type ChatConfig struct {
 
 // chatSettings 读全部 chat.* 设置。不用 Repo.GetSetting:键不存在时 GORM 每读一次记一行 record not
 // found,而老库里没有这些键,每轮扫描、每次点击都要读。
-func (s *Services) chatSettings() (map[string]string, error) { return s.Repo.SettingsByPrefix("chat.") }
+//
+// 每读成一次就顺手记下卡片语言,供不能等库的地方用(见 quickCardLang)。
+func (s *Services) chatSettings() (map[string]string, error) {
+	all, err := s.Repo.SettingsByPrefix("chat.")
+	if err != nil {
+		return nil, err
+	}
+	lang := orDefault(chatText(all["chat.cardLang"]), "zh")
+	s.chatLang.Store(&lang)
+	return all, nil
+}
 
 func (s *Services) chatBool(key string) bool {
 	all, err := s.chatSettings()
@@ -82,11 +92,17 @@ func (s *Services) chatBool(key string) bool {
 
 // cardLang 是发到聊天里的文字用的语言(全局设置,默认 zh)。
 func (s *Services) cardLang() string {
-	all, err := s.chatSettings()
-	if err != nil {
-		return "zh"
+	_, _ = s.chatSettings()
+	return s.quickCardLang()
+}
+
+// quickCardLang 是最近一次读到的卡片语言,不碰库。渠道自己要说的话用它:「正在处理」正是在处理得太慢
+// 时才说的,而慢的多半就是库。连着的渠道由 chatSupervisor 按 poll 的间隔、以及每次保存设置时刷新它。
+func (s *Services) quickCardLang() string {
+	if lang := s.chatLang.Load(); lang != nil {
+		return *lang
 	}
-	return orDefault(chatText(all["chat.cardLang"]), "zh")
+	return "zh"
 }
 
 // chatText 解出一个字符串设置(JSON 编码);没有或不是字符串为空。
@@ -122,8 +138,10 @@ func (s *Services) chatConfig(ch chat.Channel) (ChatConfig, error) {
 }
 
 // newChatTransport 按配置建一个渠道。
-func (s *Services) newChatTransport(_ chat.Channel, c ChatConfig) chat.Transport {
-	return lark.New(c.Region, c.AppID, c.AppSecret, lark.WithLang(s.cardLang))
+func (s *Services) newChatTransport(_ chat.Channel, c ChatConfig) chat.Transport { return s.newLark(c) }
+
+func (s *Services) newLark(c ChatConfig, opts ...lark.Option) chat.Transport {
+	return lark.New(c.Region, c.AppID, c.AppSecret, append(opts, lark.WithLang(s.quickCardLang))...)
 }
 
 // SetChatFactory 换掉建渠道的函数,只给测试用,要在 RunChat 之前调。

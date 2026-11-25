@@ -34,6 +34,7 @@ type Services struct {
 	chatCodeGens   *failBook[int64]
 	chatSweeping   sync.Map // chat.Channel → 正在扫描(chat_cards.go)
 	chatRun        chatRuntime
+	chatLang       atomic.Pointer[string] // 最近一次读到的卡片语言(chat_runtime.go)
 	chatTests      *failBook[int64] // 测试卡片的频控(chat_runtime.go)
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor

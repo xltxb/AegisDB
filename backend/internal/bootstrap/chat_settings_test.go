@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"gorm.io/gorm"
+
 	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
 	"aegisdb/internal/service"
@@ -434,4 +436,67 @@ func TestChatSettings_AdminOnly(t *testing.T) {
 		eq(t, app.do(http.MethodPost, chatTestURL, token, map[string]any{"channel": "lark"}).Code, 40300, email+" 发测试卡片")
 		eq(t, app.saveSettings(token, map[string]any{"chat.cardLang": "en"}).Code, 40300, email+" 改设置")
 	}
+}
+
+// 写库失败(第几个键都一样):整次一项都不存、不记审计、渠道不动,回内部错误。
+func TestSettings_FailedWriteStoresNothing(t *testing.T) {
+	app, built := runChatApp(t, nil)
+	admin := app.login(cardAdmin, "aegisdb123")
+	all := func() string {
+		var rows []model.Setting
+		if err := app.repo.DB().Order("k").Find(&rows).Error; err != nil {
+			t.Fatal(err)
+		}
+		b, _ := json.Marshal(rows)
+		return string(b)
+	}
+	before := all()
+	// 按键排序写,region 在 enabled、appId、appSecret 之后:只有它写不进去,前面的也不能留下。
+	fail := func(tx *gorm.DB) {
+		if s, ok := tx.Statement.Dest.(*model.Setting); ok && s.K == "chat.lark.region" {
+			_ = tx.AddError(errors.New("disk full"))
+		}
+	}
+	db := app.repo.DB()
+	if err := errors.Join(db.Callback().Update().Before("gorm:update").Register("test:fail", fail),
+		db.Callback().Create().Before("gorm:create").Register("test:fail", fail)); err != nil {
+		t.Fatal(err)
+	}
+	r := app.saveSettings(admin, larkOn("cli_a", larkSecret))
+	if r.Code != 50000 || strings.Contains(r.Msg, "disk full") {
+		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
+	}
+	if now := all(); now != before {
+		t.Errorf("存下了一部分: %s", now)
+	}
+	if rows := app.auditCommandsLike("admin.settings.update"); len(rows) != 0 {
+		t.Errorf("没存成也记了审计: %v", rows)
+	}
+	if st := app.chatStatus(admin)["lark"]; st.State != "off" || len(built()) != 0 {
+		t.Errorf("渠道动了: %+v", st)
+	}
+	// 恢复之后照常
+	if err := errors.Join(db.Callback().Update().Remove("test:fail"), db.Callback().Create().Remove("test:fail")); err != nil {
+		t.Fatal(err)
+	}
+	eq(t, app.saveSettings(admin, larkOn("cli_a", larkSecret)).Code, 0, "恢复之后")
+	app.waitChat(admin, "connected")
+}
+
+// 核对时读不出库里的设置:是网关的问题,不是提交的值不对。
+func TestChatSettings_ReadFailureIsInternal(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login(cardAdmin, "aegisdb123")
+	if err := app.repo.DB().Callback().Query().Before("gorm:query").Register("test:fail", func(tx *gorm.DB) {
+		if _, ok := tx.Statement.Dest.(*[]model.Setting); ok {
+			_ = tx.AddError(errors.New("disk full"))
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := app.saveSettings(admin, map[string]any{"chat.cardLang": "en"})
+	if r.Code != 50000 || strings.Contains(r.Msg, "disk full") {
+		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
+	}
+	eq(t, app.settingRaw("chat.cardLang"), `"zh"`, "没存")
 }

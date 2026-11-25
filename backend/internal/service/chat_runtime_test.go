@@ -8,8 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
@@ -17,9 +20,12 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/gorilla/websocket"
+	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
 	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/chat"
+	"aegisdb/internal/chat/lark"
 	"aegisdb/internal/model"
 	"aegisdb/pkg/crypto"
 )
@@ -565,6 +571,68 @@ func TestRunChat_BackoffResetsOnlyWhenStable(t *testing.T) {
 				t.Errorf("400ms 里重连了 %d 次", n)
 			}
 		})
+	}
+}
+
+// 库挂住的时候,点击也要在 3 秒内得到「正在处理」的应答,且用的是设置的语言:这句话不能再去读库。
+func TestLarkClick_AnswersWhileStoreIsStuck(t *testing.T) {
+	conns := make(chan *websocket.Conn, 1)
+	mux := http.NewServeMux()
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	mux.HandleFunc("/callback/ws/endpoint", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintf(w, `{"code":0,"data":{"URL":"%s/ws?service_id=7","ClientConfig":{"PingInterval":120}}}`, strings.Replace(srv.URL, "http", "ws", 1))
+	})
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		if c, err := (&websocket.Upgrader{}).Upgrade(w, r, nil); err == nil {
+			conns <- c
+		}
+	})
+	r := runApp(t, nil, func(r *runRig, cfg ChatConfig) chat.Transport { return r.newLark(cfg, lark.WithBaseURL(srv.URL)) })
+	r.set("chat.cardLang", "en")
+	r.enable("cli_a")
+	r.waitState(chat.StateConnected)
+	ws := <-conns
+	t.Cleanup(func() { ws.Close() })
+
+	event, _ := json.Marshal(map[string]any{"schema": "2.0",
+		"header": map[string]any{"event_id": "c1", "event_type": "card.action.trigger", "app_id": "cli_a"},
+		"event": map[string]any{"operator": map[string]any{"open_id": "ou_9"}, "host": "im_message",
+			"action":  map[string]any{"tag": "button", "value": map[string]any{"t": strings.Repeat("A", 32), "a": "confirm"}},
+			"context": map[string]any{"open_message_id": "om_1", "open_chat_id": "oc_1"}}})
+	frame := larkws.Frame{Method: int32(larkws.FrameTypeData), Payload: event, Headers: []larkws.Header{
+		{Key: "type", Value: "event"}, {Key: "message_id", Value: "f1"}, {Key: "sum", Value: "1"}, {Key: "seq", Value: "0"}}}
+	raw, err := frame.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx := r.Repo.DB().Begin() // 占住唯一的连接,谁也读不了库
+	defer tx.Rollback()
+	began := time.Now()
+	if err := ws.WriteMessage(websocket.BinaryMessage, raw); err != nil {
+		t.Fatal(err)
+	}
+	_ = ws.SetReadDeadline(began.Add(3 * time.Second))
+	for {
+		_, msg, err := ws.ReadMessage()
+		if err != nil {
+			t.Fatalf("3 秒内没有应答:%v", err)
+		}
+		var got larkws.Frame
+		if err := got.Unmarshal(msg); err != nil {
+			t.Fatal(err)
+		}
+		if larkws.Headers(got.Headers).GetString("message_id") != "f1" {
+			continue // 心跳
+		}
+		var resp larkws.Response
+		if err := json.Unmarshal(got.Payload, &resp); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(resp.Data), chat.Tr("en", "click.processing")) {
+			t.Errorf("应答: %s", resp.Data)
+		}
+		return
 	}
 }
 

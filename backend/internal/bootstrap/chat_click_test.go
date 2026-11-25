@@ -725,7 +725,7 @@ func TestChatClick_RoleChangesTakeEffect(t *testing.T) {
 
 // Telegram:渠道如实记下;没带 SQL 的卡片,重画(二次确认、结论)也不带。
 func TestChatClick_Telegram(t *testing.T) {
-	app, _, tg := cardApp(t)
+	app, lark, tg := cardApp(t)
 	app.bindRow(owner1, chat.Telegram, tgBot)
 	id, no := app.submitCommand()
 	app.sweepCards()
@@ -745,8 +745,10 @@ func TestChatClick_Telegram(t *testing.T) {
 		t.Errorf("审计: %+v", rows)
 	}
 	// 同一张单在 Lark 上的卡片再点,是已处理
-	if res := app.larkClick(owner1, "", chat.ActConfirm); res.OK {
-		t.Errorf("%+v", res)
+	res := app.larkClick(owner1, cardToken(t, lark, no, "lark:"+owner1), chat.ActConfirm)
+	if res.OK || res.Toast != chat.Tr("zh", "click.handled") || res.Card == nil || res.Card.Token != "" ||
+		!strings.HasPrefix(res.Card.Outcome, "已由 Zhang Wei 通过 · ") {
+		t.Errorf("已处理: %+v %+v", res, res.Card)
 	}
 }
 

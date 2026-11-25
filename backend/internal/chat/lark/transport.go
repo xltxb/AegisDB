@@ -88,7 +88,7 @@ func WithBaseURL(base string) Option {
 	return func(t *Transport) { t.base, t.wsSuffix = strings.TrimRight(base, "/"), "" }
 }
 
-// WithLang 给出卡片语言(chat.cardLang),用在渠道自己要说的那几句上;不给就是 zh。
+// WithLang 给出卡片语言(chat.cardLang),用在渠道自己要说的那几句上;不给就是 zh。它不许阻塞:赶着 3 秒应答时也要调它。
 func WithLang(lang func() string) Option {
 	return func(t *Transport) { t.lang = lang }
 }
@@ -145,11 +145,16 @@ func (t *Transport) Run(ctx context.Context, h chat.Handler, onState func(chat.S
 		connected.Store(true)
 		onState(chat.StateConnected, "")
 	})
+	returned := false
+	defer func() {
+		if !returned { // panic 了:SDK 停在「已在运行」,接着用就再也连不上
+			t.dropClient()
+		}
+	}()
 	err := cli.Start(ctx)
+	returned = true
 	if connected.Load() || ctx.Err() != nil {
-		t.clientMu.Lock()
-		t.client = nil // 连上过或被取消的,SDK 不许再用
-		t.clientMu.Unlock()
+		t.dropClient() // 连上过或被取消的,SDK 不许再用
 	}
 	run.drain()
 	if ctx.Err() != nil {
@@ -185,6 +190,12 @@ func (t *Transport) wsClient() *larkws.Client {
 			larkws.WithEventHandler(t.events))
 	}
 	return t.client
+}
+
+func (t *Transport) dropClient() {
+	t.clientMu.Lock()
+	defer t.clientMu.Unlock()
+	t.client = nil
 }
 
 // dialWS 建长连接的 TCP 连接,Run 的 ctx 一取消就关掉它:gorilla 在握手途中不看 ctx,取消要干等到握手超时。

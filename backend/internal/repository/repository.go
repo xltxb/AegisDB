@@ -5,6 +5,8 @@ package repository
 import (
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2101,6 +2103,18 @@ func (r *Repo) SettingsByPrefix(prefix string) (map[string]string, error) {
 		out[s.K] = s.V
 	}
 	return out, nil
+}
+
+// SetSettings 一次写一组设置:要么全写下,要么一项不写。按键排序写,两次保存不会互相等死。
+func (r *Repo) SetSettings(values map[string]string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, k := range slices.Sorted(maps.Keys(values)) {
+			if err := tx.Save(&model.Setting{K: k, V: values[k]}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Repo) SetSetting(k, v string) error {
