@@ -92,8 +92,6 @@ const INITIAL = {
   ssoBaseUrl: '',
   ssoCookie: 'CS-Token',
   lark: true,
-  email: false,
-  push: true,
   // Lark (飞书) channel config — the approval card is pushed to this bot webhook.
   larkWebhook: '',
   larkSecret: '',
@@ -175,8 +173,6 @@ function formOf(g: Record<string, string | undefined>): Form {
     idleMinutes: Number(parse(g['security.idleMinutes'], 15)) || 15,
     adminIdleMinutes: Number(parse(g['security.adminIdleMinutes'], 5)) || 5,
     lark: parse(g['notify.lark'], true),
-    email: parse(g['notify.email'], false),
-    push: parse(g['notify.push'], true),
     larkWebhook: parse<string>(g['notify.larkWebhook'], ''),
     // The secret is never returned; keep the field blank (blank on save == keep
     // unchanged) and just remember whether one is on file. (R3)
@@ -290,8 +286,6 @@ function settingsPayload(f: Form) {
     'sso.baseUrl': f.ssoBaseUrl.trim(),
     'sso.cookieName': f.ssoCookie.trim() || 'CS-Token',
     'notify.lark': f.lark,
-    'notify.email': f.email,
-    'notify.push': f.push,
     'notify.larkWebhook': f.larkWebhook.trim(),
     'notify.larkSecret': f.larkSecret.trim(),
     'notify.consoleURL': f.consoleURL.trim(),
@@ -643,7 +637,7 @@ export default function SettingsView() {
           {/* Notifications */}
           <section style={showOn('notify')} className="card">
             <Head icon={Bell} title="setNotify" desc="setNotifySub" />
-            <Row title="setLark" desc="setLarkD"><VSwitch {...sw('lark')} /></Row>
+            <Row title="setLark" desc="setLarkD" last={!f.lark}><VSwitch {...sw('lark')} /></Row>
             {f.lark && (
               <div className="larkcfg">
                 <div className="lkrow"><label className="lkl">{t('larkWebhook')}</label><input {...tx('larkWebhook')} className="lkin" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/xxxx" /></div>
@@ -655,8 +649,6 @@ export default function SettingsView() {
                 </div>
               </div>
             )}
-            <Row title="setEmail" desc="setEmailD"><VSwitch {...sw('email')} /></Row>
-            <Row title="setPush" desc="setPushD" last><VSwitch {...sw('push')} /></Row>
           </section>
 
           {/* Webhook (audit event forwarding) */}

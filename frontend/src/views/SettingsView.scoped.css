@@ -37,6 +37,7 @@
 .lkin:focus { border-color: var(--accent-text); }
 .lkhint { margin: -4px 0 2px 140px; font: 500 11.5px var(--font-body); color: var(--text-faint); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .lkhint .mono { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+.larkcfg:last-child { border-bottom: none; }
 .lkfoot { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
 .lkmsg { flex: 1; font: 600 12px var(--font-mono); color: var(--text-muted); }
 .lkmsg.ok { color: var(--success-text); }

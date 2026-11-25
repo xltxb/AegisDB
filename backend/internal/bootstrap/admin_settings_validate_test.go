@@ -68,8 +68,6 @@ func frontendSettingsPayload() map[string]any {
 		"sso.baseUrl":                        "",
 		"sso.cookieName":                     "CS-Token",
 		"notify.lark":                        true,
-		"notify.email":                       false,
-		"notify.push":                        true,
 		"notify.larkWebhook":                 "",
 		"notify.larkSecret":                  "",
 		"notify.consoleURL":                  "",
@@ -109,7 +107,10 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	p["security.mfaGraceMinutes"] = 0
 	p["approval.onTimeout"] = "keep-waiting"
 	p["security.sessionTTL"] = "24h"
+	// 界面上已拿掉(issue #123、#129)、没有逻辑读的键:老调用方整包提交仍要收下。
 	p["gateway.defaultPolicy"] = "approve-1"
+	p["notify.email"] = true
+	p["notify.push"] = false
 	r = app.do(http.MethodPut, "/api/v1/settings", admin, p)
 	eq(t, r.Code, 0, "填满值的整包保存:"+r.Msg)
 
