@@ -480,6 +480,33 @@ func (r *Repo) FailStuckReleases() (int64, []model.Approval, error) {
 	return n, voided, nil
 }
 
+// VoidOrphanReleaseTickets voids every ticket still pending whose release is no
+// longer live (pending, running or waiting), and returns them.
+//
+// Releases now void their tickets as they end (settleRelease); this clears what
+// was left behind before they did (issue #113). Run it after FailStuckReleases, so
+// a release cut off by the restart has already ended. Safe to repeat.
+func (r *Repo) VoidOrphanReleaseTickets() ([]model.Approval, error) {
+	live := r.db.Model(&model.Release{}).Select("id").
+		Where("status IN ?", []string{model.RunPending, model.RunRunning, model.RunWaiting})
+	var orphans []model.Approval
+	if err := r.db.Where("status = ? AND release_id > 0 AND release_id NOT IN (?)", model.StatusPending, live).
+		Order("id asc").Find(&orphans).Error; err != nil {
+		return nil, err
+	}
+	var voided []model.Approval
+	for _, ap := range orphans {
+		claimed, err := r.ClaimApproval(ap.ID, model.StatusPending, model.StatusExpired)
+		if err != nil {
+			return voided, err
+		}
+		if claimed {
+			voided = append(voided, ap)
+		}
+	}
+	return voided, nil
+}
+
 // PendingReleases lists runs that were queued but never started (the in-memory
 // queue does not survive a restart), so boot can re-enqueue them.
 func (r *Repo) PendingReleases() ([]model.Release, error) {
