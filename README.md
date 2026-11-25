@@ -79,7 +79,7 @@ http://localhost:8080/docs （仅本地开发环境挂载）。
 ## 架构
 
 ```
-浏览器 (Vue SPA)        外部系统 / CI         审批魔方
+浏览器 (React SPA)      外部系统 / CI         审批魔方
    │ Cookie + CSRF         │ key.secret         │ 共享密钥
    ▼                       ▼                    ▼
 ┌──────────────────── AegisDB 网关 ────────────────────┐
