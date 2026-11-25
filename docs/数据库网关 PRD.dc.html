@@ -242,7 +242,7 @@
     <tr><td class="id">FR-SET-01</td><td>网关策略:默认策略、严格模式、命令执行超时。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：执行超时生效；严格模式移到分层；“默认策略”从不参与判定，已拿掉。</td></tr>
     <tr><td class="id">FR-SET-02</td><td>审批:超时处理、默认审批人、超时升级到负责人。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：超时处理生效；默认审批人 = DBA 负责人角色成员；“升级到负责人”开关没有任何逻辑读它。</td></tr>
     <tr><td class="id">FR-SET-03</td><td>会话与安全:会话有效期、空闲自动锁定、强制 MFA、IP 允许列表。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--success-text)">已实现</strong>：MFA 按分层；另有管理后台独立的 IP 白名单与空闲超时。</td></tr>
-    <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：飞书卡片生效；“邮件通知”“拦截即时通知”只有开关，没有实现。</td></tr>
+    <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：飞书卡片生效；邮件通知、拦截即时通知没有实现，两个开关已拿掉。</td></tr>
     <tr><td class="id">FR-SET-05</td><td>外观与语言:界面语言(中文/English)、主题(深色/浅色)。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--success-text)">已实现</strong>：主题另有跟随系统。</td></tr>
   </tbody>
 </table>
@@ -286,8 +286,7 @@
   <thead><tr><th style="width:26%">项</th><th>现状</th><th style="width:26%">对应需求</th></tr></thead>
   <tbody>
     <tr><td>“升级到负责人”开关</td><td>没有任何逻辑读它；超时“自动升级”也只写审计告警。</td><td>FR-APPR-05、FR-SET-02</td></tr>
-    <tr><td>邮件通知</td><td>只有开关，没有发邮件的实现。</td><td>FR-SET-04</td></tr>
-    <tr><td>拦截即时通知</td><td>只有开关，没有任何逻辑读它。</td><td>FR-SET-04</td></tr>
+    <tr><td>邮件通知、拦截即时通知</td><td>没有实现；界面上的开关已拿掉。</td><td>FR-SET-04</td></tr>
     <tr><td>逐级审批</td><td>一人决定即生效，没有“组长 → 负责人”。</td><td>FR-APPR-05</td></tr>
     <tr><td>组织目录</td><td>没有对接。</td><td>FR-USER-04</td></tr>
     <tr><td>不可逆 / 锁表标签</td><td>没有。</td><td>FR-APPR-02</td></tr>
