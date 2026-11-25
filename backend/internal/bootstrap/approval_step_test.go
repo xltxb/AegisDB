@@ -60,12 +60,6 @@ func (a *testApp) submitProdHighRisk(token string) apWithSteps {
 	if err := json.Unmarshal(r.Data, &data); err != nil {
 		a.t.Fatalf("decode exec data: %v", err)
 	}
-	// 外部审批的回调只接受已外发的单。测试里没配审批魔方地址,不会真的外发,这里按已外发标记。
-	if data.ApprovalNo != "" {
-		if err := a.repo.SetApprovalExternalDispatched(a.approvalIDByNo(data.ApprovalNo), true); err != nil {
-			a.t.Fatalf("mark dispatched: %v", err)
-		}
-	}
 	if data.ApprovalNo == "" {
 		a.t.Fatalf("expected an approval number from PROD high-risk exec")
 	}

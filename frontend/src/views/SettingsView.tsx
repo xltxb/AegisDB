@@ -95,15 +95,6 @@ const INITIAL = {
   larkWebhook: '',
   larkSecret: '',
   consoleURL: '',
-  // External 飞书审批(审批魔方)对接配置(ADR-0003)
-  extEnabled: false,
-  extRelease: false,
-  extBaseURL: '',
-  extToken: '',
-  extAiGroup: '',
-  extCallbackBaseURL: '',
-  extCallbackSecret: '',
-  extAllowIPs: '',
   execTimeout: num(30), // command execution timeout, seconds
   // Web 命令行每批显示多少行;超出的"加载更多"(后端暂存,一条查询最多读 5 万行)
   resultPageSize: num(1000),
@@ -215,16 +206,6 @@ function formOf(g: Record<string, string | undefined>): Form {
     connCheckEnabled: parse(g['conn.check.enabled'], false),
     connCheckInterval: clampInt(parse(g['conn.check.intervalMinutes'], 10), 10, 1, 1440),
     connCheckConcurrency: clampInt(parse(g['conn.check.concurrency'], 4), 4, 1, 16),
-    // External approval — secrets (token/callbackSecret) are never returned; keep
-    // the fields blank (blank on save == keep unchanged) and just note presence.
-    extEnabled: parse(g['approval.external.enabled'], false),
-    extRelease: parse(g['approval.external.releaseEnabled'], false),
-    extBaseURL: parse<string>(g['approval.external.baseURL'], ''),
-    extAiGroup: parse<string>(g['approval.external.aiGroup'], ''),
-    extCallbackBaseURL: parse<string>(g['approval.external.callbackBaseURL'], ''),
-    extAllowIPs: parse<string>(g['approval.external.callbackAllowIPs'], ''),
-    extToken: '',
-    extCallbackSecret: '',
   }
 }
 
@@ -286,15 +267,6 @@ function settingsPayload(f: Form) {
     'notify.larkWebhook': f.larkWebhook.trim(),
     'notify.larkSecret': f.larkSecret.trim(),
     'notify.consoleURL': f.consoleURL.trim(),
-    // External 飞书审批(审批魔方) — empty token/secret keeps the stored one.
-    'approval.external.enabled': f.extEnabled,
-    'approval.external.releaseEnabled': f.extRelease,
-    'approval.external.baseURL': f.extBaseURL.trim(),
-    'approval.external.token': f.extToken.trim(),
-    'approval.external.aiGroup': f.extAiGroup.trim(),
-    'approval.external.callbackBaseURL': f.extCallbackBaseURL.trim(),
-    'approval.external.callbackSecret': f.extCallbackSecret.trim(),
-    'approval.external.callbackAllowIPs': f.extAllowIPs.trim(),
   }
 }
 // 改没改过:和读进来 / 上次保存时的那一份比。两个 IP 白名单在各自的弹窗里即存即生效,不算在内。
@@ -411,8 +383,6 @@ export default function SettingsView() {
   }
 
   const [hasLarkSecret, setHasLarkSecret] = useState(false)
-  const [hasExtToken, setHasExtToken] = useState(false)
-  const [hasExtCallbackSecret, setHasExtCallbackSecret] = useState(false)
   const [larkTest, setLarkTest, larkTestRef] = useStateRef<{ state: 'idle' | 'sending' | 'ok' | 'err'; msg: string }>({ state: 'idle', msg: '' })
   async function testLark() {
     if (larkTestRef.current.state === 'sending') return
@@ -425,23 +395,16 @@ export default function SettingsView() {
   }
   // 清除一个已配置的密钥(工单 02 第 8 条):后端约定 null = 清除,"" = 不改。即点即存,不等底部的保存 ——
   // 清除是一个明确的动作,与"这次没填"是两回事。
-  async function clearSecret(key: 'notify.larkSecret' | 'approval.external.token' | 'approval.external.callbackSecret') {
+  async function clearSecret(key: 'notify.larkSecret') {
     if (!(await confirmAction(t('secretClearConfirm')))) return
     try {
       await api.saveSettings({ [key]: null })
       if (key === 'notify.larkSecret') { setHasLarkSecret(false); patch({ larkSecret: '' }) }
-      else if (key === 'approval.external.token') { setHasExtToken(false); patch({ extToken: '' }) }
-      else { setHasExtCallbackSecret(false); patch({ extCallbackSecret: '' }) }
       notify(t('secretCleared'), 'success')
     } catch (e) {
       notifyError(e, t('saveFailed'))
     }
   }
-  // The callback URL to register with the vendor. The vendor authenticates by
-  // sending the callback secret as `Authorization: Bearer <secret>` (configured on
-  // their side); the URL itself carries no secret.
-  const extCallbackBase = (f.extCallbackBaseURL ?? '').trim().replace(/\/+$/, '')
-  const extCallbackURL = extCallbackBase ? `${extCallbackBase}/api/v1/approvals/lark/callback` : ''
   const [saved, setSaved] = useState(false)
   const [approvers, setApprovers] = useState<Member[]>([])
 
@@ -458,8 +421,6 @@ export default function SettingsView() {
         setAdminIpEnabled(parse<boolean>(s.settings?.['security.adminIpAllowEnabled'], false))
         setAdminIpList(parse<string>(s.settings?.['security.adminIpAllowlist'], ''))
         setAdminIpForcedOff(!!(s as any).adminIpAllowlistForcedOff)
-        setHasExtToken(!!s.secretsSet?.['approval.external.token'])
-        setHasExtCallbackSecret(!!s.secretsSet?.['approval.external.callbackSecret'])
         api.ssoConfig().then((c) => { setSsoForcedOff(!!c.forcedOff) }).catch(() => { /* 读不到就不提示 */ })
       } catch { /* ignore */ }
       takeBaseline()
@@ -572,21 +533,7 @@ export default function SettingsView() {
             <Head icon={GitPullRequestArrow} title="setAppr" desc="setApprSub" />
             <Row title="setApprTimeout" desc="setApprTimeoutD"><div className="w180"><VSelect value={labelOf(f.apprTimeout, t)} options={APPROVAL_TIMEOUT_KEYS.map((k) => labelOf(k, t))} onChange={(l) => patch({ apprTimeout: keyForLabel(l, APPROVAL_TIMEOUT_KEYS, t, APPROVAL_TIMEOUT_FALLBACK) })} /></div></Row>
             <Row title="setDefApprovers" desc="setDefApproversD"><div className="approvers">{approvers.map((a) => <span key={a.id} className="apv"><span className="ava">{a.initials}</span>{a.name}</span>)}{!approvers.length && <span className="apv-empty">{t('setApproversEmpty')}</span>}<a className="apv-manage" onClick={goPerms}>{t('setApproversManage')}</a></div></Row>
-            <Row title="setSelfApprove" desc="setSelfApproveD"><VSwitch {...sw('allowSelf')} /></Row>
-            {/* External 飞书审批(审批魔方) */}
-            <Row title="setExtAppr" desc="setExtApprD" last={!f.extEnabled}><VSwitch {...sw('extEnabled')} /></Row>
-            {f.extEnabled && <Row title="setExtRelease" desc="setExtReleaseD" data-testid="ext-release-row"><VSwitch {...sw('extRelease')} /></Row>}
-            {f.extEnabled && (
-              <div className="larkcfg">
-                <div className="lkrow"><label className="lkl">{t('extBaseURL')}</label><input {...tx('extBaseURL')} className="lkin" placeholder="https://approval.example.com" /></div>
-                <div className="lkrow"><label className="lkl">{t('extToken')}</label><input {...tx('extToken')} type="password" className="lkin" placeholder={hasExtToken ? t('secretConfigured') : t('extTokenPh')} />{hasExtToken && <VButton height="36px" onClick={() => clearSecret('approval.external.token')}>{t('secretClear')}</VButton>}</div>
-                <div className="lkrow"><label className="lkl">{t('extAiGroup')}</label><input {...tx('extAiGroup')} className="lkin" placeholder="K8S_AI" /></div>
-                <div className="lkrow"><label className="lkl">{t('extCallbackBase')}</label><input {...tx('extCallbackBaseURL')} className="lkin" placeholder="https://gw.corp.io" /></div>
-                {extCallbackURL && <div className="lkhint">{t('extCallbackFull')}<span className="mono">{extCallbackURL}</span></div>}
-                <div className="lkrow"><label className="lkl">{t('extCallbackSecret')}</label><input {...tx('extCallbackSecret')} type="password" className="lkin" placeholder={hasExtCallbackSecret ? t('secretConfigured') : t('extCallbackSecretPh')} />{hasExtCallbackSecret && <VButton height="36px" onClick={() => clearSecret('approval.external.callbackSecret')}>{t('secretClear')}</VButton>}</div>
-                <div className="lkrow"><label className="lkl">{t('extAllowIPs')}</label><input {...tx('extAllowIPs')} className="lkin" placeholder={t('extAllowIPsPh')} /></div>
-              </div>
-            )}
+            <Row title="setSelfApprove" desc="setSelfApproveD" last><VSwitch {...sw('allowSelf')} /></Row>
           </section>
 
           {/* Security */}

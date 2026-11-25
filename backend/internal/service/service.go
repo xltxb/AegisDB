@@ -23,10 +23,9 @@ import (
 // Services is the application service container wired in bootstrap.
 type Services struct {
 	Repo       *repository.Repo
-	// mfaFails:MFA 验证码失败计数(按用户);callbackFails:审批回调鉴权失败计数(按来源 IP)。
-	// 见 mfa_guard.go。挂在实例上而不是包级变量:每个 Services 各算各的。
+	// mfaFails:MFA 验证码失败计数(按用户)。见 mfa_guard.go。
+	// 挂在实例上而不是包级变量:每个 Services 各算各的。
 	mfaFails      *failBook[int64]
-	callbackFails *failBook[string]
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager
@@ -77,7 +76,6 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		Webhook:  NewDispatcher(repo),
 
 		mfaFails:      newFailBook[int64](mfaMaxFails, mfaWindow, mfaLockout),
-		callbackFails: newFailBook[string](callbackMaxFails, callbackFailWindow, callbackLockout),
 	}
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.
@@ -327,7 +325,7 @@ func (s *Services) recordAudit(actor *model.User, conn *model.Connection, comman
 }
 
 // recordAuditBy is recordAudit for an action authorised by someone other than
-// the actor — an external approver, or an administrator acting on another
+// the actor — an API credential acting for someone, or an administrator acting on another
 // user's account. See AuditLog.Operator.
 func (s *Services) recordAuditBy(actor *model.User, operator string, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
 	return s.recordAuditFrom("", actor, operator, conn, command, risk, result, apNo, eventType)
@@ -342,7 +340,7 @@ func (s *Services) recordAuditSrc(source string, actor *model.User, conn *model.
 //
 // 绝大多数调用点不必用它:请求进来时 middleware.BindRequestUser 已经按路由给 actor 盖了
 // 来源(model.AuditSourceForRoute)。要用它的是**入口与路由无关**的那几类 —— 后台跑的
-// 导出任务与发布阶段(actor 是从库里新取的,身上没有请求)、审批决定(飞书回调也会走到)、
+// 导出任务与发布阶段(actor 是从库里新取的,身上没有请求)、审批决定(开放接口代批也会走到)、
 // 登录(发生在鉴权中间件之前)。source 为空 = 沿用 actor 身上的。
 func (s *Services) recordAuditFrom(source string, actor *model.User, operator string, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
 	// 同一个 eventType 既写进行里,也交给 webhook —— 一次赋值,两处读同一个变量,

@@ -6,13 +6,12 @@ info:
     数据库管理网关的 HTTP 接口。**每一条**已注册的路由都在本文件里 —— 由
     `TestOpenAPICoversEveryRoute` 静态守住:新增路由但没写进来,测试直接失败。
 
-    ## 三套鉴权,不要混用
+    ## 两套鉴权,不要混用
 
     | 面 | 前缀 | 鉴权 | 谁在调 |
     |---|---|---|---|
     | 控制台 | `/api/v1` | `Authorization: Bearer <JWT>` | 登录的人 |
     | 开放接口 | `/api/v1/open` | `Authorization: Bearer <key>.<secret>` | 外部系统 |
-    | 回调 | `/api/v1/approvals/lark/callback` | 共享密钥(Bearer 或 `?secret=`) | 审批服务 |
 
     开放接口**不走**控制台的 IP 白名单:那个设置回答的是"哪些办公网可以打开控制台",
     把 CI runner 的出口段并进去等于为了一台机器放宽控制台的边界。每把凭据自带白名单。
@@ -95,7 +94,7 @@ tags:
   - name: pipelines
     description: 发布流程模板与发布单(CI/CD)
   - name: approvals
-    description: 审批单与外部审批回调
+    description: 审批单
   - name: audit
     description: 防篡改审计链
   - name: settings
@@ -2401,15 +2400,6 @@ paths:
         够得到该实例的同事。返回前校验审查时记下的 sha256,文件被改过即拒绝(不展示)。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { description: 'OK { filename, content } / 40300 无权查看 / 40001 非脚本工单、文件不存在或已被修改' } }
-  /approvals/lark/callback:
-    post:
-      tags: [approvals]
-      summary: 审批魔方回调(共享密钥鉴权,非用户 JWT)
-      security: []
-      description: |
-        密钥走 `Authorization: Bearer`,或回调 URL 上的 `?secret=`(有些厂商只能注册 URL)。
-        另有独立的来源 IP 白名单。鉴权失败一律**失败关闭**,因为它可能触发生产执行。
-      responses: { '200': { description: 'OK / 40300 鉴权失败 / 40001 审批单不存在' } }
 
   # ---------------------------------------------------------------- audit
   /audit:
@@ -2593,7 +2583,7 @@ paths:
   /settings/lark/test:
     post:
       tags: [settings]
-      summary: '[settings · admin] 测试飞书 / 审批魔方连通性'
+      summary: '[settings · admin] 测试飞书连通性'
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /service-accounts:
     get:

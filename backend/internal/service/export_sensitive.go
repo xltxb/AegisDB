@@ -66,7 +66,6 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 	}
 	s.recordAuditSrc(model.AuditSourceExport, u, conn, "EXPORT "+tag+" "+job.SQL, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
 	s.Webhook.SendLarkApproval(ap)
-	s.dispatchExternalApproval(u, ap)
 	job.ApNo = ap.ApNo
 	job.ApprovalID = ap.ID
 	return nil

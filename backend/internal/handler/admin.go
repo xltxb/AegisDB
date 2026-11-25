@@ -25,9 +25,8 @@ import (
 	"aegisdb/pkg/sqlutil"
 )
 
-// encryptedSettingKeys hold high-impact secrets encrypted at rest (a DB dump must
-// not hand over a usable token / callback secret that could forge approvals →
-// trigger production execution). Encrypted on save, decrypted where read.
+// encryptedSettingKeys hold secrets encrypted at rest. 审批魔方对接已移除(#137),这两个键
+// 没有代码再读;留在这里是为了老调用方整包提交时,新写进去的值仍是密文而不是明文。
 var encryptedSettingKeys = map[string]bool{
 	"approval.external.token":          true,
 	"approval.external.callbackSecret": true,
@@ -834,78 +833,6 @@ func (h *Handler) RejectApproval(c *gin.Context) {
 		return
 	}
 	resp.OK(c, gin.H{"ok": true, "status": "rejected"})
-}
-
-// LarkApprovalCallback receives审批魔方's approval-result callback (public route,
-// no user JWT). It is authenticated by a shared secret (Authorization: Bearer, or
-// a ?secret= query fallback) + optional source-IP allowlist, correlated to our
-// ticket by ApNo, idempotent, and — since it can trigger a production execution —
-// fails closed on any auth error.
-// bearerToken extracts the token from an "Authorization: Bearer <token>" header
-// (case-insensitive scheme), or "" if absent/malformed.
-func bearerToken(auth string) string {
-	auth = strings.TrimSpace(auth)
-	const p = "bearer "
-	if len(auth) > len(p) && strings.EqualFold(auth[:len(p)], p) {
-		return strings.TrimSpace(auth[len(p):])
-	}
-	return ""
-}
-
-func (h *Handler) LarkApprovalCallback(c *gin.Context) {
-	ip := c.ClientIP()
-	// Authenticate the callback by a shared secret carried as `Authorization:
-	// Bearer <secret>` (the vendor sends it). Fallback: a `secret` query param in
-	// the callback URL, for vendors that can register a URL but not headers.
-	secret := bearerToken(c.GetHeader("Authorization"))
-	if secret == "" {
-		secret = c.Query("secret")
-	}
-	// Parse first so we can log correlation keys even on an auth failure (the body
-	// is untrusted until VerifyExternalCallback passes — we only log from it here).
-	var req dto.LarkApprovalCallbackReq
-	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Warn("lark callback: bad body", "ip", ip, "err", err)
-		resp.Fail(c, resp.CodeBadRequest, "参数错误")
-		return
-	}
-	slog.Info("lark callback received",
-		"ip", ip, "secretPresent", secret != "",
-		"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID, "vendorTaskId", req.TaskID,
-		"approved", req.Approved, "approvers", len(req.Approver))
-
-	if err := h.Svc.VerifyExternalCallback(secret, ip); err != nil {
-		// Most common misconfig: the vendor didn't send the Bearer secret, or our
-		// callbackSecret setting is empty (fail-closed) / mismatched, or the source
-		// IP isn't in the allowlist. The vendor only sees HTTP 200, so this line is
-		// how you spot a silently-rejected callback.
-		slog.Warn("lark callback: auth rejected (fail-closed)",
-			"ip", ip, "secretPresent", secret != "", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调鉴权失败")
-		return
-	}
-	status, err := h.Svc.DecideApprovalExternal(req)
-	if err == service.ErrNotFound {
-		slog.Warn("lark callback: approval not found",
-			"externalTaskId", req.ExternalTaskID, "requestId", req.RequestID)
-		resp.Fail(c, resp.CodeBadRequest, "审批单不存在")
-		return
-	}
-	if err == service.ErrForbidden {
-		// The payload authenticated but does not describe this ticket (e.g. it
-		// quotes a different vendor task) — see DecideApprovalExternal.
-		slog.Warn("lark callback: payload rejected", "externalTaskId", req.ExternalTaskID)
-		resp.Fail(c, resp.CodeForbidden, "回调与该审批单不匹配")
-		return
-	}
-	if err != nil {
-		slog.Error("lark callback: process failed", "externalTaskId", req.ExternalTaskID, "err", err)
-		resp.Fail(c, resp.CodeInternalError, "回调处理失败")
-		return
-	}
-	slog.Info("lark callback processed",
-		"externalTaskId", req.ExternalTaskID, "approved", req.Approved, "resultStatus", status)
-	resp.OK(c, gin.H{"status": status})
 }
 
 // ---------------------------------------------------------------- Notifications

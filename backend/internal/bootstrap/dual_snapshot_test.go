@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"sync"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,54 +188,35 @@ func TestDualSnapshot_LegacyRowsWithoutATierStillList(t *testing.T) {
 	eq(t, app.do(http.MethodGet, "/api/v1/audit", admin, nil).Code, 0, "the audit listing still renders")
 }
 
-// The outbound 审批魔方 payload carries both fields. `tier` is additive; `env`
-// keeps its name and meaning but now ranges over any environment code.
-func TestDualSnapshot_ExternalPayloadCarriesEnvAndTier(t *testing.T) {
-	var mu sync.Mutex
-	var gotEnv, gotTier string
+// The 飞书 group card names the environment the command ran in — the environment
+// code (range open: prod-hk, prod-sh, …), upper-cased — not just the tier.
+func TestDualSnapshot_LarkCardCarriesEnv(t *testing.T) {
+	received := make(chan string, 16)
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var in struct {
-			Payload struct {
-				Env  string `json:"env"`
-				Tier string `json:"tier"`
-			} `json:"payload"`
-		}
-		_ = json.Unmarshal(body, &in)
-		mu.Lock()
-		gotEnv, gotTier = in.Payload.Env, in.Payload.Tier
-		mu.Unlock()
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`{"code":0,"task_id":"cube-1","status":"PENDING"}`))
+		b, _ := io.ReadAll(r.Body)
+		received <- string(b)
+		_, _ = w.Write([]byte(`{"code":0,"msg":"success"}`))
 	}))
 	defer stub.Close()
 
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
-	app.setSettings(admin, map[string]any{
-		"approval.external.enabled":         true,
-		"approval.external.baseURL":         stub.URL,
-		"approval.external.token":           "tok-xyz",
-		"approval.external.callbackBaseURL": "https://gw.example",
-	})
+	app.setSettings(admin, map[string]any{"notify.lark": true, "notify.larkWebhook": stub.URL})
 	app.interceptOn(admin, conn, "DROP TABLE orders;")
 
-	// Dispatch is async.
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		mu.Lock()
-		done := gotEnv != ""
-		mu.Unlock()
-		if done {
-			break
+	// The card is pushed async. 测试数据里本来就有别的单,只认这张单的卡(它的环境是 prod-hk)。
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case body := <-received:
+			if strings.Contains(body, "PROD-HK") {
+				return
+			}
+		case <-deadline:
+			t.Fatal("no approval card naming the environment prod-hk")
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	eq(t, gotEnv, "prod-hk", "payload env = environment code (range now open)")
-	eq(t, gotTier, "prod", "payload tier = control tier, new and additive")
 }
 
 // Instance labels are built from the environment, so they name the cluster an

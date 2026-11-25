@@ -79,9 +79,9 @@ http://localhost:8080/docs （仅本地开发环境挂载）。
 ## 架构
 
 ```
-浏览器 (React SPA)      外部系统 / CI         审批魔方
-   │ Cookie + CSRF         │ key.secret         │ 共享密钥
-   ▼                       ▼                    ▼
+浏览器 (React SPA)      外部系统 / CI
+   │ Cookie + CSRF         │ key.secret
+   ▼                       ▼
 ┌──────────────────── AegisDB 网关 ────────────────────┐
 │ 鉴权 → 菜单权限 → 能力矩阵 → 高危字典 → 无 WHERE 拦截 │
 │        │ 放行            │ 转审批           │ 拒绝    │
@@ -172,8 +172,7 @@ MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，�
   一张单只能执行一次，执行前重新判定。单据最终状态以数据库返回的结果为准。
 - 例外：发布单由流水线推进，敏感导出单批准后由后台任务执行，执行窗口单批准后窗口生效。
 - 网关在执行途中重启的单子判失败并写明「结果未知，请到库上核实」，不会重跑。
-- 可接外部飞书审批（审批魔方）：回调校验共享密钥与任务号，可另配 IP 白名单。
-  见 `docs/external-approval-setup.md`。
+- 审批在站内进行；发布单另可由持 `release:approve` 的开放接口凭据代批（须点名链上审批人，规则同控制台）。新单与超时升级会推送飞书群机器人（Webhook）通知。
 
 ### 执行窗口（班车）
 
@@ -356,7 +355,6 @@ sudo systemctl enable --now aegisdb
 |---|---|---|---|
 | 控制台 | `/api/v1` | 会话 Cookie + CSRF，或 `Authorization: Bearer <JWT>` | 登录的人 |
 | 开放接口 | `/api/v1/open` | `Authorization: Bearer <key>.<secret>`，或 `X-AegisDB-Key` + `X-AegisDB-Secret` | 外部系统 |
-| 审批回调 | `/api/v1/approvals/lark/callback` | 共享密钥 | 审批魔方 |
 
 业务接口一律返回 HTTP 200，结果在包体 `{ code, msg, data }` 里。常见码：`0` 成功、`40100` 未登录、
 `40300` 无权、`42200` 已转审批、`42800` 需二次验证、`42900` 过于频繁，完整码表见契约文件。
@@ -411,7 +409,7 @@ cd frontend && npm run test:e2e
 |---|---|
 | 部署 | [`DEPLOY.md`](DEPLOY.md)、`docs/上线部署SOP.md`、`docs/上线部署SOP-存储库搬迁到PG.md` |
 | 架构决策 | `docs/adr/`（0003–0020，共 18 篇） |
-| 对接 | `docs/开放接口对接文档.md`、`docs/巡检报告接入说明.md`、`docs/事件中心平台接入文档.md`、`docs/external-approval-setup.md` |
+| 对接 | `docs/开放接口对接文档.md`、`docs/巡检报告接入说明.md`、`docs/事件中心平台接入文档.md` |
 | 数据库规范 | `docs/MySQL規範.md`、`docs/TIDB規範.md`、`docs/Oracle規範.md`、`docs/DWS对象设计和业务开发规范-ABLE.md` |
 | 安全审计 | `docs/白盒安全审计报告.md` |
 | 设计稿 | `docs/*.dc.html`、`docs/_ds/` |

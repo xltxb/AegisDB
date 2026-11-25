@@ -13,7 +13,7 @@ import (
 //
 // 从前只有巡检上传、开放接口 JSON、脚本上传三处自己限了请求体,其余路由(包括不用登录的
 // /auth/login)整包读进内存 —— 一个超大 JSON 就能把进程撑爆。这里按路由分档兜底:
-//   - 不用登录的入口(登录、SSO、审批回调):1MB,够用且不给未登录的人留空间;
+//   - 不用登录的入口(登录、SSO):1MB,够用且不给未登录的人留空间;
 //   - 脚本上传:64MB(它自己再按 4×15MB 收紧);
 //   - 其余(登录后的接口、开放接口):32MB —— SQL 文本上限 15MB,JSON 转义后可能翻倍。
 // 处理器自己的上限照旧生效,这里只是最外面那一道。
@@ -26,7 +26,7 @@ const (
 
 func bodyLimitFor(path string) int64 {
 	switch {
-	case strings.HasPrefix(path, "/api/v1/auth/"), path == "/api/v1/approvals/lark/callback":
+	case strings.HasPrefix(path, "/api/v1/auth/"):
 		return bodyLimitUnauth
 	case strings.HasPrefix(path, "/api/v1/scripts/"):
 		return bodyLimitScripts
