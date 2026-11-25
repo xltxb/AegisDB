@@ -364,8 +364,7 @@ func (r *Repo) FinishRelease(id int64, from string, fields map[string]any, settl
 
 // settleRelease closes what a release that ended without completing leaves open.
 //
-// Stages: one cut off mid-run failed, one never reached is skipped. Pending and
-// waiting rows on a finished release are debris, not work.
+// Stages: see settleStages.
 //
 // Tickets: every one still pending is voided, using the same word as the timeout
 // sweep (expired — no human decision recorded, because none was made). They are
@@ -398,15 +397,53 @@ func settleRelease(tx *gorm.DB, releaseID int64, now time.Time) ([]model.Approva
 			return nil, err
 		}
 	}
+	return voided, settleStages(tx, releaseID, now)
+}
+
+// settleStages closes the stages of a release that ended without completing: one
+// cut off mid-run failed, one never reached is skipped. Pending and waiting rows
+// on a finished release are debris, not work.
+func settleStages(tx *gorm.DB, releaseID int64, at time.Time) error {
 	if err := tx.Model(&model.ReleaseStage{}).
 		Where("release_id = ? AND status = ?", releaseID, model.RunRunning).
-		Updates(map[string]any{"status": model.RunFailed, "finished_at": now}).Error; err != nil {
-		return nil, err
+		Updates(map[string]any{"status": model.RunFailed, "finished_at": at}).Error; err != nil {
+		return err
 	}
-	err := tx.Model(&model.ReleaseStage{}).
+	return tx.Model(&model.ReleaseStage{}).
 		Where("release_id = ? AND status IN ?", releaseID, []string{model.RunPending, model.RunWaiting}).
-		Updates(map[string]any{"status": model.RunSkipped, "finished_at": now}).Error
-	return voided, err
+		Updates(map[string]any{"status": model.RunSkipped, "finished_at": at}).Error
+}
+
+// SettleEndedReleaseStages closes stages still open on releases that failed or
+// were aborted, and reports how many releases it touched.
+//
+// Releases now settle their stages as they end; this clears what was left behind
+// before they did (issue #115). The stages end when their release did, not now —
+// otherwise a run from last month would show a stage that took weeks. A successful
+// release is left alone: a stage whose outcome could not be written stays
+// `running` while the run goes on to succeed, and calling it failed would be
+// wrong. Safe to repeat.
+func (r *Repo) SettleEndedReleaseStages() (int64, error) {
+	open := r.db.Model(&model.ReleaseStage{}).Select("release_id").
+		Where("status IN ?", []string{model.RunPending, model.RunWaiting, model.RunRunning})
+	var rels []model.Release
+	if err := r.db.Select("id", "finished_at").
+		Where("status IN ? AND id IN (?)", []string{model.RunFailed, model.RunAborted}, open).
+		Order("id asc").Find(&rels).Error; err != nil {
+		return 0, err
+	}
+	var n int64
+	for _, rel := range rels {
+		at := time.Now()
+		if rel.FinishedAt != nil {
+			at = *rel.FinishedAt
+		}
+		if err := r.db.Transaction(func(tx *gorm.DB) error { return settleStages(tx, rel.ID, at) }); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
 }
 
 // WaitingApprovalStages returns the approve stages currently blocking a release,

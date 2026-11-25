@@ -144,6 +144,12 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		slog.Warn("voided tickets of releases that already ended", "tickets", nos)
 		s.afterVoided(voided)
 	}
+	// 同理,从前结束的发布单上还停在待执行 / 等待 / 运行中的阶段(#109 之前)。
+	if n, err := repo.SettleEndedReleaseStages(); err != nil {
+		slog.Error("stages of ended releases could not be settled on startup", "err", err)
+	} else if n > 0 {
+		slog.Warn("settled stages of releases that already ended", "releases", n)
+	}
 	// 审批单的执行同理:上一个进程在库上跑到一半的,结果无从得知,判失败并写明,不重跑。
 	// 在线变更同理:进行中的判失败(原表没切换),残留的影子表在后台尽力删掉。
 	s.ReconcileOSCJobs()
