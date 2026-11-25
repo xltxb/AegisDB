@@ -20,7 +20,8 @@ import (
 
 func newMetaRepo(t *testing.T) *Repo {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "meta.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	// temp_store 与 bootstrap.OpenDB 一致:临时目录不可写的环境里这些用例也要能跑(issue #92)。
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "meta.db")+"?_pragma=temp_store(MEMORY)"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 	if err != nil {
 		t.Fatal(err)
 	}

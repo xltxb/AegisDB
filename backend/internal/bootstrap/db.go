@@ -36,12 +36,15 @@ func OpenDB(cfg *Config) (*gorm.DB, error) {
 		// busy_timeout lets writers wait instead of failing "database is locked",
 		// and WAL improves reader/writer concurrency (M6). Append with the right
 		// separator so a path that already carries query params keeps its pragmas.
+		// temp_store(MEMORY): bulk INSERT ... RETURNING needs temp tables, and the
+		// default puts them in a temp directory that may not be writable (read-only
+		// containers, sandboxes), failing with SQLITE_CANTOPEN (issue #92).
 		dsn := cfg.Database.SQLitePath
 		sep := "?"
 		if strings.Contains(dsn, "?") {
 			sep = "&"
 		}
-		dsn += sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+		dsn += sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=temp_store(MEMORY)"
 		db, err = gorm.Open(sqlite.Open(dsn), gcfg)
 		if err != nil {
 			return nil, fmt.Errorf("open sqlite: %w", err)

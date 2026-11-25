@@ -84,10 +84,6 @@ func realSchemaSnapshotOnce(conn *model.Connection, database, schema string) (*s
 // 列不全的由页面上直接输入库名兜住。
 const maxDiffDatabases = 2000
 
-// diffSystemSchemas 比 mysqlSystemSchemas 多 TiDB 的 metrics_schema。比较前要先转小写:TiDB 的系统库
-// 名是大写的,而 schemata 这里区分大小写,不转就会把 INFORMATION_SCHEMA 也列进下拉。
-const diffSystemSchemas = `('information_schema','performance_schema','mysql','sys','metrics_schema')`
-
 // DiffDatabaseNames 列出一个实例上可以拿来做结构对比的"库",给页面的库名下拉:MySQL 系是库,
 // Oracle 是用户(schema),PG / DWS 是可连接的非模板库,SQLite 只有 main。系统库不列。
 func diffDatabaseNamesOnce(conn *model.Connection) ([]string, error) {
@@ -100,7 +96,7 @@ func diffDatabaseNamesOnce(conn *model.Connection) ([]string, error) {
 	switch fam {
 	case familyMySQL:
 		target.Database = "" // information_schema 是全局的,配的默认库不存在也不该让这一步失败
-		q = "SELECT schema_name FROM information_schema.schemata WHERE LOWER(schema_name) NOT IN " + diffSystemSchemas + " ORDER BY schema_name"
+		q = "SELECT schema_name FROM information_schema.schemata WHERE LOWER(schema_name) NOT IN " + mysqlSystemSchemas + " ORDER BY schema_name"
 	case familyOracle:
 		// oracle_maintained 是 12c 起才有的列;老版本回退到全部用户、去掉常见的系统用户。
 		q = "SELECT username FROM all_users WHERE oracle_maintained = 'N' ORDER BY username"
