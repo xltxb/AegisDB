@@ -90,6 +90,9 @@ var texts = map[string]map[string]string{
 		"click.off":      "这个审批机器人没有开启,请到网关处理。",
 		"click.retry":    "处理失败,请稍后再试。",
 		"click.test":     "测试成功。这是测试卡片,没有审批任何单子。",
+
+		// 平台等不及了先答这一句;处理完由扫描更新卡片。
+		"click.processing": "正在处理,稍后看卡片上的结果。",
 	},
 	"en": {
 		"title.command": "High-risk command awaiting approval",
@@ -174,6 +177,8 @@ var texts = map[string]map[string]string{
 		"click.off":      "This approval bot is turned off. Use the gateway instead.",
 		"click.retry":    "Something went wrong. Please try again later.",
 		"click.test":     "Test succeeded. This is a test card; no request was approved.",
+
+		"click.processing": "Still processing. The card will show the result shortly.",
 	},
 }
 

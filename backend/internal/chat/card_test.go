@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
-	"os"
+	"io/fs"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
@@ -74,30 +75,34 @@ func TestErrGoneSurvivesWrapping(t *testing.T) {
 }
 
 // 本包与各渠道的实现不认识业务:不引用 service / repository / model,换渠道不动业务,业务变了不动渠道。
+// 连子目录一起查,本仓库里只许引用 chat 自己。
 func TestPackageStaysBusinessFree(t *testing.T) {
-	files, err := os.ReadDir(".")
+	checked, dirs := 0, map[string]bool{}
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		p, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		checked++
+		dirs[filepath.Dir(path)] = true
+		for _, im := range p.Imports {
+			to := strings.Trim(im.Path.Value, `"`)
+			if strings.HasPrefix(to, "aegisdb/") && to != "aegisdb/internal/chat" && !strings.HasPrefix(to, "aegisdb/internal/chat/") {
+				t.Errorf("%s 引用了 %s", path, to)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	checked := 0
-	for _, f := range files {
-		if !strings.HasSuffix(f.Name(), ".go") {
-			continue
-		}
-		p, err := parser.ParseFile(token.NewFileSet(), f.Name(), nil, parser.ImportsOnly)
-		if err != nil {
-			t.Fatal(err)
-		}
-		checked++
-		for _, im := range p.Imports {
-			for _, bad := range []string{"internal/service", "internal/repository", "internal/model"} {
-				if strings.Contains(im.Path.Value, bad) {
-					t.Errorf("%s 引用了 %s", f.Name(), im.Path.Value)
-				}
-			}
-		}
-	}
-	if checked < 3 {
-		t.Fatalf("只查了 %d 个文件", checked)
+	if checked < 3 || !dirs["lark"] {
+		t.Fatalf("只查了 %d 个文件,目录 %v", checked, dirs)
 	}
 }
