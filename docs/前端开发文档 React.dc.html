@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<style>
+  body { margin:0; background:#fff; color:var(--text-body); }
+  .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
+  .doc-frame { width:100%; border-collapse:collapse; }
+  .doc-frame td { padding:0; }
+  .hdr-space, .ftr-space { display:none; }
+  h1,h2,h3 { text-wrap:balance; }
+  p,li { text-wrap:pretty; }
+  .t { width:100%; border-collapse:collapse; margin:14px 0 4px; }
+  .t th { text-align:left; font:600 10.5px/1.4 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); background:var(--surface-sunken); border:1px solid var(--border-subtle); padding:8px 11px; }
+  .t td { font:400 13px/1.5 var(--font-body); color:var(--text-body); border:1px solid var(--border-subtle); padding:9px 11px; vertical-align:top; }
+  .t td.id { font:600 11.5px/1.5 var(--font-mono); color:var(--accent-text); white-space:nowrap; }
+  pre { background:#0e1422; border:1px solid var(--border-default); border-radius:10px; padding:14px 16px; overflow-x:auto; font:500 11.5px/1.62 var(--font-mono); color:#c9d4ea; margin:12px 0; }
+  pre .k { color:#7aa2ff; } pre .s { color:#5fd0a8; } pre .c { color:#5b6479; } pre .a { color:#2dcde6; }
+  code.inl { font:600 12px var(--font-mono); color:var(--accent-text); background:var(--accent-subtle); padding:1px 5px; border-radius:4px; }
+  @page { size:A4; margin:0; }
+  @media print {
+    html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html, body { margin:0; padding:0; }
+    .doc { max-width:none !important; margin:0 !important; padding:0 0.7in !important; box-shadow:none !important; }
+    .hdr-space, .ftr-space { display:table-cell; height:0.7in; }
+    h1,h2,h3,h4 { break-after:avoid; }
+    figure, pre, blockquote, table, tr, .keep { break-inside:avoid; }
+    p, li { orphans:3; widows:3; }
+  }
+</style>
+</helmet>
+
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+<div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
+  <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">AegisDB</span>
+  <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Frontend Engineering</span>
+</div>
+
+<div style="font:600 12px var(--font-mono); letter-spacing:.18em; color:var(--accent-text); text-transform:uppercase">前端开发文档 · FRONTEND</div>
+<h1 style="font:700 33px/1.15 var(--font-display); color:var(--text-strong); letter-spacing:-.025em; margin:10px 0 12px">数据库管理网关<br>前端开发文档（React）</h1>
+<p style="font:400 15px/1.6 var(--font-body); color:var(--text-muted); margin:0 0 22px; max-width:62ch">本文面向前端工程师,说明 React 前端的技术栈、工程结构、路由与状态、各模块实现要点、API 对接契约、三层权限控制、国际化与主题、样式隔离。内容以现有代码为准。配套:《后端开发文档 (Go Gin)》、《数据库网关 PRD》。</p>
+
+<table class="t keep"><tbody>
+  <tr><td class="id" style="width:24%">技术栈</td><td>React 19 · TypeScript · Vite</td><td class="id" style="width:22%">状态/路由</td><td>Zustand · React Router</td></tr>
+  <tr><td class="id">关联文档</td><td>PRD v1.0 / 后端 Go Gin</td><td class="id">更新</td><td>2026-11-25</td></tr>
+</tbody></table>
+
+<!-- 1 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">01</span> 技术栈与选型</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Stack</div>
+<table class="t">
+  <thead><tr><th style="width:22%">类别</th><th style="width:32%">选型</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>框架</td><td>React 19.3 · TypeScript 7</td><td>函数组件 + hooks；不启用 StrictMode。</td></tr>
+    <tr><td>构建</td><td>Vite 8</td><td>按路由懒加载分包；<code class="inl">tsc --noEmit</code> 通过才构建。</td></tr>
+    <tr><td>路由</td><td>React Router 8</td><td>hash 路由，loader 里做登录与菜单权限守卫。</td></tr>
+    <tr><td>状态管理</td><td>Zustand 5</td><td>只放跨页面共享的状态，共 5 个 store；页面自己的状态用 hooks。</td></tr>
+    <tr><td>HTTP</td><td>Axios</td><td>统一实例与拦截器；下载类接口走 <code class="inl">fetch</code>。</td></tr>
+    <tr><td>终端</td><td>xterm.js 6</td><td>Web 命令行渲染；WebSocket 流式交互，断线退回 REST。</td></tr>
+    <tr><td>SQL 编辑</td><td>自研 <code class="inl">SqlEditor</code></td><td>textarea + 高亮覆盖层 + 自动补全，没有引入编辑器库。</td></tr>
+    <tr><td>国际化</td><td><code class="inl">@intlify/core-base</code></td><td>vue-i18n 的内核，不依赖 Vue；词条是 <code class="inl">zh / en.json5</code>。</td></tr>
+    <tr><td>样式</td><td>AegisDB Design Tokens + 组件级样式</td><td>CSS 变量深 / 浅主题；<code class="inl">*.scoped.css</code> 由 <code class="inl">build/scopedCss.ts</code> 隔离。</td></tr>
+    <tr><td>图标</td><td>lucide-react 0.468</td><td>版本固定：升级会改变图标形状。</td></tr>
+    <tr><td>测试</td><td>Playwright</td><td>e2e 在真实浏览器里跑、接口打桩；单测也用它的运行器。</td></tr>
+  </tbody>
+</table>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">Node 要求 ≥ 22.22（React Router 8）。</p>
+
+<!-- 2 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">02</span> 工程结构</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Project Layout</div>
+<pre><code>frontend/
+├─ build/
+│  ├─ scopedCss.ts         <span class="c"># 组件级样式隔离（Vite 插件）</span>
+│  └─ json5Locales.ts      <span class="c"># 词条解析与逐条校验（Vite 插件）</span>
+├─ src/
+│  ├─ main.tsx  App.tsx    <span class="c"># 入口；品牌、标题、favicon、全局提示与确认框</span>
+│  ├─ router/
+│  │  ├─ routes.ts         <span class="c"># 路由表与元信息</span>
+│  │  ├─ guard.ts          <span class="c"># 登录 + 菜单 + 管理后台守卫</span>
+│  │  └─ index.ts          <span class="c"># 组装 hash 路由、旧地址重定向</span>
+│  ├─ stores/              <span class="c"># auth  ui  envtier  inspection  snippets</span>
+│  ├─ hooks/               <span class="c"># useI18n useNav useEvent useStateRef useUnsavedFlag …</span>
+│  ├─ api/
+│  │  ├─ http.ts           <span class="c"># axios 实例 + 拦截器</span>
+│  │  ├─ codes.ts          <span class="c"># 业务错误码</span>
+│  │  └─ index.ts          <span class="c"># 全部接口</span>
+│  ├─ lib/                 <span class="c"># 不依赖 React 的纯逻辑（单测直接跑）</span>
+│  ├─ views/               <span class="c"># 路由级页面，一页一个 XxxView.tsx</span>
+│  ├─ components/
+│  │  ├─ AppLayout.tsx  KeepAlive.tsx  useAdminIdle.ts  RouteError.tsx …
+│  │  ├─ common/           <span class="c"># VButton VSelect VMultiSelect VTagSelect VDateTime VSwitch …</span>
+│  │  ├─ modals/  terminal/  query/  perms/  pipelines/  settings/  approvals/
+│  ├─ locales/             <span class="c"># zh.json5  en.json5  core.ts  index.ts</span>
+│  ├─ styles/              <span class="c"># main.css  tokens/*.css</span>
+│  └─ types/               <span class="c"># 与后端 DTO 对齐</span>
+├─ e2e/                    <span class="c"># 浏览器用例</span>
+└─ tests/unit/             <span class="c"># lib 与词条的单测</span>
+</code></pre>
+
+<!-- 3 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">03</span> 路由与菜单权限</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Routing &amp; Menu Guard</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">每个路由在 <code class="inl">handle</code> 里声明元信息，<code class="inl">menuKey</code> 对应后端返回的 <code class="inl">menus</code>。<code class="inl">gate</code> 复用另一个菜单的权限；<code class="inl">portal: 'admin'</code> 表示管理后台；<code class="inl">open</code> 表示登录即可进；<code class="inl">home</code> 是落地页。页面按路由懒加载。</p>
+<table class="t">
+  <thead><tr><th style="width:26%">用户后台</th><th style="width:20%">权限</th><th>页面</th></tr></thead>
+  <tbody>
+    <tr><td class="id">/dashboard</td><td class="id">home</td><td>总览（落地页，不设菜单闸）</td></tr>
+    <tr><td class="id">/terminal</td><td class="id">terminal</td><td>Web 命令行</td></tr>
+    <tr><td class="id">/export</td><td class="id">terminal</td><td>数据导出</td></tr>
+    <tr><td class="id">/uploads</td><td class="id">terminal</td><td>脚本上传</td></tr>
+    <tr><td class="id">/async-jobs</td><td class="id">terminal</td><td>后台执行</td></tr>
+    <tr><td class="id">/releases</td><td class="id">pipeline</td><td>发布</td></tr>
+    <tr><td class="id">/sql-review</td><td class="id">terminal</td><td>规范审查（自查）</td></tr>
+    <tr><td class="id">/approvals</td><td class="id">approve</td><td>审批</td></tr>
+    <tr><td class="id">/projects</td><td class="id">project</td><td>项目</td></tr>
+    <tr><td class="id">/exec-windows</td><td class="id">execwindow</td><td>执行窗口</td></tr>
+    <tr><td class="id">/query</td><td class="id">query</td><td>数据查询（业务方）</td></tr>
+    <tr><td class="id">/schema-diff</td><td class="id">schemadiff</td><td>表结构对比</td></tr>
+    <tr><td class="id">/inspection</td><td class="id">inspection</td><td>AI 巡检报告</td></tr>
+    <tr><td class="id">/audit</td><td class="id">open</td><td>我的操作记录</td></tr>
+  </tbody>
+</table>
+<table class="t">
+  <thead><tr><th style="width:26%">管理后台</th><th style="width:20%">权限</th><th>页面</th></tr></thead>
+  <tbody>
+    <tr><td class="id">/admin/overview</td><td class="id">open</td><td>管理总览</td></tr>
+    <tr><td class="id">/admin/connections</td><td class="id">db</td><td>数据源配置</td></tr>
+    <tr><td class="id">/admin/risk-rules</td><td class="id">rules</td><td>高危命令规则</td></tr>
+    <tr><td class="id">/admin/env-tiers</td><td class="id">envtier</td><td>分层与环境</td></tr>
+    <tr><td class="id">/admin/permissions</td><td class="id">perms</td><td>用户与权限</td></tr>
+    <tr><td class="id">/admin/audit</td><td class="id">audit</td><td>全量审计（审计员也能进）</td></tr>
+    <tr><td class="id">/admin/sql-review</td><td class="id">terminal</td><td>审查规则库</td></tr>
+    <tr><td class="id">/admin/exec-windows</td><td class="id">execwindow</td><td>执行窗口（全部）</td></tr>
+    <tr><td class="id">/admin/pipelines</td><td class="id">pipeline</td><td>发布流程</td></tr>
+    <tr><td class="id">/admin/settings</td><td class="id">settings</td><td>系统设置</td></tr>
+  </tbody>
+</table>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><code class="inl">/admin</code> 按身份落到能进的第一页；旧地址 <code class="inl">/connections</code>、<code class="inl">/settings</code> 等重定向到 <code class="inl">/admin/*</code>，query 一并带过去。守卫依次判断：</p>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li>没有会话标记 → 登录页；首次进入先 <code class="inl">fetchMe()</code>，失败则登出。</li>
+  <li>落地页：一个菜单都没有的账户回登录页；只开了数据查询的业务方送去 <code class="inl">/query</code>。</li>
+  <li>管理后台：只有平台管理员（<code class="inl">auditor</code> 页审计员也行），否则回总览。</li>
+  <li>从别处走进管理后台时调 <code class="inl">POST /admin/enter</code>；IP 不在白名单内就地拦下并提示。</li>
+  <li>菜单不可见 → 总览。</li>
+</ul>
+<pre><code><span class="c">// router/index.ts（节选）</span>
+loader: <span class="k">async</span> () =&gt; {
+  <span class="k">const</span> r = <span class="k">await</span> guard(meta, currentMeta())
+  <span class="k">if</span> (r === true) <span class="k">return</span> null<span class="c">          // 放行
+  </span><span class="k">if</span> (r === <span class="s">'stay'</span>) <span class="k">throw</span> replace(here)<span class="c"> // 就地拦下，留在原页
+  </span><span class="k">throw</span> redirect(r)
+}</code></pre>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><code class="inl">RouterProvider</code> 设了 <code class="inl">useTransitions={false}</code>：默认的低优先级渲染会让地址先变、页面晚几十毫秒才换，这期间的点击会落在旧页上。每个页面挂了 <code class="inl">RouteError</code>，一页渲染出错只影响那一页。</p>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">Web 命令行由 <code class="inl">AppLayout</code> 放在 <code class="inl">KeepAlive</code> 里常驻：切到别的菜单时 DOM 从页面上摘下，组件不卸载，标签、会话和未提交的事务都还在。</p>
+
+<!-- 4 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">04</span> 状态管理（Zustand）</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Stores</div>
+<table class="t">
+  <thead><tr><th style="width:18%">Store</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td class="id">auth</td><td>会话标记、me，以及由 me 推出的 menus / isAdmin / isAuditor / onlyQuery / firstVisibleRoute；待办与待审批数；login、loginSSO、fetchMe、logout、clearSession</td></tr>
+    <tr><td class="id">ui</td><td>语言、主题、页眉副标题、toast（notify / notifyError）</td></tr>
+    <tr><td class="id">envtier</td><td>分层与环境清单及查找表，全站共用，只拉一次</td></tr>
+    <tr><td class="id">inspection</td><td>每个实例最近一份巡检报告，缓存 5 分钟</td></tr>
+    <tr><td class="id">snippets</td><td>终端快捷脚本，所有终端标签共用一份</td></tr>
+  </tbody>
+</table>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li>组件里按字段取：<code class="inl">useAuthStore((s) =&gt; s.me)</code>；选择器不要返回新建的对象或数组，会无限渲染。</li>
+  <li>事件与异步流程里用 <code class="inl">useXxxStore.getState()</code>，不要拿 await 之前解构出来的旧值。</li>
+  <li>不该依赖 React 的 <code class="inl">lib</code> 用 <code class="inl">lib/observable.ts</code> 存全局状态（品牌、确认框），组件用 <code class="inl">useObservable</code> 读。</li>
+</ul>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">写完马上要读、或者交给 xterm / WebSocket / 计时器的值用 <code class="inl">useStateRef</code>，回调用 <code class="inl">useEvent</code>，避免闭包拿到旧值。防双击要用 ref，不能只靠 state。</p>
+
+<!-- 5 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">05</span> 核心模块实现要点</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Module Notes</div>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.1 Web 命令行终端</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">左侧实例树（<code class="inl">DbTree</code>）、中间 xterm、右侧风险检查（<code class="inl">RiskInspector</code>）。会话逻辑全在 <code class="inl">terminal/sessionController.ts</code>，不依赖渲染闭包；<code class="inl">TerminalSession.tsx</code> 只负责渲染和订阅。行编辑器、SQL*Plus / mysql 客户端命令、补全、结果表格都在 <code class="inl">lib/</code> 里，可以单测。提交命令先做风险预检，需要审批就弹原因框，否则经 WebSocket 下发：</p>
+<pre><code><span class="c">// 示意，真实流程见 sessionController.ts
+</span><span class="k">const</span> r = <span class="k">await</span> api.riskCheck(conn.id, sql, database)<span class="c"> // 带库名：执行窗口按库判
+</span><span class="k">if</span> (r.requiresApproval) openApproval(sql, r)<span class="c">          // 填原因后提交审批
+</span><span class="k">else </span><span class="k">if</span> (sendExec(sql, <span class="s">''</span>) !== <span class="s">'ws'</span>) <span class="k">await</span> execREST(sql)<span class="c"> // WS 不可用时退回 REST</span></code></pre>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">预检只决定要不要先问一句；放行、审批、拦截以及 MFA 都由网关在执行时重新判定。每个标签有自己的会话标识，网关为它独占一条数据库连接，断线重连不丢事务。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.2 脚本上传与扫描</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">脚本随 <code class="inl">POST /scripts/scan</code> 提交（文本或已上传脚本的编号），<code class="inl">ScriptScanModal</code> 展示逐条判定与统计。带 <code class="inl">progressId</code> 时轮询 <code class="inl">/scripts/progress/:id</code> 显示进度，可取消。含高危语句时按钮变成提交审批；超时上限 120 秒。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.3 权限矩阵与菜单权限</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><code class="inl">PermissionsView</code> 的矩阵按「能力 × 分层」展示，单元格点击循环 allow → approve → deny，保存到 <code class="inl">PUT /roles/:id/capabilities</code>；菜单开关保存到 <code class="inl">/menus</code>，标签范围保存到 <code class="inl">/tags</code>。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.4 高危命令规则</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">字典按分层切换，徽标点击循环 拦截（high）→ 审批（mid）→ 放行（off），调用 <code class="inl">PATCH /risk-commands/:name</code>。分层由后端返回（<code class="inl">envtier</code> store），不写死。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.5 审批</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">列表分「我的 / 全部」并在服务端分页、筛选。<strong>通过不等于执行</strong>：批准之后由发起人、或够得到该实例的人，在这里或总览点「执行」。拉取脚本全文时换了单，旧响应作废，不会盖在新单上。页上有执行中的单时每 3 秒刷新，直到有结论。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.6 发布</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><code class="inl">ReleasesView</code> 是列表与轮询，<code class="inl">ReleaseDetailPane</code> 是详情，<code class="inl">ReleaseForm</code> 是新建。只要还有待执行、运行中或等待的单就每 2.5 秒轮询；列表与详情请求都带编号，迟到的响应作废。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">5.7 管理后台</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">管理后台有独立的空闲超时（<code class="inl">useAdminIdle</code>）：到点退回用户后台，不登出；有没保存的改动（<code class="inl">useUnsavedFlag</code> 登记）则锁住当前页，重新进入后原地继续。有操作时节流上报心跳。</p>
+
+<!-- 6 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">06</span> API 对接契约</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">API Contract</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">统一前缀 <code class="inl">/api/v1</code>，响应包 <code class="inl">{ code, msg, msgRef, data }</code>。<strong>会话在 HttpOnly Cookie 里，脚本读不到</strong>；前端只有会话标记（localStorage）和 CSRF Cookie，写操作把它放进 <code class="inl">X-CSRF-Token</code>。<code class="inl">msgRef</code> 是报错的机器可读身份，拦截器按界面语言重新渲染 <code class="inl">msg</code>。</p>
+<table class="t">
+  <thead><tr><th style="width:42%">Endpoint</th><th>用途</th></tr></thead>
+  <tbody>
+    <tr><td class="id">POST /auth/login · /auth/sso · GET /auth/me</td><td>登录、SSO 登录；拉取身份与 menus</td></tr>
+    <tr><td class="id">POST /risk/check</td><td>命令风险预检</td></tr>
+    <tr><td class="id">WS /terminal/ws · POST /terminal/exec</td><td>终端执行（WS 优先，REST 兜底）</td></tr>
+    <tr><td class="id">POST /scripts/scan · /scripts/execute</td><td>脚本扫描、执行</td></tr>
+    <tr><td class="id">/export · /async-jobs</td><td>数据导出、后台执行</td></tr>
+    <tr><td class="id">/connections · /env-tiers · /environments</td><td>数据源、分层、环境</td></tr>
+    <tr><td class="id">/roles · /users · PUT /roles/:id/(menus|capabilities|tags)</td><td>角色与用户</td></tr>
+    <tr><td class="id">/risk-commands · /sql-review/*</td><td>高危字典、规范审查</td></tr>
+    <tr><td class="id">/pipelines · /releases</td><td>发布流程与发布单</td></tr>
+    <tr><td class="id">/approvals · :id/approve|reject|execute|cancel</td><td>审批</td></tr>
+    <tr><td class="id">/exec-windows</td><td>执行窗口</td></tr>
+    <tr><td class="id">/bizquery/* · /query-grants</td><td>数据查询与授权</td></tr>
+    <tr><td class="id">/audit · /audit/export · /audit/verify</td><td>审计、导出、校验</td></tr>
+    <tr><td class="id">/settings · /settings/webhook/test</td><td>设置、Webhook</td></tr>
+  </tbody>
+</table>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">完整契约见后端的 <code class="inl">/docs</code>（Swagger）与《控制台接口说明》。常用业务码（HTTP 状态仍是 200）：</p>
+<table class="t">
+  <thead><tr><th style="width:18%">code</th><th>含义与前端动作</th></tr></thead>
+  <tbody>
+    <tr><td class="id">40100</td><td>未登录或会话失效：清会话，回登录页</td></tr>
+    <tr><td class="id">40101 · 40302</td><td>没有 SSO 登录态 · 账号未开通</td></tr>
+    <tr><td class="id">40303 · 40304</td><td>管理后台 IP 不在白名单 · 空闲超时：布局统一提示并退回用户后台</td></tr>
+    <tr><td class="id">42200</td><td>已拦截，转审批</td></tr>
+    <tr><td class="id">42600 · 42601</td><td>脚本目录 · 导出目录未设置</td></tr>
+    <tr><td class="id">42800 · 42801</td><td>需要 MFA · 需要重新出示登录密码</td></tr>
+  </tbody>
+</table>
+<pre><code><span class="c">// api/http.ts（节选）</span>
+http.interceptors.request.use((cfg) =&gt; {
+  <span class="k">for</span> (<span class="k">const</span> [k, v] <span class="k">of</span> Object.entries(sessionHeaders())) cfg.headers[k] = v<span class="c"> // 声明头 + CSRF
+  </span><span class="k">return</span> cfg
+})
+http.interceptors.response.use((res) =&gt; {
+  <span class="k">if</span> (res.data?.msgRef) res.data.msg = localizeMsg(res.data.msg, res.data.msgRef)
+  <span class="k">if</span> (res.data?.code === CODE_UNAUTHORIZED) endSession()
+  <span class="k">return</span> res.data<span class="c"> // 信封原样返回；要 data 的调用再过 ok()，非 0 抛错并带 code</span>
+})</code></pre>
+
+<!-- 7 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">07</span> 三层权限控制（前端）</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Client-side Authorization</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">前端只做<strong>展示层收敛</strong>（藏入口、灰按钮），真正的拦截以后端为准：</p>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>菜单层：</strong>路由守卫 + 侧栏，按 <code class="inl">menus</code> 渲染；管理后台另按角色判断。</li>
+  <li><strong>能力层：</strong>能不能做由后端按单判定，例如审批单带回 <code class="inl">canDecide</code> / <code class="inl">canExecute</code> / <code class="inl">canCancel</code>，前端据此显示按钮。没有 v-permission 一类的指令。</li>
+  <li><strong>命令层：</strong>提交前 <code class="inl">/risk/check</code> 决定是否先填审批原因；执行时网关重新判定。</li>
+</ul>
+
+<!-- 8 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 国际化与主题</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">i18n &amp; Theme</div>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>词条：</strong><code class="inl">locales/zh.json5</code> 与 <code class="inl">en.json5</code> 必须同步改。裸的 <code class="inl">@</code>、<code class="inl">|</code>、<code class="inl">{</code> 是消息语法，要写成字面量插值；写坏的词条在构建时就报错。</li>
+  <li><strong>取词：</strong>组件用 <code class="inl">useI18n()</code> 的 <code class="inl">t / te</code>，切换语言会重新渲染；<code class="inl">lib</code> 里用 <code class="inl">i18n.global</code>。</li>
+  <li><strong>后端文案：</strong>服务端的中文带着 ref（<code class="inl">msgRef</code>、<code class="inl">titleRef</code>、<code class="inl">commandRef</code> …），英文界面按 ref 渲染，认不出就原样显示。</li>
+  <li><strong>主题：</strong><code class="inl">&lt;html data-theme&gt;</code> 切换深 / 浅，默认浅色，可跟随系统；业务样式只用语义 token，如 <code class="inl">var(--surface-card)</code>。</li>
+  <li>实例名、SQL、人名等数据不翻译。</li>
+</ul>
+
+<!-- 9 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> 样式隔离</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Scoped Styles</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">组件旁边放 <code class="inl">Foo.scoped.css</code>，在 <code class="inl">Foo.tsx</code> 里 import 即可。构建时 <code class="inl">build/scopedCss.ts</code> 给该文件的所有 JSX 标签加作用域属性，选择器限定到同一属性，<code class="inl">@keyframes</code> 自动改名；支持 <code class="inl">:deep()</code> 与 <code class="inl">:global()</code>。</p>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li>一个大组件拆成多个 <code class="inl">.tsx</code> 时，每个都要 import 同一份 scoped.css，否则样式丢失。</li>
+  <li>会被父组件装饰的组件要把 <code class="inl">...rest</code> 展开到根元素并合并 <code class="inl">className</code>。</li>
+  <li>可复用组件的根元素不要用 <code class="inl">overlay</code>、<code class="inl">card</code>、<code class="inl">modal</code> 这类通用类名（有单测把关）。</li>
+</ul>
+
+<!-- 10 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">10</span> 终端 WebSocket 协议</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Terminal WS</div>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">握手靠会话 Cookie，另用子协议 <code class="inl">aegisdb-csrf</code> + CSRF 值证明不是别的站点发起的。<code class="inl">lib/wsTerminal.ts</code> 负责心跳与指数退避重连。</p>
+<table class="t">
+  <thead><tr><th style="width:24%">方向 / type</th><th>载荷</th></tr></thead>
+  <tbody>
+    <tr><td class="id">→ exec</td><td>connectionId, sql, reason, mfaCode, database, sessionId, serverOutput, binds</td></tr>
+    <tr><td class="id">→ cancel</td><td>取消正在执行的语句</td></tr>
+    <tr><td class="id">→ ping</td><td>心跳</td></tr>
+    <tr><td class="id">← output</td><td>text, columns, data, rows, ms（及 connMs / queryMs / fetchMs / processMs）, truncated, resultId, totalRows …</td></tr>
+    <tr><td class="id">← intercept</td><td>approvalNo, auditId, risk, rule, ruleRef, osc, notice</td></tr>
+    <tr><td class="id">← mfa_required</td><td>message：带验证码重发同一条</td></tr>
+    <tr><td class="id">← error</td><td>message, messageRef</td></tr>
+    <tr><td class="id">← session_revoked</td><td>会话失效或终端权限被收回；本人刚改密码时换新会话重连</td></tr>
+    <tr><td class="id">← pong</td><td>心跳应答</td></tr>
+  </tbody>
+</table>
+
+<!-- 11 -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">11</span> 构建、规范与交付</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Build &amp; Conventions</div>
+<ul style="margin:0 0 8px; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>命令：</strong><code class="inl">npm run dev</code> · <code class="inl">npm run build</code> · <code class="inl">npm run type-check</code> · <code class="inl">npm run test:unit</code> · <code class="inl">npm run test:e2e</code>。</li>
+  <li><strong>命名：</strong>组件 PascalCase；hook 与 store 用 <code class="inl">useXxx</code>；类名与 <code class="inl">data-testid</code> 是 e2e 的契约，改动要同步用例。</li>
+  <li><strong>类型：</strong><code class="inl">types/</code> 与后端 DTO 对应；接口数据按可能缺字段处理（<code class="inl">?.</code>、<code class="inl">?? []</code>），渲染时抛错会让整页换成错误提示。</li>
+  <li><strong>环境变量：</strong><code class="inl">VITE_API_BASE</code>、<code class="inl">VITE_WS_BASE</code>，默认同源 <code class="inl">/api/v1</code>。</li>
+  <li><strong>单测：</strong>只测 <code class="inl">lib</code> 的纯逻辑与词条，在 Node 里跑。</li>
+  <li><strong>e2e：</strong>每个用例给接口打桩，没打桩的一律 502；独立端口 5174。</li>
+  <li><strong>未引入：</strong>ESLint、Prettier、zod、Vitest、组件库。</li>
+</ul>
+
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>AegisDB · 前端开发文档 (React)</span><span style="margin-left:auto">机密 · 内部</span></div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch(e){} };
+    if (!window.lucide) { const s=document.createElement('script'); s.src='https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'; s.onload=draw; document.head.appendChild(s); } else draw();
+    setTimeout(draw, 400);
+  }
+}
+</script>
+</body>
+</html>
