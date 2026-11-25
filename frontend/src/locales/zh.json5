@@ -153,16 +153,16 @@
   fDatabase: '数据库 / Schema', fUser: '用户名', fPassword: '密码', connReal: '真连', connSim: '仿真',
   connCredHint: '填写用户名/密码/库名后,该实例将真实连库执行(MySQL / TiDB / DWS / Oracle);留空则为仿真演示。',
   // rules
-  riskSub: '命令在网关侧实时匹配规则 · 命中后执行 拦截 / 审批 / 告警', newRule: '新建规则',
+  riskSub: '命令在网关侧实时匹配规则 · 命中后执行 拦截 / 审批', newRule: '新建规则',
   dictTitle: '高危命令字典', dictSub: '按环境分别配置 · 点击徽标切换 拦截 / 审批 / 放行 · PROD 设置直接驱动终端拦截',
   addCmdPh: '新增命令…',
   addCmdScope: '「{cmd}」在各分层标签的等级(逐个指定,放行也会写入一条明确记录)',
   addCmdConfirm: '确认新增',
   lv_high: '拦截', lv_mid: '审批', lv_off: '放行',
-  statBlock: '拦截类规则', statAlert: '仅告警规则', statHits: '本月命中拦截', statCover: '策略覆盖率',
+  statBlock: '拦截类规则', statAppr: '需审批规则', statHits: '本月命中拦截', statCover: '策略覆盖率',
   pHigh: 'PROD 高危命令拦截', pStrict: '无 WHERE 的 DELETE / UPDATE', pAppr: '需审批命令',
   actOff: '未启用', pStrictWhere: '按环境分层开关,与能力矩阵、高危命令字典同处一套规则', pStrictGo: '去环境分层设置',
-  actBlockAppr: '拦截 + 审批', actAppr: '审批', actAlert: '告警', block: '拦截', approve: '审批', allow: '放行',
+  actBlockAppr: '拦截 + 审批', actAppr: '审批', block: '拦截', approve: '审批', allow: '放行',
   // perms
   tabRoleView: '角色视图', tabUserView: '用户视图', rolesTier: '角色 · 分层',
   matrixTitle: '权限矩阵 · ', matrixTitleSuffix: '权限详情', matrixHint: '点击单元格可在放行 / 需审批 / 禁止之间切换',
@@ -302,11 +302,11 @@
   mCmdExpand: '展开全部（{n} 字符）', mCmdCollapse: '收起',
   mLarkNote1: '提交后同步告警至', mLarkNote2: '与值班负责人', mCancel: '取消', mSubmit: '提交审批', auditId: '审计 ID',
   // rule form
-  rfTitle: '新建高危规则', rfSub: '命中后在网关侧执行拦截 / 审批 / 告警',
+  rfTitle: '新建高危规则', rfSub: '命中后在网关侧执行拦截 / 审批',
   rfName: '规则名称', rfNamePh: '例如：禁止生产库 DROP DATABASE',
   rfTriggers: '触发命令 · 可自定义', rfCustomPh: '自定义…',
   rfEnv: '适用环境', rfAction: '命中动作', rfChain: '审批链', rfAddApprover: '增加审批人',
-  rfActBlock: '拦截+审批', rfActApprove: '仅审批', rfActAlert: '仅告警',
+  rfActBlock: '拦截+审批', rfActApprove: '仅审批',
   rfFootHint: '保存后立即对匹配会话生效', rfCreate: '创建规则',
   // role form
   erTitle: '编辑角色 · ', nrTitle: '新建角色', drBtn: '删除角色', drConfirm: '确定删除角色「{name}」?它的权限矩阵、菜单与实例标签会一并删除,不可恢复。', drDone: '已删除角色「{name}」', nrSub: '先建好角色,再在右侧逐项授权', nrLayer: '层级说明', nrLayerPh: '例如:L3 · 分析(留空为「自定义」)', nrNote: '新角色不带任何权限:各分层的操作一律拒绝、不勾任何菜单。建好后在右侧的权限矩阵与菜单里逐项打开。', nrCreate: '创建', nrCreated: '已创建角色「{name}」', erSub: '分层授权与默认连接角色', erName: '角色名称', erTier: '分层等级', erDefRole: '默认连接角色', erDesc: '描述',

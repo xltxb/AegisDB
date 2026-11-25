@@ -44,7 +44,7 @@ export default function RiskRulesView() {
   const [rfTriggers, setRfTriggers] = useState(defaultTriggers)
   const [rfTrigDraft, setRfTrigDraft] = useState('')
   const [rfEnv, setRfEnv] = useState('prod')
-  const [rfAction, setRfAction] = useState<'block' | 'approve' | 'alert'>('block')
+  const [rfAction, setRfAction] = useState<'block' | 'approve'>('block')
 
   /** Tier codes in display order — the tabs, the segmented control and the cards. */
   const tierCodes = envtier.tierCodes
@@ -64,8 +64,8 @@ export default function RiskRulesView() {
     setRfTriggers([...rfTriggers, { name: n, on: true }])
   }
   async function createRule() {
-    // block→high (拦截), approve/alert→mid (需审批). Never map to 'off', which would
-    // DISABLE the rule and silently allow the command (R11).
+    // block→high (拦截), approve→mid (需审批). 字典没有"放行但告警"这一档(issue #125)。
+    // Never map to 'off', which would DISABLE the rule and silently allow the command (R11).
     const level = rfAction === 'block' ? 'high' : 'mid'
     const selected = rfTriggers.filter((x) => x.on).map((x) => x.name)
     // M14: 创建规则失败以 toast 呈现
@@ -288,7 +288,7 @@ export default function RiskRulesView() {
       {/* stats */}
       <div className="stats">
         <div className="stat"><div className="n danger">{highProd.length}</div><div className="l">{t('statBlock')}</div></div>
-        <div className="stat"><div className="n warn">{cmds.filter((c) => c.tiers?.prod === 'mid').length}</div><div className="l">{t('statAlert')}</div></div>
+        <div className="stat"><div className="n warn">{cmds.filter((c) => c.tiers?.prod === 'mid').length}</div><div className="l">{t('statAppr')}</div></div>
         <div className="stat"><div className="n grad">{hits}</div><div className="l">{t('statHits')}</div></div>
         <div className="stat"><div className="n">{coverage}%</div><div className="l">{t('statCover')}</div></div>
       </div>
@@ -351,7 +351,6 @@ export default function RiskRulesView() {
                   <div className="seg">
                     <div className={clsx('si', rfAction === 'block' && 'active danger')} onClick={() => setRfAction('block')}>{t('rfActBlock')}</div>
                     <div className={clsx('si', rfAction === 'approve' && 'active')} onClick={() => setRfAction('approve')}>{t('rfActApprove')}</div>
-                    <div className={clsx('si', rfAction === 'alert' && 'active')} onClick={() => setRfAction('alert')}>{t('rfActAlert')}</div>
                   </div>
                 </div>
               </div>
