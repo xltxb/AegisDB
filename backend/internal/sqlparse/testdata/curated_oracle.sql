@@ -1,0 +1,37 @@
+-- 手写样例:Oracle。SQL*Plus 命令(desc、SET、/)由网关先处理,不进这里。
+-- @case ROWNUM
+SELECT * FROM t WHERE ROWNUM < 5
+-- @case CONNECT BY
+SELECT a FROM t CONNECT BY PRIOR id=pid START WITH id=1
+-- @case 外连接加号
+SELECT a.x FROM a, b WHERE a.id=b.id(+)
+-- @case MERGE
+MERGE INTO t USING s ON (t.id=s.id) WHEN MATCHED THEN UPDATE SET t.a=s.a
+-- @case 加列
+ALTER TABLE t ADD (c NUMBER(10) DEFAULT 0 NOT NULL)
+-- @case 分区表
+CREATE TABLE t (id NUMBER PRIMARY KEY) PARTITION BY RANGE (id) (PARTITION p1 VALUES LESS THAN (10)) TABLESPACE u
+-- @case 匿名块
+BEGIN UPDATE t SET a=1; COMMIT; END;
+-- @case 动态 SQL
+DECLARE x NUMBER := 1; BEGIN EXECUTE IMMEDIATE 'DROP TABLE t'; END;
+-- @case 包声明
+CREATE OR REPLACE PACKAGE p AS PROCEDURE q(a IN NUMBER); END p;
+-- @case 包体
+CREATE OR REPLACE PACKAGE BODY p AS PROCEDURE q(a IN NUMBER) IS BEGIN NULL; END q; END p;
+-- @case 触发器
+CREATE OR REPLACE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW BEGIN :NEW.a := 1; END;
+-- @case 提示
+SELECT /*+ INDEX(t i) */ * FROM t
+-- @case 彻底删除
+DROP TABLE t PURGE
+-- @case 同名函数不算写
+SELECT REPLACE(a,'x','y') FROM t WHERE id=1
+-- @case EXPLAIN PLAN
+EXPLAIN PLAN FOR DELETE FROM t
+-- @case 字面量里的 WHERE
+UPDATE t SET a='WHERE x'
+-- @case 带 schema
+DELETE FROM app.t WHERE id=1
+-- @case 中文标识符
+SELECT "姓名" FROM "用户表"

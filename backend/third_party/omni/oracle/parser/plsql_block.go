@@ -1,0 +1,2077 @@
+package parser
+
+import (
+	nodes "github.com/bytebase/omni/oracle/ast"
+)
+
+// parsePLSQLBlock parses a PL/SQL block:
+//
+//	[<<label>>] [DECLARE declarations] BEGIN statements [EXCEPTION handlers] END [label] ;
+func (p *Parser) parsePLSQLBlock() (*nodes.PLSQLBlock, error) {
+	p.typeScopes = append(p.typeScopes, map[string]bool{})
+	defer func() { p.typeScopes = p.typeScopes[:len(p.typeScopes)-1] }()
+	start := p.pos()
+	block := &nodes.PLSQLBlock{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional label: <<label>>
+	if p.cur.Type == tokLABELOPEN {
+		p.advance()
+		var // consume <<
+		parseErr829 error
+		block.Label, parseErr829 = p.parseIdentifier()
+		if parseErr829 != nil {
+			return nil, parseErr829
+		}
+		if p.cur.Type == tokLABELCLOSE {
+			p.advance() // consume >>
+		}
+	}
+
+	// DECLARE section (optional)
+	if p.cur.Type == kwDECLARE {
+		p.advance()
+		var // consume DECLARE
+		parseErr830 error
+		block.Declarations, parseErr830 = p.parsePLSQLDeclarations()
+		if parseErr830 !=
+
+			// BEGIN
+			nil {
+			return nil, parseErr830
+		}
+	} else if p.cur.Type != kwBEGIN && p.cur.Type != tokEOF {
+		var parseErr830 error
+		block.Declarations, parseErr830 = p.parsePLSQLDeclarations()
+		if parseErr830 != nil {
+			return nil, parseErr830
+		}
+	}
+
+	if p.cur.Type != kwBEGIN {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance() // consume BEGIN
+	var parseErr831 error
+
+	// Statements
+	block.Statements, parseErr831 = p.parsePLSQLStatements()
+	if parseErr831 !=
+
+		// EXCEPTION section (optional)
+		nil {
+		return nil, parseErr831
+	}
+
+	if p.cur.Type == kwEXCEPTION {
+		p.advance()
+		var // consume EXCEPTION
+		parseErr832 error
+		block.Exceptions, parseErr832 = p.parsePLSQLExceptionHandlers()
+		if parseErr832 !=
+
+			// END [label] ;
+			nil {
+			return nil, parseErr832
+		}
+	}
+
+	if p.cur.Type != kwEND {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance() // consume END
+	// Optional label after END
+	if p.atEndName() {
+		p.advance() // consume label
+	}
+	// END [label] ends with ';', for a nested block and for a whole unit
+	// alike: Oracle compiles BEGIN NULL; END with PLS-00103.
+	if p.cur.Type != ';' {
+		return nil, p.missingSemicolonError("END")
+	}
+	p.advance() // consume ;
+
+	block.Loc.End = p.prev.End
+	return block, nil
+}
+
+// parsePLSQLDeclarations parses the DECLARE section of a PL/SQL block.
+// Stops when BEGIN is encountered.
+func (p *Parser) parsePLSQLDeclarations() (*nodes.List, error) {
+	decls := &nodes.List{}
+
+	for p.cur.Type != kwBEGIN && p.cur.Type != tokEOF {
+		decl, parseErr833 := p.parsePLSQLDeclaration()
+		if parseErr833 != nil {
+			return nil, parseErr833
+		}
+		if decl == nil {
+			break
+		}
+		if p.prev.Type != ';' {
+			// Every declaration ends with ';' (PLS-00103 otherwise).
+			return nil, p.missingSemicolonBetween("the previous declaration", kwBEGIN, kwEND)
+		}
+		decls.Items = append(decls.Items, decl)
+	}
+
+	return decls, nil
+}
+
+// parsePLSQLDeclaration parses a single declaration.
+func (p *Parser) parsePLSQLDeclaration() (nodes.Node, error) {
+	if err := p.enterNesting(); err != nil {
+		return nil, err
+	}
+	defer p.leaveNesting()
+	defer p.restorePLSQLCode(p.setPLSQLCode(true))
+
+	// CURSOR declaration
+	if p.cur.Type == kwCURSOR {
+		return p.parsePLSQLCursorDecl()
+	}
+
+	// PRAGMA directive
+	if p.cur.Type == kwPRAGMA {
+		return p.parsePLSQLPragma()
+	}
+
+	// TYPE declaration
+	if p.cur.Type == kwTYPE {
+		next := p.peekNext()
+		if next.Type != kwBODY { // not CREATE TYPE BODY
+			decl, err := p.parsePLSQLTypeDecl()
+			if err != nil {
+				return nil, err
+			}
+			p.declareTypeName(decl.Name)
+			return decl, nil
+		}
+	}
+
+	if p.cur.Type == kwSUBTYPE {
+		decl, err := p.parsePLSQLSubtypeDecl()
+		if err != nil {
+			return nil, err
+		}
+		p.declareTypeName(decl.Name)
+		return decl, nil
+	}
+
+	// Local subprogram declaration or definition. The package-item parser
+	// surface is reused (name, optional parameters, IS|AS body or
+	// forward-declaration semicolon) and is intentionally broad: it also
+	// accepts package-flavored name forms (qualified s.p, @dblink) that the
+	// engine rejects for local subprograms. Engine-verified on Oracle 23ai
+	// for parameterized, parameterless, nested, and forward-declared forms.
+	// Known documented over-accepts (parser-unsure -> accept direction):
+	// the name forms above, and declaration order — the engine requires
+	// item declarations to precede subprograms (PLS-00103); order is not
+	// enforced here.
+	if p.cur.Type == kwPROCEDURE {
+		return p.parsePackageProcDecl(subprogramNested)
+	}
+	if p.cur.Type == kwFUNCTION {
+		return p.parsePackageFuncDecl(subprogramNested)
+	}
+
+	// Variable declaration: name [CONSTANT] type [NOT NULL] [:= | DEFAULT expr] ;
+	if p.isIdentLike() {
+		return p.parsePLSQLVarDecl(charsetFlexible)
+	}
+
+	return nil, nil
+}
+
+// parsePLSQLVarDecl parses a variable declaration, or a record field when
+// charset is charsetFixed.
+func (p *Parser) parsePLSQLVarDecl(charset plsqlCharsetUse) (*nodes.PLSQLVarDecl, error) {
+	start := p.pos()
+	decl := &nodes.PLSQLVarDecl{
+		Loc: nodes.Loc{Start: start},
+	}
+	var parseErr834 error
+
+	decl.Name, parseErr834 = p.parseIdentifier()
+	if parseErr834 !=
+
+		// Optional CONSTANT
+		nil {
+		return nil, parseErr834
+	}
+
+	if p.cur.Type == kwCONSTANT {
+		decl.Constant = true
+		p.advance()
+	}
+	var parseErr835 error
+
+	// Type name
+	decl.TypeName, parseErr835 = p.parsePLSQLDatatype(typeModsPLSQL, charset)
+	if parseErr835 !=
+
+		// Optional NOT NULL
+		nil {
+		return nil, parseErr835
+	}
+
+	if p.cur.Type == kwNOT {
+		next := p.peekNext()
+		if next.Type == kwNULL {
+			decl.NotNull = true
+			p.advance() // consume NOT
+			p.advance() // consume NULL
+		}
+	}
+
+	// Optional default value: := expr or DEFAULT expr
+	if p.cur.Type == tokASSIGN {
+		p.advance()
+		var // consume :=
+		parseErr836 error
+		decl.Default, parseErr836 = p.parseExpr()
+		if parseErr836 != nil {
+			return nil, parseErr836
+		}
+	} else if p.cur.Type == kwDEFAULT {
+		p.advance()
+		var // consume DEFAULT
+		parseErr837 error
+		decl.Default, parseErr837 = p.parseExpr()
+		if parseErr837 !=
+
+			// Semicolon
+			nil {
+			return nil, parseErr837
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	decl.Loc.End = p.prev.End
+	return decl, nil
+}
+
+// parsePLSQLCursorDecl parses a cursor declaration.
+//
+//	CURSOR name [(params)] IS select_stmt ;
+func (p *Parser) parsePLSQLCursorDecl() (*nodes.PLSQLCursorDecl, error) {
+	start := p.pos()
+	p.advance() // consume CURSOR
+
+	decl := &nodes.PLSQLCursorDecl{
+		Loc: nodes.Loc{Start: start},
+	}
+	var parseErr838 error
+
+	decl.Name, parseErr838 = p.parseIdentifier()
+	if parseErr838 !=
+
+		// Optional parameter list
+		nil {
+		return nil, parseErr838
+	}
+
+	if p.cur.Type == '(' {
+		var parseErr839 error
+		decl.Parameters, parseErr839 = p.parsePLSQLCursorParams()
+		if parseErr839 !=
+
+			// IS
+			nil {
+			return nil, parseErr839
+		}
+		if err := p.checkCharsetSources(decl.Parameters, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	if p.cur.Type == kwIS {
+		p.advance()
+	}
+
+	// The query: SELECT, WITH, or a parenthesized subquery, which may be
+	// an operand of a set operator: CURSOR c IS (SELECT ...) UNION (SELECT
+	// ...) compiles on Oracle 23ai.
+	if p.atQuery() {
+		var parseErr840 error
+		decl.Query, parseErr840 = p.parseSelectStmt()
+		if parseErr840 != nil {
+			return nil, parseErr840
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	decl.Loc.End = p.prev.End
+	return decl, nil
+}
+
+// parsePLSQLCursorParams parses cursor parameter list.
+func (p *Parser) parsePLSQLCursorParams() (*nodes.List, error) {
+	params := &nodes.List{}
+	p.advance() // consume (
+
+	for p.cur.Type != ')' && p.cur.Type != tokEOF {
+		paramStart := p.pos()
+		paramDecl := &nodes.PLSQLVarDecl{
+			Loc: nodes.Loc{Start: paramStart},
+		}
+		var parseErr841 error
+		paramDecl.Name, parseErr841 = p.parseIdentifier()
+		if parseErr841 !=
+			// Optional IN keyword (cursor params are always IN)
+			nil {
+			return nil, parseErr841
+		}
+
+		if p.cur.Type == kwIN {
+			p.advance()
+		}
+		var parseErr842 error
+		paramDecl.TypeName, parseErr842 = p.parsePLSQLDatatype(typeModsNone, charsetFlexible)
+		if parseErr842 !=
+
+			// Optional default
+			nil {
+			return nil, parseErr842
+		}
+
+		if p.cur.Type == tokASSIGN {
+			p.advance()
+			var parseErr843 error
+			paramDecl.Default, parseErr843 = p.parseExpr()
+			if parseErr843 != nil {
+				return nil, parseErr843
+			}
+		} else if p.cur.Type == kwDEFAULT {
+			p.advance()
+			var parseErr844 error
+			paramDecl.Default, parseErr844 = p.parseExpr()
+			if parseErr844 != nil {
+				return nil, parseErr844
+			}
+		}
+
+		paramDecl.Loc.End = p.prev.End
+		params.Items = append(params.Items, paramDecl)
+
+		if p.cur.Type != ',' {
+			break
+		}
+		p.advance() // consume ,
+	}
+
+	if p.cur.Type == ')' {
+		p.advance()
+	}
+	return params, nil
+}
+
+// parsePLSQLStatements parses PL/SQL statements until END, EXCEPTION, ELSIF, ELSE, or EOF.
+func (p *Parser) parsePLSQLStatements() (*nodes.List, error) {
+	stmts := &nodes.List{}
+
+	for {
+		// Check for terminators
+		switch p.cur.Type {
+		case kwEND, kwEXCEPTION, kwELSIF, kwELSE, kwWHEN, tokEOF:
+			return stmts, p.requirePLSQLStatement(stmts)
+		}
+
+		stmt, parseErr845 := p.parsePLSQLStatement()
+		if parseErr845 != nil {
+			return nil, parseErr845
+		}
+		if stmt == nil {
+			return stmts, p.requirePLSQLStatement(stmts)
+		}
+		// Every PL/SQL statement ends with ';' (PLS-00103 otherwise). Without
+		// this check the words after a statement that stopped early parsed
+		// as further procedure calls.
+		if p.prev.Type != ';' {
+			return nil, p.missingSemicolonBetween("the previous statement", kwEND, kwEXCEPTION, kwELSIF, kwELSE, kwWHEN)
+		}
+		stmts.Items = append(stmts.Items, stmt)
+	}
+	return nil,
+
+		// parsePLSQLStatement parses a single PL/SQL statement.
+		nil
+}
+
+// requirePLSQLStatement reports a syntax error at the current token when
+// stmts is empty. A block body, a branch of IF or CASE, a loop body, and an
+// exception handler each hold at least one statement; Oracle 23ai rejects
+// BEGIN END; and IF c THEN END IF; with PLS-00103 (NULL; is the empty
+// statement).
+func (p *Parser) requirePLSQLStatement(stmts *nodes.List) error {
+	if stmts.Len() == 0 {
+		return p.syntaxErrorAtCur()
+	}
+	return nil
+}
+
+func (p *Parser) parsePLSQLStatement() (nodes.StmtNode, error) {
+	if err := p.enterNesting(); err != nil {
+		return nil, err
+	}
+	defer p.leaveNesting()
+	defer p.restorePLSQLCode(p.setPLSQLCode(true))
+
+	// One or more <<label>> prefixes may precede ANY statement (engine-
+	// verified), not only blocks: consume them all, parse the statement,
+	// then attach — blocks and loops keep their first label on their own
+	// Label field (END-label matching); everything else, and any extra
+	// labels, ride on a PLSQLLabeledStatement wrapper.
+	if p.cur.Type == tokLABELOPEN {
+		start := p.pos()
+		var labels []string
+		for p.cur.Type == tokLABELOPEN {
+			p.advance() // consume <<
+			name, err := p.parseIdentifier()
+			if err != nil {
+				return nil, err
+			}
+			if name == "" {
+				// <<>> is not a label (engine: PLS-00103).
+				return nil, p.syntaxErrorAtCur()
+			}
+			labels = append(labels, name)
+			if p.cur.Type != tokLABELCLOSE {
+				return nil, p.syntaxErrorAtCur()
+			}
+			p.advance() // consume >>
+		}
+		stmt, err := p.parsePLSQLStatement()
+		if err != nil {
+			return nil, err
+		}
+		switch s := stmt.(type) {
+		case *nodes.PLSQLBlock:
+			if s.Label == "" {
+				s.Label = labels[0]
+				labels = labels[1:]
+				s.Loc.Start = start // the block's range covers its label
+			}
+		case *nodes.PLSQLLoop:
+			if s.Label == "" {
+				s.Label = labels[0]
+				labels = labels[1:]
+				s.Loc.Start = start
+			}
+		}
+		if len(labels) == 0 {
+			return stmt, nil
+		}
+		return &nodes.PLSQLLabeledStatement{
+			Labels:    labels,
+			Statement: stmt,
+			Loc:       nodes.Loc{Start: start, End: p.prev.End},
+		}, nil
+	}
+
+	switch p.cur.Type {
+	case kwBEGIN:
+		return p.parsePLSQLBlock()
+
+	case kwDECLARE:
+		return p.parsePLSQLBlock()
+
+	case kwIF:
+		return p.parsePLSQLIf()
+
+	case kwLOOP:
+		return p.parsePLSQLBasicLoop()
+
+	case kwWHILE:
+		return p.parsePLSQLWhileLoop()
+
+	case kwFOR:
+		return p.parsePLSQLForLoop()
+
+	case kwRETURN:
+		return p.parsePLSQLReturn()
+
+	case kwGOTO:
+		return p.parsePLSQLGoto()
+
+	case kwRAISE:
+		return p.parsePLSQLRaise()
+
+	case kwNULL:
+		return p.parsePLSQLNull()
+
+	case kwEXECUTE:
+		return p.parsePLSQLExecImmediate()
+
+	case kwOPEN:
+		return p.parsePLSQLOpen()
+
+	case kwFETCH:
+		return p.parsePLSQLFetch()
+
+	case kwCLOSE:
+		return p.parsePLSQLClose()
+
+	case kwEXIT:
+		return p.parsePLSQLExit()
+
+	case kwCONTINUE:
+		return p.parsePLSQLContinue()
+
+	case kwFORALL:
+		return p.parsePLSQLForall()
+
+	case kwPIPE:
+		return p.parsePLSQLPipeRow()
+
+	case kwCASE:
+		return p.parsePLSQLCaseStmt()
+
+	// SQL statements PL/SQL runs as they are, each ended by its ';'.
+	case kwCOMMIT:
+		return p.parsePLSQLSQLStmt(p.parseCommitStmt)
+	case kwROLLBACK:
+		return p.parsePLSQLSQLStmt(p.parseRollbackStmt)
+	case kwSAVEPOINT:
+		return p.parsePLSQLSQLStmt(p.parseSavepointStmt)
+	case kwLOCK:
+		return p.parsePLSQLSQLStmt(p.parseLockTableStmt)
+	case kwSET:
+		if p.peekNext().Type == kwTRANSACTION {
+			return p.parsePLSQLSQLStmt(p.parseSetTransactionAtSet)
+		}
+		return nil, p.syntaxErrorAtCur()
+
+	case kwPRAGMA:
+		return p.parsePLSQLPragmaStmt()
+
+	case kwMERGE:
+		stmt, parseErr846 := p.parseMergeStmt()
+		if parseErr846 != nil {
+			return nil, parseErr846
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return stmt, nil
+
+	// DML statements
+	case kwSELECT, kwWITH:
+		stmt, parseErr847 := p.parseSelectStmt()
+		if parseErr847 != nil {
+			return nil, parseErr847
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return stmt, nil
+
+	case kwINSERT:
+		stmt, parseErr848 := p.parseInsertStmt()
+		if parseErr848 != nil {
+			return nil, parseErr848
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return stmt, nil
+
+	case kwUPDATE:
+		stmt, parseErr849 := p.parseUpdateStmt()
+		if parseErr849 != nil {
+			return nil, parseErr849
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return stmt, nil
+
+	case kwDELETE:
+		stmt, parseErr850 := p.parseDeleteStmt()
+		if parseErr850 != nil {
+			return nil, parseErr850
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return stmt, nil
+
+	default:
+		// Try assignment: target := expr ;
+		// tokBIND handles :NEW.col := expr in trigger bodies
+		if p.isIdentLike() || p.cur.Type == tokQIDENT || p.cur.Type == tokBIND {
+			return p.parsePLSQLAssignOrCall()
+		}
+		return nil, nil
+	}
+}
+
+// parsePLSQLSQLStmt parses a SQL statement in a PL/SQL body with parse and
+// consumes the ';' that ends it.
+func (p *Parser) parsePLSQLSQLStmt(parse func() (nodes.StmtNode, error)) (nodes.StmtNode, error) {
+	stmt, err := parse()
+	if err != nil {
+		return nil, err
+	}
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+	return stmt, nil
+}
+
+// parsePLSQLPragmaStmt parses a pragma that stands as a statement. Oracle
+// 23ai accepts INLINE, COVERAGE, DEPRECATE, and SUPPRESSES_WARNING_6009 there;
+// the others belong to a declarative section or a package and fail in a body
+// (AUTONOMOUS_TRANSACTION, UDF: PLS-00710; SERIALLY_REUSABLE: PLS-00708;
+// EXCEPTION_INIT: PLS-00700; RESTRICT_REFERENCES: PLS-00115).
+func (p *Parser) parsePLSQLPragmaStmt() (nodes.StmtNode, error) {
+	switch p.peekNext().Str {
+	case "INLINE", "COVERAGE", "DEPRECATE", "SUPPRESSES_WARNING_6009":
+	default:
+		p.advance() // consume PRAGMA
+		return nil, p.syntaxErrorAtCur()
+	}
+	return p.parsePLSQLPragma()
+}
+
+// parsePLSQLAssignOrCall parses an assignment statement (target := expr ;)
+// or a procedure call (name(args) ;).
+func (p *Parser) parsePLSQLAssignOrCall() (nodes.StmtNode, error) {
+	start := p.pos()
+
+	// Parse the target expression (could be column ref or function call)
+	target, parseErr851 := p.parseExpr()
+	if parseErr851 != nil {
+		return nil, parseErr851
+
+		// Check for := (assignment)
+	}
+	if target == nil {
+		return nil, nil
+	}
+
+	if p.cur.Type == tokASSIGN {
+		p.advance() // consume :=
+		value, parseErr852 := p.parseExpr()
+		if parseErr852 != nil {
+			return nil, parseErr852
+		}
+		if p.cur.Type == ';' {
+			p.advance()
+		}
+		return &nodes.PLSQLAssign{
+			Target: target,
+			Value:  value,
+			Loc:    nodes.Loc{Start: start, End: p.prev.End},
+		}, nil
+	}
+
+	// Otherwise it's a procedure call, consume the semicolon
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	return &nodes.PLSQLCall{
+		Name: target,
+		Loc:  nodes.Loc{Start: start, End: p.prev.End},
+	}, nil
+}
+
+// parsePLSQLIf parses an IF/ELSIF/ELSE/END IF statement.
+//
+//	IF condition THEN statements [ELSIF condition THEN statements ...] [ELSE statements] END IF ;
+func (p *Parser) parsePLSQLIf() (*nodes.PLSQLIf, error) {
+	start := p.pos()
+	p.advance() // consume IF
+
+	ifStmt := &nodes.PLSQLIf{
+		ElsIfs: &nodes.List{},
+		Loc:    nodes.Loc{Start: start},
+	}
+	var parseErr853 error
+
+	// Condition
+	ifStmt.Condition, parseErr853 = p.parseExpr()
+	if parseErr853 !=
+
+		// THEN
+		nil {
+		return nil, parseErr853
+	}
+
+	if p.cur.Type != kwTHEN {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance()
+	var parseErr854 error
+
+	// Then body
+	ifStmt.Then, parseErr854 = p.parsePLSQLStatements()
+	if parseErr854 !=
+
+		// ELSIF clauses
+		nil {
+		return nil, parseErr854
+	}
+
+	for p.cur.Type == kwELSIF {
+		elsifStart := p.pos()
+		p.advance() // consume ELSIF
+
+		elsif := &nodes.PLSQLElsIf{
+			Loc: nodes.Loc{Start: elsifStart},
+		}
+		var parseErr855 error
+		elsif.Condition, parseErr855 = p.parseExpr()
+		if parseErr855 != nil {
+			return nil, parseErr855
+		}
+
+		if p.cur.Type != kwTHEN {
+			return nil, p.syntaxErrorAtCur()
+		}
+		p.advance()
+		var parseErr856 error
+
+		elsif.Then, parseErr856 = p.parsePLSQLStatements()
+		if parseErr856 != nil {
+			return nil, parseErr856
+		}
+		elsif.Loc.End = p.prev.End
+		ifStmt.ElsIfs.Items = append(ifStmt.ElsIfs.Items, elsif)
+	}
+
+	// ELSE clause
+	if p.cur.Type == kwELSE {
+		p.advance()
+		var parseErr857 error
+		ifStmt.Else, parseErr857 = p.parsePLSQLStatements()
+		if parseErr857 !=
+
+			// END IF ;
+			nil {
+			return nil, parseErr857
+		}
+	}
+
+	if err := p.consumeEndKeyword(kwIF); err != nil {
+		return nil, err
+	}
+
+	ifStmt.Loc.End = p.prev.End
+	return ifStmt, nil
+}
+
+// parsePLSQLBasicLoop parses a basic LOOP/END LOOP statement.
+//
+//	LOOP statements END LOOP [label] ;
+func (p *Parser) parsePLSQLBasicLoop() (*nodes.PLSQLLoop, error) {
+	start := p.pos()
+	p.advance() // consume LOOP
+
+	loop := &nodes.PLSQLLoop{
+		Type: nodes.LOOP_BASIC,
+		Loc:  nodes.Loc{Start: start},
+	}
+	var parseErr858 error
+
+	loop.Statements, parseErr858 = p.parsePLSQLStatements()
+	if parseErr858 !=
+
+		// END LOOP [label] ;
+		nil {
+		return nil, parseErr858
+	}
+
+	if parseErr := p.consumeEndLoop(); parseErr != nil {
+		return nil, parseErr
+	}
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	loop.Loc.End = p.prev.End
+	return loop, nil
+}
+
+// parsePLSQLWhileLoop parses a WHILE LOOP statement.
+//
+//	WHILE condition LOOP statements END LOOP [label] ;
+func (p *Parser) parsePLSQLWhileLoop() (*nodes.PLSQLLoop, error) {
+	start := p.pos()
+	p.advance() // consume WHILE
+
+	loop := &nodes.PLSQLLoop{
+		Type: nodes.LOOP_WHILE,
+		Loc:  nodes.Loc{Start: start},
+	}
+	var parseErr859 error
+
+	loop.Condition, parseErr859 = p.parseExpr()
+	if parseErr859 != nil {
+		return nil, parseErr859
+	}
+
+	if p.cur.Type != kwLOOP {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance()
+	var parseErr860 error
+
+	loop.Statements, parseErr860 = p.parsePLSQLStatements()
+	if parseErr860 != nil {
+		return nil, parseErr860
+	}
+
+	if parseErr := p.consumeEndLoop(); parseErr != nil {
+		return nil, parseErr
+	}
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	loop.Loc.End = p.prev.End
+	return loop, nil
+}
+
+// parsePLSQLForLoop parses a FOR LOOP statement.
+//
+//	FOR iterator LOOP statements END LOOP [label] ;
+//
+// The iterator is Oracle 21c's (parseIterator): FOR i IN 1..10 BY 2 WHEN
+// MOD(i, 3) = 0, FOR i, v IN PAIRS OF t, and the classic range and cursor
+// forms.
+func (p *Parser) parsePLSQLForLoop() (*nodes.PLSQLLoop, error) {
+	start := p.pos()
+	p.advance() // consume FOR
+
+	loop := &nodes.PLSQLLoop{
+		Loc: nodes.Loc{Start: start},
+	}
+	// The iterator, Oracle 21c's iterands and iteration controls. A classic
+	// form fills the loop's own fields: one plain iterand over a range or a
+	// query, without WHILE or WHEN. Any other form is the loop's Iteration,
+	// so a walk meets each node once. A plain name or call, FOR r IN c or
+	// FOR r IN c(1), names a cursor or a scalar expression of one value,
+	// which the text does not tell apart: the loop is a cursor FOR loop
+	// over that name and keeps the iterator in Iteration too.
+	it, err := p.parseIterator()
+	if err != nil {
+		return nil, err
+	}
+	iterand := it.Iterands.Items[0].(*nodes.PLSQLIterand)
+	loop.Iterator = iterand.Name
+	loop.Type = nodes.LOOP_FOR
+	classic := false
+	if it.Iterands.Len() == 1 && iterand.Mutability == "" && iterand.DataType == nil && it.Controls.Len() == 1 {
+		ctl := it.Controls.Items[0].(*nodes.PLSQLIterationControl)
+		plain := ctl.While == nil && ctl.When == nil
+		switch cursor := ctl.Expr.(type) {
+		case nil:
+			if ctl.Kind == "RANGE" && ctl.Step == nil && plain {
+				loop.LowerBound, loop.UpperBound, loop.Reverse = ctl.Lower, ctl.Upper, ctl.Reverse
+				classic = true
+			}
+		case *nodes.ColumnRef:
+			if ctl.Kind == "EXPR" && plain {
+				loop.Type = nodes.LOOP_CURSOR_FOR
+				loop.CursorName = cursor.Column
+			}
+		case *nodes.FuncCallExpr:
+			if ctl.Kind == "EXPR" && plain && cursor.FuncName != nil {
+				loop.Type = nodes.LOOP_CURSOR_FOR
+				loop.CursorName = cursor.FuncName.Name
+			}
+		case *nodes.SubqueryExpr:
+			if ctl.Kind == "EXPR" && plain {
+				loop.Type = nodes.LOOP_CURSOR_FOR
+				loop.CursorQuery = cursor.Subquery
+				classic = true
+			}
+		}
+	}
+	if !classic {
+		loop.Iteration = it
+	}
+
+	if p.cur.Type != kwLOOP {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance()
+	var parseErr865 error
+
+	loop.Statements, parseErr865 = p.parsePLSQLStatements()
+	if parseErr865 != nil {
+		return nil, parseErr865
+	}
+
+	if parseErr := p.consumeEndLoop(); parseErr != nil {
+		return nil, parseErr
+	}
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	loop.Loc.End = p.prev.End
+	return loop, nil
+}
+
+// consumeEndLoop consumes END LOOP [label].
+func (p *Parser) consumeEndLoop() error {
+	if p.cur.Type != kwEND {
+		return p.syntaxErrorAtCur()
+	}
+	p.advance()
+	if p.cur.Type != kwLOOP {
+		return p.syntaxErrorAtCur()
+	}
+	p.advance()
+	// Optional label after END LOOP
+	if p.atEndName() {
+		p.advance()
+	}
+	return nil
+}
+
+// parsePLSQLReturn parses a RETURN [expr] ; statement.
+func (p *Parser) parsePLSQLReturn() (*nodes.PLSQLReturn, error) {
+	start := p.pos()
+	p.advance() // consume RETURN
+
+	ret := &nodes.PLSQLReturn{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional expression (not followed by ;)
+	if p.cur.Type != ';' && p.cur.Type != tokEOF {
+		var parseErr866 error
+		ret.Expr, parseErr866 = p.parseExpr()
+		if parseErr866 != nil {
+			return nil, parseErr866
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	ret.Loc.End = p.prev.End
+	return ret, nil
+}
+
+// parsePLSQLGoto parses a GOTO label ; statement.
+func (p *Parser) parsePLSQLGoto() (*nodes.PLSQLGoto, error) {
+	start := p.pos()
+	p.advance()
+	parseValue81, // consume GOTO
+		parseErr82 := p.parseIdentifier()
+	if parseErr82 != nil {
+		return nil, parseErr82
+	}
+	g := &nodes.PLSQLGoto{
+		Label: parseValue81,
+		Loc:   nodes.Loc{Start: start},
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	g.Loc.End = p.prev.End
+	return g, nil
+}
+
+// parsePLSQLRaise parses a RAISE [exception_name] ; statement.
+func (p *Parser) parsePLSQLRaise() (*nodes.PLSQLRaise, error) {
+	start := p.pos()
+	p.advance() // consume RAISE
+
+	r := &nodes.PLSQLRaise{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional exception name
+	if p.cur.Type != ';' && p.cur.Type != tokEOF && p.isIdentLike() {
+		var parseErr867 error
+		r.Exception, parseErr867 = p.parseIdentifier()
+		if parseErr867 != nil {
+			return nil, parseErr867
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	r.Loc.End = p.prev.End
+	return r, nil
+}
+
+// parsePLSQLNull parses a NULL ; statement.
+func (p *Parser) parsePLSQLNull() (*nodes.PLSQLNull, error) {
+	start := p.pos()
+	p.advance() // consume NULL
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	return &nodes.PLSQLNull{
+		Loc: nodes.Loc{Start: start, End: p.prev.End},
+	}, nil
+}
+
+// parsePLSQLExecImmediate parses an EXECUTE IMMEDIATE statement.
+//
+// Ref: https://docs.oracle.com/en/database/oracle/oracle-database/19/lnpls/EXECUTE-IMMEDIATE-statement.html
+//
+//	EXECUTE IMMEDIATE dynamic_sql_stmt
+//	    [ { into_clause | bulk_collect_into_clause } [ using_clause ]
+//	    | using_clause [ dynamic_returning_clause ]
+//	    | dynamic_returning_clause
+//	    ] ;
+//	dynamic_returning_clause ::= { RETURNING | RETURN } { into_clause | bulk_collect_into_clause }
+func (p *Parser) parsePLSQLExecImmediate() (*nodes.PLSQLExecImmediate, error) {
+	start := p.pos()
+	p.advance() // consume EXECUTE
+
+	// IMMEDIATE
+	if p.cur.Type == kwIMMEDIATE {
+		p.advance()
+	}
+
+	stmt := &nodes.PLSQLExecImmediate{
+		Loc: nodes.Loc{Start: start},
+	}
+	var parseErr868 error
+
+	stmt.SQL, parseErr868 = p.parseExpr()
+	if parseErr868 != nil {
+		return nil, parseErr868
+	}
+	if stmt.SQL == nil {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	// { INTO | BULK COLLECT INTO } variables
+	bulk, err := p.parseOptionalBulkCollect()
+	if err != nil {
+		return nil, err
+	}
+	if p.cur.Type == kwINTO {
+		stmt.Bulk = bulk
+		p.advance()
+		var parseErr869 error
+		stmt.Into, parseErr869 = p.parsePLSQLVarList()
+		if parseErr869 != nil {
+			return nil, parseErr869
+		}
+	}
+
+	if p.cur.Type == kwUSING {
+		p.advance()
+		var parseErr870 error
+		stmt.Using, stmt.UsingModes, parseErr870 = p.parsePLSQLBindArgList()
+		if parseErr870 != nil {
+			return nil, parseErr870
+		}
+	}
+
+	// dynamic_returning_clause, only without an into_clause
+	if stmt.Into == nil && (p.cur.Type == kwRETURNING || p.cur.Type == kwRETURN) {
+		p.advance() // consume RETURNING or RETURN
+		stmt.ReturningBulk, err = p.parseOptionalBulkCollect()
+		if err != nil {
+			return nil, err
+		}
+		if p.cur.Type != kwINTO {
+			return nil, p.syntaxErrorAtCur()
+		}
+		p.advance() // consume INTO
+		stmt.ReturningInto, err = p.parsePLSQLVarList()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// parseOptionalBulkCollect consumes BULK COLLECT when it starts a
+// bulk_collect_into_clause and reports whether it did. INTO must follow.
+func (p *Parser) parseOptionalBulkCollect() (bool, error) {
+	if !p.isBulkCollect() {
+		return false, nil
+	}
+	p.advance() // consume BULK
+	p.advance() // consume COLLECT
+	if p.cur.Type != kwINTO {
+		return false, p.syntaxErrorAtCur()
+	}
+	return true, nil
+}
+
+// parsePLSQLOpen parses OPEN cursor [(args)] [FOR query|dynamic_sql [USING args]] ;
+func (p *Parser) parsePLSQLOpen() (*nodes.PLSQLOpen, error) {
+	start := p.pos()
+	p.advance() // consume OPEN
+
+	o := &nodes.PLSQLOpen{
+		Loc: nodes.Loc{Start: start},
+	}
+	var parseErr871 error
+
+	o.Cursor, parseErr871 = p.parseIdentifier()
+	if parseErr871 !=
+
+		// Optional arguments
+		nil {
+		return nil, parseErr871
+	}
+	if o.Cursor == "" {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	if p.cur.Type == '(' {
+		var parseErr872 error
+		o.Args, parseErr872 = p.parsePLSQLArgList()
+		if parseErr872 !=
+
+			// FOR query
+			nil {
+			return nil, parseErr872
+		}
+	}
+
+	if p.cur.Type == kwFOR {
+		p.advance()
+		if p.cur.Type == kwSELECT || p.cur.Type == kwWITH {
+			var parseErr873 error
+			o.ForQuery, parseErr873 = p.parseSelectStmt()
+			if parseErr873 != nil {
+				return nil, parseErr873
+			}
+		} else if p.cur.Type == '(' && p.parenQueryAt(p.cur.Loc).leads {
+			// The query stands bare: Oracle 23ai rejects OPEN c FOR (SELECT
+			// ...) and ((SELECT ...) UNION (SELECT ...)) at the SELECT
+			// (PLS-00103). A parenthesized string, ('SELECT ...' || s), is
+			// dynamic SQL.
+			lex := p.selectionLexer(p.cur.Loc)
+			tok := lex.NextToken()
+			for tok.Type == '(' {
+				tok = lex.NextToken()
+			}
+			return nil, p.syntaxErrorAtTok(tok)
+		} else {
+			var parseErr873 error
+			o.ForExpr, parseErr873 = p.parseExpr()
+			if parseErr873 != nil {
+				return nil, parseErr873
+			}
+			if o.ForExpr == nil {
+				return nil, p.syntaxErrorAtCur()
+			}
+		}
+		if p.cur.Type == kwUSING {
+			p.advance()
+			var parseErr874 error
+			o.UsingArgs, parseErr874 = p.parseExprList()
+			if parseErr874 != nil {
+				return nil, parseErr874
+			}
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	o.Loc.End = p.prev.End
+	return o, nil
+}
+
+// parsePLSQLFetch parses FETCH cursor INTO vars [BULK COLLECT INTO vars] [LIMIT expr] ;
+func (p *Parser) parsePLSQLFetch() (*nodes.PLSQLFetch, error) {
+	start := p.pos()
+	p.advance() // consume FETCH
+
+	f := &nodes.PLSQLFetch{
+		Loc: nodes.Loc{Start: start},
+	}
+	var parseErr874 error
+
+	f.Cursor, parseErr874 = p.parseIdentifier()
+	if parseErr874 !=
+
+		// BULK COLLECT INTO
+		nil {
+		return nil, parseErr874
+	}
+	if f.Cursor == "" {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	if p.cur.Type == kwBULK {
+		f.Bulk = true
+		p.advance() // consume BULK
+		if p.cur.Type == kwCOLLECT {
+			p.advance() // consume COLLECT
+		}
+	}
+
+	// INTO
+	if p.cur.Type == kwINTO {
+		p.advance()
+		var parseErr875 error
+		f.Into, parseErr875 = p.parsePLSQLVarList()
+		if parseErr875 !=
+
+			// LIMIT
+			nil {
+			return nil, parseErr875
+		}
+	} else {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	if p.cur.Type == kwLIMIT {
+		p.advance()
+		var parseErr876 error
+		f.Limit, parseErr876 = p.parseExpr()
+		if parseErr876 != nil {
+			return nil, parseErr876
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	f.Loc.End = p.prev.End
+	return f, nil
+}
+
+// parsePLSQLClose parses CLOSE cursor ;
+func (p *Parser) parsePLSQLClose() (*nodes.PLSQLClose, error) {
+	start := p.pos()
+	p.advance()
+	parseValue83, // consume CLOSE
+		parseErr84 := p.parseIdentifier()
+	if parseErr84 != nil {
+		return nil, parseErr84
+	}
+	c := &nodes.PLSQLClose{
+		Cursor: parseValue83,
+		Loc:    nodes.Loc{Start: start},
+	}
+	if c.Cursor == "" {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	c.Loc.End = p.prev.End
+	return c, nil
+}
+
+// parsePLSQLExceptionHandlers parses exception handlers.
+//
+//	WHEN name [OR name ...] THEN statements
+func (p *Parser) parsePLSQLExceptionHandlers() (*nodes.List, error) {
+	handlers := &nodes.List{}
+
+	for p.cur.Type == kwWHEN {
+		start := p.pos()
+		p.advance() // consume WHEN
+
+		handler := &nodes.ExceptionHandler{
+			Exceptions: &nodes.List{},
+			Loc:        nodes.Loc{Start: start},
+		}
+
+		// Exception name(s)
+		if p.cur.Type == kwTHEN {
+			return nil, p.syntaxErrorAtCur()
+		}
+		name, parseErr877 := p.parsePLSQLExceptionName()
+		if parseErr877 != nil {
+			return nil, parseErr877
+		}
+		if name == "" {
+			return nil, p.syntaxErrorAtCur()
+		}
+		handler.Exceptions.Items = append(handler.Exceptions.Items, &nodes.String{Str: name})
+
+		for p.cur.Type == kwOR {
+			p.advance()
+			var // consume OR
+			parseErr878 error
+			name, parseErr878 = p.parsePLSQLExceptionName()
+			if parseErr878 != nil {
+				return nil, parseErr878
+			}
+			if name == "" {
+				return nil, p.syntaxErrorAtCur()
+			}
+			handler.Exceptions.Items = append(handler.Exceptions.Items, &nodes.String{Str: name})
+		}
+
+		// THEN
+		if p.cur.Type != kwTHEN {
+			return nil, p.syntaxErrorAtCur()
+		}
+		p.advance()
+		var parseErr879 error
+
+		handler.Statements, parseErr879 = p.parsePLSQLStatements()
+		if parseErr879 != nil {
+			return nil, parseErr879
+		}
+		handler.Loc.End = p.prev.End
+
+		handlers.Items = append(handlers.Items, handler)
+	}
+
+	// EXCEPTION takes at least one handler (PLS-00103 on Oracle 23ai for
+	// EXCEPTION END).
+	if handlers.Len() == 0 {
+		return nil, p.syntaxErrorAtCur()
+	}
+	return handlers, nil
+}
+
+func (p *Parser) parsePLSQLExceptionName() (string, error) {
+	obj, err := p.parseObjectName()
+	if err != nil {
+		return "", err
+	}
+	if obj == nil || obj.Name == "" {
+		return "", nil
+	}
+	if obj.Schema != "" {
+		return obj.Schema + "." + obj.Name, nil
+	}
+	return obj.Name, nil
+}
+
+// parsePLSQLVarList parses a comma-separated list of variable references.
+//
+// The list holds at least one target, and no entry may be empty: Oracle
+// rejects `INTO;`, `USING;`, and `INTO a,,b` with PLS-00103.
+func (p *Parser) parsePLSQLVarList() (*nodes.List, error) {
+	list := &nodes.List{}
+
+	for {
+		expr, parseErr880 := p.parseExpr()
+		if parseErr880 != nil {
+			return nil, parseErr880
+		}
+		if expr == nil {
+			return nil, p.syntaxErrorAtCur()
+		}
+		// No parentheses around a FETCH, EXECUTE IMMEDIATE, or RETURNING
+		// target (PLS-00103 on Oracle 23ai for FETCH c INTO (x)).
+		if isParenExpr(expr) {
+			return nil, p.syntaxErrorAtNode(expr)
+		}
+		list.Items = append(list.Items, expr)
+		if p.cur.Type != ',' {
+			break
+		}
+		p.advance() // consume ,
+	}
+
+	return list, p.checkTargets(list)
+}
+
+// isParenExpr reports whether expr is a parenthesized expression.
+func isParenExpr(expr nodes.ExprNode) bool {
+	_, ok := expr.(*nodes.ParenExpr)
+	return ok
+}
+
+// checkTargets rejects a value among targets, the variables an INTO
+// clause assigns: an inquiry directive, which Oracle 23ai replaces with a
+// literal, a literal, or an operation, predicate, CASE, CAST, subquery, or
+// cursor attribute, parenthesized or not (ORA-32551 for INTO 1 + x and
+// INTO $$PLSQL_LINE + x, PLS-00403 for INTO x + 1, INTO (x + 1), and INTO
+// NULL; PLS-00103 after FETCH or EXECUTE IMMEDIATE). A name, a bind
+// variable, an element, or a field is left to the engine.
+func (p *Parser) checkTargets(targets *nodes.List) error {
+	if targets == nil {
+		return nil
+	}
+	for _, item := range targets.Items {
+		expr, ok := item.(nodes.ExprNode)
+		if !ok {
+			continue
+		}
+		target := expr
+		for paren, ok := target.(*nodes.ParenExpr); ok; paren, ok = target.(*nodes.ParenExpr) {
+			target = paren.Expr
+		}
+		if p.isInquiryRef(target) || isValueExpr(target) {
+			return p.syntaxErrorAtNode(expr)
+		}
+	}
+	return nil
+}
+
+// isValueExpr reports whether expr is a value no assignment can target: a
+// literal, or an operation, predicate, CASE, CAST, subquery, or cursor
+// attribute.
+func isValueExpr(expr nodes.ExprNode) bool {
+	switch expr.(type) {
+	case *nodes.NullLiteral, *nodes.StringLiteral, *nodes.NumberLiteral, *nodes.DateTimeLiteral,
+		*nodes.IntervalExpr, *nodes.BinaryExpr, *nodes.UnaryExpr, *nodes.BoolExpr,
+		*nodes.CaseExpr, *nodes.DecodeExpr, *nodes.BetweenExpr, *nodes.InExpr, *nodes.LikeExpr,
+		*nodes.IsExpr, *nodes.ExistsExpr, *nodes.CastExpr, *nodes.MultisetExpr,
+		*nodes.CursorExpr, *nodes.SubqueryExpr, *nodes.ExtractExpr, *nodes.CursorAttributeExpr:
+		return true
+	}
+	return false
+}
+
+// parsePLSQLBindArgList parses the bind arguments of a USING clause, each
+// with an optional mode, and returns the modes ("", "IN", "OUT", or
+// "IN OUT") parallel to the arguments.
+//
+//	using_clause ::= USING [ IN | OUT | IN OUT ] bind_argument
+//	    [, [ IN | OUT | IN OUT ] bind_argument ]...
+func (p *Parser) parsePLSQLBindArgList() (*nodes.List, []string, error) {
+	list := &nodes.List{}
+	var modes []string
+
+	for {
+		mode := ""
+		switch p.cur.Type {
+		case kwIN:
+			p.advance() // consume IN
+			mode = "IN"
+			if p.cur.Type == kwOUT {
+				p.advance() // consume OUT
+				mode = "IN OUT"
+			}
+		case kwOUT:
+			p.advance() // consume OUT
+			mode = "OUT"
+		}
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, nil, err
+		}
+		if expr == nil {
+			return nil, nil, p.syntaxErrorAtCur()
+		}
+		// An OUT bind assigns its argument, which an inquiry directive's
+		// literal is not, nor one in parentheses, nor any other value: a
+		// literal or an operation (PLS-00103 on Oracle 23ai for USING OUT
+		// x + 1, OUT -x, and IN OUT 1).
+		if mode != "" && mode != "IN" && (p.isInquiryRef(expr) || isParenExpr(expr) || isValueExpr(expr)) {
+			return nil, nil, p.syntaxErrorAtNode(expr)
+		}
+		list.Items = append(list.Items, expr)
+		modes = append(modes, mode)
+		if p.cur.Type != ',' {
+			break
+		}
+		p.advance() // consume ,
+	}
+
+	return list, modes, nil
+}
+
+// parsePLSQLArgList parses a parenthesized argument list.
+func (p *Parser) parsePLSQLArgList() (*nodes.List, error) {
+	args := &nodes.List{}
+	p.advance() // consume (
+
+	for p.cur.Type != ')' && p.cur.Type != tokEOF {
+		expr, parseErr881 := p.parseExpr()
+		if parseErr881 != nil {
+			return nil, parseErr881
+		}
+		if expr != nil {
+			args.Items = append(args.Items, expr)
+		}
+		if p.cur.Type != ',' {
+			break
+		}
+		p.advance() // consume ,
+	}
+
+	if p.cur.Type == ')' {
+		p.advance()
+	}
+
+	return args, nil
+}
+
+// parsePLSQLExit parses an EXIT [label] [WHEN condition] ; statement.
+func (p *Parser) parsePLSQLExit() (nodes.StmtNode, error) {
+	start := p.pos()
+	p.advance() // consume EXIT
+
+	stmt := &nodes.PLSQLExit{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional label (before WHEN or ;)
+	if p.isIdentLike() && p.cur.Type != kwWHEN {
+		stmt.Label = p.cur.Str
+		p.advance()
+	}
+
+	// WHEN condition
+	if p.cur.Type == kwWHEN {
+		p.advance()
+		var parseErr882 error
+		stmt.Condition, parseErr882 = p.parseExpr()
+		if parseErr882 != nil {
+			return nil, parseErr882
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// parsePLSQLContinue parses a CONTINUE [label] [WHEN condition] ; statement.
+func (p *Parser) parsePLSQLContinue() (nodes.StmtNode, error) {
+	start := p.pos()
+	p.advance() // consume CONTINUE
+
+	stmt := &nodes.PLSQLContinue{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional label
+	if p.isIdentLike() && p.cur.Type != kwWHEN {
+		stmt.Label = p.cur.Str
+		p.advance()
+	}
+
+	// WHEN condition
+	if p.cur.Type == kwWHEN {
+		p.advance()
+		var parseErr883 error
+		stmt.Condition, parseErr883 = p.parseExpr()
+		if parseErr883 != nil {
+			return nil, parseErr883
+		}
+		if stmt.Condition == nil {
+			return nil, p.syntaxErrorAtCur()
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// parsePLSQLForall parses a FORALL statement.
+//
+//	FORALL index IN lower..upper [SAVE EXCEPTIONS] dml_statement ;
+func (p *Parser) parsePLSQLForall() (nodes.StmtNode, error) {
+	start := p.pos()
+	p.advance() // consume FORALL
+
+	stmt := &nodes.PLSQLForall{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Index variable
+	if p.isIdentLike() {
+		stmt.Index = p.cur.Str
+		p.advance()
+	}
+
+	// IN
+	if p.cur.Type == kwIN {
+		p.advance()
+	}
+
+	// lower..upper or VALUES OF or INDICES OF
+	if p.isIdentLike() && (p.cur.Str == "VALUES" || p.cur.Str == "INDICES") {
+		// VALUES OF / INDICES OF - skip to DML
+		p.advance()
+		if p.cur.Type == kwOF {
+			p.advance()
+		}
+		var parseErr884 error
+		// collection name
+		stmt.Lower, parseErr884 = p.parseExpr()
+		if parseErr884 != nil {
+			return nil, parseErr884
+		}
+	} else {
+		var parseErr885 error
+		stmt.Lower, parseErr885 = p.parseExpr()
+		if parseErr885 != nil {
+			return nil, parseErr885
+		}
+		if p.cur.Type == tokDOTDOT {
+			p.advance()
+			var parseErr886 error
+			stmt.Upper, parseErr886 = p.parseExpr()
+			if parseErr886 !=
+
+				// Optional SAVE EXCEPTIONS
+				nil {
+				return nil, parseErr886
+			}
+		}
+	}
+
+	if p.isIdentLike() && p.cur.Str == "SAVE" {
+		p.advance()
+		if p.cur.Type == kwEXCEPTION || p.isIdentLike() {
+			p.advance()
+		}
+	}
+	var parseErr887 error
+
+	// DML statement body
+	stmt.Body, parseErr887 = p.parsePLSQLStatement()
+	if parseErr887 != nil {
+		return nil, parseErr887
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// parsePLSQLPipeRow parses a PIPE ROW statement.
+//
+//	PIPE ROW (expression) ;
+func (p *Parser) parsePLSQLPipeRow() (nodes.StmtNode, error) {
+	start := p.pos()
+	p.advance() // consume PIPE
+
+	// ROW
+	if p.cur.Type == kwROW || (p.isIdentLike() && p.cur.Str == "ROW") {
+		p.advance()
+	}
+
+	stmt := &nodes.PLSQLPipeRow{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// (expression)
+	if p.cur.Type == '(' {
+		p.advance()
+		var parseErr888 error
+		stmt.Row, parseErr888 = p.parseExpr()
+		if parseErr888 != nil {
+			return nil, parseErr888
+		}
+		if p.cur.Type == ')' {
+			p.advance()
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// parsePLSQLPragma parses a PRAGMA directive.
+//
+//	PRAGMA AUTONOMOUS_TRANSACTION ;
+//	PRAGMA EXCEPTION_INIT ( exception, error_code ) ;
+//	PRAGMA RESTRICT_REFERENCES ( ... ) ;
+func (p *Parser) parsePLSQLPragma() (*nodes.PLSQLPragma, error) {
+	start := p.pos()
+	p.advance() // consume PRAGMA
+
+	pragma := &nodes.PLSQLPragma{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Pragma name
+	if p.isIdentLike() {
+		pragma.Name = p.cur.Str
+		p.advance()
+	}
+
+	// Optional arguments in parentheses
+	if p.cur.Type == '(' {
+		p.advance()
+		pragma.Args = &nodes.List{}
+		for p.cur.Type != ')' && p.cur.Type != tokEOF {
+			arg, parseErr889 := p.parseExpr()
+			if parseErr889 != nil {
+				return nil, parseErr889
+			}
+			if arg != nil {
+				pragma.Args.Items = append(pragma.Args.Items, arg)
+			}
+			if p.cur.Type != ',' {
+				break
+			}
+			p.advance()
+		}
+		if p.cur.Type == ')' {
+			p.advance()
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	pragma.Loc.End = p.prev.End
+	return pragma, nil
+}
+
+// parsePLSQLCaseStmt parses a PL/SQL CASE statement (distinct from CASE expression).
+//
+//	CASE [expr]
+//	  WHEN expr THEN statements ...
+//	  [ELSE statements]
+//	END CASE ;
+func (p *Parser) parsePLSQLCaseStmt() (nodes.StmtNode, error) {
+	start := p.pos()
+	p.advance() // consume CASE
+
+	stmt := &nodes.PLSQLCase{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Optional search expression (simple CASE vs searched CASE)
+	// If next is WHEN, it's a searched CASE
+	if p.cur.Type != kwWHEN {
+		var parseErr890 error
+		stmt.Expr, parseErr890 = p.parseExpr()
+		if parseErr890 !=
+
+			// WHEN clauses
+			nil {
+			return nil, parseErr890
+		}
+	}
+
+	for p.cur.Type == kwWHEN {
+		whenStart := p.pos()
+		p.advance() // consume WHEN
+		when := &nodes.PLSQLWhen{
+			Loc: nodes.Loc{Start: whenStart},
+		}
+		var parseErr891 error
+		when.Expr, parseErr891 = p.parseExpr()
+		if parseErr891 != nil {
+			return nil, parseErr891
+		}
+		if p.cur.Type != kwTHEN {
+			return nil, p.syntaxErrorAtCur()
+		}
+		p.advance()
+		// Statements until next WHEN, ELSE, or END, each ended by ';'
+		stmts, parseErr892 := p.parsePLSQLStatements()
+		if parseErr892 != nil {
+			return nil, parseErr892
+		}
+		when.Stmts = plsqlStmtNodes(stmts)
+		when.Loc.End = p.prev.End
+		stmt.Whens = append(stmt.Whens, when)
+	}
+
+	// ELSE
+	if len(stmt.Whens) == 0 {
+		return nil, p.syntaxErrorAtCur()
+	}
+	if p.cur.Type == kwELSE {
+		p.advance()
+		stmts, parseErr893 := p.parsePLSQLStatements()
+		if parseErr893 != nil {
+			return nil, parseErr893
+		}
+		stmt.Else = plsqlStmtNodes(stmts)
+	}
+
+	if err := p.consumeEndKeyword(kwCASE); err != nil {
+		return nil, err
+	}
+
+	stmt.Loc.End = p.prev.End
+	return stmt, nil
+}
+
+// consumeEndKeyword consumes END kw [label] ; that closes an IF or CASE
+// statement. Oracle 23ai requires the keyword after END (IF c THEN NULL; END;
+// is PLS-00103) and accepts a label after it (END IF l;, END CASE l;).
+func (p *Parser) consumeEndKeyword(kw int) error {
+	if p.cur.Type != kwEND {
+		return p.syntaxErrorAtCur()
+	}
+	p.advance()
+	if p.cur.Type != kw {
+		return p.syntaxErrorAtCur()
+	}
+	p.advance()
+	if p.atEndName() {
+		p.advance() // consume label
+	}
+	if p.cur.Type != ';' {
+		if kw == kwIF {
+			return p.missingSemicolonError("END IF")
+		}
+		return p.missingSemicolonError("END CASE")
+	}
+	p.advance()
+	return nil
+}
+
+// plsqlStmtNodes returns the statements of a list parsePLSQLStatements built.
+func plsqlStmtNodes(list *nodes.List) []nodes.StmtNode {
+	out := make([]nodes.StmtNode, 0, list.Len())
+	for _, item := range list.Items {
+		out = append(out, item.(nodes.StmtNode))
+	}
+	return out
+}
+
+// parsePLSQLSubtypeDecl parses a SUBTYPE declaration, the current token at
+// SUBTYPE.
+//
+// Ref: https://docs.oracle.com/en/database/oracle/oracle-database/23/lnpls/block.html (subtype_definition)
+//
+//	SUBTYPE subtype IS base_type
+//	    [ constraint | CHARACTER SET character_set ] [ NOT NULL ] ;
+//	constraint ::= { precision [, scale ] | RANGE low_value .. high_value }
+//
+// Precision and scale are written in parentheses as part of base_type:
+// Oracle 23ai rejects SUBTYPE s IS NUMBER 8, 2 (PLS-00103). The character set
+// may be named or item%CHARSET, but not ANY_CS (PLS-00551).
+func (p *Parser) parsePLSQLSubtypeDecl() (*nodes.PLSQLSubtypeDecl, error) {
+	decl := &nodes.PLSQLSubtypeDecl{Loc: nodes.Loc{Start: p.pos()}}
+	p.advance() // consume SUBTYPE
+
+	if !p.isPLSQLIdentifier() {
+		return nil, p.syntaxErrorAtCur()
+	}
+	name, err := p.parseIdentifier()
+	if err != nil {
+		return nil, err
+	}
+	decl.Name = name
+	if p.cur.Type != kwIS {
+		return nil, p.syntaxErrorAtCur()
+	}
+	p.advance()
+
+	decl.BaseType, err = p.parsePLSQLDatatype(typeModsPLSQL, charsetFlexible)
+	if err != nil {
+		return nil, err
+	}
+	if decl.BaseType.Names.Len() == 0 {
+		return nil, p.syntaxErrorAtCur()
+	}
+
+	if p.cur.Type == kwRANGE {
+		p.advance()
+		if decl.RangeLow, err = p.parseExpr(); err != nil {
+			return nil, err
+		}
+		if decl.RangeLow == nil || p.cur.Type != tokDOTDOT {
+			return nil, p.syntaxErrorAtCur()
+		}
+		p.advance()
+		if decl.RangeHigh, err = p.parseExpr(); err != nil {
+			return nil, err
+		}
+		if decl.RangeHigh == nil {
+			return nil, p.syntaxErrorAtCur()
+		}
+	}
+	decl.NotNull = p.consumeNotNull()
+
+	if p.cur.Type != ';' {
+		return nil, p.missingSemicolonError("the SUBTYPE declaration")
+	}
+	p.advance()
+	decl.Loc.End = p.prev.End
+	return decl, nil
+}
+
+// consumeNotNull consumes NOT NULL and reports whether it was there.
+func (p *Parser) consumeNotNull() bool {
+	if p.cur.Type != kwNOT || p.peekNext().Type != kwNULL {
+		return false
+	}
+	p.advance() // consume NOT
+	p.advance() // consume NULL
+	return true
+}
+
+// parsePLSQLTypeDecl parses a PL/SQL TYPE declaration.
+//
+//	TYPE name IS TABLE OF type [NOT NULL] [INDEX BY type] ;
+//	TYPE name IS VARRAY(n) OF type [NOT NULL] ;
+//	TYPE name IS RECORD (field type [,...]) ;
+//	TYPE name IS REF CURSOR [RETURN type] ;
+func (p *Parser) parsePLSQLTypeDecl() (*nodes.PLSQLTypeDecl, error) {
+	start := p.pos()
+	p.advance() // consume TYPE
+
+	decl := &nodes.PLSQLTypeDecl{
+		Loc: nodes.Loc{Start: start},
+	}
+
+	// Type name
+	if p.isIdentLike() {
+		decl.Name = p.cur.Str
+		p.advance()
+	}
+
+	// IS
+	if p.cur.Type == kwIS {
+		p.advance()
+	}
+
+	// TABLE OF / VARRAY / RECORD / REF CURSOR
+	switch {
+	case p.cur.Type == kwTABLE:
+		decl.Kind = "TABLE"
+		p.advance()
+		if p.cur.Type == kwOF {
+			p.advance()
+		}
+		var parseErr894 error
+		decl.ElementType, parseErr894 = p.parsePLSQLDatatype(typeModsPLSQL, charsetFixed)
+		if parseErr894 !=
+			// INDEX BY
+			nil {
+			return nil, parseErr894
+		}
+		if decl.ElementType == nil || decl.ElementType.Names.Len() == 0 {
+			return nil, p.syntaxErrorAtCur()
+		}
+		decl.ElementNotNull = p.consumeNotNull()
+
+		if p.cur.Type == kwINDEX {
+			p.advance()
+			if p.cur.Type == kwBY {
+				p.advance()
+			}
+			var parseErr895 error
+			decl.IndexBy, parseErr895 = p.parsePLSQLTypeName()
+			if parseErr895 != nil {
+				return nil, parseErr895
+			}
+			// An associative array is indexed by an integer or a string,
+			// never a REF (PLS-00315 on Oracle 23ai).
+			if decl.IndexBy != nil && decl.IndexBy.IsRef {
+				return nil, p.syntaxErrorAtType(decl.IndexBy)
+			}
+		}
+
+	case p.isIdentLike() && p.cur.Str == "VARRAY" || p.isIdentLike() && p.cur.Str == "VARYING":
+		decl.Kind = "VARRAY"
+		p.advance()
+		// Optional ARRAY keyword
+		if p.isIdentLike() && p.cur.Str == "ARRAY" {
+			p.advance()
+		}
+		// (limit)
+		if p.cur.Type == '(' {
+			p.advance()
+			var parseErr896 error
+			decl.Limit, parseErr896 = p.parseExpr()
+			if parseErr896 != nil {
+				return nil, parseErr896
+			}
+			if err := p.checkVarrayLimit(decl.Limit); err != nil {
+				return nil, err
+			}
+			if p.cur.Type == ')' {
+				p.advance()
+			}
+		}
+		if p.cur.Type == kwOF {
+			p.advance()
+		}
+		var parseErr897 error
+		decl.ElementType, parseErr897 = p.parsePLSQLDatatype(typeModsPLSQL, charsetFixed)
+		if parseErr897 != nil {
+			return nil, parseErr897
+		}
+		if decl.ElementType == nil || decl.ElementType.Names.Len() == 0 {
+			return nil, p.syntaxErrorAtCur()
+		}
+		decl.ElementNotNull = p.consumeNotNull()
+
+	case p.isIdentLike() && p.cur.Str == "RECORD":
+		decl.Kind = "RECORD"
+		p.advance()
+		// (field_name type [,...])
+		if p.cur.Type == '(' {
+			p.advance()
+			decl.Fields = &nodes.List{}
+			for p.cur.Type != ')' && p.cur.Type != tokEOF {
+				field, parseErr898 := p.parsePLSQLVarDecl(charsetFixed)
+				if parseErr898 != nil {
+					return nil, parseErr898
+				}
+				if field != nil {
+					decl.Fields.Items = append(decl.Fields.Items, field)
+				}
+				if p.cur.Type == ',' {
+					p.advance()
+				} else {
+					break
+				}
+			}
+			if p.cur.Type == ')' {
+				p.advance()
+			}
+		}
+
+	case p.cur.Type == kwREF:
+		decl.Kind = "REF_CURSOR"
+		p.advance()
+		if p.cur.Type == kwCURSOR {
+			p.advance()
+		}
+		// RETURN type
+		if p.cur.Type == kwRETURN {
+			p.advance()
+			var parseErr899 error
+			decl.ReturnType, parseErr899 = p.parsePLSQLDatatype(typeModsNone, charsetNone)
+			if parseErr899 != nil {
+				return nil, parseErr899
+			}
+		}
+	}
+
+	if p.cur.Type == ';' {
+		p.advance()
+	}
+
+	decl.Loc.End = p.prev.End
+	return decl, nil
+}

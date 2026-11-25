@@ -1,0 +1,166 @@
+package handler
+
+import (
+	"errors"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+
+	"velagateway/internal/dto"
+	"velagateway/internal/middleware"
+	"velagateway/internal/model"
+	"velagateway/internal/service"
+	"velagateway/pkg/resp"
+)
+
+// 发布流程 (CI/CD) HTTP surface.
+//
+// Templates are configuration and therefore admin-only; releases are work, so
+// anyone with the pipeline menu may raise one — and the gateway's own gate
+// decides what that release is allowed to do when it executes, exactly as it
+// does for the terminal.
+
+// ListPipelines returns the flow templates with their stages.
+func (h *Handler) ListPipelines(c *gin.Context) {
+	resp.OK(c, h.Svc.ListPipelines())
+}
+
+// GetPipeline returns one template.
+func (h *Handler) GetPipeline(c *gin.Context) {
+	p, err := h.Svc.GetPipeline(pathID(c))
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "发布流程不存在")
+		return
+	}
+	resp.OK(c, p)
+}
+
+// SavePipeline creates (POST) or replaces (PUT /:id) a template.
+func (h *Handler) SavePipeline(c *gin.Context) {
+	var req dto.PipelineReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	p, err := h.Svc.SavePipeline(middleware.CurrentUser(c), pathID(c), req)
+	if err != nil {
+		resp.FailErr(c, releaseErrCode(err), err)
+		return
+	}
+	// 流程模板决定一张升级单要过哪些闸,改它与改审批规则同等分量(工单 02 第 2 条)。
+	verb := "create"
+	if pathID(c) > 0 {
+		verb = "update"
+	}
+	types := make([]string, 0, len(p.Stages))
+	for _, st := range p.Stages {
+		types = append(types, st.Type)
+	}
+	h.auditAdmin(c, fmt.Sprintf("admin.pipeline.%s id=%d name=%s tier=%s enabled=%v default=%v stages=%s",
+		verb, p.ID, p.Name, p.TierCode, p.Enabled, p.IsDefault, strings.Join(types, ">")))
+	resp.OK(c, p)
+}
+
+// DeletePipeline removes a template (running releases keep their snapshot).
+func (h *Handler) DeletePipeline(c *gin.Context) {
+	name := ""
+	if p, err := h.Repo.GetPipeline(pathID(c)); err == nil {
+		name = p.Name
+	}
+	if err := h.Svc.DeletePipeline(pathID(c)); err != nil {
+		resp.FailErr(c, releaseErrCode(err), err)
+		return
+	}
+	h.auditAdmin(c, fmt.Sprintf("admin.pipeline.delete id=%d name=%s", pathID(c), name))
+	resp.OK(c, gin.H{"ok": true})
+}
+
+// ListReleases returns a page of runs.
+func (h *Handler) ListReleases(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	// 按项目跟进升级单:projectId 缺省/0 = 全部项目。
+	projectID, _ := strconv.ParseInt(c.Query("projectId"), 10, 64)
+	resp.OK(c, h.Svc.ListReleases(middleware.CurrentUser(c),
+		c.DefaultQuery("scope", "mine"), c.Query("status"), page, pageSize, projectID, c.Query("env"), c.Query("q")))
+}
+
+// GetRelease returns one run with its stages — the pipeline view's data source.
+func (h *Handler) GetRelease(c *gin.Context) {
+	v, err := h.Svc.GetReleaseDetail(middleware.CurrentUser(c), pathID(c))
+	if err != nil {
+		resp.Fail(c, releaseErrCode(err), "发布单不存在或无权查看")
+		return
+	}
+	resp.OK(c, v)
+}
+
+// CreateRelease submits a change and queues the flow.
+func (h *Handler) CreateRelease(c *gin.Context) {
+	var req dto.ReleaseReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	rel, err := h.Svc.SubmitRelease(middleware.CurrentUser(c), req)
+	if err != nil {
+		// MFA gets its own code so the console can prompt for the step-up code
+		// rather than showing the refusal as a validation error.
+		if errors.Is(err, service.ErrMFALocked) {
+			resp.Fail(c, resp.CodeTooManyReqs, mfaLockedMsg)
+			return
+		}
+		if errors.Is(err, service.ErrMFARequired) || errors.Is(err, service.ErrMFAInvalid) {
+			resp.Fail(c, resp.CodeMFARequired, "该实例需要二次验证")
+			return
+		}
+		resp.FailErr(c, releaseErrCode(err), err)
+		return
+	}
+	resp.OK(c, rel)
+}
+
+// AbortRelease stops a run that has not begun executing.
+func (h *Handler) AbortRelease(c *gin.Context) {
+	if err := h.Svc.AbortRelease(middleware.CurrentUser(c), pathID(c)); err != nil {
+		resp.FailErr(c, releaseErrCode(err), err)
+		return
+	}
+	resp.OK(c, gin.H{"ok": true})
+}
+
+// ContinueStage is the human "继续" on a manual gate.
+func (h *Handler) ContinueStage(c *gin.Context) {
+	stageID, _ := strconv.ParseInt(c.Param("stageId"), 10, 64)
+	// 同一个"继续"入口,两种人工闸:manual 是流程里配置的确认点,execute 是
+	// 内置的执行闸(0024)。按阶段类型分流,授权语义各自负责。
+	st, err := h.Repo.GetReleaseStage(stageID)
+	if err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "阶段不存在")
+		return
+	}
+	var cerr error
+	if st.Type == model.StageExecute || st.Type == model.StageAutoExecute {
+		cerr = h.Svc.ConfirmExecuteStage(middleware.CurrentUser(c), pathID(c), stageID)
+	} else {
+		cerr = h.Svc.ContinueManualStage(middleware.CurrentUser(c), pathID(c), stageID)
+	}
+	if cerr != nil {
+		resp.FailErr(c, releaseErrCode(cerr), cerr)
+		return
+	}
+	resp.OK(c, gin.H{"ok": true})
+}
+
+func releaseErrCode(err error) int {
+	switch {
+	case errors.Is(err, service.ErrForbidden):
+		return resp.CodeForbidden
+	case errors.Is(err, service.ErrNotFound):
+		return resp.CodeBadRequest
+	default:
+		return resp.CodeBadRequest
+	}
+}

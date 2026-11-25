@@ -1,0 +1,9 @@
+/* ============================================================
+   Vela — Webfonts
+   NOTE: These are Google Fonts stand-ins chosen to match the
+   intended Vela voice (techy-geometric display + friendly
+   modern body + CJK + mono). Swap with licensed brand fonts
+   when available. See README "Visual Foundations → Type".
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&display=swap');

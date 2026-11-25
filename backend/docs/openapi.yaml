@@ -1,0 +1,3165 @@
+openapi: 3.0.3
+info:
+  title: DP DB GATEWAY API
+  version: "2.0"
+  description: |
+    数据库管理网关的 HTTP 接口。**每一条**已注册的路由都在本文件里 —— 由
+    `TestOpenAPICoversEveryRoute` 静态守住:新增路由但没写进来,测试直接失败。
+
+    ## 三套鉴权,不要混用
+
+    | 面 | 前缀 | 鉴权 | 谁在调 |
+    |---|---|---|---|
+    | 控制台 | `/api/v1` | `Authorization: Bearer <JWT>` | 登录的人 |
+    | 开放接口 | `/api/v1/open` | `Authorization: Bearer <key>.<secret>` | 外部系统 |
+    | 回调 | `/api/v1/approvals/lark/callback` | 共享密钥(Bearer 或 `?secret=`) | 审批服务 |
+
+    开放接口**不走**控制台的 IP 白名单:那个设置回答的是"哪些办公网可以打开控制台",
+    把 CI runner 的出口段并进去等于为了一台机器放宽控制台的边界。每把凭据自带白名单。
+
+    ## 响应包
+
+    一律 HTTP 200,业务结果在 `code` 里 —— 包括错误。
+
+    ```json
+    { "code": 0, "msg": "ok", "data": { } }
+    ```
+
+    `/api/v1` 下的响应一律带 `Cache-Control: no-store` 与 `Pragma: no-cache`,浏览器与代理不留副本。
+
+    | code | 含义 | 客户端该做什么 |
+    |---|---|---|
+    | `0` | 成功 | 读 `data` |
+    | `40001` | 参数错误 | `msg` 说明了哪里不对,直接展示 |
+    | `40100` | 未登录 / Token 失效 / API 凭据无效 | 重新登录;开放接口检查 key.secret |
+    | `40300` | 无权(菜单、能力矩阵、scope、非本人单据) | 展示 `msg`,不要重试 |
+    | `40301` | 来源 IP 不在白名单 | 联系管理员放行 |
+    | `42200` | 命令被拦截,已转审批 | `data.approvalNo` 是审批单号 |
+    | `42600` | 脚本保存路径未配置 | 引导去【系统设置 · 网关】 |
+    | `42601` | 导出保存路径未配置 | 同上 |
+    | `42800` | 需要二次验证(TOTP) | 弹验证码输入,带 `mfaCode` 重试 |
+    | `42900` | 过于频繁:登录尝试过多;业务查询的并发已满或当天次数已用完 | 退避后再试;业务查询看 `data.reasonRef` |
+    | `50000` | 服务端错误 | 可重试;`msg` 不含内部细节 |
+
+    ## 控制台的三层闸门
+
+    每条控制台写接口要过:**菜单权限** → **能力矩阵(角色 × 能力 × 分层)** → **高危命令字典**。
+    下面每个操作的 `summary` 都标了它要求的守卫,格式 `[菜单 · admin]`:
+
+    - `[terminal]` 需要终端菜单;`[perms · admin]` 需要权限菜单**且**是平台管理员。
+    - 没有标注 = 任何已登录用户可调。
+
+    ## 分层(tier)不是环境(environment)
+
+    规则挂在**分层**上,实例归属**环境**,一个分层承载 N 个环境。凡是参数名为
+    `tierCode` 的地方都不接受环境码 —— 查不到规则行等于放行,传错会让实例失去管控。
+
+    ## 本文件之外
+
+    这份是**契约**:逐字段的形状。它说不清的两类东西各有一份文档 ——
+
+    | 你在做什么 | 看哪份 |
+    |---|---|
+    | 接控制台这一面(第二个前端、内部看板、自动化脚本) | `docs/控制台接口说明.md` —— 按业务面分组,每条路由的守卫,以及和直觉不一样的地方 |
+    | 从外部系统提交变更单 | `docs/开放接口对接文档.md` —— 怎么拿凭据、幂等怎么算、卡住了怎么办、错误码各是什么 |
+
+    Swagger UI 在 `GET /docs`,带 Authorize 与 Try it out。它**只在本地开发环境挂载** ——
+    把完整路由表交给生产上任何一个未鉴权的访客,是送给攻击者的一份地图。
+
+servers:
+  - url: /api/v1
+
+tags:
+  - name: auth
+    description: 登录、会话、当前用户、TOTP 绑定
+  - name: terminal
+    description: 命令预检与执行(同步 / 异步 / WebSocket)
+  - name: scripts
+    description: SQL 脚本上传、扫描、执行
+  - name: snippets
+    description: 个人快捷脚本(Alt+1…9)
+  - name: export
+    description: 数据导出(压缩加密分卷)
+  - name: connections
+    description: 实例配置与库表元数据
+  - name: tiers
+    description: 控制分层与环境
+  - name: roles
+    description: 角色、菜单、能力矩阵、标签范围
+  - name: users
+    description: 账号与个人数据范围
+  - name: risk-rules
+    description: 高危命令字典(判"危不危险")
+  - name: sql-review
+    description: 规范审查规则库(判"写得对不对")
+  - name: pipelines
+    description: 发布流程模板与发布单(CI/CD)
+  - name: approvals
+    description: 审批单与外部审批回调
+  - name: audit
+    description: 防篡改审计链
+  - name: settings
+    description: 系统设置、Webhook、开放接口凭据
+  - name: open-api
+    description: 外部系统提交 SQL 升级单(key/secret 鉴权)
+  - name: schemadiff
+    description: 跨环境表结构对比(同一个库在 PROD / UAT 等环境的结构差异)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 控制台会话 Token,由 `/auth/login` 签发。
+    openApiKey:
+      type: http
+      scheme: bearer
+      description: |
+        开放接口凭据,格式 `<key>.<secret>`,在【系统设置 · 开放接口】签发。
+        也接受 `X-Vela-Key` + `X-Vela-Secret` 两个请求头(给保留了 Authorization 的客户端)。
+        鉴权失败的码:key/secret 不对或凭据已吊销(删除)= 40100;凭据**已停用**或绑定的服务账号已停用 = 40300;
+        来源 IP 不在凭据白名单 = 40301;同一来源 IP 认证失败过多 = 42900。
+
+  schemas:
+    InspectionFinding:
+      type: object
+      required: [severity, title]
+      properties:
+        severity: { type: string, enum: [critical, warning, info] }
+        category: { type: string, example: 分区 }
+        title: { type: string }
+        object: { type: string, example: shop.t_order }
+        detail: { type: string }
+    InspectionReport:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        connectionId: { type: integer, format: int64 }
+        instanceName: { type: string }
+        reportDate: { type: string, example: '2026-10-15' }
+        inspectedAt: { type: string, format: date-time }
+        score: { type: integer, nullable: true }
+        level: { type: string, enum: [ok, warning, critical] }
+        criticalCount: { type: integer }
+        warningCount: { type: integer }
+        infoCount: { type: integer }
+        sizeBytes: { type: integer, format: int64 }
+        updatedAt: { type: string, format: date-time }
+        topFinding: { type: string, description: 只在最新列表里有:最严重那条问题的标题 }
+        findings:
+          type: array
+          description: 只在单份报告详情里有
+          items: { $ref: '#/components/schemas/InspectionFinding' }
+    QueryGrant:
+      type: object
+      properties:
+        id: { type: integer }
+        email: { type: string }
+        userName: { type: string }
+        dept: { type: string }
+        sourceId: { type: integer }
+        source: { type: string }
+        database: { type: string }
+        maxRows: { type: integer }
+        timeoutSec: { type: integer }
+        effectiveMaxRows: { type: integer }
+        effectiveTimeoutSec: { type: integer }
+        allowExport: { type: boolean }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        status: { type: string, enum: [active, pending, expired, revoked] }
+        externalId: { type: string }
+        client: { type: string }
+        approver: { type: string }
+        reason: { type: string }
+        revokedAt: { type: string, format: date-time }
+        revokedBy: { type: string }
+        updatedAt: { type: string, format: date-time }
+    R:
+      type: object
+      description: 统一响应包。
+      required: [code, msg]
+      properties:
+        code: { type: integer, example: 0 }
+        msg: { type: string, example: ok, description: 报错时为规范中文原句(逐字稳定,调用方可直接展示) }
+        msgRef:
+          type: object
+          description: 仅报错时出现。msg 的机器可读身份,控制台据此按界面语言显示;调用方可忽略。
+          properties:
+            code: { type: string, description: 文案编号(中文原句的哈希),前端词条 apiMsg.<code> }
+            args: { type: object, additionalProperties: { type: string }, description: 按位置的参数 "0" "1" … }
+            parts: { type: array, items: { type: object }, description: 嵌在句中的子句(args._slot 指明填进第几个参数;code=raw 为不翻译的原文) }
+        data: {}
+
+    LoginReq:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, example: linwei@vela.io }
+        password: { type: string, format: password }
+        mfaCode: { type: string, description: 已绑定 TOTP 的账号在第二步提交 }
+
+    MeResp:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        email: { type: string }
+        roleId: { type: integer, format: int64, description: 主角色(展示与 JWT 用) }
+        roleCodes:
+          type: array
+          items: { type: string }
+          description: 持有的全部角色码;权限取所有角色的并集
+        canApprove: { type: boolean }
+        canSeeAllReleases:
+          type: boolean
+          description: 发布页能否切到「全部」看所有人的发布单(平台管理员 / DBA 负责人 / DBA L2 / 审计员;自定义角色不算)
+        mfaEnabled: { type: boolean }
+        menus:
+          type: object
+          additionalProperties: { type: boolean }
+          description: 菜单键 → 是否可见。缺失的键读作"无权"。
+        capabilities:
+          type: object
+          description: 能力 → 分层 → 等级(allow / approve / deny)。
+          additionalProperties:
+            type: object
+            additionalProperties: { type: string }
+
+    RiskCheckReq:
+      type: object
+      required: [connectionId, sql]
+      properties:
+        connectionId: { type: integer, format: int64 }
+        sql: { type: string }
+    RiskCheckResp:
+      type: object
+      properties:
+        risk: { type: string, enum: [high, mid, low] }
+        action: { type: string, enum: [allow, approve, deny] }
+        requiresApproval: { type: boolean }
+        matchedRule: { type: string, description: 命中的规则;多条以 " + " 连接 }
+        command: { type: string, description: 判定所依据的那条语句(批量时是最严的一条) }
+
+    ExecReq:
+      type: object
+      required: [connectionId, sql]
+      properties:
+        connectionId: { type: integer, format: int64 }
+        sql: { type: string, description: 可含多条语句;按最严的一条判定 }
+        reason: { type: string, description: 转审批时写进工单 }
+        mfaCode: { type: string, description: 目标分层要求二次验证时必填 }
+        database: { type: string, description: 实例内的目标库;留空用连接默认库 }
+        sessionId: { type: string, description: 终端标签页的会话标识;同一标识的语句都在网关为它独占的一条连接上(见 /terminal/sessions/close)}
+    ExecResp:
+      type: object
+      properties:
+        risk: { type: string }
+        output: { type: string }
+        rows: { type: integer }
+        ms: { type: integer, description: 数据库执行耗时(实测,不含网关开销) }
+        columns: { type: array, items: { type: string } }
+        data: { type: array, items: { type: array, items: { type: string } } }
+        truncated: { type: boolean }
+        intercepted: { type: boolean }
+        approvalNo: { type: string }
+
+    ReviewRule:
+      type: object
+      description: |
+        规范审查规则库的一行。`code` 是身份 —— 内置规则靠它绑定实现,不可改名。
+
+        规则库按公司四份规范(docs/ 下 MySQL / TiDB / Oracle / DWS)重写,见
+        docs/adr/0007-sql-review-from-specs.md。`spec`/`specRef` 是**引文**,
+        `level` 是这条发现在本平台**值多少钱** —— 两者刻意分开:把某条规则降成
+        告警是运营决定,不等于改了公司规范。
+      properties:
+        id: { type: integer, format: int64 }
+        code: { type: string, example: ddl.require.primary.key }
+        name: { type: string }
+        dialect: { type: string, description: '`all` 或逗号分隔方言集,如 `mysql,tidb`', example: 'mysql,tidb' }
+        category: { type: string, enum: [dml, ddl, structure, naming, index, security, perf] }
+        level: { type: string, enum: [error, warn, info], description: error 会卡住发布,warn/info 只记录 }
+        kind: { type: string, enum: [builtin, regex] }
+        enabled: { type: boolean }
+        params: { type: string, description: JSON 字符串;空表示用内置默认 }
+        message: { type: string }
+        sortOrder: { type: integer }
+        spec: { type: string, enum: [critical, mandatory, recommended, ''], description: '规范分级:高危/强制/建议;空 = 规范未覆盖,平台内置的防护' }
+        specRef: { type: string, description: '出处,如 `DWS对象设计和业务开发规范 RULE 13`;空 = 平台内置', example: 'DWS对象设计和业务开发规范 RULE 13' }
+    ReviewFinding:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        level: { type: string, enum: [error, warn, info] }
+        category: { type: string }
+        stmt: { type: integer, description: 第几条语句(从 1 起) }
+        line: { type: integer }
+        sql: { type: string, description: 语句摘录,口令已打码 }
+        message: { type: string }
+    ReviewResult:
+      type: object
+      properties:
+        dialect: { type: string }
+        statements: { type: integer }
+        errors: { type: integer }
+        warnings: { type: integer }
+        infos: { type: integer }
+        findings:
+          type: array
+          description: 示例:每条规则最多 5 条(脚本里最前面的)。命中总数看 rules / total。
+          items: { $ref: '#/components/schemas/ReviewFinding' }
+        rules:
+          type: array
+          description: 按规则汇总,error 在前、warn 其次、info 最后;空 = 全部通过。
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              name: { type: string }
+              level: { type: string, enum: [error, warn, info] }
+              category: { type: string }
+              count: { type: integer, description: 这条规则命中的语句总数 }
+              message: { type: string, description: 首条命中的提示 }
+        total: { type: integer, description: 全部命中条数(= errors+warnings+infos),可能远大于 findings 条数 }
+        passed:
+          type: boolean
+          description: 无 error 级命中。**不是**"零命中" —— 警告从不拦截。
+
+    PipelineStage:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        stepOrder: { type: integer }
+        name: { type: string }
+        type:
+          type: string
+          enum: [review, approve, backup, execute, auto_execute, verify, manual, notify]
+          description: auto_execute = 自动执行(无需确认执行，只能用于开启了「允许自动执行」的分层)
+        config:
+          type: string
+          description: |
+            按类型解释的 JSON:review `{"failOn":"error|warn|none"}`、
+            backup/verify `{"sql":"…"}`、verify 另可 `{"expect":"empty|nonempty"}`、
+            manual `{"note":"…"}`。
+
+            **审批人在这里配置。** approve 阶段 `{"approverRole":"<角色 code>"}` 指定由哪个角色审批;
+            不配或为空 = 默认审批链(见 `GET /approval-chain`)。manual / execute / auto_execute 阶段可配
+            `{"confirmRole":"<角色 code>"}`,指定谁能点「继续」放行。模板里只存角色 code,不存具体的人:
+            要知道是谁,按 code 在 `GET /roles` 里找到角色 id,再看 `GET /roles/{id}` 的 `members`
+            (服务账号和已停用账号不算审批人)。一张发布单实际的审批人,见 `GET /approvals` 的 `steps`。
+        onFailure: { type: string, enum: [abort, continue], description: 执行阶段强制 abort }
+    Member:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        initials: { type: string }
+        dept: { type: string }
+        kind: { type: string, enum: [human, service], description: 'service = 服务账号,登录不了控制台,不能审批' }
+    ApprovalStep:
+      type: object
+      description: |
+        审批链上的一个人。链是**任一人通过即生效**:steps 列的是候选审批人,不是要依次全部通过的多级审批。
+        创建时第 1 步为 active、其余 waiting;谁批了,记在谁那一步上(approved / rejected + actedAt)。
+      properties:
+        id: { type: integer, format: int64 }
+        approvalId: { type: integer, format: int64 }
+        stepOrder: { type: integer }
+        approverId: { type: integer, format: int64 }
+        approver: { type: string, description: 审批人姓名(建单时的快照) }
+        status: { type: string, enum: [waiting, active, approved, rejected] }
+        actedAt: { type: string, format: date-time, nullable: true }
+    PipelineDetail:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        description: { type: string }
+        tierCode: { type: string, description: 空 = 适用全部分层;填值则只对该分层可选 }
+        enabled: { type: boolean }
+        isDefault: { type: boolean, description: 全局唯一;设置新的会清掉旧的 }
+        stages: { type: array, items: { $ref: '#/components/schemas/PipelineStage' } }
+
+    ReleaseStage:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        stepOrder: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, skipped] }
+        log: { type: string, description: '列表接口里为空,详情接口才带。执行阶段的日志含逐条语句的执行摘要;返回结果集的语句(如自查 SELECT)会附对齐文本表预览(上限 20 行、单元格 60 字符,省略必有说明),口令等敏感值出口统一打码' }
+        findings: { type: string, description: 审查阶段的 ReviewResult(JSON 字符串) }
+        approvalId: { type: integer, format: int64, description: 'approve 阶段跑到时生成的审批单 id;未跑到 = 0' }
+        approvalNo: { type: string, description: '同上,审批单号。拿它调 `GET /approvals?ap=<approvalNo>`,返回的 `steps` 就是这一阶段的审批人' }
+        confirmedBy: { type: string, description: 'execute 执行闸的放行人;空 = 尚未确认(阶段到达即停 waiting)。可点:创建者本人或审批角色' }
+        rows: { type: integer }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+    ReleaseView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        relNo: { type: string, example: REL-42 }
+        title: { type: string }
+        pipelineId: { type: integer, format: int64 }
+        pipelineName: { type: string, description: 快照,模板改名不影响历史 }
+        connectionId: { type: integer, format: int64 }
+        instance: { type: string }
+        database: { type: string }
+        env: { type: string, description: 快照:在哪个环境跑的 }
+        tierCode: { type: string, description: 快照:按哪个分层判的 }
+        engine: { type: string }
+        projectId: { type: integer, format: int64, description: '归属项目 —— 取**目标库**的归属;0 = 未归属' }
+        projectName: { type: string, description: 提交时快照 —— 库以后改挂别的项目,历史单据不改账 }
+        changeType: { type: string, enum: [dml, ddl, ''], description: '变更类型:dml=数据订正,ddl=结构变更;历史单为空。提交时校验:声明与内容不符、或两类语句同单,均拒收' }
+        sql: { type: string, description: 口令已打码;列表接口里截断 }
+        reason: { type: string }
+        creator: { type: string }
+        source: { type: string, enum: [console, api] }
+        clientName: { type: string, description: source=api 时的外部系统名 }
+        externalRef: { type: string, description: 外部系统自己的单号 }
+        status: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+        risk: { type: string, enum: [high, mid, low] }
+        error: { type: string }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time, nullable: true }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        stages: { type: array, items: { $ref: '#/components/schemas/ReleaseStage' } }
+    ReleaseReq:
+      type: object
+      required: [connectionId]
+      properties:
+        title: { type: string }
+        pipelineId: { type: integer, format: int64, description: 0 = 用目标分层的默认流程 }
+        connectionId: { type: integer, format: int64 }
+        database: { type: string }
+        sql: { type: string }
+        changeType: { type: string, enum: [dml, ddl], description: '空 = 按语句推断。分类口径:SELECT 计入 DML,GRANT/REVOKE 计入 DDL,事务/会话控制(BEGIN/COMMIT/SET/USE)中性不参与判定' }
+        scriptUploadId: { type: integer, format: int64, description: 与 sql 二选一;按摘要校验后执行 }
+        reason: { type: string }
+        mfaCode: { type: string }
+
+    CompileReq:
+      type: object
+      required: [type, name]
+      properties:
+        scope: { type: string, description: 'owner / schema;留空用连接账号的当前 schema' }
+        type: { type: string, enum: [package, procedure, function, trigger, type, view, materialized view] }
+        name: { type: string, description: 对象名;必须是合法 Oracle 标识符(拼入语句,不可绑定) }
+        database: { type: string }
+        mfaCode: { type: string, description: '生产步进验证码。编译会改变库上对象的状态,与终端执行同级,走同一道 MFA 闸;需要时接口返回 42800' }
+    RecompileReq:
+      type: object
+      properties:
+        scope: { type: string, description: 'owner / schema;留空用连接账号的当前 schema' }
+        database: { type: string }
+        mfaCode: { type: string, description: '生产步进验证码。与单个编译同一道闸——批量重编译改的对象更多,不比它宽松;需要时接口返回 42800' }
+        names:
+          type: array
+          items: { type: string }
+          description: 留空 = 该 schema 下全部无效对象;非空 = 只编这几个(界面勾选)
+    CompileResp:
+      type: object
+      properties:
+        ok: { type: boolean, description: 所有编译单元 VALID 且无诊断才为 true }
+        report:
+          type: object
+          properties:
+            object: { type: string }
+            kind: { type: string }
+            ms: { type: integer }
+            targets:
+              type: array
+              description: 每个编译单元编译后的状态(包有 PACKAGE 与 PACKAGE BODY 两个)
+              items:
+                type: object
+                properties:
+                  type: { type: string, example: PACKAGE BODY }
+                  status: { type: string, enum: [VALID, INVALID] }
+            errors:
+              type: array
+              description: all_errors 的内容 —— 行、列与编译器原文
+              items:
+                type: object
+                properties:
+                  type: { type: string }
+                  line: { type: integer }
+                  position: { type: integer }
+                  text: { type: string, example: 'PLS-00103: 出现符号 ";"' }
+            warnings:
+              type: array
+              description: 单条 ALTER 的驱动报错(如只有规格没有包体时的 COMPILE BODY)
+              items: { type: string }
+            cascade:
+              type: object
+              description: |
+                连带编译:本对象编成 VALID 后,直接或间接依赖它、且处于 INVALID 的同 owner 对象
+                按依赖分层一并重编。形状与 /objects/recompile 的 report 相同(total / fixed /
+                failed / skipped / levels / items[]:owner、name、kind、status、level、errors、err)。
+                本对象未通过或没有依赖方时不出现。
+            cascadeNote:
+              type: string
+              description: 连带编译没做成的原因(依赖读不到、被规则拦下、需审批……);不影响本对象的结果
+            cascadeNoteRef:
+              type: object
+              description: cascadeNote 的机器可读身份(同信封的 msgRef),控制台按界面语言显示;调用方可忽略
+    DatabaseProjectReq:
+      type: object
+      required: [database]
+      properties:
+        database: { type: string, description: 库名,取对象树给出的那个名字 }
+        projectId: { type: integer, format: int64, description: 0 = 取消归属(合法取值,不是"没填") }
+    SensitiveColumnReq:
+      type: object
+      required: [columnName]
+      properties:
+        tableName: { type: string, example: t_user, description: "留空或 '*' = 所有表(口令、密钥这类字段在哪张表上都不该被看到)" }
+        columnName: { type: string, example: id_card }
+        maskStyle: { type: string, enum: [partial, full, hash], default: partial, description: 'partial 留头留尾;full 整体抹掉;hash 同值同码(能核对是不是同一个,看不出是谁)' }
+        enabled: { type: boolean }
+        note: { type: string, description: 为什么它是敏感的,给后来人看 }
+    SensitiveColumnView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        tableName: { type: string }
+        columnName: { type: string }
+        maskStyle: { type: string, enum: [partial, full, hash] }
+        enabled: { type: boolean }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }
+    ProjectReq:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, example: 订单业务线, description: 名称即身份,唯一 }
+        owner: { type: string, nullable: true, description: '负责人 / 团队;编辑时缺席=不变' }
+        description: { type: string, nullable: true, description: 编辑时缺席=不变 }
+    ProjectView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        owner: { type: string }
+        description: { type: string }
+        databases: { type: integer, description: 名下的数据库数;>0 时不可删除 }
+        releases: { type: integer, description: 名下的升级单数(含库已改挂他处的历史单据) }
+        createdAt: { type: string, format: date-time }
+    ServiceAccountReq:
+      type: object
+      required: [name, roleIds]
+      properties:
+        name: { type: string, example: 升级单平台 }
+        roleIds: { type: array, items: { type: integer, format: int64 }, description: 多角色取并集,决定它的发布能到哪些分层。**不能含平台管理员(admin)**,含则 40001 }
+        tags: { type: array, items: { type: string }, description: 标签范围;空 = 按角色派生范围 }
+        dept: { type: string, description: 列表展示用,默认「服务账号」 }
+    ServiceAccountView:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        email: { type: string, example: svc-upgrade-portal-1a2b3c4d@service.vela, description: 自动生成的唯一标识,不是邮箱 }
+        status: { type: string }
+        dept: { type: string }
+        roles: { type: array, items: { type: string } }
+        tags: { type: array, items: { type: string } }
+        clients: { type: integer, description: 已绑定的 API 凭据数 }
+
+    APIClient:
+      type: object
+      description: 开放接口凭据。响应里**没有**密钥 —— 库里只存 bcrypt 哈希。
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        key: { type: string, example: ak_e1026cc86fe60da7 }
+        userId: { type: integer, format: int64 }
+        userName: { type: string, description: 绑定的服务账号;能力矩阵与审计归属都按它算 }
+        allowIps: { type: string, description: 逗号分隔 IP/CIDR;空 = 不限来源 }
+        scopes: { type: string, example: 'release:create,release:read,review:check' }
+        pipelineId: { type: integer, format: int64, description: 该凭据建单固定走的发布流程;0 = 未绑定,走目标分层默认流程 }
+        enabled: { type: boolean }
+        lastUsedAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    APIClientReq:
+      type: object
+      description: |
+        创建时 name/userId 必填。**更新是局部语义**:只有请求里出现的字段会变,缺席
+        字段一律保持原值 —— 启停开关只发 {enabled},不会动 IP 白名单;allowIps 传空串
+        才是显式清空。
+      required: [name, userId]
+      properties:
+        name: { type: string }
+        userId: { type: integer, format: int64, description: 绑定的服务账号(见 /service-accounts);必填且不给默认值。新建与改绑**只接受 kind=service 的服务账号**,且不能带平台管理员角色,否则 40001(升级前已绑在人类账号名下的存量凭据不追溯,照常工作) }
+        allowIps: { type: string, nullable: true, description: 'IP/CIDR 列表,逗号/空白/换行分隔,逐项校验,任一项非法 40001;更新时缺席=不变,空串=清空(不限来源)' }
+        scopes: { type: array, items: { type: string, enum: ['release:create', 'release:read', 'review:check', 'grant:read', 'grant:write', 'inspection:write', 'release:approve'] }, description: '任一项不认识 40001(不再静默丢弃)。创建时缺席或 [] = 默认集合 release:create/release:read/review:check;更新时缺席=不变,[] = 40001(凭据至少要有一个范围)。release:approve(外部审批)不在默认集合里,须显式勾选' }
+        pipelineId: { type: integer, format: int64, nullable: true, description: 绑定建单走的发布流程;更新时缺席=不变,0=解绑(回分层默认)。绑定的流程须存在且启用 }
+        enabled: { type: boolean, nullable: true, description: 更新时缺席=不变 }
+
+    OpenReleaseReq:
+      type: object
+      description: |
+        外部系统提交的升级单。实例用**名字**寻址(`instance`)或 connectionId。
+        **发布流程不可指定**:由网关侧配置 —— 管理员在凭据上绑定一条流水线,或回落
+        到目标分层的默认流程;请求里出现 pipeline/pipelineId 会被整单拒绝(拒绝而非
+        忽略:静默忽略会让调用方以为自己指定成功了)。正文三选一:`sql`、`script`
+        (或 `scriptBase64`)、multipart 的 `file` 字段。
+      properties:
+        title: { type: string }
+        externalRef:
+          type: string
+          description: |
+            调用方自己的单号,**幂等键**。同一凭据 + 同一 externalRef 重试会返回第一次
+            创建的那张单,不会重复下发变更(数据库唯一索引兜底,并发重试也安全)。
+        instance: { type: string, example: order-cluster }
+        connectionId: { type: integer, format: int64 }
+        database: { type: string }
+        pipeline: { type: string, deprecated: true, description: '**不可再指定**:发布流程由网关侧配置(凭据绑定 > 分层默认),请求携带此字段会被整单拒绝' }
+        pipelineId: { type: integer, format: int64, deprecated: true, description: 同 pipeline —— 携带即拒 }
+        changeType: { type: string, enum: [dml, ddl], description: '建议总是显式声明;空 = 按语句推断。声明与内容不符、或 DML/DDL 同单,提交即拒(错误点名第几条/什么动词)' }
+        sql: { type: string }
+        script: { type: string, description: 脚本全文;落盘并记摘要,执行阶段重读校验 }
+        scriptBase64: { type: string, description: 脚本的 base64,避免 JSON 转义出错 }
+        filename: { type: string, default: upgrade.sql }
+        reason: { type: string }
+        mfaCode: { type: string, description: 目标分层要求二次验证且服务账号已绑 TOTP 时才需要 }
+    OpenStage:
+      type: object
+      properties:
+        order: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, skipped] }
+        log: { type: string, description: 只有状态查询接口返回 }
+        approvalNo: { type: string }
+        approvers:
+          type: array
+          description: |
+            能放行这一步的人。**任一人通过即生效**,不是依次全部通过。出现在两种阶段上:
+
+            - `approve`:生成了审批单之后才有。外部审批时 `approver` 填其中一人的 `account`。
+            - `manual`(人工确认):只在阶段**正停着**(status=waiting)时有,是此刻能放行的人,status 恒为 active;
+              外部确认时 `confirmer` 填其中一人的 `account`。配了确认角色 = 该角色在职真人成员,没配 = 所有有审批能力的
+              在职真人;都不含发起人(未开自审批时)、服务账号、停用账号。放行后不再给。
+
+            `execute`(执行变更)阶段不给 —— 它只能在网关上确认。
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              account: { type: string, description: 网关账号邮箱 }
+              status: { type: string, enum: [waiting, active, approved, rejected] }
+              actedAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+    OpenReleaseResp:
+      type: object
+      description: 对外的稳定契约,刻意不等于内部的 ReleaseView。
+      properties:
+        relNo: { type: string, example: REL-42 }
+        title: { type: string }
+        status: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+        changeType: { type: string, enum: [dml, ddl], description: 声明的或推断出的变更类型 }
+        risk: { type: string }
+        instance: { type: string }
+        database: { type: string }
+        env: { type: string }
+        pipeline: { type: string }
+        externalRef: { type: string }
+        error: { type: string }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time }
+        stages: { type: array, items: { $ref: '#/components/schemas/OpenStage' } }
+
+  responses:
+    Ok:
+      description: 成功
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/R' }
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------- 健康检查
+  /healthz:
+    servers:
+      - url: /
+        description: 不在 /api/v1 前缀下
+    get:
+      tags: [auth]
+      summary: 健康检查(无需鉴权)
+      security: []
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /docs:
+    servers:
+      - url: /
+        description: 不在 /api/v1 前缀下
+    get:
+      tags: [auth]
+      summary: 本文件的可读版(浏览器直接打开)
+      description: |
+        由网关自己渲染 —— 服务端读同一份 `docs/openapi.yaml`,不加载任何外部资源,
+        断网环境照常可用。原始 YAML 在 `/openapi.yaml`。
+      security: []
+      responses: { '200': { description: text/html } }
+
+  /openapi.yaml:
+    servers:
+      - url: /
+        description: 不在 /api/v1 前缀下
+    get:
+      tags: [auth]
+      summary: 本文件(原始 YAML)
+      description: |
+        仅本地开发运行时提供。配置了系统名称(`brand.name` / `brand.nameEn`)时,`info.title`
+        换成该名称,其余内容与文件逐字节一致。
+      security: []
+      responses: { '200': { description: application/yaml } }
+
+  # ---------------------------------------------------------------- auth
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: 登录(受 IP 白名单与登录频控约束)
+      description: |
+        **两步登录**:已绑定 TOTP 的账号先用邮箱+口令换到 `42800`,再带 `mfaCode` 重发同一请求。
+        口令对但没带码也是 `42800` 而不是 `40100` —— 两者要人做的事不同。没绑过 TOTP 的账号
+        一步登录(MFA 是自助开启的)。
+
+        频控按**源 IP**计,超了给 `42900`。服务账号(`kind=service`)永远登录不了控制台:它
+        没有口令也设不上,唯一的门是开放接口凭据。返回的 token 里带**会话代次**,登出、停用
+        账号、重置口令都会把它加一,于是所有旧 token 当场失效。
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LoginReq' } } }
+      responses:
+        '200':
+          description: OK / 40100 凭据错误 / 40300 该账号已绑定 SSO(管理员除外) / 42800 需 MFA 验证码 / 42900 过于频繁
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /auth/sso/config:
+    get:
+      tags: [auth]
+      summary: 登录页要不要露出「SRD 授权登录」入口
+      description: |
+        公开接口。返回 `enabled` 与 `loginUrl`(`{SRD 地址}/auth/login`)。没有登录态时,前端跳
+        `loginUrl?redirect=<encodeURIComponent(网关登录页地址)>`,在 SRD 完成 Lark 授权后回到网关。
+        `forcedOff` 为 true:部署配置(`sso.disabled` / 环境变量 `VELA_SSO_DISABLED`)强制关闭了 SSO,
+        此时 `enabled` 恒为 false,设置页的开关不生效。
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /auth/branding:
+    get:
+      tags: [auth]
+      summary: 系统名称与 LOGO(公开)
+      description: |
+        公开接口,登录页未登录时就要显示。返回 `name`(中文名称)、`nameEn`(英文名称)、`logo`
+        (`data:image/...;base64,...`)。空串表示未配置:界面保持原来的名称与图标。
+        修改走 `PUT /settings` 的 `brand.name` / `brand.nameEn` / `brand.logo`(平台管理员,改动进审计)。
+        LOGO 解码后不超过 256 KB,只收 PNG / JPG / GIF / WebP / ICO / SVG(SVG 不得含脚本)。
+      security: []
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /auth/sso:
+    post:
+      tags: [auth]
+      summary: 用 SRD 授权登录态换网关会话(受 IP 白名单与登录频控约束)
+      description: |
+        **只做认证,不做授权。** 登录态从 SRD 写在公司父域上的 Cookie(默认名 `CS-Token`)里取,
+        不从请求体取。网关服务端解出其中的 JWT,带 `Authorization: Bearer <jwt>` 调 SRD 的
+        `GET /api/v1/user/oauth/userinfo`,按返回的**邮箱**(不分大小写)映射到网关用户:
+
+        - 网关里有这个邮箱:就是这个人,原有权限不变;第一次经 SRD 登录时记为**已绑定**,
+          此后只能经 SSO 登录(管理员除外)。
+        - 网关里没有:拒绝(`40302`),不建号 —— 账号由管理员在后台开通。
+
+        停用账号、服务账号进不来;受邀账号首登即激活。部门同步自 SRD 的 internal_department(为空时退回 department)。CS-Token 里的封装时间
+        超过 24 小时视为没有登录态(与 SRD 前端一致)。
+
+        之后的请求用网关自己签的 JWT,不再回 SRD —— 所以 SRD 那边的下线不会传过来,
+        网关会话按自己的 TTL 到期。登录这一步不再要网关的 TOTP,生产操作的步进验证照常。
+
+        `40101` 不是错误:请求里没有 SRD 登录态,前端据此露出入口,不计入频控。
+      security: []
+      responses:
+        '200':
+          description: OK / 40101 无 SRD 登录态 / 40100 JWT 被 SRD 拒绝 / 40302 网关里未开通账号 / 40300 账号已停用或未启用 SSO / 42900 过于频繁 / 50000 SRD 不可用或 CS-Token 无法解析
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: 退出登录(作废当前会话代次)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /admin/enter:
+    post:
+      tags: [auth]
+      summary: 进入管理后台(重新计时管理后台的空闲超时)
+      description: |
+        人主动点「管理后台」时调用。平台管理员或审计员,且来源 IP 在管理后台白名单内。管理接口在
+        空闲超过 `adminIdleMinutes`(见 `/auth/session-policy`)后返回 `40304`,必须再调一次这里。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /admin/heartbeat:
+    post:
+      tags: [auth]
+      summary: 管理后台活跃心跳
+      description: |
+        人在管理后台里有操作时前端调用(节流)。管理接口本身不算活跃 —— 定时刷新的面板不会让空闲
+        超时失效。已经超时的心跳返回 `40304`,不会把会话救回来。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/session-policy:
+    get:
+      tags: [auth]
+      summary: 会话策略(空闲锁定开关与时长),所有登录用户可读
+      description: |
+        前端据此做空闲锁定。`idleMinutes` 已按会话时长封顶。系统设置本身(`/settings`)只给平台管理员,
+        这几项单独开放给所有人 —— 否则非管理员读不到,设置里改的时长对他们不生效。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: 当前用户 + 菜单 + 能力矩阵
+      description: |
+        **登录后第一条该调的**。返回的 `menus` 与 `capabilities` 就是服务端守卫读的同一份
+        数据,照着它收敛界面入口,可以避免"按钮亮着、点下去 403"。
+
+        但**不要拿它当安全边界**:每条路由自己判,前端的收敛只是为了不让人对着一个必然失败
+        的按钮。权限取这个人**所有角色的并集**;`roleCode` / `roleName` 只是主角色,用于显示。
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/MeResp' } } }
+  /auth/mfa/setup:
+    post:
+      tags: [auth]
+      summary: 生成 TOTP 密钥与二维码 URI(尚未启用)
+      description: 有本地口令的账号须在请求体带 password(当前登录密码),否则 42801;本次会话经 SSO 登录且不超过 15 分钟时免出示口令。SSO 会话超时又没带口令时同样 42801,data.ssoReauth=true(请重新 SSO 登录)。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/mfa/enable:
+    post:
+      tags: [auth]
+      summary: 用一次验证码确认并启用 TOTP
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/mfa/disable:
+    post:
+      tags: [auth]
+      summary: 解绑 TOTP(需当前验证码)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/password:
+    post:
+      tags: [auth]
+      summary: 自助修改密码(旧密码 + 新密码)
+      description: |
+        新密码规则与建号 / 管理员重置一致:至少 8 位,且不能与原密码相同。
+
+        成功后该用户的**会话代次 +1**:他在其它地方的会话(含发起修改的这枚 token)全部作废;
+        接口当场为当前会话**重新签发**一枚 token 放在 `data.token`,客户端换上即可继续使用,
+        不需要重新登录。
+
+        没有本地口令的账号(只挂业务查询角色的业务方、口令为空的 SSO 账号、服务账号)返回 `40001`。
+        原密码错误与登录共用频控(来源 IP + 账号),过多后返回 `42900`。成功与原密码错误都写审计
+        (`password.change` / `password.change.rejected`),口令本身不进审计。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                oldPassword: { type: string, description: 当前密码 }
+                newPassword: { type: string, minLength: 8, description: 新密码(至少 8 位,不能与原密码相同) }
+      responses:
+        '200':
+          description: OK(data 为重签的 token)/ 40001 原密码错误、新密码不合规或该账号没有本地口令 / 42900 过于频繁
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/R'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          token: { type: string, description: 当前会话的新 token(旧 token 已作废) }
+                          expiresAt: { type: string, example: '2026-10-19 21:00:00' }
+  /gateway/stats:
+    get:
+      tags: [auth]
+      summary: 网关实测延迟与拦截计数(不挂菜单)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approval-chain:
+    get:
+      tags: [approvals]
+      summary: 默认审批链(终端与风险检查器展示用)
+      description: |
+        没指定审批角色时找的那批人:「DBA 负责人」(owner)角色的成员;其中没有能审批的人时,改用平台管理员
+        (admin)角色的成员。服务账号与已停用账号不计入。发布流程审批阶段未配 `approverRole` 时,用的就是这条链。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chain: { type: array, items: { $ref: '#/components/schemas/Member' } }
+  /notifications:
+    get:
+      tags: [auth]
+      summary: 站内通知收件箱
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 30 } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /notifications/read:
+    post:
+      tags: [auth]
+      summary: 标记通知已读(ids 为空表示全部)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- terminal
+  /risk/check:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 三层预检,不执行'
+      description: |
+        判定链:菜单权限 → 能力矩阵(角色 × 能力 × 分层)→ 高危命令字典 → 无 WHERE 拦截。
+        多语句逐条判、取**最严格**的一条。
+
+        **`database` 要传。** 执行窗口按库开,不带库名就判不出窗口,预检会比真实执行更严 ——
+        界面先弹一个多余的审批理由框,提交后才发现根本不用审批。
+
+        **预检的结论不构成承诺**:执行时会重新判一次。中间可能过了几秒,也可能过了几小时
+        (审批单那条路),而规则、实例归属、调用者的角色都可能在这期间变。
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckReq' } } }
+      responses:
+        '200':
+          description: OK
+          content: { application/json: { schema: { $ref: '#/components/schemas/RiskCheckResp' } } }
+  /terminal/exec:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 执行命令(WS 不可用时的 REST 回退)'
+      description: |
+        **`42200` 不是错误**:它说的是"这条命令要人批,单子已经建好了",`data.approvalNo` 拿去
+        展示。把它当失败弹红框是最常见的一种接错。
+
+        执行前**再判一次**(与 `/risk/check` 同一条链,同样建议传 `database`)。多语句整批判定,
+        任何一条命中就整批拦截。未填连接凭据的实例走仿真执行,生产环境下模拟一律被拒。
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ExecReq' } } }
+      responses:
+        '200':
+          description: OK / 42200 已转审批(返回 approvalNo)/ 42800 需二次验证 / 40300 拒绝
+          content: { application/json: { schema: { $ref: '#/components/schemas/ExecResp' } } }
+  /terminal/sessions/close:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 关掉终端标签页时释放它独占的数据库连接'
+      description: |
+        Web 命令行的每个标签页带一个会话标识(`sessionId`,前端生成的 UUID)执行:同一标签的语句都在
+        网关为它独占的一条数据库连接上,标签里的 SET / 临时表 / 事务只在这个标签生效。关掉标签时调这里,
+        连接断开、未提交的事务由数据库回滚。只能关自己的标签;不调也没关系 —— 登出或空闲超时(跟随
+        空闲锁定时长)后网关会自己断开。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId: { type: string, maxLength: 64, description: '标签页的会话标识(字母、数字、连字符)' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /terminal/results/{id}:
+    get:
+      tags: [terminal]
+      summary: '[terminal] 加载更多:取暂存结果的下一批'
+      description: |
+        Web 命令行执行查询时,结果超过「每批行数」(系统设置 `terminal.resultPageSize`,默认 1000)的部分
+        已在执行时**打码后**暂存(一条查询最多读 5 万行),回执里给 `resultId`。这里按 `offset`(整个结果里
+        的行位置)取下一批,不会重新执行 SQL。只取得到本人的;10 分钟没人取即过期。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: offset, in: query, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /terminal/exec-async:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 后台执行长耗时 SQL,返回任务号后轮询'
+      description: |
+        给 30–60min+ 的长语句/存储过程用。**判定链与同步执行完全相同** —— 转后台不是绕过闸门
+        的路子,同样可能以 `42200` 结束。
+
+        返回任务号后轮询 `/async-jobs/{id}`:它带着流式收集的进度日志(如 PostgreSQL 的
+        `RAISE NOTICE`)。超时可配,默认 90 分钟。网关重启时在跑的任务判失败,不重跑。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /terminal/ws:
+    get:
+      tags: [terminal]
+      summary: 终端流式执行(WebSocket,token 走 Sec-WebSocket-Protocol)
+      security: []
+      responses: { '101': { description: Switching Protocols } }
+  /terminal/transcript-export:
+    post:
+      tags: [terminal]
+      summary: '[terminal] 记录一次会话日志导出(只报描述,不回传日志正文)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /async-jobs:
+    get:
+      tags: [terminal]
+      summary: '[terminal] 我的后台任务(监管角色可见全部)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /async-jobs/{id}:
+    get:
+      tags: [terminal]
+      summary: '[terminal] 后台任务详情 + 流式日志'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- scripts
+  /scripts/config:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 脚本保存路径是否已配置'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /scripts/scan:
+    post:
+      tags: [scripts]
+      summary: '[terminal] 逐语句扫描脚本并判级'
+      responses: { '200': { description: OK。无扫描基准分层时报错而不是"全部通过" } }
+  /scripts/execute:
+    post:
+      tags: [scripts]
+      summary: '[terminal] 执行脚本;检出高危则整脚本转审批'
+      description: >
+        请求体可带 progressId(前端生成,8-64 位字母数字或连字符):带上时服务端逐条记录复扫与执行进度,
+        请求进行中可轮询 GET /scripts/progress/{id}。/scripts/scan 同样接受 progressId。
+      responses: { '200': { description: 'OK / 42200 / 42800' } }
+  /scripts/progress/{id}:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 脚本扫描 / 执行的进度(上传脚本弹窗轮询)'
+      description: >
+        返回 phase(scan 字典扫描 / judge 逐条判定 / run 逐条执行)、done / total、current(正在处理的语句开头)、
+        startedAt、finished。只能查自己发起的;别人的、超过 10 分钟没更新的、不存在的都是 40400。进度只在内存里。
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'OK / 40400' } }
+  /scripts/uploads:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 我上传的脚本(只看自己的)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /scripts/upload:
+    post:
+      tags: [scripts]
+      summary: '[terminal] 上传脚本(multipart 的 file,或 JSON 的 content+filename)'
+      responses: { '200': { description: 'OK / 42600 保存路径未配置' } }
+  /scripts/uploads/{id}/download:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 下载自己的脚本文件'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 文件流 } }
+  /scripts/uploads/{id}/content:
+    get:
+      tags: [scripts]
+      summary: '[terminal] 读取脚本正文(在线查看)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /scripts/uploads/{id}:
+    delete:
+      tags: [scripts]
+      summary: '[terminal] 删除自己的脚本'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- snippets
+  /snippets:
+    get:
+      tags: [snippets]
+      summary: '[terminal] 我的快捷脚本'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [snippets]
+      summary: '[terminal] 新建快捷脚本'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /snippets/limits:
+    get:
+      tags: [snippets]
+      summary: '[terminal] 长度与数量上限(前后端同源,避免写完才被拒)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /snippets/{id}:
+    put:
+      tags: [snippets]
+      summary: '[terminal] 修改快捷脚本(占用已被绑定的槽位会释放原脚本)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [snippets]
+      summary: '[terminal] 删除快捷脚本'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- export
+  /export/config:
+    get:
+      tags: [export]
+      summary: '[terminal] 导出保存路径是否已配置、归档保留几天'
+      description: 'data.enabled/savePath 说明导出是否可用;data.retentionDays 是归档在服务器上的保留天数(0 = 永久保留),前端据此提示用户文件何时被清理。'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /export:
+    post:
+      tags: [export]
+      summary: '[terminal] 提交导出任务(仅限单条只读查询)'
+      description: |
+        导出**默认脱敏**:命中敏感字段规则的列在服务端打码后才写进归档
+        (ADR 0009 —— 一份带原值的 CSV 落到磁盘、发进聊天工具,比在终端上看一眼跑得远得多)。
+
+        `includeSensitive: true` 要的是原值。它不会让这次导出立刻跑:任务停在
+        `awaiting`、生成一张高危审批单,批准之后才由 worker 后台执行。
+        那张单**不能**用 `/approvals/{id}/execute` 手动执行 —— 它授权的是"让导出任务去跑",
+        而它的 command 是一句描述而不是可执行的语句。
+
+        放行原值的那一刻 worker 还会再核一次审批状态:这道复核是重复的,故意的 ——
+        这类旁路最常见的失效方式是后来有人加了新路径、忘了先检查。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [connectionId, sql, name]
+              properties:
+                connectionId: { type: integer }
+                sql: { type: string, description: 单条只读查询 }
+                name: { type: string, maxLength: 64, description: 文件名(必填),列表里靠它认出这份导出,下载的文件以它开头 }
+                database: { type: string }
+                includeSensitive:
+                  type: boolean
+                  default: false
+                  description: 要敏感字段的原值。为 true 时任务停在 awaiting 等审批,不直接执行。
+                format:
+                  type: string
+                  enum: [csv, sql]
+                  default: csv
+                  description: |
+                    sql = 写成目标库可直接执行的 INSERT(每条 100 行,Oracle 每行一条),单表查询在第一卷
+                    附建表语句;分卷、加密、脱敏、审批与 csv 相同。
+                targetTable:
+                  type: string
+                  description: format=sql 时 INSERT 写入的表(表名 或 schema.表名);留空则从查询的 FROM 识别,联表 / 子查询识别不出时必填。
+      responses: { '200': { description: 'OK(includeSensitive 时任务为 awaiting)/ 42601 保存路径未配置 / 40001 非只读语句、格式不对、目标表名缺失或不合法' } }
+  /export/jobs:
+    get:
+      tags: [export]
+      summary: '[terminal] 我的导出任务'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /export/jobs/{id}/cancel:
+    post:
+      tags: [export]
+      summary: '[terminal] 终止导出任务'
+      description: |
+        终止排队中 / 待审批 / 执行中的导出任务,状态变为 cancelled,error 写明谁终止的。
+        执行中的同时终止目标库上的查询(MySQL 系 KILL QUERY、PostgreSQL 取消请求、Oracle break),
+        已写出的分卷删除;待审批的一并撤回审批单。只有提交人或平台管理员能终止。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK(返回终止后的任务)/ 40001 任务不存在或已经结束' } }
+  /export/download:
+    get:
+      tags: [export]
+      summary: '[terminal] 下载导出分卷'
+      parameters: [{ name: file, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: 文件流 } }
+
+  # ---------------------------------------------------------------- 敏感字段
+  /sensitive-columns:
+    get:
+      tags: [connections]
+      summary: '[terminal] 敏感字段列表'
+      description: |
+        按 表名 + 字段 定义。命中的列在**结果离开网关之前**就被打码,回传的数据本身
+        已经是脱敏后的 —— 前端不做、也不该做任何脱敏工作:让浏览器负责打码等于把
+        明文发过去再请它别显示,抓个包就绕过了,而且它已经躺在浏览器缓存和沿途代理
+        的日志里。
+
+        读开放给能进终端的人:被脱敏的列在结果里是一串星号,"为什么这列看不到"必须
+        有个自己查得到的答案。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SensitiveColumnView' }
+    post:
+      tags: [connections]
+      summary: '[terminal · admin] 新增敏感字段'
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensitiveColumnReq' }
+      responses: { '200': { description: 'OK / 40001 字段名为空、脱敏方式非法或该 表.字段 已存在' } }
+  /sensitive-columns/{id}:
+    put:
+      tags: [connections]
+      summary: '[terminal · admin] 编辑敏感字段(含启用/停用)'
+      description: 停用会让该字段**从此明文回传**,所以它和删除一样写入审计。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SensitiveColumnReq' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [connections]
+      summary: '[terminal · admin] 删除敏感字段 —— 该字段将不再脱敏'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- connections
+  /projects:
+    get:
+      tags: [connections]
+      summary: '[*] 项目列表(含名下数据库数与升级单数)'
+      description: |
+        归属的单位是**数据库**,不是数据源:一个实例底下的几个库分属不同团队是常态,
+        把归属挂在实例上,等于逼着人按项目去拆实例。
+
+        项目是**组织维度,不是安全边界**:它回答"这个库、这张单归谁跟进",判定层
+        (能力矩阵 / 标签范围 / 高危字典)一概不看它。谁能访问哪些库,仍然只由
+        Connection.tags 与角色决定。读开放给所有已登录用户 —— 归属信息本身不敏感。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ProjectView' }
+    post:
+      tags: [connections]
+      summary: '[project · admin] 新建项目'
+      description: 名称即身份(唯一)。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectReq' }
+      responses: { '200': { description: 'OK / 40001 名称为空或重名' } }
+  /projects/{id}:
+    patch:
+      tags: [connections]
+      summary: '[project · admin] 编辑项目(局部更新:缺席字段保持原值)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectReq' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [connections]
+      summary: '[project · admin] 删除项目(名下还有数据库时拒绝)'
+      description: |
+        名下仍有数据库时**拒绝删除**并说明还剩几个 —— 悄悄把库变成"未归属",会让
+        跟进视图静静地说谎。历史升级单不阻止删除:它们带的是项目名的快照,项目没了
+        也读得出当初挂在哪。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK / 40001 名下还有数据库' } }
+  /connections:
+    get:
+      tags: [connections]
+      summary: 实例列表(按调用者的标签范围过滤)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [connections]
+      summary: '[db · admin] 新建实例'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}:
+    put:
+      tags: [connections]
+      summary: '[db · admin] 编辑实例(留空口令表示保持不变)'
+      description: |
+        从库(只读副本):replicaHost 不传 = 不动;传空串 = 去掉从库;`host` 或 `host:port`(不带端口沿用
+        主库端口),与主库地址相同回 40001。replicaUsername 留空沿用主库账号密码;replicaPassword 留空
+        保持已存的(AES 加密存储,列表不回传)。配了从库的实例,业务方数据查询(/bizquery/exec、
+        /bizquery/export、/bizquery/tables)都由从库提供,连不上时回落主库。SQLite 没有从库。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                replicaHost: { type: string, description: '从库 host 或 host:port;空串 = 去掉从库' }
+                replicaUsername: { type: string }
+                replicaPassword: { type: string, description: '留空 = 保持不变' }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    patch:
+      tags: [connections]
+      summary: '[db · admin] 局部修改:status / tags / policy / bizQuery(业务查询源标记,写审计)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/database-project:
+    put:
+      tags: [connections]
+      summary: '[db · admin] 把实例下的一个库归到项目(projectId 0 = 取消归属)'
+      description: |
+        归属的单位是**数据库**,不是实例 —— 一个实例底下的几个库分属不同团队是常态。
+
+        库名按**发现到的名字**存(系统里没有库的注册表,对象树是实时 introspect 的),
+        与升级单记录目标库用的是同一个字符串。库名不校验是否真实存在:对象树可能
+        正好连不上,而记账不该取决于连通性;指向不存在的库的归属是惰性的 —— 没有
+        任何地方会列出它。项目则必须存在,否则库会显示"已归属"而无人认领。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DatabaseProjectReq' }
+      responses: { '200': { description: 'OK / 40001 项目不存在或未指定数据库' } }
+  /connections/{id}/test:
+    post:
+      tags: [connections]
+      summary: '[db · admin] 测试连通性'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/columns:
+    get:
+      tags: [connections]
+      summary: '[terminal] 一张表的列名(终端 Tab 补全)'
+      description: |
+        实时查目标库,不走元数据缓存;按建表顺序、保留原始大小写;按库过滤(同名表在别的库里的列不混进来)。
+        table 可带限定名:MySQL 系是库,PostgreSQL 系是 schema,Oracle 是 owner。没有这张表返回空列表。
+        没有真实凭据的演示连接返回空列表。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string }, description: 会话所在的库 }
+        - { name: table, in: query, required: true, schema: { type: string } }
+      responses: { '200': { description: 'OK { columns: string[] } / 40001 表名不合法 / 40300 无权访问该实例' } }
+  /connections/{id}/schema:
+    get:
+      tags: [connections]
+      summary: '[terminal] 库表树(每个库带回它的归属项目)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/objects:
+    get:
+      tags: [connections]
+      summary: '[terminal] 视图 / 函数 / 存储过程 / 触发器等对象'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: database, in: query, schema: { type: string }, description: PostgreSQL 系必传,目录按库隔离 }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /bizquery/grants:
+    get:
+      tags: [bizquery]
+      summary: '[query] 我的查询授权(生效中与未到开始时间的)及全局上限'
+      description: |
+        数据查询页左侧的"能查哪些库"。只列出实例仍是业务查询源的授权。
+      responses:
+        '200':
+          description: 'OK { grants: QueryGrant[], limits }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /bizquery/tables:
+    get:
+      tags: [bizquery]
+      summary: '[query] 授权库里的表与视图(数据查询页的「表」下拉)'
+      description: |
+        判定与 /bizquery/exec 的前半段相同:实例仍是业务查询源、不在维护态、调用人对该库有此刻生效的
+        查询授权 —— 没有授权的库连有哪些表都不给看(40300 + data.reasonRef)。只查这一个库的目录
+        (MySQL 系 information_schema、PG 系连到该库、Oracle 按 owner、SQLite),名字按在该库里
+        写查询时的写法给出:PG 系非 public 的带 schema 前缀。最多 5000 个,超出时 truncated=true。
+        读不到目录(连不上、账号看不到)不算拒绝:回 0,原因在 data.error,手写 SQL 照样能查。
+        不占并发配额,不写审计。
+      parameters:
+        - { name: sourceId, in: query, required: true, schema: { type: integer } }
+        - { name: database, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 'OK { tables: string[], truncated, error?, quote } / 40300 判定拒绝(quote:该库的标识符引号,补全用)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /bizquery/columns:
+    get:
+      tags: [bizquery]
+      summary: '[query] 授权库里一张表的列(数据查询页的自动补全)'
+      description: |
+        判定与 /bizquery/tables 相同(实例仍是业务查询源、不在维护态、对该库有此刻生效的授权,否则 40300 +
+        data.reasonRef)。table 可带限定名:MySQL 系 / Oracle 的限定名必须就是授权的库;PG 系的限定名是库里的
+        schema,不许是系统 schema(pg_catalog 等)。按建表顺序、原始大小写返回。读不到不算拒绝:回 0,
+        原因在 data.error。不占并发配额,不写审计。
+      parameters:
+        - { name: sourceId, in: query, required: true, schema: { type: integer } }
+        - { name: database, in: query, required: true, schema: { type: string } }
+        - { name: table, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: 'OK { columns: string[], error? } / 40001 表名不合法 / 40300 判定拒绝'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /bizquery/export:
+    post:
+      tags: [bizquery]
+      summary: '[query] 把一次业务查询的结果下载为 CSV(需导出开关与授权的允许导出)'
+      description: |
+        判定与 /bizquery/exec 完全相同,另要求:全局 bizQuery.exportEnabled 打开,且调用人对该库的授权
+        allowExport=true。同步返回,至多授权的行数上限;结果永远脱敏;单元格防公式注入;带 UTF-8 BOM。
+        写一条 result=exported 的审计。失败时返回 JSON 信封,按 Content-Type 区分:判定拒绝或导出未开启
+        40300、并发已满 / 当天次数用完 42900(原因在 msg,机器可读的在 data.reasonRef);执行失败
+        (超时、库报错)回 0,原因在 data.error / data.errorRef。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceId, database, sql]
+              properties:
+                sourceId: { type: integer }
+                database: { type: string }
+                sql: { type: string }
+      responses:
+        '200':
+          description: 'text/csv 文件 / 40300 判定拒绝或导出未开启 / 42900 限流 / 0 + data.error 执行失败'
+          content:
+            text/csv: { schema: { type: string } }
+  /query-grants:
+    get:
+      tags: [bizquery]
+      summary: '[perms] 查询授权总表(可按 email / dept / sourceId / database / status 筛选)'
+      responses:
+        '200':
+          description: 'OK { items: QueryGrant[], limits }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /query-grants/{id}/revoke:
+    post:
+      tags: [bizquery]
+      summary: '[perms · admin] 管理员撤销一条查询授权(立即生效,写审计)'
+      description: |
+        授权的记录方是外部审批系统,但离职、误授、安全事件时网关必须能立即收回。外部系统之后再下发
+        同一个人同一个库,会重新生效。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { reason: { type: string } } }
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+  /bizquery/exec:
+    post:
+      tags: [bizquery]
+      summary: '[query] 执行一条业务查询(只读、按库收窄、有行数上限与时限)'
+      description: |
+        判定顺序,任何一步不过都不执行:实例仍是业务查询源且不在维护态 → 调用人对该库有此刻生效的
+        查询授权 → 单条只读语句(SELECT / WITH … SELECT / EXPLAIN / MySQL 的 DESC;拒绝加锁、INTO、
+        读文件 / 睡眠 / 加锁 / Oracle 工具包等函数;拒绝反斜杠转义的引号 `'`,各引擎理解不一)→
+        不引用这台实例上别的库或系统库 → 最外层 LIMIT / FETCH 的行数必须是数字 → 每人每天次数上限
+        (bizQuery.maxDailyPerUser,默认 0 = 不限,次日零点恢复)→ 并发配额(默认每人 2 条、每实例 5 条)。
+
+        执行时在最外层补 LIMIT(MySQL / PG 系 / SQLite;自带的 LIMIT 比授权上限大会被改小;Oracle 靠读取截断)、在**只读事务**里执行
+        (START TRANSACTION READ ONLY / BEGIN READ ONLY / SET TRANSACTION READ ONLY),库端时限用
+        max_execution_time(MySQL 系)或 statement_timeout(PG 系),超时后 MySQL 系另发 KILL QUERY。
+        结果服务端按【设置 · 敏感字段】脱敏,业务方没有看原值的通道;经子查询 / UNION / WITH 给敏感
+        字段改名(打码兜不住的形态)的查询在判定层即拒绝(40300,reasonRef.code = bizSensitiveEvasion)。每次执行写审计,operator 为"查询授权 #id";被拒绝的
+        语句同样写审计(result=rejected)。
+
+        从库:数据源配了从库时由从库执行(data.served = replica);从库连不上时回落主库
+        (served = primaryFallback,原因在 data.replicaError),审计 operator 里同样注明。只在"连不上"
+        时回落 —— 连上了、查询本身报错或超时照实报错,不拿同一条查询再去打主库。
+
+        EXPLAIN:MySQL / PG 系在只读事务里照常执行;Oracle 只认 `EXPLAIN PLAN FOR <只读查询>`,由网关
+        代为写计划、用 DBMS_XPLAN.DISPLAY 读出、回滚(PLAN_TABLE 不留东西),结果集是计划文本
+        (其它写法回 40300,reasonRef.code = bizExplainForm)。
+
+        判定层面的拒绝回 40300,并发已满 / 当天次数用完回 42900 —— 两者 msg 是规范中文串,
+        data.reasonRef 是机器可读的原因({ code, args },code 取值见 model.BizReasonCodes,如
+        bizNoGrant / bizNotSelect / bizBackslash / bizBusyUser / bizDailyLimit)。执行层面的失败
+        (超时、取消、库报错)回 0,原因在 data.error,机器可读的在 data.errorRef
+        (bizExecTimeout / bizExecCancelled / bizExecFailed)。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceId, database, sql]
+              properties:
+                sourceId: { type: integer }
+                database: { type: string }
+                sql: { type: string }
+      responses:
+        '200':
+          description: 'OK { columns, rows, truncated, maxRows, timeoutSec, ms, timedOut, maskedColumns, error, errorRef, served, replicaError } / 40300 判定拒绝 / 42900 限流(均带 data.reasonRef)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /schema-diff/connections:
+    get:
+      tags: [schemadiff]
+      summary: '[schemadiff] 可以参与表结构对比的实例(调用人能访问、引擎支持、配了凭据)'
+      description: |
+        family 是引擎族(mysql / oracle / postgres / sqlite),只有同一族能互比;database 是默认比的库
+        (Oracle 为登录账号自己的 schema)。
+      responses:
+        '200':
+          description: 'OK [{ id, name, env, engine, family, database }]'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /schema-diff/connections/{id}/databases:
+    get:
+      tags: [schemadiff]
+      summary: '[schemadiff] 一个实例上可以比的库(页面的库名下拉)'
+      description: |
+        实时列出:MySQL 系是库,Oracle 是用户(schema,总含登录账号自己),PG / DWS 是可连接的非模板库,
+        SQLite 只有 main;系统库不列,至多 2000 个。判定与对比相同:无权访问 40300,实例不存在 / 没配凭据
+        40001(均带 data.reasonRef)。读不到库列表回 0 + data.error,页面退回手填库名。不写审计。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200':
+          description: 'OK { databases: string[], error? }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /schema-diff/connections/{id}/schemas:
+    get:
+      tags: [schemadiff]
+      summary: '[schemadiff] PG / DWS 一个库里可以比的 schema(页面的 schema 下拉)'
+      description: |
+        连到 database 指定的库(空 = 实例配置的默认库),实时列出用户 schema,口径与对比时读目录相同
+        (不列 pg_catalog、information_schema、pg_toast 与 DWS 的系统 schema)。不是 PG 系的实例回空列表。
+        判定、读失败的回包与 /schema-diff/connections/{id}/databases 相同。不写审计。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: 'OK { schemas: string[], error? }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /schema-diff:
+    post:
+      tags: [schemadiff]
+      summary: '[schemadiff] 比较两个库的表结构'
+      description: |
+        左右两个实例调用人都要能访问(与终端同一个判断),否则 40300;实例不存在、没配凭据、两边引擎族
+        不同 40001。这些拒绝的 msg 是中文原话,data.reasonRef 是机器可读的原因(code = sdNoConn /
+        sdNoAccess / sdNoCreds / sdEngineMismatch,args.side = left / right),页面按读者语言显示。
+        左右可以是同一个实例(同实例的两个库、PG 同库的两个 schema)。两边并行
+        实时读系统目录(只读结构,不碰数据;读目录 60 秒时限,建连另有 8 秒上限;超过 5000 张表报错)。
+        任一边读不到(连不上、超时、表太多)回 0,不出半份报告:原因在 data.error,机器可读的在
+        data.errorRef(code = sdReadFailed / sdReadTimeout / sdTooLarge),哪一边在 data.errorSide。
+        一边读到 0 张表不是错误(新环境可能就是空库),照常出报告,data.emptySide 标出是哪一边
+        (多半是库名写错了,页面据此提示)。
+
+        PG / DWS 可以指定 schema:空 = 库内全部非系统 schema(非 public 的表名带 schema 前缀);
+        指定了只比这一个 schema,表名不带前缀(app 与 app_uat 也能互比)。
+
+        比较表 / 视图是否存在与类型、表注释、列(类型、可空、默认值、注释、顺序)、主键、索引。写法差异
+        不算差异(int(11)=int、'0'=0、CURRENT_TIMESTAMP 写法、PG 的 ::类型转换、Oracle 系统命名索引按
+        列组成匹配);options 可忽略列顺序 / 注释 / 索引名。差异项保留两边原文;结构不同的表另带
+        两边完整定义(leftDef / rightDef),供左右对照。
+
+        审计:左右是两个实例时各记一条(按实例筛都查得到),同一实例只记一条,命令
+        "SCHEMA-DIFF 左实例/库[.schema] <-> 右实例/库[.schema] · 仅左 n · 仅右 n · 不同 n · 一致 n",增删改查记"读",
+        operator 留空。读失败只记失败归类(超时 / 表太多 / 连接或读取出错),不记驱动报错原文。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [left, right]
+              properties:
+                left: { type: object, properties: { connectionId: { type: integer }, database: { type: string, description: '留空用默认库' }, schema: { type: string, description: '只对 PG / DWS 有意义' } } }
+                right: { type: object, properties: { connectionId: { type: integer }, database: { type: string }, schema: { type: string } } }
+                options:
+                  type: object
+                  properties:
+                    ignoreColumnOrder: { type: boolean }
+                    ignoreComments: { type: boolean }
+                    ignoreIndexNames: { type: boolean }
+      responses:
+        '200':
+          description: 'OK { left, right, diff: { summary, same, onlyLeft, onlyRight, changed }, emptySide?, error?, errorRef?, errorSide? } / 40300 无权访问一边 / 40001 实例不存在、没配凭据或引擎不同(均带 data.reasonRef)'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /connections/{id}/packages/download:
+    post:
+      tags: [connections]
+      summary: '[terminal] 下载 Oracle 程序包源码(.pck;多选打成 zip)'
+      description: |
+        对象树上右键程序包的「下载」。取 ALL_SOURCE 里的包头与包体,按 PL/SQL Developer 的 .pck
+        约定拼接(两段 CREATE OR REPLACE,各自以单独一行的 "/" 收尾),拿到 SQL*Plus / SQLcl
+        里直接执行即可重建。选一个包返回 `<包名>.pck`(text/plain);选多个返回
+        `<schema>_packages_<时间>.zip`,里面每个包一个 .pck。文件名在 Content-Disposition 里。
+
+        只读,访问控制与 object-source 相同;成功后记一条 result=exported 的审计,列出下载的包。
+        任一个包取不到(不存在、无权限)整体失败并指出是哪个包,不返回缺了几个包的 zip。一次最多
+        200 个。失败时返回 JSON 信封,调用方按 Content-Type 区分。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope, names]
+              properties:
+                scope: { type: string, description: '包所在的 owner / schema' }
+                database: { type: string }
+                names: { type: array, items: { type: string }, description: '程序包名,1–200 个' }
+      responses:
+        '200':
+          description: '文件本体(.pck 或 .zip)/ 失败时为 JSON 信封:40300 无权 / 40001 引擎非 Oracle、未选包、超过上限、某个包取不到'
+          content:
+            text/plain: { schema: { type: string } }
+            application/zip: { schema: { type: string, format: binary } }
+  /connections/{id}/objects/compile:
+    post:
+      tags: [connections]
+      summary: '[terminal] 重新编译 Oracle 存储程序(包 / 过程 / 函数 / 触发器 / 类型)'
+      description: |
+        Oracle 专有:包在依赖对象改动后会变成 INVALID,这里让 DBA 立刻重编并当场看到错误,
+        而不是等下一次业务调用才暴露。**编译是一次 DDL**,因此与终端走同一套闸门(菜单权限
+        → 能力矩阵 ddl 维度 → 高危字典 + 严格模式),逐条记审计;命中需审批的实例会被拒绝并
+        指向发布单,而不是降级执行。
+
+        成功与否**不以驱动是否报错为准** —— `ALTER … COMPILE` 即使编译失败也返回成功,只是
+        把对象留成 INVALID。响应里的 ok 由回读 all_objects.status 与 all_errors 决定:所有
+        单元 VALID 且无诊断才算通过。包会编译规格与包体两个单元(只编规格会让包体失效)。
+
+        对象名与 schema 是拼进 SQL 文本的(Oracle 不能把标识符做成绑定变量),因此二者都必须
+        是合法 Oracle 标识符,否则整个请求被拒。
+
+        **连带编译**:本对象编成 VALID 后,直接或间接依赖它、此刻为 INVALID 的同 owner 对象
+        会按依赖分层一并重编(与 /objects/recompile 同一套:整批判定一次、逐个记审计),结果
+        在 report.cascade。连带那一批被判定拦下时本对象的结果照常返回,原因写在 cascadeNote。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompileReq' }
+      responses:
+        '200':
+          description: 'OK(ok=false 表示编译未通过,errors 里是 all_errors 的行列与文本)/ 42800 需二次验证(生产实例,见 mfaCode)/ 40300 无权 / 40001 引擎非 Oracle、标识符非法、类型不可编译、实例未配置真实凭据'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CompileResp' }
+  /connections/{id}/objects/invalid:
+    get:
+      tags: [connections]
+      summary: '[terminal] Oracle 无效对象清单(status = INVALID)'
+      description: |
+        一次表结构变更能让几十个包/视图/触发器一起变成 INVALID。Oracle 会在下次调用时**隐式**
+        重编译,所以它们看起来还能用 —— 直到某个业务请求第一次踩上去。这个接口把它们摊开。
+
+        只读:走访问控制,不走 DDL 闸。一个包的 PACKAGE 与 PACKAGE BODY 在数据字典里是两行,
+        这里合成一条(它们由同一次 ALTER 一起编),units 里说明具体哪几个单元失效了。
+        同义词、Java 类等 `ALTER … COMPILE` 修不了的类型不会出现在清单里。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string }, description: 'owner / schema;留空用连接账号的当前 schema' }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/objects/recompile:
+    post:
+      tags: [connections]
+      summary: '[terminal] 批量重编译 Oracle 无效对象'
+      description: |
+        utlrp 做的事,但用业务账号做(UTL_RECOMP 要 SYSDBA)。
+
+        **整批一起判定**:把这一批要执行的 ALTER 全部交给同一次判定,只要其中任何一条在这台
+        实例上是 deny 或需审批,整批都不执行 —— 逐个判、能编的先编,会在需要审批的库上留下
+        "编了一半"。执行仍然复用单个编译那条路,因此同样回读 all_objects.status 与 all_errors。
+
+        **按依赖分层,再多轮**:先读 all_dependencies 把这批对象分层(被依赖的在下层),逐层往上
+        编 —— utlrp 的做法,一条依赖链一轮编完。分层管不了的环(互相引用的包)与读不到依赖图
+        的情形,退回"上一轮修好了至少一个就再来一轮",最多三轮;报告里带 levels / cyclic /
+        depsNote 说明这次是怎么编的。**逐个记审计**,记的是每个对象这次的最终状态。
+
+        `names` 为空 = 该 schema 下全部无效对象;非空 = 只编这几个(界面上勾选的情形)。
+
+        一次最多处理 200 个对象,超出的部分在 report.skipped 里明确报告,不会悄悄只做一半。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecompileReq' }
+      responses:
+        '200':
+          description: 'OK(ok=false 表示仍有对象编不过,items 里逐个说明)/ 40300 无权或整批判定被拒 / 40001 引擎非 Oracle、实例未配置真实凭据、命中需审批'
+          content: { application/json: { schema: { $ref: '#/components/responses/Ok' } } }
+  /metadata/search:
+    get:
+      tags: [connections]
+      summary: '[terminal] 在元数据缓存里按表名 / 列名检索'
+      description: |
+        远端库的表清单与表结构在本地留了一份(见 `POST /connections/{id}/metadata/sync`),
+        这个接口在那份副本里检索。**按列名找**是它换来的能力 —— 实时探查做不到:那意味着
+        把每台实例的每张表都问一遍列,是一轮对生产的全量扫描。
+
+        范围收在 SQL 里,只查调用者按标签授权够得到的实例:表名和列名本身就是信息。
+
+        结果**可能过期**。判定、执行、导出一律仍然走实时的目标库 —— 一份过期的结构如果被
+        拿去做判断,它就从"快"变成了"错"。每行都带 syncedAt。
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 200, maximum: 500 } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/metadata:
+    get:
+      tags: [connections]
+      summary: '[terminal] 一台实例缓存下来的表清单与最近一次同步的结果'
+      description: |
+        `sync` 为 null 表示这台实例**还没同步过** —— 与"同步过但一张表都没有"不是一回事,
+        而这两者在界面上长得一模一样。`sync.err` 非空说明最近一次失败了,原因在里面。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/metadata/sync:
+    get:
+      tags: [connections]
+      summary: '[db · admin] 一台实例此刻在不在同步元数据、上一次的结果'
+      description: |
+        后台同步(`POST ...?async=1`)的轮询。返回 `{running, failed, sync}`:
+        `running` 为 true 表示还在跑;跑完后 `failed` 非空表示这次什么都没收到(连不上 /
+        没权限 …),为空时看 `sync`(`sync.err` 非空 = 收下了但不完整)。
+        `failed` 只记在网关进程内存里,重启后为空。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [connections]
+      summary: '[db · admin] 立刻同步一台实例的元数据'
+      description: |
+        主动去连目标库把表与列读回来,与缓存逐行比对后只写有变化的行,一个库一个事务
+        (中途失败时每个库要么是旧的那份、要么是新的那份,不会是"删了一半")。
+
+        带 `async=1`:在后台跑,立刻返回 `{running: true, sync}`,再轮询 GET 同一路径。
+        不带:等跑完再返回(旧行为)。同一台实例同一时刻只跑一个同步,已在跑时
+        async 版照样返回 running,同步版报错。
+
+        要 admin:定时同步默认关着,而手动这一下同样是让网关去登录一台生产实例。
+
+        PostgreSQL 家族只同步**连接上配置的那个库** —— 它的目录按库隔离,读别的库要重新
+        建连接,而连接凭据未必在每个库上都成立。要覆盖更多库就为它们各配一条连接。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: async, in: query, schema: { type: string, enum: ['1'] } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /connections/{id}/object-source:
+    get:
+      tags: [connections]
+      summary: '[terminal] 单个对象的源码 / 建表 DDL'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: type, in: query, required: true, schema: { type: string } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: database, in: query, schema: { type: string } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /tags:
+    get:
+      tags: [connections]
+      summary: 全部实例标签(选择器用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- tiers
+  /env-tiers:
+    get:
+      tags: [tiers]
+      summary: 控制分层列表(任何登录用户可读:树、标签、表单都要用)
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[envtier · admin] 新建分层 —— 必须从模板克隆规则'
+      description: 没有规则行的分层不是标签,是**不受管控的环境**(查无规则行=放行),所以克隆在同一事务里完成。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /env-tiers/{code}:
+    put:
+      tags: [tiers]
+      summary: '[envtier · admin] 修改分层(名称、MFA、危险横幅、扫描基准等)'
+      description: 局部更新:没传的字段保持原值;传了 displayName 就不能是空串。
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[envtier · admin] 删除分层(仍有环境挂靠时拒绝)'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows:
+    get:
+      tags: [tiers]
+      summary: 执行窗口(「班车」)列表 —— 含"此刻是否开着"
+      description: >
+        默认只列**自己申请的**窗口;`scope=all` 列所有人的(带申请人姓名),只给平台管理员(管理后台)。
+        `scope=active` 列所有人此刻开着的窗口,`scope=scheduled` 列所有人已批准、还没到点的窗口
+        (都带申请人姓名,所有登录用户可读 —— 用户后台总览的「生效中」与「排期」)。
+        `scope=reviewable` 是用户后台班车页的「全部窗口」页签(只读,含已过期,带申请人姓名),
+        只给有回看权限的人(监督角色 admin / owner / audit,或有 execwindow 菜单),否则 40300:
+        监督角色看全部;其他人看自己申请的,加上够得到那台实例、且已批准的别人的窗口(与回看接口同一口径)。
+        窗口在指定时间、对指定的库,把本来需要审批的中/高风险语句直接放行。它改的是
+        "要不要人来批",不是"有没有权限":能力矩阵禁止的仍然禁止,风险等级也不降。
+        响应里的 active 由服务端用与判定完全相同的逻辑算出,前端不重算。
+        读对能进该菜单的人开放 —— 一扇免审批的门开在哪、什么时候开,不该只有管理员知道。
+      parameters: [{ name: scope, in: query, required: false, schema: { type: string, enum: [all, active, scheduled, reviewable] } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[execwindow] 申请执行窗口(提交审批,通过后才生效)'
+      description: >
+        提交一次**申请**,不是保存一个立即生效的配置。窗口落成 pending 并按默认审批链
+        建单;判定层只认 approved,等待期间它一行都不放行。
+        不再要求管理员:这个功能的意义就在于开门的人和签字的人不是同一个。
+
+        两种时间模型:once(绝对起止时刻,与时区无关)与 recurring(带 IANA 时区的固定
+        时段,结束早于开始表示跨午夜)。库名必填 —— 空库名会让窗口悄悄覆盖整台实例。
+        可勾同一台实例上的多个库:databases(数组,最多 20 个);只传 database(单个库)也认。
+        说不清的定义当场拒绝:写坏的窗口要么白配,要么开在没预料的时间,后者是安全问题。
+        once 的结束时间必须晚于当前时间,时长不超过 31 天。
+        申请人必须够得到这台实例(与 /terminal/exec 同一道闸);实例不存在与够不到回同一个错误。
+        每次变动写入审计链。
+
+        窗口只放行**只触及窗口库**的语句:引用了别的库(限定名、JOIN / 逗号里的别库表、
+        别库函数、读别库)、换库(USE、ALTER SESSION)、动态 SQL(PREPARE / EXECUTE)、
+        库级 / 实例级语句,以及判不准的,一律照常走审批。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows/{id}/disable:
+    post:
+      tags: [tiers]
+      summary: 停用执行窗口 —— 立即不再放行,不走审批
+      description: |
+        关门是收紧,不需要谁签字,所以不经审批;申请人自己或平台管理员可以(管理后台的全局管理页
+        用它停别人的窗口)。停用写审计。重新启用要走修改 —— 那会重新提交审批。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows/{id}:
+    put:
+      tags: [tiers]
+      summary: '[execwindow] 修改执行窗口 —— 改完重新走审批'
+      description: >
+        改动会把窗口打回 pending 并重新建单。因为"把 02:00-04:00 改成 02:00-06:00"和
+        "新开一扇 04:00-06:00 的门"是同一件事;不重审的话,审批只拦得住第一版。
+        还在等审批的旧单随之撤回(cancelled);批准只认窗口当前挂着的那张单。
+        只有申请人本人或平台管理员可以改(在 service 层判,路由只认得菜单)。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[execwindow] 撤销执行窗口(立刻恢复审批)'
+      description: >
+        撤销不走审批:关一扇门永远不需要第二个人同意。同样限申请人本人或平台管理员。
+        还在等审批的单随之撤回(cancelled),不再留在待办里。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /exec-windows/{id}/statements:
+    get:
+      tags: [tiers]
+      summary: 回看窗口期里执行过的 SQL
+      description: >
+        窗口开着的那几个小时里没有人签过字,这段时间的审计行是唯一的凭据。这一条把它们
+        按 (实例, 库) + 窗口时间表捞出来,时间表用的是与判定层完全相同的那套换算(跨午夜、
+        时区),不在 SQL 里重写一遍。
+
+        返回里的 byWindow 说这一条是**被这扇门放行的**(本来要审批),判据是审计行的
+        Operator —— 执行当时写进哈希链的,事后改不了。没有这个标记的行只是恰好在窗口期里
+        跑的,低风险语句开不开窗都一样。被放行过的行按 Operator 另捞一趟,所以改过时间段的
+        窗口也不会把它们漏掉。
+
+        只列真的下发过的语句:被拦下开单的、被拒绝的不在其中;执行失败与仿真的照实标出,
+        不算作"已执行"。内容**不按人收窄**:打得开这一页的人,看得见这段窗口期里所有人跑过
+        的语句原文和执行者,不只是自己的 —— 一扇免审批的门没有签字的人,只剩自己那几条的
+        回看读起来和"没出什么事"一样。审计页那条规则不受影响,仍按监督角色收窄。收窄的是
+        范围而不是人:只有这扇门自己那台实例、那个库、那段窗口期。扫描有上限,到顶时
+        truncated 为 true。
+
+        门槛因此在"谁打得开这一页":持有 execwindow 菜单的人,或监督角色(admin/owner/audit)。
+        两者都不沾的账号得到 40300 —— 他们在界面上本来就进不了班车页。审计角色按默认矩阵
+        没有 execwindow 键,所以这道判断按角色而不是按菜单键,否则会把查旧账的人挡在门外。
+        持菜单的非监督角色还要够得到窗口那台实例(与 /terminal/exec 同一道闸);够不到与窗口
+        不存在回同一个错误。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '403': { description: 无权查看 —— 既无 execwindow 菜单,也不是监督角色 }
+  /environments:
+    get:
+      tags: [tiers]
+      summary: 环境列表
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [tiers]
+      summary: '[envtier · admin] 新建环境并绑定到一个分层'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /environments/usage:
+    get:
+      tags: [tiers]
+      summary: '[envtier] 各环境的实例数(删除前提示影响面)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /environments/{code}:
+    put:
+      tags: [tiers]
+      summary: '[envtier · admin] 修改环境(可改绑分层)'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [tiers]
+      summary: '[envtier · admin] 删除环境;moveTo 必填,实例改挂过去而不是悬空'
+      parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content: { application/json: { schema: { type: object, required: [moveTo], properties: { moveTo: { type: string } } } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- roles & users
+  /roles:
+    get:
+      tags: [roles]
+      summary: '[perms] 角色列表'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [roles]
+      summary: '[perms · admin] 新建角色'
+      description: |
+        body:name(必填,不与已有角色同名)、layer、description、defaultConnRole、canApprove。
+        code 由服务端生成(r_ + 随机串)。新角色**什么都不给**:每个分层 × 每项能力写 deny、不带菜单 ——
+        矩阵里查不到行按 allow 算,不写 deny 的空角色会在所有分层全放行。返回角色详情。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}:
+    get:
+      tags: [roles]
+      summary: '[perms] 角色详情(能力矩阵 + 菜单 + 成员 + 标签)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    patch:
+      tags: [roles]
+      summary: '[perms · admin] 改名称 / 描述 / 默认连接角色 / 可审批'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [roles]
+      summary: '[perms · admin] 删除自定义角色'
+      description: |
+        只有经「新建角色」建的角色(code 以 r_ 开头,详情里 deletable=true)能删;内置 / 系统角色拒绝。
+        还有用户挂着它(主角色或成员)、被发布流程用作审批 / 确认角色、或有未结束的发布单在等它时也拒绝,
+        msg 说明原因。删除时连同菜单、能力矩阵、实例标签一并删,写审计。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/menus:
+    put:
+      tags: [roles]
+      summary: '[perms · admin] 设置菜单权限'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/capabilities:
+    put:
+      tags: [roles]
+      summary: '[perms · admin] 设置能力矩阵(能力 × 分层 → allow/approve/deny)'
+      description: |
+        能力维度:`select` `write` `ddl` `grant` `conn` `approve` `explain` `release`。
+        `release` 管的是**能不能发起发布单**,与语句本身能不能跑是两个问题。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/tags:
+    put:
+      tags: [roles]
+      summary: '[perms · admin] 设置角色的数据访问范围(空 = 不限)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/members:
+    post:
+      tags: [roles]
+      summary: '[perms · admin] 添加成员'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /roles/{id}/members/{userId}:
+    delete:
+      tags: [roles]
+      summary: '[perms · admin] 移除成员'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/jobs/{id}:
+    get:
+      tags: [osc]
+      summary: '一个在线变更任务(生产大表在线加 / 删索引)的进度与结局'
+      description: |
+        终端在生产实例上对大表(估算 ≥ osc.minRows 行或 ≥ osc.minBytes)做加 / 删索引时,不执行原 DDL,
+        而是生成一张在线变更工单(审批单 oscJobId 指向本任务),审批通过后在审批页执行。进度每 3 秒落库:
+        phase(preparing / copying / catching_up / cutting_over / done / failed / aborted)、rowsEstimated、
+        rowsCopied、rowsReplayed、cutOverAttempts、throttled、paused;成功后 oldTable 是保留下来的原表,
+        需 DBA 择时手动删除。够得到那台实例的人都能看;canControl 说调用人能否暂停 / 继续 / 中止。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /osc/jobs/{id}/{action}:
+    post:
+      tags: [osc]
+      summary: '暂停 / 继续 / 中止一个正在跑的在线变更(action = pause | resume | abort)'
+      description: |
+        要求能访问那台实例,并且是发起人本人、有审批资格的角色,或这条 DDL 对调用人直接放行;写审计。
+        中止 = 删掉影子表,原表不动。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: action, in: path, required: true, schema: { type: string, enum: [pause, resume, abort] } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /online-users:
+    get:
+      tags: [users]
+      summary: '[perms · admin] 此刻在线的登录会话'
+      description: |
+        按登录会话列出:用户、部门、来源 IP、浏览器、登录时间、最近一次请求(lastSeen,含页面自动轮询)、
+        最近一次操作(lastAction,不含轮询),以及开着的终端(实例、是否执行中)。3 分钟内有请求、或者
+        还开着终端的算在线;退出登录 / 停用 / 重置口令后立即消失。只记在内存里:网关重启清空,
+        多副本部署时只看得到本副本。用户表的 lastActive 同时改为真实时间(每人每分钟至多写一次)。
+      responses:
+        '200':
+          description: 'OK { sessions: [...], users, terminals, windowSec }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /users:
+    get:
+      tags: [users]
+      summary: '[perms] 用户列表'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [users]
+      summary: '[perms · admin] 管理员建号(设初始密码,直接 active)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/sso-unbind:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 解除一个账号的 SSO 绑定,恢复口令登录'
+      description: |
+        绑定发生在这个人第一次经 SRD 授权登录、邮箱对上网关账号的时候。解绑后他可以重新用
+        口令登录;下次再经 SRD 登录会重新绑定。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/invite:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 邀请用户(invited 状态,不能登录)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}:
+    patch:
+      tags: [users]
+      summary: '[perms · admin] 改状态 / 角色(停用会立即作废其所有会话)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/password:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 重置密码(会作废该用户所有会话)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/mfa/reset:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 解绑该用户的 TOTP'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/mfa/bind:
+    post:
+      tags: [users]
+      summary: '[perms · admin] 代为生成并绑定 TOTP(返回密钥与 otpauth URI)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/tags:
+    get:
+      tags: [users]
+      summary: '[perms] 该用户的数据访问范围'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    put:
+      tags: [users]
+      summary: '[perms · admin] 设置个人范围 —— 覆盖角色范围,清空则回落到角色'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- risk rules
+  /risk-commands:
+    get:
+      tags: [risk-rules]
+      summary: '[terminal] 高危命令字典(风险检查器要读)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    post:
+      tags: [risk-rules]
+      summary: '[rules · admin] 新增/覆盖一条命令在各分层的等级'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /risk-commands/{name}:
+    patch:
+      tags: [risk-rules]
+      summary: '[rules · admin] 改单个分层的等级'
+      description: 只改已有命令(不存在 → 40400,不会新建);等级 high / mid / off,分层必须存在。
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [risk-rules]
+      summary: '[rules · admin] 删除命令(删掉等于全分层放行)'
+      parameters: [{ name: name, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- sql review
+  /sql-review/rules:
+    get:
+      tags: [sql-review]
+      summary: '[terminal] 规范审查规则库'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ReviewRule' } }
+    post:
+      tags: [sql-review]
+      summary: '[rules · admin] 新建自定义规则(编码自动加 custom. 前缀)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /sql-review/rules/{id}:
+    put:
+      tags: [sql-review]
+      summary: '[rules · admin] 改级别 / 开关 / 参数 / 文案 / 出处;内置规则的编码与方言不可改'
+      description: |
+        运维拥有的是 level / enabled / params / message / 显示名 与出处标注;
+        内置规则的 code、kind 与方言范围随版本走 —— 升级时会回填,改了会被覆盖。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [sql-review]
+      summary: '[rules · admin] 删除自定义规则 —— 内置规则只能停用'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK / 40001 内置规则不可删除' } }
+  /sql-review/catalog:
+    get:
+      tags: [sql-review]
+      summary: '[terminal] 方言 / 分类 / 级别词表,及各规则的参数说明(params:规则编码 → [{key,type,default,dialectDefaults,options}];自定义正则规则在 _regex 下)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /sql-review/check:
+    post:
+      tags: [sql-review]
+      summary: '[terminal] 规范审查(connectionId 优先于 dialect:目标实例决定方言)'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties:
+                connectionId: { type: integer, format: int64 }
+                dialect: { type: string, enum: [mysql, tidb, dws, oracle] }
+                sql: { type: string }
+                changeType: { type: string, enum: [dml, ddl], description: '要进的升级单类型;声明了就核对内容。不论声明与否,DML 与 DDL 同在脚本里都报一条 error(release.change_type),与建单时的拒绝一致' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance: { type: string }
+                  result: { $ref: '#/components/schemas/ReviewResult' }
+
+  # ---------------------------------------------------------------- pipelines
+  /pipelines:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布流程模板(含阶段)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PipelineDetail' } }
+    post:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 新建流程'
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/PipelineDetail' } } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /pipelines/{id}:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 单个流程'
+      description: 审批阶段的审批角色在 `stages[].config` 的 `approverRole` 里,见 PipelineStage。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200':
+          description: OK / 40001 流程不存在
+          content: { application/json: { schema: { $ref: '#/components/schemas/PipelineDetail' } } }
+    put:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 覆盖式保存 —— 阶段整体替换,运行中的发布单不受影响'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    delete:
+      tags: [pipelines]
+      summary: '[pipeline · admin] 删除流程(历史发布单保留自己的阶段快照)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /releases:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布单分页'
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all], default: mine }, description: all 需监管角色 }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: projectId, in: query, schema: { type: integer, format: int64 }, description: '按项目跟进;缺省/0 = 全部项目' }
+        - { name: env, in: query, schema: { type: string }, description: '按环境筛选(environment 编码,如 fat;不是分层 tier);缺省 = 全部' }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 128 }
+          description: |
+            按单号搜索,只在调用者看得到的发布单里找,不分大小写。
+            `REL-11` / `rel11` 只匹配这一张;纯数字整段匹配 REL 编号、外部引用里冒号分隔的一段
+            (不含最后一段,那是执行顺序)和标题里的 `orderID=`;其它输入按片段匹配 REL 编号、
+            标题和外部引用。不搜 SQL 正文。
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        '200':
+          description: OK。列表里阶段的 log/findings 为空,详情接口才带。total 是筛选后的总数。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ReleaseView' } }
+                  total: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+                  envs:
+                    type: array
+                    items: { type: string }
+                    description: 环境筛选的选项:当前 scope 和项目下的发布单落过的环境,不随 env / q / status 收窄
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 提交发布'
+      description: |
+        提交时按当前角色与实例**复判一次**:命中拒绝直接 40300;需审批的变更必须选含
+        审批阶段的流程,否则拒收(不建单)。执行阶段会再判一次 —— 等待期间规则可能变。
+        可带 changeType(dml|ddl,空=按语句推断):声明与内容不符、或 DML/DDL 语句同单,提交即拒。
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseReq' } } }
+      responses:
+        '200':
+          description: OK / 40300 能力矩阵或 release 能力拒绝 / 42800 需二次验证 / 40001 流程不含审批阶段
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseView' } } }
+  /releases/{id}:
+    get:
+      tags: [pipelines]
+      summary: '[pipeline] 发布单详情(各阶段状态、日志、审查结果)'
+      description: |
+        详情不直接带审批人。approve 阶段跑到后,`stages[].approvalNo` 是生成的审批单号,
+        再调 `GET /approvals?ap=<approvalNo>` 取 `steps`。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200':
+          description: OK / 40001 或 40300 不存在或无权查看
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseView' } } }
+  /releases/{id}/abort:
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 终止发布 —— 仅 pending/waiting;running 不可终止'
+      description: 执行中的发布可能已经打到目标库,一个"已终止"的假承诺比没有这个按钮更糟。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /releases/{id}/stages/{stageId}/continue:
+    post:
+      tags: [pipelines]
+      summary: '[pipeline] 人工闸放行:manual 确认点 / execute 执行确认(必须点击后才落库)'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: stageId, in: path, required: true, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- approvals
+  /approvals:
+    get:
+      tags: [approvals]
+      summary: '[approve] 审批单分页'
+      parameters:
+        - { name: scope, in: query, schema: { type: string, enum: [mine, all] } }
+        - { name: ap, in: query, schema: { type: string }, description: 按单号精确查一张,不受分页影响 }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+        - name: type
+          in: query
+          description: |
+            按工单类型筛。类型不是表上的一列,是由 releaseId / windowId / exportJobId 三个外键推出来的
+            (三个都为 0 = 普通命令单),每一行也带着 `type` 字段回来 —— 界面照它画标签,不自己再推一遍。
+            拼错的取值**报错**,不是返回空列表:空列表和"确实没有"长得一模一样。
+          schema: { type: string, enum: [cmd, release, window, export] }
+      responses:
+        '200':
+          description: |
+            OK。每张单带 `steps`:审批链上的人和各自的处理状态,即这张单的审批人。
+            发布单审批阶段生成的单 `releaseId` 非 0、`type` 为 release,单号即发布单阶段上的 `approvalNo`。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      description: 审批单的全部字段(下列为常用的),命令已脱敏
+                      properties:
+                        id: { type: integer, format: int64 }
+                        apNo: { type: string }
+                        type: { type: string, enum: [cmd, release, window, export] }
+                        releaseId: { type: integer, format: int64, description: 来自发布单时为其 id }
+                        instance: { type: string }
+                        database: { type: string }
+                        env: { type: string }
+                        initiator: { type: string }
+                        riskLevel: { type: string }
+                        status: { type: string, enum: [pending, approved, rejected, expired] }
+                        decidedAt: { type: string, format: date-time, nullable: true }
+                        createdAt: { type: string, format: date-time }
+                        steps: { type: array, items: { $ref: '#/components/schemas/ApprovalStep' } }
+                        canDecide: { type: boolean, description: 当前用户此刻能否审批这张单 }
+                        blockReason: { type: string, description: 不能审批的原因 }
+                        canExecute: { type: boolean }
+                        canCancel: { type: boolean }
+                  total: { type: integer }
+                  pending: { type: integer }
+                  page: { type: integer }
+                  pageSize: { type: integer }
+  /approvals/todo:
+    get:
+      tags: [approvals]
+      summary: 右上角"待办":此刻在等当前登录者动手的三类事
+      description: |
+        `decide` 是等我审批的(在链上、不是自己发起的 —— 与列表页的 canDecide 同一条规则),
+        `execute` 是批过了、等我执行的(与 canExecute 同一条规则),`confirm` 是**发布单停在
+        人工闸上**等我点「继续」(与 /releases/{id}/stages/{stageId}/continue 同一条规则,
+        见 service/release_confirm.go)。前两类的 `apNo` 是工单号,第三类是发布单号,`id` 是
+        发布单 id,`stage` 是停在哪一道闸上(manual / execute,送类型不送阶段名 —— 阶段名是
+        派生出来的规范中文,界面按读者的语言渲染)。
+
+        `items` 逐张列出,命令已脱敏并截短。它不等于 GET /approvals 的 pending:那个把我自己
+        发起、正在等别人审的单子也算进去。不挂菜单闸 —— 没有任何待办的人拿到的是零。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/approve:
+    post:
+      tags: [approvals]
+      summary: '[approve] 通过 —— 仅审批链成员;默认不可自批'
+      description: |
+        **通过不执行任何命令。** 审批人按下的是"我同意",不是"现在就跑" ——
+        执行时机(业务低峰、应用是否已停、备份是否就绪)由执行的那个人掌握,不是审批这一下。
+        通过后工单停在 approved,等人来调 `POST /approvals/{id}/execute`(不限发起人本人,
+        见那一条)。发布单的审批同样不执行:它的执行归发布流水线的执行阶段。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/execute:
+    post:
+      tags: [approvals]
+      summary: '[terminal] 执行已通过的工单 —— 够得到这台实例的人都可以,且只能执行一次'
+      description: |
+        把"批准了"和"跑过了"分成两件事的那一步。四条边界:
+
+        - **谁能执行**:够得到那台实例(标签授权)、能力矩阵也放行的人 —— 不再限发起人本人。
+          需求要的是"值班的人能接手",而值班的人常常正是审批人(ADR 0010 的 2026-09-09 修订)。
+          门都按**执行者**算:标签授权、MFA 步进、能力矩阵复判。别人替你跑了,发起人会收到
+          通知 —— 审计里当然记着,但"我的变更什么时候生效的"是他一定会问、又不会天天去翻
+          审计才知道的事。
+        - 一张工单只能执行**一次**(批准是对一次执行的授权,不是可反复使用的通行证)
+        - **三类工单走不了这条路**:发布单的执行归流水线(插队会把同一变更应用两次)、
+          执行窗口单批准即生效、导出单由后台任务跑 —— 后两类的 `command` 是一句描述而不是
+          可执行语句,放它们过去等于把那句话当 SQL 发给数据库
+        - 下发前**再判一次**规则:工单可能在待执行状态里放了很久,期间字典、
+          实例归属、执行者的角色都可能变
+
+        拒绝的理由原样透出 —— 等审批、已被执行过、看发布单、重新提交,
+        这几种拒绝要人做的事完全不同。控制台照着列表行上的 `canExecute` 画按钮即可,
+        它读的是同一条规则。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/cancel:
+    post:
+      tags: [approvals]
+      summary: '[terminal] 撤回自己发起的、尚未执行的工单'
+      description: >
+        撤回与驳回是两件事:驳回是审批人看过之后说"不行",要留在记录里;撤回是发起人
+        说"这张不用了",没有人对它做过判断。所以**审批人不能撤回** —— 否则他可以用撤回
+        把一张本该驳回的工单悄悄抹掉,而记录上看不出有人拒绝过什么。
+        能撤的只有发起人自己与平台管理员。
+        两种状态可撤:等审批的,以及**已批准但还没执行的**(批准解锁的是发起人的一次
+        执行,放不放弃是他的事)。跑过的撤不了 —— 命令已经落到库上,改状态只会让记录与
+        事实对不上。撤回与执行抢同一把原子闸(status 与 executed_at 在同一次更新里较量),
+        谁先谁赢。
+        升级单里的审批工单不能单独撤回(流水线不认识这种结论,会停在无人推进的状态)。
+        挂在这张单上的东西跟着收场:执行窗口置为 rejected,导出任务标记失败。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/reject:
+    post:
+      tags: [approvals]
+      summary: '[approve] 驳回'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /approvals/{id}/script:
+    get:
+      tags: [approvals]
+      summary: 脚本工单所引用脚本的全文(审批人审阅用)
+      description: |
+        脚本工单只存摘要;全文给能看到这张工单的人:发起人、审批链成员,以及工单已批准未执行时
+        够得到该实例的同事。返回前校验审查时记下的 sha256,文件被改过即拒绝(不展示)。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK { filename, content } / 40300 无权查看 / 40001 非脚本工单、文件不存在或已被修改' } }
+  /approvals/lark/callback:
+    post:
+      tags: [approvals]
+      summary: 审批魔方回调(共享密钥鉴权,非用户 JWT)
+      security: []
+      description: |
+        密钥走 `Authorization: Bearer`,或回调 URL 上的 `?secret=`(有些厂商只能注册 URL)。
+        另有独立的来源 IP 白名单。鉴权失败一律**失败关闭**,因为它可能触发生产执行。
+      responses: { '200': { description: 'OK / 40300 鉴权失败 / 40001 审批单不存在' } }
+
+  # ---------------------------------------------------------------- audit
+  /audit:
+    get:
+      tags: [audit]
+      summary: '[audit] 审计日志分页'
+      parameters:
+        - name: event
+          in: query
+          description: |
+            按**事件类型**筛:intercept(被拦下来)/ approve(审批决定)/ exec(真执行了)/ login。
+            这一列是迁移 0039 加的,更早的行为空,按类型筛**筛不到它们** —— 它们当时确实没有记下
+            自己是哪一类,不回填也不猜。拼错的取值报错,不是返回空列表。
+
+            **多选**:逗号分隔(`event=intercept,exec`)。任何一个取值认不出都报错 ——
+            半懂半不懂地筛,给出的结果比报错更难发现是错的。
+          schema: { type: string, example: 'intercept,exec' }
+        - name: action
+          in: query
+          description: |
+            按**对数据做了什么**筛:create(增)/ delete(删)/ update(改)/ read(查)/ other。
+            与 event 正交 —— 那个说"这一步在流程里是什么",这个说"它动了数据没有"。
+
+            other 是一个**真实的结论**:登录、配置变更、流程标签,以及认不出的语句。它和空
+            (迁移 0040 之前写下的行)不是一回事,空表示当时没有这一列。多语句脚本取最重的一条
+            (删 > 改 > 增 > 查),所以一个含 DROP 的脚本在 delete 里找得到。
+
+            同样支持逗号分隔的多选(`action=delete,update`)。
+          schema: { type: string, example: 'delete,update' }
+        - name: source
+          in: query
+          description: |
+            按**入口来源**筛(迁移 0063):query(数据查询)/ terminal(Web 命令行)/ script(上传脚本)/
+            export(数据导出,含查询页导出)/ approval(审批单)/ release(变更发布,含外部系统经开放接口
+            提交的发布单 —— 那一层看 operator 的「API:系统名」)/ api(发布流水线以外的开放接口)/
+            auth(登录认证)/ admin(管理操作)/ system(系统后台任务)。
+
+            `unknown` 筛 0063 之前写下、没有来源的旧行(响应里 `source` 为空串)。来源按服务端路由
+            判定,进哈希链(第六代载荷)。同样支持逗号分隔的多选(`source=query,terminal`),认不出的
+            取值报错。
+
+            响应里每一行多一个 `source` 字段;`/audit/export` 的 CSV 在 data_action 之后多一列 source。
+          schema: { type: string, example: 'query,terminal' }
+        - { name: risk, in: query, schema: { type: string, enum: [all, high, mid, low] } }
+        - { name: range, in: query, schema: { type: string, enum: [1h, 24h, 7d, 30d] } }
+        - { name: from, in: query, schema: { type: string, format: date-time }, description: 绝对区间优先于 range }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - name: instance
+          in: query
+          description: |
+            按实例名精确筛。可选值来自 `/audit/instances` —— 那一条列的是**调用者在审计里
+            见得到的**实例,而不是连接表里的全部:一个筛出来永远是空的选项,读起来像
+            "这台机器上什么都没发生过"。
+          schema: { type: string }
+        - name: q
+          in: query
+          description: |
+            模糊匹配**操作人姓名、邮箱、来源 IP**,任意一个命中都算。这几样是同一个问题
+            的几半("是谁、从哪台机器"),分成几个输入框只会让人把名字打进 IP 那一格里。
+            邮箱也匹配是因为审计行存的是姓名,而人想到一个同事首先想到的是登录名。
+            输入里的 `%` 与 `_` 按字面量处理,超过 128 字符截断。
+          schema: { type: string }
+        - name: group
+          in: query
+          description: |
+            `approval` = 按审批单合并:同一张审批单的行(拦截 → 审批 → 执行)合成一个条目,显示
+            最新的那一行;没有审批单号的行照常一条一行。分页与 total 按条目算。响应里多一个
+            `groups`(审批单号 → 这张单共几条,可见范围内),点开看全部用 `/audit/approval/{apNo}`。
+          schema: { type: string, enum: [approval] }
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: pageSize, in: query, schema: { type: integer } }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /audit/approval/{apNo}:
+    get:
+      tags: [audit]
+      summary: '[audit · 平台管理员 / 审计员 / DBA 负责人] 一张审批单的全部操作记录(按时间先后)'
+      description: >
+        审计列表里点开合并条目时用。**只给平台管理员、审计员与 DBA 负责人**(audit 菜单 + 角色 admin / audit / owner,
+        与审计导出同一道闸;admin / audit 另受管理后台 IP 白名单与空闲超时约束,owner 在用户后台用、不受这两条约束,
+        2026-10-26 回归 18);其他角色拿到 40300。
+        不受列表上的时间 / 风险等筛选限制 —— 点开要看的是这张单完整的经过。最多 500 行。
+      parameters: [{ name: apNo, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /audit/verify:
+    get:
+      tags: [audit]
+      summary: '[audit · 平台管理员 / 审计员 / DBA 负责人] 校验审计哈希链(最近 5000 行)'
+      description: |
+        重算每一行的 `SHA256(前一行 hash ‖ 本行内容快照)`,报出**第一处**对不上的行。不报
+        "坏了几行":链是前后咬合的,第一处断掉之后它后面的每一行都会跟着对不上,那个数字
+        只会让人以为损坏面很大。
+
+        `badReason` 三种,要人做的事不同:`content` 这一行的内容被改过 · `link` 它的前驱
+        哈希接不上上一行(中间有行被删除或插入)· `gen` 它按比前面更老的键集才算得过。
+        响应里另附一句 `reasonText`(及其机器可读身份 `reasonRef`,同信封的 msgRef),前端不照着三个取值各写一份文案。
+
+        载荷的键集是**分代**的(0039 的 event、0040 的 action、0041 的 ip),校验时从新到
+        老逐代试,并要求代不倒退。整表校验走命令行:`vela-gateway verify-audit`,退出码 2
+        表示链断了,可直接挂进巡检。
+
+        门槛是 audit 菜单 + **平台管理员、审计员或 DBA 负责人**(角色 admin / audit / owner,路由上的
+        AuditSupervisor;admin / audit 另受管理后台 IP 白名单与空闲超时约束)。DBA 负责人(owner)在
+        用户后台「操作记录」里看全员,也能校验链(2026-10-26 回归 18 恢复),不受管理后台的两条约束。
+
+        它挡的是"顺手改一行"。载荷是裸 SHA-256、算法公开,拿得到库写权限的人可以把整条
+        尾巴重算一遍而链照样自洽(白盒审计 L-12)—— 那一层要靠给载荷加密钥,或把链尾外推
+        到网关自己改不了的地方。
+      responses:
+        '200': { $ref: '#/components/responses/Ok' }
+        '403': { description: 无权校验 —— 不是监督角色 }
+  /audit/instances:
+    get:
+      tags: [audit]
+      summary: '[audit] 筛选下拉用的实例清单(去重、按字母序)'
+      description: >
+        只列调用者在审计里见得到的实例,可见性与 /audit 同一条(没有监督角色的人只看得见
+        自己那些行,于是也只看得见自己动过的实例)。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /audit/export:
+    get:
+      tags: [audit]
+      summary: '[audit · 平台管理员 / 审计员 / DBA 负责人] 导出 CSV(参数同上:event/action/source/risk/range/from/to/instance/q)'
+      description: >
+        与单据轨迹、链校验同一道闸(AuditSupervisor,DBA 负责人 2026-10-26 回归 18 恢复)。
+        表头自 actor 之后多一列 client_ip,result 之后多两列 event_type、data_action。
+        筛选条件与列表共用同一段解析 —— 人是看着筛过的列表按下导出的,两边不一致就会
+        导出一份他没在看的东西。
+      responses: { '200': { description: text/csv } }
+
+  # ---------------------------------------------------------------- settings
+  /settings:
+    get:
+      tags: [settings]
+      summary: '[settings] 读取系统设置(密钥类只回"是否已配置",不回明文)'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+    put:
+      tags: [settings]
+      summary: '[settings · admin] 保存设置(运行时生效,免重启)'
+      description: |
+        **逐键校验**:未知键、类型不对、超出范围、非 http(s) 地址、非绝对路径(或含 `..`)、写错的
+        IP / 网段,整次 40001、一项都不存。密钥类(含 secret / token / password 的键):非空字符串 =
+        替换,`""` = 不改,`null` = 清除。每次保存把真正变了的键记一条 `admin.settings.update`
+        审计,密钥类只记键名。
+
+        业务数据查询的全局值以 `bizQuery.*` 为键,保存时整体校验并写审计:
+        defaultMaxRows / maxRowsCap / defaultTimeoutSec / timeoutCapSec / maxGrantDays /
+        maxConcurrentPerUser / maxConcurrentPerSource / exportEnabled / maxDailyPerUser
+        (每人每天执行 + 导出次数,0 = 不限,上限 100000)。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/webhook:
+    put:
+      tags: [settings]
+      summary: '[settings · admin] 保存 Webhook(留空 secret 表示保持不变)'
+      description: |
+        `endpoint` 只认 http/https,拒绝链路本地(169.254.0.0/16、fe80::/10)与云元数据地址;
+        `retryMax` 0 ~ 10(0 = 保持原值)。响应与 GET 一致:`secret` 恒为空,另带 `hasSecret`。
+
+        `events` 是订阅列表,逗号分隔。它按**增删改查**取值:`create|delete|update|read|other`
+        —— 与审计行上 `data_action` 那一列同一组字符串(见 GET /settings 的 `webhookActions`)。
+        认不出的取值在保存时被丢掉(不报错,只归一),空列表是一个明确的"什么都不推"。
+
+        **它以前按事件类型取值**(intercept/approve/exec/login)。升级时启动期会把这种旧订阅
+        放宽成全部五类并打一条 WARN 日志 —— 旧值一个都匹配不上,不迁就是一次静默停推。
+
+        `envs` 是推送的环境(环境代码,逗号分隔),空串 = 全部环境,省略 = 保留原值;不存在的环境
+        代码在保存时被丢掉。按审计行上那一刻的环境快照(`env`)匹配;没有环境的事件(登录、改设置
+        这类不属于任何实例的)不受环境约束。删除一个环境、实例并入别的环境时,这里的代码跟着换成
+        接手的环境。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/webhook/test:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 发送测试事件'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/webhook/deliveries:
+    get:
+      tags: [settings]
+      summary: '[settings · admin] 最近的投递结果'
+      parameters: [{ name: limit, in: query, schema: { type: integer, default: 50 } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/lark/test:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 测试飞书 / 审批魔方连通性'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /service-accounts:
+    get:
+      tags: [settings]
+      summary: '[settings] 服务账号列表(机器主体:角色/标签/已绑定凭据数)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ServiceAccountView' }
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 创建服务账号(kind=service)'
+      description: 对接升级单/CI/CD 系统的机器主体。像人一样持有角色与标签,能力矩阵、标签范围、审计链一视同仁;区别只有两处且都朝收紧方向 —— 控制台登录一律拒绝(口令不存在也设不上),security.mfaMandatory 不约束它(机器无法注册 TOTP,第二因子是 API 凭据的 bcrypt secret + 每凭据 IP 白名单)。身份标识自动生成为 svc-<slug>-<hash>@service.vela,仅作唯一标识,不是邮箱。停用走常规 PATCH /users/{id}(停用即刻切断其所有凭据,已有回归覆盖)。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceAccountReq' }
+      responses: { '200': { description: 'OK / 40001 名称为空、重名、角色缺失或不存在、含平台管理员角色' } }
+  /api-clients:
+    get:
+      tags: [settings]
+      summary: '[settings] 开放接口凭据列表(响应里没有密钥)'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/APIClient' } }
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 签发凭据 —— 明文密钥只在此响应里出现一次'
+      description: 只能绑服务账号(非 admin);scopes / allowIps 逐项校验,非法 40001。签发写审计(admin.apiclient.create,只记 key 不记 secret)。
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/APIClientReq' } } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  client: { $ref: '#/components/schemas/APIClient' }
+                  token: { type: string, description: '`<key>.<secret>`,直接放进 Authorization', example: ak_xxx.yyy }
+  /api-clients/{id}:
+    put:
+      tags: [settings]
+      summary: '[settings · admin] 改名称 / 服务账号 / scope / IP 白名单 / 启停'
+      description: 局部更新:只有请求里出现的字段会变,缺席字段一律保持原值(启停开关只发 {enabled},不会动 IP 白名单;allowIps 传空串才是显式清空)。key 与 secret 不可修改 —— 轮换 = 新签一把 + 吊销旧的,避免正在用的系统毫无征兆地开始 401。改绑同样只接受服务账号;scopes / allowIps 校验同创建(allowIps 逐项须是 IP 或 CIDR,按解析后的地址/网段去重,规范化后上限 512 字符)。修改立即生效(鉴权每次请求都查库,无缓存)。每次修改写审计(admin.apiclient.update),改了 allowIps 时同时记改前值 allow_ips_before。控制台编辑白名单时,清空(= 不限来源)前会二次确认。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: 'OK / 40001 凭据不存在、改绑对象不是服务账号或是管理员、scopes/allowIps 非法、流程不存在或已停用' } }
+    delete:
+      tags: [settings]
+      summary: '[settings · admin] 吊销凭据(使用它的系统立刻调不通)'
+      description: 吊销写审计(admin.apiclient.delete)。吊销后再用这把凭据调用返回 40100(凭据无效);只是停用(enabled=false)则返回 40300。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+
+  # ---------------------------------------------------------------- open API
+  /inspection-reports/latest:
+    get:
+      tags: [inspection]
+      summary: '[inspection] 每个实例最近一份巡检报告(没有报告的实例也列出)'
+      description: |
+        菜单 inspection,且角色是平台管理员、DBA 负责人或 DBA L2(多角色取并集);不按实例标签收窄。
+        `report` 为 null 表示这个实例还没收到过报告;`today` 是服务器的今天,前端据此标出今天没收到报告的实例。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  today: { type: string, example: '2026-10-15' }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        connectionId: { type: integer, format: int64 }
+                        instance: { type: string }
+                        env: { type: string }
+                        engine: { type: string }
+                        report:
+                          nullable: true
+                          allOf: [{ $ref: '#/components/schemas/InspectionReport' }]
+  /inspection-reports:
+    get:
+      tags: [inspection]
+      summary: '[inspection] 某实例的巡检报告历史(按巡检日期倒序)'
+      parameters:
+        - { name: instanceId, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, default: 30, maximum: 200 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/InspectionReport' } }
+                  total: { type: integer }
+  /inspection-reports/{id}:
+    get:
+      tags: [inspection]
+      summary: '[inspection] 单份巡检报告的摘要与问题列表'
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: OK(报告不存在返回 40400)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InspectionReport' }
+  /inspection-reports/{id}/view:
+    get:
+      tags: [inspection]
+      summary: '[inspection] 巡检报告页面(给控制台的沙箱 iframe 用)'
+      description: |
+        成功时返回 `text/html`,带 `Content-Security-Policy: sandbox allow-scripts`:脚本能跑,但在不透明来源里,
+        碰不到控制台的存储和 Cookie。每次读取记一条审计。报告不存在或文件丢失返回 404 纯文本。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 报告页面
+          content:
+            text/html:
+              schema: { type: string }
+        '404':
+          description: 报告不存在或文件已丢失
+          content:
+            text/plain:
+              schema: { type: string }
+  /inspection-reports/{id}/html:
+    get:
+      tags: [inspection]
+      summary: '[inspection] 巡检报告的完整 HTML(纯文本、附件方式返回)'
+      description: |
+        成功时直接返回报告原文:`Content-Type: text/plain`、`Content-Disposition: attachment`、`X-Content-Type-Options: nosniff`
+        —— 浏览器不会把它当页面直接打开执行。控制台显示报告走 `/inspection-reports/{id}/view`。
+        每次读取记一条审计。出错时返回 JSON 信封:报告不存在 / 文件丢失 40400,保存路径未配置 42602。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: 报告 HTML 原文
+          content:
+            text/plain:
+              schema: { type: string }
+  /open/inspection-reports:
+    post:
+      tags: [open-api]
+      summary: '[scope inspection:write] 上传一份 AI 巡检报告(同一实例同一天再传即覆盖)'
+      security:
+        - openApiKey: []
+      description: |
+        AI 巡检系统每巡检完一个实例调一次。`inspection:write` 不在默认范围里,须在凭据上显式勾选。
+        请求体上限 20MB。错误码:实例名在平台里不存在 40400(不要重试,先核对实例名)、字段不合法 40001(信息里说明哪个字段)、
+        超过 20MB 41300、凭据没有该范围 40300、巡检报告保存路径未配置 42602。网络错误或 5xx 建议指数退避重试 3 次。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [instance, date, level, html]
+              properties:
+                instance: { type: string, description: 平台实例名(唯一) }
+                date: { type: string, example: '2026-10-15', description: '巡检日期 YYYY-MM-DD,不能晚于明天' }
+                inspectedAt: { type: string, format: date-time }
+                score: { type: integer, minimum: 0, maximum: 100 }
+                level: { type: string, enum: [ok, warning, critical] }
+                counts:
+                  type: object
+                  properties:
+                    critical: { type: integer, minimum: 0 }
+                    warning: { type: integer, minimum: 0 }
+                    info: { type: integer, minimum: 0 }
+                findings:
+                  type: array
+                  maxItems: 500
+                  items: { $ref: '#/components/schemas/InspectionFinding' }
+                html: { type: string, description: 完整报告 HTML }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, format: int64 }
+                  replaced: { type: boolean, description: 'true = 覆盖了同实例同一天的旧报告' }
+  /open/releases:
+    post:
+      tags: [open-api]
+      summary: '[scope release:create] 提交 SQL 升级单'
+      security:
+        - openApiKey: []
+      description: |
+        JSON 或 multipart/form-data 都接受;后者用 `file` 字段直传 .sql。脚本上限 15MB:multipart 的 `file`、JSON 的 `script`、
+        解码后的 `scriptBase64` 同一尺寸、同一句拒绝(40001「脚本超过 15MB 上限」);JSON 请求体本身另有约 21MB 的外层上限。
+        与控制台走**同一条** submitRelease:同样的流程模板、规则库、审批链、执行前复判、审计链。
+        可带 changeType(dml|ddl,空=推断):两类语句不得同单,声明与内容不符即拒;响应回带 changeType。
+        **执行需网关侧人工确认**:单据到达执行阶段会停在 waiting,由网关操作员在控制台点击「确认执行」后才落库 —— 轮询时看到 execute 阶段 waiting 属正常流转,不是卡单。
+        审计行记 `actor=服务账号 / operator=API:<凭据名>`。
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OpenReleaseReq' }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                externalRef: { type: string }
+                instance: { type: string }
+                database: { type: string }
+                changeType: { type: string, enum: [dml, ddl] }
+                reason: { type: string }
+                sql: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: |
+            OK(重试同一 externalRef 返回同一张单)/ 40300 服务账号无权 /
+            42800 需二次验证 / 40001 实例或流程不存在、内容为空、流程不含审批阶段
+          content: { application/json: { schema: { $ref: '#/components/schemas/OpenReleaseResp' } } }
+  /open/releases/{relNo}:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 查询升级单状态与各阶段日志'
+      security:
+        - openApiKey: []
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string }, example: REL-42 }]
+      responses:
+        '200':
+          description: OK / 40300 单据存在但不是同一服务账号名下的凭据经开放接口提交的(同一服务账号的其他凭据、含已删除的旧凭据提交的可查,便于轮换;其他服务账号与控制台建的单不行)/ 40001 单号不存在
+          content: { application/json: { schema: { $ref: '#/components/schemas/OpenReleaseResp' } } }
+  /open/releases/{relNo}/abort:
+    post:
+      tags: [open-api]
+      summary: '[scope release:create] 终止本系统提交的升级单(仅 pending/waiting)'
+      security:
+        - openApiKey: []
+      description: 只能终止本凭据提交的单。每次调用(含被拒的)写审计 open.release.abort,actor=服务账号、operator=API:<凭据名>。
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'OK / 40300 不是本凭据提交的单 / 40001 单号不存在或当前状态不可终止' } }
+  /open/releases/{relNo}/approval:
+    post:
+      tags: [open-api]
+      summary: '[scope release:approve] 外部审批:替审批链上的人通过 / 驳回发布单当前的审批阶段'
+      security:
+        - openApiKey: []
+      description: |
+        给外部审批系统(OA、工单平台)用。`release:approve` 不在默认范围里,须在凭据上显式勾选。
+
+        - **凭据不是审批人。** `approver` 必须点名一个网关账号(邮箱,不分大小写),此人必须在这张单的审批链上、
+          不是发起人、不是服务账号、未停用 —— 与控制台审批按钮同一条规则。审批链上有谁,见状态查询里
+          审批阶段的 `approvers`。
+        - **范围:** 服务账号实例范围内的发布单都能批,不要求是本凭据提交的。
+        - **作用对象:** 发布单当前在等的那个审批阶段;流程里有多个审批阶段时,一次只决定正在等的那个。
+        - **先到先得:** 控制台照样能批。已被决定过的单返回 0、`alreadyDecided=true`、`status` 为已有结论,
+          本次请求不改变任何东西。
+        - **审计:** 每次调用(含被拒的)写 open.release.approve / open.release.reject,actor = 服务账号、
+          operator = API:<凭据名>,并记审批人账号与意见;决定本身另记一条,operator = 审批人姓名。
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [approver, action]
+              properties:
+                approver: { type: string, example: chenhao@vela.io, description: 审批人的网关账号邮箱 }
+                action: { type: string, enum: [approve, reject], description: 不用布尔值:漏传不会被读成驳回 }
+                comment: { type: string, maxLength: 200, description: 审批意见,记入审计 }
+      responses:
+        '200':
+          description: |
+            OK / 40300 审批人不在链上、是发起人本人,或发布单的实例不在服务账号范围内(msg 说明是哪一条)/
+            40001 发布单不存在、还没走到审批阶段、审批人账号不存在或不可用、action 非法
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relNo: { type: string }
+                  approvalNo: { type: string }
+                  status: { type: string, enum: [approved, rejected, expired, pending], description: 审批单此刻的结论 }
+                  alreadyDecided: { type: boolean, description: true = 本次请求之前已被决定(控制台或别的调用抢先),本次没有改变任何东西 }
+                  releaseStatus: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+  /open/releases/{relNo}/confirm:
+    post:
+      tags: [open-api]
+      summary: '[scope release:approve] 外部确认:替确认人放行发布单此刻停着的「人工确认」(不含执行变更)'
+      security:
+        - openApiKey: []
+      description: |
+        给外部平台的「待人工确认」卡片用。与外部审批共用 `release:approve`(须显式勾选)。
+
+        - **凭据不是确认人。** `confirmer` 必须点名一个网关账号(邮箱,不分大小写),按控制台「继续」按钮同一条规则核对:
+          发起人本人不能放行(除非开了自审批);阶段配了确认角色须在角色里,没配须有审批能力。
+          能放行的人见状态查询里人工确认阶段的 `approvers`(停着时才有)。
+        - **范围:** 服务账号实例范围内的发布单,不要求是本凭据提交的。
+        - **只管人工确认(manual)。** 「执行变更」的确认执行只能在网关上由人操作,本接口永远不放行它:
+          发布单停在执行变更上时返回 40001;人工确认放行后若流水线停到执行变更,响应 `executePending=true`,提示去网关点。
+        - **先到先得 / 重试安全:** 已放行过的返回 0、`alreadyConfirmed=true`,本次不改变任何东西。只放行,不驳回(不放行用 abort)。
+        - **审计:** 每次调用(含被拒的)写 open.release.confirm,actor = 服务账号、operator = API:<凭据名>;
+          放行本身另记一条,operator = 确认人姓名。
+      parameters: [{ name: relNo, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmer]
+              properties:
+                confirmer: { type: string, example: chenhao@vela.io, description: 确认人的网关账号邮箱 }
+                comment: { type: string, maxLength: 200, description: 备注,记入审计 }
+      responses:
+        '200':
+          description: |
+            OK / 40300 确认人无权放行(发起人本人、不在确认角色里),或发布单的实例不在服务账号范围内 /
+            40001 发布单不存在、当前没有停在人工确认上、停在执行变更(须在网关上确认)、确认人账号不存在或不可用
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relNo: { type: string }
+                  stage: { type: string, description: 放行的阶段名 }
+                  alreadyConfirmed: { type: boolean, description: true = 本次请求之前已被放行,本次没有改变任何东西 }
+                  releaseStatus: { type: string, enum: [pending, running, waiting, success, failed, aborted] }
+                  executePending: { type: boolean, description: true = 发布单此刻停在执行变更,须到网关上人工确认执行 }
+  /open/sql-review:
+    post:
+      tags: [open-api]
+      summary: '[scope review:check] 规范审查预检,不建单'
+      security:
+        - openApiKey: []
+      description: CI 合并前的门禁:同一套规则库,只回结果,不产生任何单据。脚本(multipart 的 file、JSON 的 script / 解码后的 scriptBase64)与建单接口同一条 15MB 上限,超限 40001 明确报错。`dialect` 取 mysql / tidb / dws / oracle(大小写不敏感);也认 all / generic / postgres(按通用规则审查)与带方言词的引擎名(gaussdb → dws、polardb → mysql 等),认不出的值 40001;带了 instance/connectionId 时以实例引擎为准,dialect 不参与校验。每次调用写审计 open.sqlreview(只记结论,不记 SQL 原文),operator=API:<凭据名>。
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                instance: { type: string }
+                connectionId: { type: integer, format: int64 }
+                dialect: { type: string, example: mysql, description: 'mysql / tidb / dws / oracle;另认 all、generic、postgres 与引擎名' }
+                sql: { type: string }
+                script: { type: string }
+                scriptBase64: { type: string }
+                changeType: { type: string, enum: [dml, ddl], description: '要进的升级单类型;声明了就核对内容。不论声明与否,DML 与 DDL 同在脚本里都报一条 error(release.change_type),与建单时的拒绝一致' }
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                instance: { type: string }
+                dialect: { type: string, example: mysql, description: 'mysql / tidb / dws / oracle;另认 all、generic、postgres 与引擎名' }
+                sql: { type: string }
+                file: { type: string, format: binary }
+                changeType: { type: string, enum: [dml, ddl], description: '要进的升级单类型;声明了就核对内容。不论声明与否,DML 与 DDL 同在脚本里都报一条 error(release.change_type),与建单时的拒绝一致' }
+      responses:
+        '200':
+          description: OK / 40001 内容为空、实例不存在、dialect 非法、脚本超过 15MB / 40300 服务账号无权访问该实例
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  instance: { type: string }
+                  result: { $ref: '#/components/schemas/ReviewResult' }
+  /open/instances:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 本凭据可访问的实例(名字即 create 的 instance 参数)'
+      security:
+        - openApiKey: []
+      responses:
+        '200':
+          description: OK。按服务账号的**实例访问范围**(标签)过滤,**不按发布能力过滤**:列出来的实例不保证能发布 —— 比如只读角色的服务账号也会列出实例,但对其提交 DDL/DML 会按能力矩阵拒绝(40300)或要求审批。能否发布以提交时(及执行前复判)的判定为准。
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    instance: { type: string }
+                    env: { type: string }
+                    engine: { type: string }
+                    database: { type: string }
+                    status: { type: string, enum: [online, maint] }
+  /open/query-sources:
+    get:
+      tags: [open-api]
+      summary: '[scope grant:read] 可授权的业务查询源(只含管理员标记过的从库实例)'
+      description: |
+        查询授权(业务方数据查询)的第一步:外部审批系统用它给审批单填"实例"。只列出管理员在
+        控制台标记为「业务查询源」的实例(约定指向从库、使用只读库账号),主库永远不会出现在这里。
+        按凭据绑定的服务账号的标签范围过滤。
+
+        grant:read / grant:write **不在凭据的默认范围里**,签发凭据时必须显式勾选。
+      security:
+        - openApiKey: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer, description: '下发授权时的 sourceId' }
+                    name: { type: string }
+                    engine: { type: string }
+                    env: { type: string }
+                    status: { type: string, enum: [online, maint] }
+  /open/query-sources/{id}/databases:
+    get:
+      tags: [open-api]
+      summary: '[scope grant:read] 一个业务查询源上的库名'
+      description: |
+        现查实例(不含系统库,含没有表的库,至多 2000 个);现查失败时退回网关的元数据缓存。
+        下发授权时的 database 必须是这里列出的名字之一(区分大小写)。
+      security:
+        - openApiKey: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses:
+        '200':
+          description: OK / 40001 实例不是业务查询源 / 40300 服务账号无权访问该实例
+          content:
+            application/json:
+              schema: { type: array, items: { type: string } }
+  /open/query-grants:
+    get:
+      tags: [open-api]
+      summary: '[scope grant:read] 查询授权列表'
+      description: |
+        只列**本凭据下发的**授权。可按 email(不分大小写)、sourceId、database、status、externalId 筛选。
+        status 是**生效状态**:active / pending(未到开始时间)/ expired / revoked。最多返回 1000 条,按 id 倒序。
+      security:
+        - openApiKey: []
+      parameters:
+        - { name: email, in: query, schema: { type: string } }
+        - { name: sourceId, in: query, schema: { type: integer } }
+        - { name: database, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [active, pending, expired, revoked] } }
+        - { name: externalId, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/QueryGrant' } }
+    put:
+      tags: [open-api]
+      summary: '[scope grant:write] 下发或更新一条查询授权(外部审批通过后调用)'
+      description: |
+        按 (email, sourceId, database) 定位,一个人对一个库只有一条授权;再次下发按 externalId 区分:
+        与当前单号相同 = 重试,**原样返回、不改动**(已撤销的不会恢复);新单号 = **更新**这一条
+        (上限、有效期、导出开关、外部单号换成新的;已撤销 / 已过期的重新生效);已被新单取代的
+        旧单号 = 40001 拒绝。响应里 created 区分新建与更新。
+
+        网关只执行,不审批,但会拒绝越界的请求:实例必须是业务查询源、库必须真实存在、
+        maxRows / timeoutSec 不能超过全局上限(默认 10000 行 / 300 秒)、endsAt 必填且有效期
+        不超过 90 天(均可在网关设置里调整)。被授权人不能是服务账号或已停用账号。
+
+        被授权人在网关里没有账号时**自动建号**,只挂「业务查询」角色(该角色本身不开放任何实例与
+        操作,查询权只来自授权);已有账号追加这个角色,原有角色不变。每次下发、更新都写审计,
+        记下外部系统、外部单号与审批人。
+      security:
+        - openApiKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [externalId, email, sourceId, database, endsAt]
+              properties:
+                externalId: { type: string, maxLength: 128, description: '外部审批单号' }
+                email: { type: string }
+                name: { type: string, description: '自动建号时的姓名' }
+                dept: { type: string, description: '自动建号时的部门' }
+                sourceId: { type: integer }
+                database: { type: string }
+                maxRows: { type: integer, description: '0 = 全局默认(1000)' }
+                timeoutSec: { type: integer, description: '0 = 全局默认(30)' }
+                allowExport: { type: boolean }
+                startsAt: { type: string, format: date-time, description: '不填 = 现在' }
+                endsAt: { type: string, format: date-time }
+                approver: { type: string }
+                reason: { type: string }
+      responses:
+        '200':
+          description: 'OK { created, grant } / 40001 参数越界或旧审批单(原因在 msg)/ 40300 服务账号无权访问该实例'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: boolean }
+                  grant: { $ref: '#/components/schemas/QueryGrant' }
+    delete:
+      tags: [open-api]
+      summary: '[scope grant:write] 按外部单号撤销(只在本凭据下发的授权里找)'
+      security:
+        - openApiKey: []
+      parameters: [{ name: externalId, in: query, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { reason: { type: string } } }
+      responses:
+        '200':
+          description: OK,返回被撤销的授权 / 40001 找不到
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/QueryGrant' } }
+  /open/query-grants/{id}:
+    delete:
+      tags: [open-api]
+      summary: '[scope grant:write] 按 id 撤销一条查询授权(只能撤本凭据下发的)'
+      description: 撤销立即生效,写审计。已撤销的再撤销一次不报错。别的系统下发的授权回"不存在"。
+      security:
+        - openApiKey: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { reason: { type: string } } }
+      responses:
+        '200':
+          description: OK / 40001 不存在
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/QueryGrant' } }
+  /open/pipelines:
+    get:
+      tags: [open-api]
+      summary: '[scope release:read] 发布流程一览(只读了解;建单不可指定流程)'
+      security:
+        - openApiKey: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    pipeline: { type: string }
+                    tier: { type: string }
+                    isDefault: { type: boolean }
+                    stages: { type: array, items: { type: string } }

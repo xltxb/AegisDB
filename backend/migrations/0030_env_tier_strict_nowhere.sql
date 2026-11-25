@@ -1,0 +1,21 @@
+-- 0030: 无 WHERE 的 DELETE / UPDATE 这道闸,改为按分层开关。
+--
+-- 判定有三层:能力矩阵(角色 × 能力 × 分层)、高危命令字典(命令 × 分层),以及这一层。
+-- 前两层都按分层存,只有这一层是一个进程内的全局布尔量 —— 于是它是唯一一道瞄不准的闸。
+--
+-- 后果是具体的:dev 分层特意把整本字典设成 off,就是要让人在开发库上随手清表;可严格
+-- 模式照样把那条 DELETE 判成 high 并要求审批,级别与 PROD 一模一样。想让 dev 放行,
+-- 唯一的办法是把这层整个关掉 —— 连 PROD 一起关。运维要的是"分环境开关",拿到的是
+-- "要么都开、要么都关"。
+--
+-- 默认值取 TRUE,即"每一层都继续拦"。这是**保持现状**的方向:
+-- 旧代码的全局开关来自 configs/config.yaml 的 gateway.strict_mode,发行默认是 true,
+-- 而运行时那个开关从不落库(SetStrict 只改内存,重启即回到配置值),所以升级前实际
+-- 生效的状态就是"所有分层都开"。
+--
+-- 少数把 strict_mode 显式设成 false 的部署,由 bootstrap.backfillStrictNoWhere 在迁移
+-- 之后按配置回填成 false —— 那段回填读得到配置,SQL 读不到。
+--
+-- 选 TRUE 而不是 FALSE,还因为两个方向的错法不对等:多拦一次是一次多余的审批,少拦
+-- 一次是一条没人看过的全表 DELETE 落在生产上。要退,也只能往"拦得更多"的方向退。
+ALTER TABLE tbl_env_tier ADD COLUMN strict_nowhere BOOLEAN NOT NULL DEFAULT 1;

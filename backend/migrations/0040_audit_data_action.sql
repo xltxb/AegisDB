@@ -1,0 +1,32 @@
+-- 0040: 审计行再记一栏「对数据做了什么」—— 增 / 删 / 改 / 查。
+--
+-- 它和 0039 的 event_type 是**正交**的两个维度,谁也替不了谁:
+--
+--   event_type    这一步在网关的流程里是什么(被拦下来 / 审批决定 / 真执行了 / 登录)
+--   data_action   它动了数据没有、怎么动的(增 / 删 / 改 / 查)
+--
+-- 一条 approve 放行的可能是 DROP,也可能是 SELECT —— 只有事件类型的话,"上个月谁删过东西"
+-- 这句话答不出来。
+--
+-- 这个结论此前只存在于 webhook 发送的那一刻(service.eventAction),而且只看整条命令的
+-- **第一个词**、认不出的一律当成"查"。三处错得很具体:
+--
+--   登录、配置变更、流程标签      全被报成"查"。一次登录不是一次查询。
+--   EXPLAIN ANALYZE DELETE        PostgreSQL 上它真的删,而"第一个词"看到的是 EXPLAIN。
+--   多语句脚本                    只看第一条。首条 SELECT、后面跟着 DROP 的脚本被报成"查"。
+--
+-- 现在改成建立在 gateway.ParseVerb 之上(它已处理注释、引号、CTE 与 EXPLAIN 拆包),多语句
+-- 取最重的一条,认不出的记 'other' 而不是兜底成"查"。
+--
+-- 取值:create | delete | update | read | other
+--
+--   other  归过类了,结论是"它不属于增删改查"(登录、配置变更、流程标签、认不出的语句)。
+--   ''     这一行写下时还没有这一列。两者不是一回事 —— 混成一个就分不清"没记"和
+--          "记了、但不是数据操作"。
+--
+-- 老行留空,不回填:按命令文本事后补算等于用今天的规则去断当时的事,而这是一张哈希链
+-- 审计表。新行起这一列进哈希载荷(service.auditHashPayload 的 "action" 键)。
+ALTER TABLE tbl_audit_log ADD COLUMN data_action VARCHAR(16) NOT NULL DEFAULT '';
+
+-- 与 0039 同一个道理:审计表按时间倒序翻,所以联合索引把时间带上。
+CREATE INDEX idx_audit_action ON tbl_audit_log (data_action, occurred_at);

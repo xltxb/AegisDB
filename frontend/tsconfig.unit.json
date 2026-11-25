@@ -1,0 +1,16 @@
+{
+  // Node-runner variant of the app tsconfig: identical except that `@/locales`
+  // resolves to a test double. See tests/unit/stubs/locales.ts for why — in
+  // short, the runner cannot import .json5 and has no localStorage, and the
+  // failure took down collection for the entire suite rather than one spec.
+  //
+  // The order matters: the more specific mapping must come first, everything
+  // else still points at the real src/.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/locales": ["./tests/unit/stubs/locales.ts"],
+      "@/*": ["./src/*"]
+    }
+  }
+}

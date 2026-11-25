@@ -1,0 +1,72 @@
+import { test, expect } from '@playwright/test'
+import { envelope, stubCommon, ME } from './helpers'
+
+// 班车申请:实例、数据库下拉可以输入关键字筛选(实例一多,翻着找太慢)。
+
+const CONNS = [
+  { id: 1, name: 'UAT-MYSQL', env: 'uat', engine: 'MySQL 8.0' },
+  { id: 2, name: 'UAT-TIDB', env: 'uat', engine: 'TiDB' },
+  { id: 3, name: 'GLI-MYSQL', env: 'gli', engine: 'MySQL 8.0' },
+  { id: 4, name: 'GLI-ORACLE', env: 'gli', engine: 'Oracle 23ai' },
+]
+
+test('班车申请:实例与数据库下拉输入关键字即可筛选,回车选中第一项', async ({ page }) => {
+  await stubCommon(page)
+  await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, menus: { ...ME.menus, execwindow: true } })))
+  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(CONNS)))
+  await page.route('**/api/v1/exec-windows', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/connections/*/schema*', (r) =>
+    r.fulfill(envelope({ databases: [{ name: 'order_db' }, { name: 'risk_control' }, { name: 'risk_cron' }] })))
+  await page.goto('/#/exec-windows')
+  await page.getByRole('button', { name: '申请窗口' }).click()
+
+  const inst = page.getByTestId('ew-instance')
+  await inst.locator('.control').click()
+  await inst.locator('.sbox input').fill('gli-gli')
+  await expect(inst.locator('.opt')).toHaveText(['gli-GLI-MYSQL', 'gli-GLI-ORACLE'])
+  await inst.locator('.sbox input').press('Enter')
+  await expect(inst.locator('.val')).toHaveText('gli-GLI-MYSQL')
+
+  const db = page.getByTestId('ew-database')
+  await db.locator('.control').click()
+  await db.locator('.sbox input').fill('risk')
+  await expect(db.locator('.opt')).toHaveText(['risk_control', 'risk_cron'])
+  await db.locator('.opt', { hasText: 'risk_cron' }).click()
+  // 可多选:默认勾上的第一个库还在,新勾的追加在后面
+  await expect(db.getByTestId('vtag-chip')).toHaveText(['order_db', 'risk_cron'])
+})
+
+// 2026-10-22:一张窗口可以勾同一台实例上的多个库。提交带上全部库,列表里显示完整的库清单。
+test('班车申请:勾选多个库一起提交,列表显示全部库', async ({ page }) => {
+  const bodies: any[] = []
+  const saved: any[] = []
+  await stubCommon(page)
+  await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, menus: { ...ME.menus, execwindow: true } })))
+  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(CONNS)))
+  await page.route('**/api/v1/exec-windows', (r) => {
+    if (r.request().method() === 'POST') {
+      const b = r.request().postDataJSON()
+      bodies.push(b)
+      const w = { id: 9, name: b.name, enabled: true, connectionId: b.connectionId, database: b.databases[0], databases: b.databases,
+        kind: 'recurring', timezone: 'Asia/Shanghai', weekdays: '', startMin: 120, endMin: 240, reason: '', status: 'pending', apNo: 'AP-1', active: false, expired: false }
+      saved.push(w)
+      return r.fulfill(envelope(w))
+    }
+    return r.fulfill(envelope(saved))
+  })
+  await page.route('**/api/v1/connections/*/schema*', (r) =>
+    r.fulfill(envelope({ databases: [{ name: 'gaussdb' }, { name: 'prod_c66_b' }, { name: 'postgres' }] })))
+  await page.goto('/#/exec-windows')
+  await page.getByRole('button', { name: '申请窗口' }).click()
+  await page.getByPlaceholder('例如:凌晨发车').fill('dws-b')
+  const db = page.getByTestId('ew-database')
+  await expect(db.getByTestId('vtag-chip')).toHaveText(['gaussdb'])
+  await db.locator('.control').click()
+  await db.locator('.opt', { hasText: 'prod_c66_b' }).click()
+  await expect(db.getByTestId('vtag-chip')).toHaveText(['gaussdb', 'prod_c66_b'])
+  await page.locator('.vbtn', { hasText: '提交审批' }).click()
+  await expect.poll(() => bodies.length).toBe(1)
+  expect(bodies[0].databases).toEqual(['gaussdb', 'prod_c66_b'])
+  expect(bodies[0].database).toBe('gaussdb')
+  await expect(page.getByTestId('ew-scope').first()).toContainText('gaussdb, prod_c66_b')
+})

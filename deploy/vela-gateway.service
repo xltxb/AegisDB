@@ -1,0 +1,36 @@
+# systemd unit for DP DB GATEWAY (single-binary: API + SPA).
+# Prereqs (run once as root):
+#   sudo useradd --system --home /opt/vela-gateway --shell /usr/sbin/nologin vela
+#   sudo mkdir -p /opt/vela-gateway && sudo tar -xzf vela-gateway-*.tar.gz -C /opt/vela-gateway
+#   sudo cp /opt/vela-gateway/vela.env.example /opt/vela-gateway/vela.env  # then edit + fill secrets
+#   sudo chown -R vela:vela /opt/vela-gateway && sudo chmod 600 /opt/vela-gateway/vela.env
+# Install:
+#   sudo cp /opt/vela-gateway/deploy/vela-gateway.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vela-gateway
+# Edit the paths / EnvironmentFile location to match your deployment.
+
+[Unit]
+Description=Vela Database Gateway
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vela
+Group=vela
+WorkingDirectory=/opt/vela-gateway
+# Secrets (VELA_JWT_SECRET, VELA_MYSQL_DSN, ...) live here — chmod 600, not in git.
+# The leading '-' avoids an opaque systemd failure if the file is missing; the
+# server then exits with a clear "missing JWT secret" message instead.
+EnvironmentFile=-/opt/vela-gateway/vela.env
+ExecStart=/opt/vela-gateway/vela-gateway -config configs/config.yaml
+Restart=on-failure
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

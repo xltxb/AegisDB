@@ -1,0 +1,34 @@
+-- 手写样例:TiDB。
+-- @case AUTO_RANDOM
+CREATE TABLE t (id BIGINT AUTO_RANDOM PRIMARY KEY) SHARD_ROW_ID_BITS=4
+-- @case 特性注释
+CREATE TABLE t (id BIGINT /*T![auto_rand] AUTO_RANDOM(5) */ PRIMARY KEY)
+-- @case 聚簇索引注释
+CREATE TABLE t (id BIGINT, PRIMARY KEY (id) /*T![clustered_index] CLUSTERED */)
+-- @case 非事务 DML
+BATCH ON id LIMIT 1000 DELETE FROM t WHERE a=1
+-- @case 执行计划绑定
+CREATE GLOBAL BINDING FOR SELECT * FROM t WHERE a=1 USING SELECT /*+ USE_INDEX(t, i) */ * FROM t WHERE a=1
+-- @case FLASHBACK
+FLASHBACK TABLE t TO t2
+-- @case ADMIN
+ADMIN SHOW DDL JOBS
+-- @case 同名函数不算写
+SELECT REPLACE(a,'x','y') FROM t WHERE id=1
+-- @case 括号 UNION
+(SELECT 1) UNION (SELECT 2)
+-- @case 普通加索引
+ALTER TABLE t ADD INDEX i (a,b) COMMENT 'x'
+-- @case 触发器 TiDB 不支持
+CREATE TRIGGER tr BEFORE INSERT ON t FOR EACH ROW SET NEW.a=1
+-- @case 存储过程
+CREATE PROCEDURE p() BEGIN SELECT 1; END
+-- @case EXPLAIN ANALYZE
+EXPLAIN ANALYZE SELECT 1
+-- @case SHOW CREATE
+SHOW CREATE TABLE t
+-- @case DESC
+DESC t
+-- @case 井号注释藏 OUTFILE
+SELECT 1 # c
+INTO OUTFILE '/tmp/p'

@@ -1,0 +1,11 @@
+-- 0045: 审计按审批单合并 —— approval_no 上的索引。
+--
+-- 审计列表按审批单合并时(GET /audit?group=approval),每一页都要按 approval_no 分组取每张单
+-- 最新的一行、再数每张单共几行;点开一张单(GET /audit/approval/:apNo)按它取全部行。审计表是
+-- 全网关最大的一张表,没有这个索引,这几步都是全表扫。
+--
+-- 编号跳过 0043 / 0044:它们留给 feature/biz-data-query 分支(查询授权与审批单历史),
+-- 那边合入 main 时不会撞号。
+--
+-- 只有一条语句:失败即整体未生效,可以安全重跑(ADR 0016)。
+CREATE INDEX idx_audit_approval ON tbl_audit_log (approval_no);

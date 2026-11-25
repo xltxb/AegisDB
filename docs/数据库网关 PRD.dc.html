@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<style>
+  body { margin:0; background:#fff; color:var(--text-body); }
+  .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
+  .doc-frame { width:100%; border-collapse:collapse; }
+  .doc-frame td { padding:0; }
+  .hdr-space, .ftr-space { display:none; }
+  h1,h2,h3 { text-wrap:balance; }
+  p,li { text-wrap:pretty; }
+  .prd-table { width:100%; border-collapse:collapse; margin:14px 0 4px; }
+  .prd-table th { text-align:left; font:600 10.5px/1.4 var(--font-mono); letter-spacing:.06em; text-transform:uppercase; color:var(--text-faint); background:var(--surface-sunken); border:1px solid var(--border-subtle); padding:8px 11px; }
+  .prd-table td { font:400 13px/1.5 var(--font-body); color:var(--text-body); border:1px solid var(--border-subtle); padding:9px 11px; vertical-align:top; }
+  .prd-table td.id { font:600 11.5px/1.5 var(--font-mono); color:var(--accent-text); white-space:nowrap; }
+  @page { size:A4; margin:0; }
+  @media print {
+    html { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html, body { margin:0; padding:0; }
+    .doc { max-width:none !important; margin:0 !important; padding:0 0.7in !important; box-shadow:none !important; }
+    .hdr-space, .ftr-space { display:table-cell; height:0.7in; }
+    h1,h2,h3,h4 { break-after:avoid; }
+    figure, pre, blockquote, table, tr, .keep { break-inside:avoid; }
+    p, li { orphans:3; widows:3; }
+    .screen-only { display:none !important; }
+  }
+</style>
+</helmet>
+
+<main class="doc">
+<table class="doc-frame" role="presentation">
+<thead><tr><td class="hdr-space"></td></tr></thead>
+<tbody><tr><td>
+
+<!-- ===== MASTHEAD ===== -->
+<div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
+  <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
+  <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Product Requirements</span>
+</div>
+
+<div style="font:600 12px var(--font-mono); letter-spacing:.18em; color:var(--accent-text); text-transform:uppercase">PRD · 数据库管理网关</div>
+<h1 style="font:700 34px/1.15 var(--font-display); color:var(--text-strong); letter-spacing:-.025em; margin:10px 0 12px">数据库管理网关系统<br>产品需求文档</h1>
+<p style="font:400 15.5px/1.6 var(--font-body); color:var(--text-muted); margin:0 0 24px; max-width:62ch">一套面向 DBA 与运维团队的统一数据库访问网关:所有数据库操作经 Web 命令行下发,由网关按分层策略实时校验、拦截高危命令、触发审批并全量审计,实现"可控、可审、可追溯"的生产数据库操作。</p>
+
+<!-- meta table -->
+<table class="prd-table keep">
+  <tbody>
+    <tr><td class="id" style="width:24%">文档版本</td><td>v1.0</td><td class="id" style="width:24%">状态</td><td>评审稿 Draft for review</td></tr>
+    <tr><td class="id">最近更新</td><td>2026-06-25</td><td class="id">文档负责人</td><td>平台工程 · 数据库网关组</td></tr>
+    <tr><td class="id">目标读者</td><td>产品 / 研发 / DBA / 安全</td><td class="id">关联原型</td><td>Vela 数据库网关.dc.html</td></tr>
+  </tbody>
+</table>
+
+<p style="font:400 12.5px/1.5 var(--font-body); color:var(--text-faint); margin:14px 0 0">优先级定义:<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono);margin:0 2px">P0 必须</span>本期上线必备 ·<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono);margin:0 2px">P1 重要</span>强烈建议 ·<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono);margin:0 2px">P2 增强</span>可迭代。</p>
+
+<!-- ===== 1. OVERVIEW ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">01</span> 背景与目标</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Background &amp; Goals</div>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">1.1 问题背景</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 10px">生产数据库的直连操作长期存在三类风险:其一,<strong>高危命令</strong>(DROP / TRUNCATE / DELETE / ALTER / RENAME 等)一旦误执行即造成不可逆数据损失;其二,权限粗放,研发与运维共用账号、缺乏分层管控;其三,操作散落在各类客户端,<strong>无统一审计</strong>,事后难以追溯。本系统以"网关代理 + 分层策略 + 审批前置 + 全量审计"解决上述问题。</p>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">1.2 产品目标</h3>
+<ul style="margin:0; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li><strong>统一入口:</strong>所有数据库操作收敛到 Web 命令行,经网关代理执行,不再直连。</li>
+  <li><strong>分层管控:</strong>按环境(PROD / STAGING / DEV)与角色分层,差异化决定命令是放行、审批还是拦截。</li>
+  <li><strong>高危前置审批:</strong>命中高危命令自动生成审批单,继承飞书(Lark)审批卡并同步告警,通过后由网关代执行。</li>
+  <li><strong>全量可审计:</strong>每条命令(含被拦截、被拒绝的)均不可篡改留痕,支持筛选、导出与 Webhook 实时外推。</li>
+</ul>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">1.3 范围与非目标</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>本期范围:</strong>连接配置、分层与角色权限、高危命令规则、Web 命令行、SQL 脚本上传扫描、审批流、审计与 Webhook、系统设置、中英双语。</p>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-muted); margin:0"><strong>非目标(本期不做):</strong>可视化建表 / ER 图、查询结果图表分析、数据脱敏导出、SQL 性能优化建议、多租户计费。</p>
+
+<!-- ===== 2. ROLE MODEL ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">02</span> 角色与权限分层模型</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Roles &amp; Layered Authorization</div>
+
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 12px">系统采用<strong>三层授权模型</strong>,自上而下逐级收紧,任一层拒绝即终止:</p>
+
+<div class="keep" style="display:flex; gap:10px; margin:0 0 18px">
+  <div style="flex:1; border:1px solid var(--border-subtle); border-radius:12px; padding:14px 15px; background:var(--surface-card)"><div style="font:600 11px var(--font-mono); color:var(--accent-text)">LAYER 1</div><div style="font:600 15px var(--font-body); color:var(--text-strong); margin:5px 0 4px">菜单权限</div><div style="font:400 12.5px/1.5 var(--font-body); color:var(--text-muted)">角色能进入哪些功能菜单(终端、审批、配置、审计…)。</div></div>
+  <div style="flex:1; border:1px solid var(--border-subtle); border-radius:12px; padding:14px 15px; background:var(--surface-card)"><div style="font:600 11px var(--font-mono); color:var(--accent-text)">LAYER 2</div><div style="font:600 15px var(--font-body); color:var(--text-strong); margin:5px 0 4px">能力矩阵</div><div style="font:400 12.5px/1.5 var(--font-body); color:var(--text-muted)">该角色在各环境对各能力的权限:允许 / 需审批 / 禁止。</div></div>
+  <div style="flex:1; border:1px solid var(--border-subtle); border-radius:12px; padding:14px 15px; background:var(--surface-card)"><div style="font:600 11px var(--font-mono); color:var(--accent-text)">LAYER 3</div><div style="font:600 15px var(--font-body); color:var(--text-strong); margin:5px 0 4px">高危命令字典</div><div style="font:400 12.5px/1.5 var(--font-body); color:var(--text-muted)">命令级:按环境对具体命令配置拦截 / 审批 / 放行。</div></div>
+</div>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">2.1 内置角色</h3>
+<table class="prd-table">
+  <thead><tr><th style="width:20%">角色</th><th style="width:18%">分层</th><th>职责与默认授权</th></tr></thead>
+  <tbody>
+    <tr><td><strong>平台管理员</strong></td><td>L0 · 全局</td><td>管理连接配置、规则、用户与系统设置;可审批高危命令。全菜单开放。</td></tr>
+    <tr><td><strong>DBA 负责人</strong></td><td>L1 · 终审</td><td>高危命令审批链终审节点;可在 PROD 执行全部能力(经审批)。</td></tr>
+    <tr><td><strong>DBA L2</strong></td><td>L2 · 执行</td><td>可在 PROD 执行常规操作,高危命令需走审批;不可改权限与系统设置。</td></tr>
+    <tr><td><strong>研发只读</strong></td><td>L3 · 只读</td><td>仅 Web 命令行查询与审计日志;PROD 只读、DEV 可写。</td></tr>
+    <tr><td><strong>审计员</strong></td><td>L3 · 审计</td><td>仅审计日志查看与导出;不可执行任何数据库操作。</td></tr>
+  </tbody>
+</table>
+
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:20px 0 7px">2.2 环境分层策略</h3>
+<table class="prd-table">
+  <thead><tr><th style="width:22%">环境</th><th style="width:26%">默认策略</th><th>高危命令处理</th></tr></thead>
+  <tbody>
+    <tr><td><strong>PROD 生产</strong></td><td><code style="font:600 12px var(--font-mono);color:var(--danger-text)">strict</code></td><td>默认拦截,高危命令必须二级审批后由网关代执行。</td></tr>
+    <tr><td><strong>STAGING 预发</strong></td><td><code style="font:600 12px var(--font-mono);color:var(--warning-text)">approve-1</code></td><td>高危命令仅需一级审批。</td></tr>
+    <tr><td><strong>DEV 测试</strong></td><td><code style="font:600 12px var(--font-mono);color:var(--text-muted)">audit-only</code></td><td>自由执行,仅记录审计,不拦截。</td></tr>
+  </tbody>
+</table>
+
+<table class="prd-table" style="margin-top:18px">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-RBAC-01</td><td>系统提供可配置的角色,每个角色拥有独立的菜单权限、能力矩阵与成员列表。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-RBAC-02</td><td>授权按"菜单 → 能力矩阵 → 命令字典"三层逐级生效,任一层拒绝即终止操作。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-RBAC-03</td><td>能力矩阵支持按环境(PROD/STAGING/DEV)分别设定:允许 / 需审批 / 禁止三态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 3. FUNCTIONAL REQUIREMENTS ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">03</span> 功能需求</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Functional Requirements</div>
+
+<!-- 3.1 Terminal -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:22px 0 7px">3.1 Web 命令行终端</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">三栏 IDE 工作台:左侧为按环境分层的数据库树(实例 → 库 → 表),中间为命令行执行区,右侧为执行上下文与风险检查面板。用户输入 SQL 回车执行,网关实时判定风险等级。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-TERM-01</td><td>左侧树按环境分组展示实例 / 数据库 / 表,实例标注风险等级(高危 / 受限),支持搜索定位。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-TERM-02</td><td>命令行区回显历史(信息 / 命令 / 输出 / 成功 / 拦截),支持 SELECT 类查询返回行数与耗时。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-TERM-03</td><td>输入即时按当前连接环境与高危字典判定:命中高危命令在终端内嵌"已拦截"提示并转入审批。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-TERM-04</td><td>右侧上下文面板展示目标实例、库、连接角色、网关策略、受限命令清单(PROD)与审批链。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-TERM-05</td><td>底部状态栏显示连接状态、角色、策略、编码与审计开关。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.2 Interception & approval -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.2 高危命令拦截与审批流</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">命中高危命令时弹出居中审批提交卡,强制填写操作原因、确认审批链,提交后生成审批单并同步告警。审批人在"审批待办"中通过 / 拒绝,通过后由网关代执行。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-APPR-01</td><td>识别高危命令:命中字典中标记为"拦截/审批"的命令,或开启严格模式时无 WHERE 的 DELETE/UPDATE。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-APPR-02</td><td>提交卡展示待执行命令、环境、实例、风险标签(不可逆/锁表),并强制填写操作原因(必填)。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-APPR-03</td><td>生成审批单(含审批单号、审计 ID),继承飞书(Lark)审批卡格式,并同步告警至 #dba-oncall 与值班负责人。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-APPR-04</td><td>审批待办页支持"待我审批 / 全部",卡片展示命令、发起人、目标、原因与审批链,可通过 / 拒绝并即时反馈状态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-APPR-05</td><td>审批链支持多级(发起 → 组长 → 负责人),并可配置审批超时处理(自动驳回 / 自动升级 / 保持等待)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.3 SQL script -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.3 SQL 脚本上传与预执行扫描</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">用户可上传 <code style="font:600 12.5px var(--font-mono);color:var(--accent-text)">.sql</code> 脚本,系统在执行前自动按高危字典扫描:拆分语句、剔除注释、逐条判定风险,并出具扫描报告。若检出高危语句,整脚本须提交审批后由网关代执行;全部安全则可直接执行。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-SQL-01</td><td>支持上传 .sql 文件,读取内容并按 <code style="font:600 12px var(--font-mono)">;</code> 拆分为独立语句,自动剔除行注释与块注释。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-SQL-02</td><td>逐条语句按当前环境的高危字典判定风险等级(高危 / 需审批 / 安全),无 WHERE 的 DELETE/UPDATE 单独标记。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-SQL-03</td><td>扫描报告展示统计概览(总语句 / 高危 / 需审批 / 安全)与逐条明细及风险标签。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-SQL-04</td><td>检出高危/需审批语句时,执行入口变为"提交审批后执行";全部安全时可直接执行并在终端回显结果。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-SQL-05</td><td>扫描规则与终端实时拦截、高危字典完全一致;字典调整后扫描结果同步变化。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.4 Connections -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.4 数据库连接配置</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">后台管理所有数据库实例,按环境分层展示,统一经网关代理执行。支持新建连接并设定引擎、环境、网关策略。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-CONN-01</td><td>连接列表按 PROD/STAGING/DEV 分组,展示实例名、分层、引擎、地址、默认角色、网关策略与状态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-CONN-02</td><td>新建连接表单:实例名、地址端口、引擎、分层环境、网关策略;保存即"测试连接并接入网关"。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-CONN-03</td><td>支持的引擎:MySQL、PostgreSQL、ClickHouse、Redis、TiDB(可扩展)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-CONN-04</td><td>实例状态可在"在线 / 维护"间切换,维护态下提示拦截或限制操作。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.5 Risk rules -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.5 高危命令规则配置</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">高危命令字典按环境独立配置,每个命令在各环境下可设为拦截 / 审批 / 放行。PROD 配置直接驱动终端与脚本扫描的拦截判定。规则可新增、移除,触发命令可自定义。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-RULE-01</td><td>高危字典内置 DROP、TRUNCATE、DELETE、ALTER、RENAME、GRANT、REVOKE 等命令,可新增自定义命令。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-RULE-02</td><td>每个命令按环境(PROD/STAGING/DEV)分别配置三态:拦截 / 审批 / 放行,可点击循环切换。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-RULE-03</td><td>规则即时生效:PROD 字典调整后,终端实时拦截与脚本扫描结果同步变化。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-RULE-04</td><td>新建规则支持自定义触发命令(可勾选已有命令并输入任意命令)、适用环境、命中动作与审批链。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-RULE-05</td><td>严格模式开关:开启后拦截无 WHERE 的 DELETE / UPDATE。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.6 Users & perms -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.6 用户与权限管理</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">提供角色视图与用户视图。角色视图含菜单权限、能力矩阵与成员管理;用户视图管理具体账号、其角色与启停状态,支持邀请新用户。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-USER-01</td><td>角色视图:左侧可切换角色,右侧实时展示该角色的菜单权限、能力矩阵与成员。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-USER-02</td><td>菜单权限:逐功能(终端/审批/配置/规则/权限/审计/设置)开关控制角色是否可见可进入。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-USER-03</td><td>能力矩阵:能力 × 环境单元格点击循环 允许 → 需审批 → 禁止,按角色独立保存。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-USER-04</td><td>成员管理:从组织目录添加 / 移除成员;成员变更即时生效。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-USER-05</td><td>用户视图:列表展示账号、角色、状态,支持启用 / 停用与邀请新用户(预分配角色)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.7 Audit -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.7 审计日志与 Webhook</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">不可篡改记录每条命令(含被拦截、被拒绝),支持按风险与时间筛选、导出 CSV,并可配置 Webhook 将审计事件实时推送到远端(SIEM / 数据湖 / 告警通道)。</p>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-AUD-01</td><td>记录每条命令的时间、操作人、实例、命令全文、风险等级、结果(执行/审批中/拒绝/告警)与审批单号。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-AUD-02</td><td>支持按风险(全部/高危/中/低)与时间范围(24h/7天/30天)筛选,导出含完整命令与审批链的 CSV。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td></tr>
+    <tr><td class="id">FR-AUD-03</td><td>Webhook 配置:推送地址、HMAC-SHA256 签名密钥、推送事件(拦截/审批/高危执行/登录)、重试与投递策略。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-AUD-04</td><td>支持发送测试事件验证 Webhook 连通性,并查看投递日志。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.8 Settings -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.8 系统设置</h3>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-SET-01</td><td>网关策略:默认策略、严格模式、命令执行超时。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-SET-02</td><td>审批:超时处理、默认审批人、超时升级到负责人。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-SET-03</td><td>会话与安全:会话有效期、空闲自动锁定、强制 MFA、IP 允许列表。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+    <tr><td class="id">FR-SET-05</td><td>外观与语言:界面语言(中文/English)、主题(深色/浅色)。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+  </tbody>
+</table>
+
+<!-- 3.9 i18n -->
+<h3 style="font:600 17px var(--font-body); color:var(--text-strong); margin:24px 0 7px">3.9 国际化(双语)</h3>
+<table class="prd-table">
+  <thead><tr><th style="width:14%">需求 ID</th><th>需求描述</th><th style="width:12%">优先级</th></tr></thead>
+  <tbody>
+    <tr><td class="id">FR-I18N-01</td><td>全界面支持中文 / English 一键切换,覆盖导航、模块、弹窗与动态状态文案;顶栏与系统设置联动。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td></tr>
+    <tr><td class="id">FR-I18N-02</td><td>数据类内容(实例名、SQL、人名、邮箱、IP)保持原文不翻译。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 4. FLOW ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">04</span> 高危命令拦截流程</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:16px">Interception Flow</div>
+
+<div class="keep" style="display:flex; flex-direction:column; gap:0; border-left:2px solid var(--border-default); margin:0 0 8px; padding-left:0">
+  <div style="display:flex; gap:14px; padding:0 0 16px 18px; position:relative"><div style="position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--accent)"></div><div><div style="font:600 14px var(--font-body);color:var(--text-strong)">1 · 用户下发命令</div><div style="font:400 13px/1.55 var(--font-body);color:var(--text-muted)">DBA 在 Web 命令行输入 SQL,或上传 .sql 脚本。</div></div></div>
+  <div style="display:flex; gap:14px; padding:0 0 16px 18px; position:relative"><div style="position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--accent)"></div><div><div style="font:600 14px var(--font-body);color:var(--text-strong)">2 · 网关风险判定</div><div style="font:400 13px/1.55 var(--font-body);color:var(--text-muted)">按"菜单权限 → 能力矩阵 → 高危字典(当前环境)"逐层校验,确定放行 / 审批 / 拦截。</div></div></div>
+  <div style="display:flex; gap:14px; padding:0 0 16px 18px; position:relative"><div style="position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--danger)"></div><div><div style="font:600 14px var(--font-body);color:var(--text-strong)">3 · 命中高危 → 拦截 + 生成审批单</div><div style="font:400 13px/1.55 var(--font-body);color:var(--text-muted)">终端内嵌拦截提示;弹出提交卡,用户填写原因并确认审批链。生成审批单与审计 ID,继承 Lark 审批卡,同步告警至 #dba-oncall。</div></div></div>
+  <div style="display:flex; gap:14px; padding:0 0 16px 18px; position:relative"><div style="position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--warning)"></div><div><div style="font:600 14px var(--font-body);color:var(--text-strong)">4 · 审批人决策</div><div style="font:400 13px/1.55 var(--font-body);color:var(--text-muted)">审批人在待办中通过 / 拒绝;超时按设置自动驳回或升级。</div></div></div>
+  <div style="display:flex; gap:14px; padding:0 0 0 18px; position:relative"><div style="position:absolute;left:-7px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--success)"></div><div><div style="font:600 14px var(--font-body);color:var(--text-strong)">5 · 网关代执行 + 全量审计</div><div style="font:400 13px/1.55 var(--font-body);color:var(--text-muted)">通过后由网关代执行并回显结果;无论放行 / 拦截 / 拒绝,均不可篡改留痕并可经 Webhook 外推。</div></div></div>
+</div>
+
+<!-- ===== 5. DATA MODEL ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">05</span> 概念数据模型</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Conceptual Data Model</div>
+<table class="prd-table">
+  <thead><tr><th style="width:22%">实体</th><th>关键字段</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Connection 连接</strong></td><td>id、name、engine、host:port、env、policy、defaultRole、status</td></tr>
+    <tr><td><strong>Role 角色</strong></td><td>id、name、layer、menus[]、capabilityMatrix(能力 × 环境 × 三态)、members[]</td></tr>
+    <tr><td><strong>User 用户</strong></td><td>id、name、email、roleId、status(启用/停用)</td></tr>
+    <tr><td><strong>RiskCommand 高危命令</strong></td><td>name、env→level(high/mid/off)</td></tr>
+    <tr><td><strong>Approval 审批单</strong></td><td>apNo、command、env、instance、initiator、reason、chain[]、status、auditId</td></tr>
+    <tr><td><strong>AuditLog 审计</strong></td><td>time、actor、instance、command、risk、result、apNo(不可篡改)</td></tr>
+    <tr><td><strong>WebhookConfig</strong></td><td>endpoint、secret(HMAC-SHA256)、events[]、retry、successRate</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 6. NFR ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">06</span> 非功能需求</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Non-functional Requirements</div>
+<table class="prd-table">
+  <thead><tr><th style="width:20%">类别</th><th>要求</th></tr></thead>
+  <tbody>
+    <tr><td><strong>安全</strong></td><td>强制 MFA(生产)、IP 允许列表、会话有效期与空闲锁定;审计日志不可篡改;Webhook 负载 HMAC-SHA256 签名。</td></tr>
+    <tr><td><strong>性能</strong></td><td>命令风险判定为同步前置,目标增加延迟 &lt; 20ms;审计写入异步不阻塞执行。</td></tr>
+    <tr><td><strong>可用性</strong></td><td>网关多实例无状态部署;策略与字典变更热生效,无需重启会话。</td></tr>
+    <tr><td><strong>可观测</strong></td><td>审计可导出,可经 Webhook 外推 SIEM;投递失败自动重试并记录成功率。</td></tr>
+    <tr><td><strong>合规</strong></td><td>所有生产高危操作可追溯到人、命令、原因与审批链。</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== 7. ACCEPTANCE ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">07</span> 关键验收标准</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Acceptance Criteria</div>
+<ul style="margin:0; padding-left:20px; font:400 14.5px/1.7 var(--font-body); color:var(--text-body)">
+  <li>在 PROD 输入 <code style="font:600 12.5px var(--font-mono);color:var(--danger-text)">DROP TABLE</code> 必被拦截并生成审批单,审批通过前不执行。</li>
+  <li>同一命令在 DEV(放行)直接执行、在 PROD(拦截)进入审批,体现环境分层差异。</li>
+  <li>上传含高危语句的脚本,扫描报告准确统计高危条数,且整脚本须审批后才执行。</li>
+  <li>高危字典在 PROD 调整后,终端与脚本扫描的判定即时同步变化。</li>
+  <li>每条命令(含被拒绝)均可在审计中检索,并能导出与经 Webhook 推送。</li>
+  <li>无菜单权限的角色看不到对应功能入口。</li>
+</ul>
+
+<!-- ===== 8. ROADMAP ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 里程碑与未来规划</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Milestones</div>
+<table class="prd-table">
+  <thead><tr><th style="width:16%">阶段</th><th>范围</th></tr></thead>
+  <tbody>
+    <tr><td><strong>M1 · MVP</strong></td><td>连接配置、角色与能力矩阵、高危字典、Web 命令行、拦截与审批、审计日志。</td></tr>
+    <tr><td><strong>M2 · 增强</strong></td><td>SQL 脚本上传扫描、Webhook 外推、菜单权限、系统设置、中英双语。</td></tr>
+    <tr><td><strong>M3 · 未来</strong></td><td>审批超时自动化、结果集脱敏、SQL 影响行数预估、批量审批、OpenAPI。</td></tr>
+  </tbody>
+</table>
+
+<!-- ===== APPENDIX ===== -->
+<h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:42px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> 附录 · 术语表</h2>
+<div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Glossary</div>
+<table class="prd-table">
+  <thead><tr><th style="width:24%">术语</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td><strong>网关代理执行</strong></td><td>用户不直连数据库,命令统一经网关校验后由网关代为执行。</td></tr>
+    <tr><td><strong>高危命令字典</strong></td><td>按环境维护的命令级风险规则,决定命令拦截 / 审批 / 放行。</td></tr>
+    <tr><td><strong>能力矩阵</strong></td><td>角色在各环境对各能力的权限矩阵(允许 / 需审批 / 禁止)。</td></tr>
+    <tr><td><strong>严格模式</strong></td><td>额外拦截无 WHERE 条件的 DELETE / UPDATE 等危险写操作。</td></tr>
+    <tr><td><strong>审批链</strong></td><td>高危命令的多级审批路径,如 发起 → 组长 → 负责人。</td></tr>
+  </tbody>
+</table>
+
+<div style="margin-top:46px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)">
+  <span>DP DB GATEWAY · 数据库管理网关 PRD v1.0</span><span style="margin-left:auto">机密 · 内部评审</span>
+</div>
+
+</td></tr></tbody>
+<tfoot><tr><td class="ftr-space"></td></tr></tfoot>
+</table>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch(e){} };
+    if (!window.lucide) {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/lucide@latest/dist/umd/lucide.min.js';
+      s.onload = draw; document.head.appendChild(s);
+    } else { draw(); }
+    setTimeout(draw, 400);
+  }
+}
+</script>
+</body>
+</html>

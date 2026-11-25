@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/motion.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/styles.css">
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<style>
+  @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+  .scrollerY{ overflow-y:auto; }
+  .scrollerY::-webkit-scrollbar{ width:8px; }
+  .scrollerY::-webkit-scrollbar-thumb{ background:rgba(255,255,255,.1); border-radius:8px; }
+</style>
+</helmet>
+
+<!-- ============ SECTION HEADER ============ -->
+<div style="position:absolute; left:80px; top:48px; width:1100px">
+  <div style="font:600 12px/1 var(--font-mono); letter-spacing:.18em; color:#5e83fb; text-transform:uppercase">VELA GATEWAY · WEB CLI</div>
+  <div style="font:600 30px/1.15 var(--font-display); letter-spacing:-.02em; color:#1b2030; margin-top:10px">数据库管理网关 · 核心终端布局变体</div>
+  <div style="font:400 14px/1.55 var(--font-body); color:#4b5468; margin-top:8px; max-width:760px">同一场景的三种工作台布局——DBA 在 Web 命令行执行操作，命中 DROP / TRUNCATE / ALTER 等高危命令时被网关拦截，自动生成继承 Lark 审批卡的审批单并同步告警。</div>
+</div>
+
+<!-- ============ VARIANT A : 三栏 IDE 工作台 ============ -->
+<div style="position:absolute; left:80px; top:188px; width:1320px">
+  <div data-drags-parent="1" style="position:absolute; top:-30px; left:0; font:600 12px/1 var(--font-mono); letter-spacing:.04em; color:#353c4d">变体 A — 三栏 IDE 工作台</div>
+  <div data-theme="dark" style="position:relative; background:var(--surface-page); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow:0 24px 60px -20px rgba(12,14,23,.45); overflow:hidden; height:820px; font-family:var(--font-body); color:var(--text-body)">
+
+    <!-- top bar -->
+    <div style="display:flex; align-items:center; gap:16px; height:50px; padding:0 18px; border-bottom:1px solid var(--border-subtle); background:rgba(20,24,38,.6); backdrop-filter:blur(8px)">
+      <div style="display:flex; align-items:center; gap:8px">
+        <div style="width:22px; height:22px; border-radius:6px; background:linear-gradient(135deg,#3b6ef6,#2dcde6); display:flex; align-items:center; justify-content:center"><i data-lucide="sailboat" style="width:13px;height:13px;color:#fff"></i></div>
+        <span style="font:600 14px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
+      </div>
+      <div style="width:1px; height:18px; background:var(--border-subtle)"></div>
+      <div style="display:flex; align-items:center; gap:7px; font:500 13px var(--font-body); color:var(--text-muted)">
+        <i data-lucide="server" style="width:14px;height:14px"></i><span>实例</span><i data-lucide="chevron-right" style="width:13px;height:13px;color:var(--text-faint)"></i>
+        <span style="color:var(--text-body)">prod-order-cluster</span>
+      </div>
+      <div style="display:inline-flex; align-items:center; gap:6px; height:22px; padding:0 9px; border-radius:999px; font:600 11px/1 var(--font-mono); background:var(--danger-subtle); color:var(--danger-text)"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>PROD 生产</div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px">
+        <div style="display:flex; align-items:center; gap:6px; font:500 12px var(--font-mono); color:var(--text-muted)"><i data-lucide="activity" style="width:14px;height:14px;color:#2dcde6"></i>p50 12ms</div>
+        <div style="display:flex; align-items:center; gap:8px; padding:4px 4px 4px 10px; border:1px solid var(--border-subtle); border-radius:999px">
+          <div style="text-align:right"><div style="font:600 12px var(--font-body); color:var(--text-strong); line-height:1.1">Lin Wei</div><div style="font:500 10px var(--font-mono); color:#8facff; line-height:1.2">DBA · 二级权限</div></div>
+          <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 11px var(--font-body);color:#fff">LW</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- body grid -->
+    <div style="display:grid; grid-template-columns:264px 1fr 336px; height:770px">
+
+      <!-- LEFT: db tree -->
+      <div style="border-right:1px solid var(--border-subtle); display:flex; flex-direction:column; background:var(--surface-sunken)">
+        <div style="padding:14px 14px 10px">
+          <div style="font:600 11px/1 var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:10px">数据库分层</div>
+          <div style="display:flex; align-items:center; gap:8px; height:32px; padding:0 10px; background:var(--surface-card); border:1px solid var(--border-subtle); border-radius:10px">
+            <i data-lucide="search" style="width:14px;height:14px;color:var(--text-faint)"></i><span style="font:400 12px var(--font-body); color:var(--text-faint)">搜索实例 / 库 / 表</span>
+          </div>
+        </div>
+        <div class="scrollerY" style="flex:1; padding:2px 8px 12px">
+          <!-- PROD group -->
+          <div style="display:flex; align-items:center; gap:7px; padding:7px 8px; font:600 12px var(--font-body); color:var(--text-body)"><i data-lucide="chevron-down" style="width:14px;height:14px;color:var(--text-muted)"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--danger)"></span>生产环境 · PROD</div>
+          <div style="padding-left:14px">
+            <div style="display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; background:var(--accent-subtle); border:1px solid var(--accent-subtle-border); font:500 12px var(--font-mono); color:var(--accent-text)"><i data-lucide="database" style="width:14px;height:14px"></i>order-cluster<span style="margin-left:auto; font:600 10px var(--font-mono); color:var(--danger-text)">高危</span></div>
+            <div style="padding-left:22px; padding-top:2px">
+              <div style="display:flex;align-items:center;gap:7px;padding:5px 8px;font:400 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="folder" style="width:13px;height:13px"></i>orders_db</div>
+              <div style="padding-left:18px">
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;font:400 12px var(--font-mono);color:var(--text-body)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--text-faint)"></i>orders</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;font:400 12px var(--font-mono);color:var(--text-body)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--text-faint)"></i>orders_2024_q3</div>
+                <div style="display:flex;align-items:center;gap:7px;padding:4px 8px;font:400 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="table-2" style="width:12px;height:12px;color:var(--text-faint)"></i>payments</div>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;font:500 12px var(--font-mono);color:var(--text-muted)"><i data-lucide="database" style="width:14px;height:14px"></i>user-cluster<span style="margin-left:auto;font:600 10px var(--font-mono);color:var(--warning-text)">受限</span></div>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; padding:7px 8px; margin-top:4px; font:600 12px var(--font-body); color:var(--text-muted)"><i data-lucide="chevron-right" style="width:14px;height:14px"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--warning)"></span>预发 · STAGING</div>
+          <div style="display:flex; align-items:center; gap:7px; padding:7px 8px; font:600 12px var(--font-body); color:var(--text-muted)"><i data-lucide="chevron-right" style="width:14px;height:14px"></i><span style="width:7px;height:7px;border-radius:50%;background:var(--success)"></span>测试 · DEV</div>
+        </div>
+      </div>
+
+      <!-- CENTER: terminal -->
+      <div style="display:flex; flex-direction:column; min-width:0; background:var(--surface-page)">
+        <div style="display:flex; align-items:center; gap:2px; height:38px; padding:0 12px; border-bottom:1px solid var(--border-subtle)">
+          <div style="display:flex;align-items:center;gap:7px;height:28px;padding:0 12px;border-radius:8px 8px 0 0;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-bottom:none;font:500 12px var(--font-mono);color:var(--text-body)"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>order-cluster · SQL</div>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:10px;font:500 11px var(--font-mono);color:var(--text-faint)"><span>UTF-8</span><span>只读关闭</span><i data-lucide="settings-2" style="width:14px;height:14px"></i></div>
+        </div>
+        <div class="scrollerY" style="flex:1; padding:16px 18px; font-family:var(--font-mono); font-size:13px; line-height:1.75">
+          <div style="color:var(--text-faint)"># 会话已连接 prod-order-cluster · 角色 dba_l2 · 网关策略 strict</div>
+          <div style="margin-top:10px"><span style="color:#8facff">prod-order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">SELECT count(*) FROM orders WHERE status='paid';</span></div>
+          <div style="color:var(--text-body); padding-left:2px">+ <span style="color:#2dcde6">42,318</span> rows <span style="color:var(--text-faint)">· 12ms</span></div>
+          <div style="margin-top:12px"><span style="color:#8facff">prod-order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">DROP TABLE orders_2024_q3;</span></div>
+          <!-- interception block -->
+          <div style="margin-top:10px; border:1px solid rgba(240,71,62,.4); border-left:3px solid var(--danger); border-radius:10px; background:var(--danger-subtle); padding:12px 14px">
+            <div style="display:flex;align-items:center;gap:8px;font:600 12px var(--font-body);color:var(--danger-text)"><i data-lucide="shield-alert" style="width:15px;height:15px"></i>命令已被网关拦截 · 禁止直接执行</div>
+            <div style="margin-top:7px;font:400 12px/1.6 var(--font-body);color:var(--text-body)">命中规则 <span style="color:var(--text-strong)">「高危 DDL 需二级审批」</span> — DROP / TRUNCATE / ALTER 在 PROD 必须经审批后由网关代执行。</div>
+            <div style="margin-top:9px;display:flex;align-items:center;gap:10px">
+              <span style="font:600 11px var(--font-mono);color:var(--text-muted)">已生成审批单</span>
+              <span style="font:600 12px var(--font-mono);color:#8facff">#AP-2291</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>待审批</span>
+              <span style="font:500 11px var(--font-mono);color:var(--text-faint);margin-left:auto">已同步 Lark · #dba-oncall</span>
+            </div>
+          </div>
+          <div style="margin-top:12px"><span style="color:#8facff">prod-order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="display:inline-block;width:8px;height:16px;background:var(--cyan-400);vertical-align:-3px;animation:blink 1s steps(1) infinite"></span></div>
+        </div>
+        <div style="height:34px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:16px; padding:0 16px; font:500 11px var(--font-mono); color:var(--text-faint)">
+          <span style="color:var(--success-text)">● 已连接</span><span>dba_l2</span><span>strict 策略</span><span style="margin-left:auto">Ln 4 · UTF-8</span>
+        </div>
+      </div>
+
+      <!-- RIGHT: risk inspector -->
+      <div class="scrollerY" style="border-left:1px solid var(--border-subtle); background:var(--surface-card); padding:16px 16px 20px">
+        <div style="font:600 11px/1 var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase">执行上下文 · 风险检查</div>
+        <div style="margin-top:14px; display:flex; align-items:center; gap:10px; padding:12px 14px; border:1px solid rgba(240,71,62,.4); border-radius:12px; background:var(--danger-subtle)">
+          <i data-lucide="alert-octagon" style="width:22px;height:22px;color:var(--danger)"></i>
+          <div><div style="font:700 14px var(--font-display);color:var(--danger-text);letter-spacing:-.01em">高危操作 · P1</div><div style="font:500 11px var(--font-mono);color:var(--text-muted)">DDL · DROP TABLE</div></div>
+        </div>
+        <div style="margin-top:16px; display:flex; flex-direction:column; gap:11px">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">目标实例</span><span style="font:500 12px var(--font-mono);color:var(--text-body)">prod-order-cluster</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">数据库 / 表</span><span style="font:500 12px var(--font-mono);color:var(--text-body)">orders_db.orders_2024_q3</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">预计影响</span><span style="font:500 12px var(--font-mono);color:var(--danger-text)">≈ 18.2M 行 · 不可逆</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font:500 12px var(--font-body);color:var(--text-muted)">当前角色</span><span style="font:500 12px var(--font-mono);color:#8facff">dba_l2 · 无 DDL 直执权</span></div>
+        </div>
+        <div style="margin-top:16px;height:1px;background:var(--border-subtle)"></div>
+        <div style="margin-top:14px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">命中规则</div>
+        <div style="margin-top:10px;border:1px solid var(--border-subtle);border-radius:10px;padding:11px 12px;background:var(--surface-sunken)">
+          <div style="display:flex;align-items:center;gap:7px;font:600 12px var(--font-body);color:var(--text-strong)"><i data-lucide="shield-check" style="width:14px;height:14px;color:#2dcde6"></i>高危 DDL 需二级审批</div>
+          <div style="margin-top:6px;font:400 11px/1.5 var(--font-mono);color:var(--text-muted)">env=PROD AND cmd IN (DROP,TRUNCATE,ALTER,RENAME,DELETE) → 拦截 + 审批</div>
+        </div>
+        <div style="margin-top:18px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">审批链</div>
+        <div style="margin-top:11px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:#fff">LW</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">Lin Wei · 发起</div></div><span style="font:600 10px var(--font-mono);color:var(--success-text)">已提交</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:var(--text-muted)">ZW</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">张伟 · DBA 组长</div></div><span style="font:600 10px var(--font-mono);color:var(--warning-text)">审批中</span></div>
+          <div style="display:flex;align-items:center;gap:10px;opacity:.55"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:var(--text-muted)">LN</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">李娜 · DBA 负责人</div></div><span style="font:600 10px var(--font-mono);color:var(--text-faint)">待激活</span></div>
+        </div>
+        <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:8px;height:40px;border-radius:10px;background:var(--accent);color:#fff;font:600 13px var(--font-body);box-shadow:0 0 0 1px var(--accent-subtle-border),0 6px 20px -6px rgba(59,110,246,.6)">查看审批单 #AP-2291<i data-lucide="arrow-right" style="width:15px;height:15px"></i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- post-it A -->
+<div style="position:absolute; left:80px; top:1040px; width:300px; background:#fef4a8; padding:13px 15px; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.12); transform:rotate(-1deg); font:400 12px/1.5 var(--font-body); color:#5b4a12">
+  <b>三栏 IDE</b> — 左侧分层树定位库表，中间终端执行，右侧实时风险检查 + 审批链。信息密度最高，适合常驻工作台。
+</div>
+
+<!-- ============ VARIANT B : 终端优先 + 底部审批抽屉 ============ -->
+<div style="position:absolute; left:1480px; top:188px; width:1200px">
+  <div data-drags-parent="1" style="position:absolute; top:-30px; left:0; font:600 12px/1 var(--font-mono); letter-spacing:.04em; color:#353c4d">变体 B — 终端优先 · 底部 Lark 审批抽屉</div>
+  <div data-theme="dark" style="position:relative; background:var(--surface-page); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow:0 24px 60px -20px rgba(12,14,23,.45); overflow:hidden; height:820px; font-family:var(--font-body); color:var(--text-body)">
+
+    <!-- toolbar -->
+    <div style="display:flex; align-items:center; gap:12px; height:52px; padding:0 18px; border-bottom:1px solid var(--border-subtle); background:rgba(20,24,38,.6)">
+      <div style="display:flex;align-items:center;gap:8px"><div style="width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="terminal" style="width:13px;height:13px;color:#fff"></i></div><span style="font:600 14px var(--font-display);color:var(--text-strong)">Web CLI</span></div>
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-card);font:500 12px var(--font-mono);color:var(--text-body)"><i data-lucide="database" style="width:14px;height:14px;color:#2dcde6"></i>prod-order-cluster<i data-lucide="chevron-down" style="width:13px;height:13px;color:var(--text-faint)"></i></div>
+      <div style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 11px var(--font-mono)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>PROD</div>
+      <div style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 9px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 11px var(--font-mono)">角色 dba_l2</div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:12px">
+        <div style="display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 12px var(--font-mono)"><i data-lucide="hourglass" style="width:13px;height:13px"></i>审批中 1</div>
+        <i data-lucide="bell" style="width:18px;height:18px;color:var(--text-muted)"></i>
+        <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 11px var(--font-body);color:#fff">LW</div>
+      </div>
+    </div>
+
+    <!-- terminal -->
+    <div class="scrollerY" style="height:438px; padding:18px 22px; font-family:var(--font-mono); font-size:13.5px; line-height:1.8; background:var(--surface-page)">
+      <div style="color:var(--text-faint)"># prod-order-cluster · dba_l2 · 网关策略 strict · 审计 ON</div>
+      <div style="margin-top:10px"><span style="color:#8facff">order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">SHOW TABLE STATUS LIKE 'orders_2024_q3';</span></div>
+      <div style="color:var(--text-body)">  Rows <span style="color:#2dcde6">18,204,773</span> · Data_length <span style="color:#2dcde6">9.4 GB</span> <span style="color:var(--text-faint)">· 8ms</span></div>
+      <div style="margin-top:12px"><span style="color:#8facff">order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">TRUNCATE TABLE orders_2024_q3;</span></div>
+      <div style="margin-top:8px;color:var(--danger-text);display:flex;align-items:center;gap:8px;font-family:var(--font-body);font-weight:600;font-size:12.5px"><i data-lucide="shield-alert" style="width:15px;height:15px"></i>已拦截 — TRUNCATE 命中「高危 DDL」策略，已转入审批（见下方）</div>
+      <div style="margin-top:12px"><span style="color:#8facff">order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="display:inline-block;width:8px;height:17px;background:var(--cyan-400);vertical-align:-3px;animation:blink 1s steps(1) infinite"></span></div>
+    </div>
+
+    <!-- bottom approval drawer (Lark-style card) -->
+    <div style="position:absolute; left:0; right:0; bottom:0; height:330px; border-top:1px solid var(--border-default); background:var(--surface-card); box-shadow:0 -20px 40px -24px rgba(0,0,0,.6)">
+      <div style="display:flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-bottom:1px solid var(--border-subtle)">
+        <div style="width:28px;height:6px;border-radius:999px;background:var(--border-strong);position:absolute;top:8px;left:50%;transform:translateX(-50%)"></div>
+        <i data-lucide="square-stack" style="width:16px;height:16px;color:#8facff"></i>
+        <span style="font:600 13px var(--font-body);color:var(--text-strong)">审批抽屉</span>
+        <span style="font:500 11px var(--font-mono);color:var(--text-faint)">继承 Lark 审批卡</span>
+        <span style="margin-left:auto;font:500 11px var(--font-mono);color:var(--text-faint)">下一步：等待 张伟 审批</span>
+      </div>
+      <!-- the Lark card -->
+      <div style="margin:14px 20px; border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-raised)">
+        <div style="height:4px;background:linear-gradient(90deg,#f0473e,#ffb648)"></div>
+        <div style="padding:14px 18px; display:flex; gap:20px">
+          <!-- left: meta -->
+          <div style="flex:1; min-width:0; border-right:1px solid var(--border-subtle); padding-right:20px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="font:700 15px var(--font-display);color:var(--text-strong);letter-spacing:-.01em">高危命令审批 · TRUNCATE TABLE</div>
+              <span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 11px var(--font-mono)">高危 P1</span>
+            </div>
+            <div style="margin-top:4px;font:500 11px var(--font-mono);color:var(--text-faint)">审批单 #AP-2294 · 发起于 22:41 · 审计已记录</div>
+            <div style="margin-top:12px;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:10px;padding:10px 12px;font:500 13px var(--font-mono);color:var(--text-body)"><span style="color:var(--danger-text)">TRUNCATE</span> TABLE <span style="color:#2dcde6">orders_2024_q3</span>;</div>
+            <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px 22px">
+              <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">环境</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:2px">PROD · order-cluster</div></div>
+              <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">影响行数</div><div style="font:600 12px var(--font-mono);color:var(--danger-text);margin-top:2px">≈ 18.2M · 不可逆</div></div>
+              <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">发起人</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:2px">Lin Wei · dba_l2</div></div>
+              <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">操作原因</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:2px">Q3 归档表清理</div></div>
+            </div>
+          </div>
+          <!-- right: approver chain + actions -->
+          <div style="width:300px; flex-shrink:0; display:flex; flex-direction:column">
+            <div style="font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">审批流</div>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:9px;flex:1">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:#fff">LW</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">Lin Wei</div><div style="font:500 10px var(--font-mono);color:var(--text-faint)">发起人</div></div><span style="font:600 10px var(--font-mono);color:var(--success-text)">✓ 已提交</span></div>
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--accent-subtle-border);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:#8facff">ZW</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">张伟</div><div style="font:500 10px var(--font-mono);color:var(--text-faint)">DBA 组长</div></div><span style="display:inline-flex;align-items:center;gap:4px;font:600 10px var(--font-mono);color:var(--warning-text)"><span style="width:5px;height:5px;border-radius:50%;background:currentColor"></span>审批中</span></div>
+              <div style="display:flex;align-items:center;gap:10px;opacity:.5"><div style="width:26px;height:26px;border-radius:50%;background:#232838;border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;font:600 10px var(--font-body);color:var(--text-muted)">LN</div><div style="flex:1"><div style="font:600 12px var(--font-body);color:var(--text-body)">李娜</div><div style="font:500 10px var(--font-mono);color:var(--text-faint)">DBA 负责人</div></div><span style="font:600 10px var(--font-mono);color:var(--text-faint)">待激活</span></div>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:12px">
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;height:36px;border-radius:10px;border:1px solid var(--border-default);font:600 12px var(--font-body);color:var(--text-body)">撤回</div>
+              <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:10px;background:var(--accent);color:#fff;font:600 12px var(--font-body)">催办 <i data-lucide="bell-ring" style="width:13px;height:13px"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- post-it B -->
+<div style="position:absolute; left:1480px; top:1040px; width:300px; background:#fef4a8; padding:13px 15px; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.12); transform:rotate(1deg); font:400 12px/1.5 var(--font-body); color:#5b4a12">
+  <b>终端优先</b> — 终端占满主视野，拦截后审批卡从底部抽屉升起，不打断命令流。审批与执行同屏可见。
+</div>
+
+<!-- ============ VARIANT C : 拦截焦点态 · 居中审批提交卡 ============ -->
+<div style="position:absolute; left:2760px; top:188px; width:1200px">
+  <div data-drags-parent="1" style="position:absolute; top:-30px; left:0; font:600 12px/1 var(--font-mono); letter-spacing:.04em; color:#353c4d">变体 C — 拦截焦点态 · 居中审批提交卡</div>
+  <div data-theme="dark" style="position:relative; background:var(--surface-page); border:1px solid rgba(255,255,255,.08); border-radius:14px; box-shadow:0 24px 60px -20px rgba(12,14,23,.45); overflow:hidden; height:820px; font-family:var(--font-body); color:var(--text-body)">
+
+    <!-- dimmed terminal behind -->
+    <div style="padding:18px 22px; font-family:var(--font-mono); font-size:13.5px; line-height:1.8; filter:blur(1.5px); opacity:.4">
+      <div style="color:var(--text-faint)"># prod-order-cluster · dba_l2 · strict</div>
+      <div style="margin-top:10px"><span style="color:#8facff">order-cluster</span> <span style="color:var(--cyan-400)">❯</span> <span style="color:var(--text-strong)">ALTER TABLE orders DROP COLUMN legacy_ref;</span></div>
+      <div style="margin-top:6px;color:var(--danger-text)">⚠ 已拦截 · 需要审批</div>
+    </div>
+    <!-- scrim -->
+    <div style="position:absolute; inset:0; background:rgba(4,6,12,.66); backdrop-filter:blur(2px)"></div>
+
+    <!-- centered modal: Lark approval submission -->
+    <div style="position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:560px; background:var(--surface-card); border:1px solid var(--border-default); border-radius:18px; box-shadow:0 30px 80px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(45,205,230,.12); overflow:hidden">
+      <div style="height:4px; background:linear-gradient(90deg,#f0473e,#ffb648)"></div>
+      <div style="padding:22px 26px 0">
+        <div style="display:flex; align-items:flex-start; gap:14px">
+          <div style="width:42px;height:42px;border-radius:12px;background:var(--danger-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0"><i data-lucide="shield-alert" style="width:22px;height:22px;color:var(--danger)"></i></div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:10px"><div style="font:700 18px var(--font-display);color:var(--text-strong);letter-spacing:-.02em">该命令需要审批后执行</div><span style="display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 11px var(--font-mono)">高危 P1</span></div>
+            <div style="margin-top:5px;font:400 12.5px/1.55 var(--font-body);color:var(--text-muted)">命中策略 <span style="color:var(--text-body)">「PROD · 高危 DDL 二级审批」</span>。提交后将生成 Lark 审批卡并通知审批人，通过后由网关代执行。</div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 14px">
+          <div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-bottom:6px">待执行命令</div>
+          <div style="font:500 13.5px var(--font-mono);color:var(--text-body)"><span style="color:var(--danger-text)">ALTER TABLE</span> orders <span style="color:var(--danger-text)">DROP COLUMN</span> <span style="color:#2dcde6">legacy_ref</span>;</div>
+        </div>
+
+        <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">环境</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:3px">PROD</div></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">实例</div><div style="font:600 12px var(--font-mono);color:var(--text-body);margin-top:3px">order-cluster</div></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint)">风险</div><div style="font:600 12px var(--font-mono);color:var(--danger-text);margin-top:3px">不可逆 · 锁表</div></div>
+        </div>
+
+        <!-- approver chain -->
+        <div style="margin-top:16px;font:600 11px var(--font-mono);letter-spacing:.1em;color:var(--text-faint);text-transform:uppercase">审批链</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--accent-subtle-border);background:var(--accent-subtle);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#5e83fb,#2dcde6);display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:#fff">LW</div><span style="font:600 11px var(--font-body);color:var(--accent-text)">你</span></div>
+          <i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-faint)"></i>
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">ZW</div><span style="font:600 11px var(--font-body);color:var(--text-body)">张伟 · 组长</span></div>
+          <i data-lucide="arrow-right" style="width:14px;height:14px;color:var(--text-faint)"></i>
+          <div style="display:flex;align-items:center;gap:7px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px"><div style="width:22px;height:22px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">LN</div><span style="font:600 11px var(--font-body);color:var(--text-body)">李娜 · 负责人</span></div>
+        </div>
+
+        <!-- reason -->
+        <div style="margin-top:16px">
+          <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">操作原因 <span style="color:var(--danger-text)">*</span></div>
+          <div style="border:1px solid var(--accent-subtle-border);border-radius:10px;background:var(--surface-sunken);padding:11px 13px;font:400 13px var(--font-body);color:var(--text-body);box-shadow:0 0 0 3px var(--focus-ring)">下线已废弃字段 legacy_ref，已确认无服务引用，变更窗口 23:00–23:30。<span style="display:inline-block;width:1.5px;height:15px;background:var(--cyan-400);vertical-align:-3px;margin-left:1px;animation:blink 1s steps(1) infinite"></span></div>
+        </div>
+
+        <!-- lark sync note -->
+        <div style="margin-top:14px;display:flex;align-items:center;gap:8px;font:500 11.5px var(--font-mono);color:var(--text-muted)"><i data-lucide="radio" style="width:14px;height:14px;color:#2dcde6"></i>提交后同步告警至 <span style="color:#8facff">Lark · #dba-oncall</span> 与值班负责人</div>
+      </div>
+
+      <!-- footer -->
+      <div style="margin-top:18px;display:flex;align-items:center;gap:12px;padding:14px 26px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
+        <div style="font:500 11px var(--font-mono);color:var(--text-faint)">审计 ID · AUD-77310</div>
+        <div style="margin-left:auto;display:flex;gap:10px">
+          <div style="display:flex;align-items:center;justify-content:center;height:40px;padding:0 18px;border-radius:10px;border:1px solid var(--border-default);font:600 13px var(--font-body);color:var(--text-body)">取消</div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:7px;height:40px;padding:0 20px;border-radius:10px;background:var(--accent);color:#fff;font:600 13px var(--font-body);box-shadow:0 0 0 1px var(--accent-subtle-border),0 8px 24px -6px rgba(59,110,246,.6)">提交审批 <i data-lucide="send" style="width:14px;height:14px"></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- post-it C -->
+<div style="position:absolute; left:2760px; top:1040px; width:300px; background:#fef4a8; padding:13px 15px; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.12); transform:rotate(-1deg); font:400 12px/1.5 var(--font-body); color:#5b4a12">
+  <b>拦截焦点态</b> — 命中高危命令时弹出居中提交卡，强制填写原因、确认审批链。仪式感最强，最难被忽略。
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    const draw = () => { try { window.lucide && window.lucide.createIcons(); } catch(e){} };
+    draw();
+    setTimeout(draw, 300);
+    setTimeout(draw, 1000);
+  }
+}
+</script>
+</body>
+</html>

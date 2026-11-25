@@ -1,0 +1,47 @@
+/* ============================================================
+   Vela — Effects: radii, shadows, blur, glow
+   Light shadows are soft & cool-tinted (slate). Dark relies on
+   borders + neon glow instead of drop shadows.
+   ============================================================ */
+
+:root {
+  /* ---- Corner radii (medium-rounded house style) ---- */
+  --radius-xs:   4px;
+  --radius-sm:   6px;
+  --radius-md:   10px;  /* default control / card inner */
+  --radius-lg:   14px;  /* cards, panels */
+  --radius-xl:   20px;
+  --radius-2xl:  28px;
+  --radius-full: 999px;
+
+  /* ---- Borders ---- */
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+
+  /* ---- Shadows (cool slate-tinted, Light) ---- */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 48, 0.06);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 48, 0.06), 0 2px 6px rgba(16, 24, 48, 0.06);
+  --shadow-md: 0 4px 10px rgba(16, 24, 48, 0.08), 0 1px 3px rgba(16, 24, 48, 0.06);
+  --shadow-lg: 0 12px 28px rgba(16, 24, 48, 0.12), 0 4px 10px rgba(16, 24, 48, 0.07);
+  --shadow-xl: 0 24px 60px rgba(16, 24, 48, 0.16), 0 8px 20px rgba(16, 24, 48, 0.08);
+
+  /* ---- Neon glow (use for accent CTAs / focus in dark, sparingly in light) ---- */
+  --glow-sm: 0 0 0 1px color-mix(in oklch, var(--azure-500) 30%, transparent), 0 6px 18px rgba(59, 110, 246, 0.30);
+  --glow-md: 0 0 0 1px color-mix(in oklch, var(--cyan-400) 40%, transparent), 0 8px 30px rgba(45, 205, 230, 0.35);
+
+  /* ---- Backdrop blur ---- */
+  --blur-sm: 6px;
+  --blur-md: 14px;
+  --blur-lg: 28px;
+}
+
+[data-theme="dark"] {
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 6px 16px rgba(0, 0, 0, 0.50);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --shadow-xl: 0 30px 70px rgba(0, 0, 0, 0.62);
+
+  --glow-sm: 0 0 0 1px rgba(94, 131, 251, 0.45), 0 8px 26px rgba(59, 110, 246, 0.45);
+  --glow-md: 0 0 0 1px rgba(45, 205, 230, 0.50), 0 10px 40px rgba(45, 205, 230, 0.45);
+}

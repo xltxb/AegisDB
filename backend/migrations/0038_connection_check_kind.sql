@@ -1,0 +1,19 @@
+-- 0038: 巡检结论加一栏「种类」。
+--
+-- 0037 只记了 ok / 不 ok。审查时发现这个 bool 装不下真实的四种结局,而分不清它们会
+-- 直接造成两个错误行为:
+--
+--   没配凭据的实例被记成「连不上」  网关这边缺凭据,不是远端坏了;而且定时巡检刻意
+--                                   跳过它们,于是这条假的「连不上」永远不会被刷新。
+--   靠错误文本猜「认证失败」        PostgreSQL 的 permission denied 是登录成功之后的
+--                                   授权错误,被当成认证失败之后,一台连得上的实例会
+--                                   被自动巡检永久跳过。
+--
+-- 种类由 gateway 按**驱动的错误码**判(MySQL 1045、pq 28P01、ORA-01017 …),在那一层
+-- 错误还带类型;出了那层就只剩文字了。取值见 gateway.CheckKind:
+--
+--   ok | unreachable | auth
+--
+-- nocred(没配凭据)**不会写进来**:那种情况根本不记,last_check_ok 保持 NULL ——
+-- "没探过"和"探过、连不上"必须分开。
+ALTER TABLE tbl_connection ADD COLUMN last_check_kind VARCHAR(16) NOT NULL DEFAULT '';
