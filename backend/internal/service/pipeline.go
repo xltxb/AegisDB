@@ -505,9 +505,12 @@ func (s *Services) enqueueRelease(id int64) {
 func (s *Services) failInterrupted(id int64, from string, errRef *model.RuleRef) {
 	now := time.Now()
 	fields := releaseErrFields(errRef, map[string]any{"status": model.RunFailed, "finished_at": now})
-	if _, err := s.Repo.FinishRelease(id, from, fields, true, now); err != nil {
+	voided, _, err := s.Repo.FinishRelease(id, from, fields, true, now)
+	if err != nil {
 		slog.Error("发布单终态写库失败", "release", id, "status", model.RunFailed, "err", err)
+		return
 	}
+	s.afterVoided(voided)
 }
 
 // ---------------------------------------------------------------- 运行 (runner)
@@ -1221,9 +1224,11 @@ func (s *Services) finishRelease(rel *model.Release, status string, errRef *mode
 	now := time.Now()
 	errMsg := model.RenderRelLog(errRef)
 	fields := releaseErrFields(errRef, map[string]any{"status": status, "finished_at": now})
-	if _, err := s.Repo.FinishRelease(rel.ID, "", fields, status != model.RunSuccess, now); err != nil {
+	voided, _, err := s.Repo.FinishRelease(rel.ID, "", fields, status != model.RunSuccess, now)
+	if err != nil {
 		slog.Error("发布单终态写库失败", "release", rel.RelNo, "status", status, "err", err)
 	}
+	s.afterVoided(voided)
 	if status == model.RunSuccess {
 		s.notify(rel.CreatorID, model.NotifReleaseDone, apimsg.T("发布完成"),
 			apimsg.Sprintf("%s「%s」已全部阶段通过", rel.RelNo, rel.Title), rel.RelNo)
@@ -1458,35 +1463,29 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 	now := time.Now()
 	fields := releaseErrFields(model.NewRuleRef(model.RelErrAborted, "who", u.Name),
 		map[string]any{"status": model.RunAborted, "finished_at": now})
-	claimed, err := s.Repo.FinishRelease(rel.ID, rel.Status, fields, true, now)
+	// The pending approval a parked run raised is voided WITH the run, in the same
+	// transaction: leaving it in the approvers' queue invites a decision on a change
+	// that no longer exists — and the sweeper would then try to resume a corpse.
+	voided, claimed, err := s.Repo.FinishRelease(rel.ID, rel.Status, fields, true, now)
 	if err != nil || !claimed {
 		return ErrAlreadyDecided
 	}
-	// The pending approval a parked run raised is voided WITH the run: leaving
-	// it in the approvers' queue invites a decision on a change that no longer
-	// exists — and the sweeper would then try to resume a corpse.
-	s.voidReleaseApprovals(rel)
+	s.afterVoided(voided)
 	return nil
 }
 
-// voidReleaseApprovals expires every still-pending ticket this release raised,
-// using the same vocabulary as the timeout sweep (作废 = expired, no human
-// decision recorded — because none was made). The claim keeps a racing human
-// decision authoritative: if an approver decided first, their outcome stands.
-func (s *Services) voidReleaseApprovals(rel *model.Release) {
-	for _, st := range s.stagesOf(rel.ID) {
-		if st.Type != model.StageApprove || st.ApprovalID == 0 {
-			continue
+// afterVoided is the best-effort follow-up to tickets voided with their release:
+// the stage that raised one says so in its log, and the 审批魔方/飞书 card still
+// open on it is collapsed. The voiding itself already happened, in the transaction
+// that ended the release.
+func (s *Services) afterVoided(voided []model.Approval) {
+	for _, ap := range voided {
+		for _, st := range s.stagesOf(ap.ReleaseID) {
+			if st.ApprovalID == ap.ID {
+				_ = s.Repo.UpdateReleaseStage(st.ID, relLogOf(model.RelLogApVoided, "no", ap.ApNo).fields())
+			}
 		}
-		ap, err := s.Repo.GetApproval(st.ApprovalID)
-		if err != nil || ap.Status != model.StatusPending {
-			continue
-		}
-		if claimed, _ := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusExpired); !claimed {
-			continue
-		}
-		_ = s.Repo.UpdateReleaseStage(st.ID, relLogOf(model.RelLogApVoided, "no", ap.ApNo).fields())
-		s.cancelExternalApproval(*ap) // collapse the still-open 审批魔方/飞书 card, best-effort
+		s.cancelExternalApproval(ap)
 	}
 }
 
