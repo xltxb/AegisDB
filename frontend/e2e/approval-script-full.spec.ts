@@ -38,3 +38,49 @@ test('脚本审查后被改过:不展示,说出原因', async ({ page }) => {
   await expect(page.getByTestId('ap-script-error')).toContainText('被修改')
   await expect(page.getByTestId('ap-script-content')).toHaveCount(0)
 })
+
+// issue #101:拉取全文途中换了一张单,旧响应回来后盖在新单上 —— 审批人照着别人的 SQL 批。
+const OTHER = { ...ROW, id: 8, apNo: 'AP-9202', scriptUploadId: 0, keyword: 'DELETE', command: 'DELETE FROM t_other WHERE id = 1', initiator: 'Wang Wu' }
+const OTHER_SCRIPT = { ...ROW, id: 9, apNo: 'AP-9203', scriptUploadId: 32, initiator: 'Zhao Liu' }
+
+async function slowScript(page: Page, reply: (r: import('@playwright/test').Route) => Promise<void>) {
+  let release = () => {}
+  const gate = new Promise<void>((res) => { release = res })
+  await stubCommon(page)
+  await page.route((u) => u.pathname.endsWith('/api/v1/approvals'), (r) =>
+    r.fulfill(envelope({ items: [ROW, OTHER, OTHER_SCRIPT], total: 3, pending: 3, page: 1, pageSize: 20 })))
+  await page.route((u) => u.pathname.endsWith('/api/v1/approvals/7/script'), async (r) => { await gate; await reply(r) })
+  await page.goto('/#/approvals')
+  await page.locator('.tr', { hasText: 'AP-9201' }).click()
+  await page.getByTestId('ap-full-script').click()
+  const switchTo = async (apNo: string) => {
+    await page.locator('.dx').click()
+    await page.locator('.tr', { hasText: apNo }).click()
+    await expect(page.locator('.dhead .apno')).toHaveText('#' + apNo)
+  }
+  // 放行旧响应,并等页面消化完
+  const respond = async () => {
+    const done = page.waitForResponse('**/approvals/7/script')
+    release()
+    await done
+    await page.waitForTimeout(200)
+  }
+  return { switchTo, respond }
+}
+
+test('拉取全文途中换到普通 SQL 单:显示的仍是它自己的命令', async ({ page }) => {
+  const { switchTo, respond } = await slowScript(page, (r) => r.fulfill(envelope({ filename: 'ddl.sql', content: SCRIPT })))
+  await switchTo('AP-9202')
+  await respond()
+  await expect(page.getByTestId('ap-script-content')).toHaveCount(0)
+  await expect(page.locator('.dcmd').first()).toHaveText('DELETE FROM t_other WHERE id = 1')
+})
+
+test('拉取全文途中换到另一张脚本单:不带过去内容、报错和加载状态', async ({ page }) => {
+  const { switchTo, respond } = await slowScript(page, (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ code: 40001, msg: '旧单的报错', data: null }) }))
+  await switchTo('AP-9203')
+  await expect(page.getByTestId('ap-full-script')).toBeEnabled() // 旧请求还没回来,新单的按钮不该是「加载中」
+  await respond()
+  await expect(page.getByTestId('ap-script-error')).toHaveCount(0)
+})

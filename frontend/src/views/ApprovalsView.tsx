@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { renderApText, renderRule } from '@/lib/ruleText'
 import OscJobPanel from '@/components/approvals/OscJobPanel'
@@ -115,23 +115,31 @@ export default function ApprovalsView() {
   function openDetail(a: Approval) { setDetail(a) }
 
   // 脚本工单的全文。工单的 command 只是摘要(前 40 行 + 语句清单):一条建表语句就几十行,
-  // 摘要装不下后面的 DDL,而审批人要为每一条签字。按需拉取,换一张单就作废。
+  // 摘要装不下后面的 DDL,而审批人要为每一条签字。按需拉取,换一张单就作废 —— 包括还没回来的
+  // 请求:旧响应不能盖在新单上,那会让审批人照着别人的 SQL 批(issue #101)。
   const [fullScript, setFullScript] = useState<string | null>(null)
   const [scriptErr, setScriptErr] = useState('')
   const [scriptLoading, setScriptLoading] = useState(false)
   const [scriptOf, setScriptOf] = useState<number | undefined>()
-  if (scriptOf !== detail?.id) { setScriptOf(detail?.id); setFullScript(null); setScriptErr('') }
+  if (scriptOf !== detail?.id) { setScriptOf(detail?.id); setFullScript(null); setScriptErr(''); setScriptLoading(false) }
+  const scriptSeq = useRef(0)
+  useLayoutEffect(() => { scriptSeq.current++ }, [detail?.id])
   async function toggleFullScript() {
     if (fullScript !== null) { setFullScript(null); return }
-    if (!detailRef.current) return
+    const id = detailRef.current?.id
+    if (!id) return
+    const seq = ++scriptSeq.current
+    // 序号在换单提交后才变,detailRef 在换单的同一刻就变,两个都要对得上
+    const stale = () => seq !== scriptSeq.current || detailRef.current?.id !== id
     setScriptLoading(true)
     setScriptErr('')
     try {
-      setFullScript((await api.approvalScript(detailRef.current.id)).content)
+      const { content } = await api.approvalScript(id)
+      if (!stale()) setFullScript(content)
     } catch (e: any) {
-      setScriptErr(e?.message || '')
+      if (!stale()) setScriptErr(e?.message || '')
     } finally {
-      setScriptLoading(false)
+      if (!stale()) setScriptLoading(false)
     }
   }
   function closeDetail() {
