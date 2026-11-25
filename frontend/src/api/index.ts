@@ -217,8 +217,6 @@ export const api = {
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { status }).then(ok),
   setConnectionTags: (id: number, tags: string) =>
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { tags }).then(ok),
-  setConnectionPolicy: (id: number, policy: string) =>
-    http.patch<any, Envelope<Connection>>(`/connections/${id}`, { policy }).then(ok),
   // 业务方数据查询:我的授权 + 执行(判定拒绝回 40300,执行失败回 0 + data.error)
   myQueryGrants: () => http.get<any, Envelope<{ grants: QueryGrant[]; limits: BizQueryLimits }>>('/bizquery/grants').then(ok),
   // ---- AI 巡检报告(.scratch/inspection-report)----

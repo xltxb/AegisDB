@@ -135,7 +135,7 @@ export default function TerminalSession({
           {wsStatus === 'open' ? t('connected') : wsStatus === 'connecting' ? t('wsConnecting') : t('wsDisconnected')}
         </span>
         <span className="hl">{conn.engine?.toUpperCase()}</span>
-        <span>{conn.defaultRole}</span><span>{conn.policy}</span>
+        <span>{conn.defaultRole}</span>
         <span>UTF-8</span>
         <span className="right keyhint">
           <span><kbd>↑</kbd><kbd>↓</kbd> {t('sbHistory')}</span>

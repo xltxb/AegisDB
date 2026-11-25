@@ -87,8 +87,8 @@
    写 auto / min-content 会让每一行按自己那行的内容各算一套,分栏当场错开。 */
 .tscroll { min-width: 1000px; }
 /* 管理员多一列复选框;只读用户没有批量动作,那一列也就不该占位置。 */
-.thead, .trow { display: grid; grid-template-columns: 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; gap: 12px; }
-.table.adm .thead, .table.adm .trow { grid-template-columns: 34px 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; }
+.thead, .trow { display: grid; grid-template-columns: 1.6fr 0.9fr 1.8fr 0.85fr 0.7fr 64px; gap: 12px; }
+.table.adm .thead, .table.adm .trow { grid-template-columns: 34px 1.6fr 0.9fr 1.8fr 0.85fr 0.7fr 64px; }
 .tar { text-align: right; }
 .cbcell { display: flex; align-items: center; }
 .cb { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-text); }
@@ -102,7 +102,6 @@
 .table.dense .cn { font: 600 12px var(--font-body); }
 .table.dense .engcell, .table.dense .mono { font-size: 11.5px; }
 .table.dense .eic { width: 18px; height: 18px; }
-.table.dense .polsel, .table.dense .polpill { height: 21px; }
 .table.dense .ghost { width: 22px; height: 22px; }
 .table.dense .grouprow { padding: 7px 16px; }
 .table.dense .typerow { padding-top: 4px; padding-bottom: 4px; }
@@ -192,19 +191,6 @@
 /* 截断而不是折行:一条 60 字符的 RDS 域名折起来能把整行撑成三倍高,而这一列
    的作用是"认出是哪台",完整值给 title 和复制按钮。 */
 .hosttxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px var(--font-mono); color: var(--text-muted); }
-/* 网关策略:紧凑的小 select,底色只到"淡"为止。strict 用的是同一枚玫瑰淡底,
-   而不是一块饱和红 —— 这一列是**配置**,不是告警。 */
-.polsel, .polpill {
-  display: inline-flex; align-items: center; height: 24px; max-width: 100%;
-  padding: 0 8px; border-radius: var(--radius-full);
-  font: 600 10.5px var(--font-mono); outline: none;
-}
-.polsel { cursor: pointer; border: 1px solid transparent; -webkit-appearance: none; appearance: none; padding-right: 8px; }
-.polsel:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
-.polsel option { background: var(--surface-card); color: var(--text-body); }
-.polsel.strict, .polpill.strict { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-subtle-border, transparent); }
-.polsel.approve, .polpill.approve { background: var(--warning-subtle); color: var(--warning-text); }
-.polsel.audit, .polpill.audit { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
 .opscell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .opscell .ghost:disabled { opacity: .55; cursor: default; }
 /* 同步时让图标转起来 —— 一个点下去没有任何反应的按钮会被连点,

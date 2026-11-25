@@ -4,7 +4,7 @@
 // sheet is parsed and validated BEFORE anything is created (see lib/connectionImport):
 // a half-applied sheet that then fails leaves the estate in a state nobody asked
 // for. Rows are created through the ordinary connections API, so the server-side
-// environment/policy validation and credential encryption all still apply.
+// environment validation and credential encryption all still apply.
 import { useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react'
 import { createPortal } from 'react-dom'
 import VButton from '@/components/common/VButton'
@@ -81,7 +81,7 @@ export default function ConnectionImportModal({ ref, reload }: { ref: Ref<Import
       try {
         const created = await api.createConnection({
           name: r.name, engine: r.engine, host: r.host, env: r.env as any,
-          policy: r.policy, username: r.username, password: r.password, database: r.database,
+          username: r.username, password: r.password, database: r.database,
         })
         // 导入建成了,但连不上要记一笔 —— 一份"全部成功"的导入报告里躺着两台连不上的
         // 实例,比报告里多两行字糟得多。

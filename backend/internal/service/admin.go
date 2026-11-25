@@ -37,6 +37,9 @@ func (s *Services) connEnvMeta(envCode string) (layer, role string, err error) {
 }
 
 func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connection, error) {
+	if req.Policy == "" {
+		req.Policy = "strict" // 列非空;这个值不参与判定
+	}
 	// 新建与编辑同一套校验(工单 02 第 10 条):从前编辑挡非法 policy,新建却照单全收。
 	if !validPolicies[req.Policy] {
 		return nil, invalidf("网关策略无效:%s(只能是 strict / approve-1 / audit-only)", req.Policy)
@@ -115,6 +118,9 @@ func (s *Services) UpdateConnection(id int64, req dto.ConnectionUpdateReq) (*mod
 	c, err := s.Repo.GetConnection(id)
 	if err != nil {
 		return nil, ErrNotFound
+	}
+	if req.Policy == "" {
+		req.Policy = c.Policy // 不传 = 保持原值
 	}
 	if !validPolicies[req.Policy] {
 		return nil, ErrBadRequest

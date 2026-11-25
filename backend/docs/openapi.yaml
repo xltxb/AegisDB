@@ -1302,7 +1302,7 @@ paths:
       responses: { '200': { $ref: '#/components/responses/Ok' } }
     patch:
       tags: [connections]
-      summary: '[db · admin] 局部修改:status / tags / policy / bizQuery(业务查询源标记,写审计)'
+      summary: '[db · admin] 局部修改:status / tags / policy(不参与判定) / bizQuery(业务查询源标记,写审计)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /connections/{id}/database-project:

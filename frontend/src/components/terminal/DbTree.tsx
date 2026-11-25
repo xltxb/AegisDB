@@ -30,13 +30,6 @@ const dbKey = (cid: number, name: string) => `${cid}:${name}`
 const schemaKey = (cid: number, db: string, sc: string) => `${cid}:${db}:${sc}`
 const objKey = (cid: number, db: string, sc = '') => `${cid}:${db}:${sc}`
 
-// risk tag derived from policy
-function tag(c: Connection) {
-  if (c.policy === 'strict') return { text: 'highTag', cls: 'danger' }
-  if (c.policy === 'approve-1') return { text: 'limitedTag', cls: 'warn' }
-  return null
-}
-
 // The tree groups environment → database type → instance. Those are the two
 // questions an operator answers before touching anything ("which cluster", "which
 // engine"), and an estate with several engines per cluster cannot be navigated by
@@ -673,7 +666,6 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
                       {(g.flat || isOpen(sub)) && (
                         <div className={clsx('ind', !g.flat && 'ind1')}>
                           {ch.conns.map((c) => {
-                            const tg = tag(c)
                             const open = instOpen(c.id)
                             return (
                               <Fragment key={c.id}>
@@ -681,7 +673,6 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
                                   {chev(open, 12)}
                                   <Database size={14} /><span className="nm" title={c.name}>{c.name}</span>
                                   <InspectionBadge report={inspByConn[c.id]} />
-                                  {tg && <span className={clsx('tag', tg.cls)}>{t(tg.text)}</span>}
                                 </div>
                                 {open && <div className="ind2">{renderSchema(c)}</div>}
                               </Fragment>

@@ -10,7 +10,7 @@ import { useUnsavedFlag } from '@/hooks/useUnsavedFlag'
 import { sameForm } from '@/lib/unsavedChanges'
 import { useUIStore } from '@/stores/ui'
 import type { Connection } from '@/types'
-import { blankDraft, dbHint, engineOpts, policyOpts, probe, useEnvOpts, type ConnDraft } from './connectionForm'
+import { blankDraft, dbHint, engineOpts, probe, useEnvOpts, type ConnDraft } from './connectionForm'
 import './ConnectionsView.scoped.css'
 
 export interface EditModalHandle { open(c: Connection): void }
@@ -49,7 +49,6 @@ export default function ConnectionEditModal({ ref, reload }: { ref: Ref<EditModa
         engine: c.engine,
         // Never fall back to the first option — see envOptsFor.
         envLabel: envOptsFor(c.env).find((o) => o.env === c.env)!.label,
-        policy: c.policy,
         username: c.username || '',
         password: '',
         database: c.database || '',
@@ -84,7 +83,7 @@ export default function ConnectionEditModal({ ref, reload }: { ref: Ref<EditModa
       // Update, then test-attach to the gateway (best-effort).
       const updated = await api.updateConnection(modal.id, {
         name: draft.name.trim(), engine: draft.engine,
-        host: draft.host.trim(), env: env as any, policy: draft.policy,
+        host: draft.host.trim(), env: env as any,
         username: draft.username.trim(), password: draft.password, database: draft.database.trim(),
         // SQLite 没有主从之分,不发这组字段(服务端不动)。
         ...(/sqlite/i.test(draft.engine) ? {} : {
@@ -115,7 +114,6 @@ export default function ConnectionEditModal({ ref, reload }: { ref: Ref<EditModa
             <div><div className="fl">{t('fEngine')}</div><VSelect value={draft.engine} onChange={(v) => patch({ engine: v })} options={engineOpts} /></div>
             <div><div className="fl">{t('fEnv')}</div><VSelect value={draft.envLabel} onChange={(v) => patch({ envLabel: v })} options={envOpts.map((o) => o.label)} /></div>
             <div><div className="fl">{t('fAddr')}</div><input value={draft.host} onChange={(e) => patch({ host: e.target.value })} placeholder="10.20.3.12:3306" /></div>
-            <div><div className="fl">{t('fPolicy')}</div><VSelect value={draft.policy} onChange={(v) => patch({ policy: v })} options={policyOpts} /></div>
             <div><div className="fl">{t('fDatabase')}</div><input value={draft.database} onChange={(e) => patch({ database: e.target.value })} placeholder={dbHint(draft.engine, t)} /></div>
             <div><div className="fl">{t('fUser')}</div><input value={draft.username} onChange={(e) => patch({ username: e.target.value })} placeholder="app_ro" /></div>
             <div><div className="fl">{t('fPassword')}</div><input value={draft.password} onChange={(e) => patch({ password: e.target.value })} type="password" placeholder={t('fPasswordKeep')} className={clsx((mainNeedsPw || replicaNeedsMainPw) && 'invalid')} data-testid="conn-edit-password" /></div>

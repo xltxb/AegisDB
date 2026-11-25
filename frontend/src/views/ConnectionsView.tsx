@@ -27,7 +27,6 @@ import type { Connection, Project } from '@/types'
 import ConnectionImportModal, { type ImportModalHandle } from './ConnectionImportModal'
 import ConnectionNewModal, { type NewModalHandle } from './ConnectionNewModal'
 import ConnectionEditModal, { replicaAddr, type EditModalHandle } from './ConnectionEditModal'
-import { policyOpts } from './connectionForm'
 import './ConnectionsView.scoped.css'
 
 interface Db { name: string; projectId?: number }
@@ -64,17 +63,9 @@ const tagArr = (s: string) => (s ? s.split(',').map((x) => x.trim()).filter(Bool
 // 与主库同一个地址、只换了账号:没有从库的架构(TiDB 等)配的只读账号,标签不叫「从库」
 const replicaIsReadonly = (c: Connection) => !!c.replicaHost && c.replicaHost.toLowerCase() === (c.host || '').toLowerCase() && (!c.replicaPort || c.replicaPort === c.port)
 
-// 网关策略的色档。返回的是**类名**而不是内联色值:内联样式盖不过 :hover /
-// :focus,于是那个下拉框在任何状态下都只有一个样子,看着像块死色。
-function polCls(p: string) {
-  if (p === 'strict') return 'strict'
-  if (p === 'audit-only') return 'audit'
-  return 'approve'
-}
-
 function roleColor(r: string) { return r?.startsWith('dba') ? '#8facff' : 'var(--text-muted)' }
 
-// 原生 select 的值不在选项里(归属的项目没列出来、没见过的策略)时留空:React 会改选第一项,
+// 原生 select 的值不在选项里(例如归属的项目没列出来)时留空:React 会改选第一项,
 // 那等于替这台实例声称了一个它没有的值。
 const blankIfUnknown = (v: string | number) => (el: HTMLSelectElement | null) => {
   if (el && ![...el.options].some((o) => o.value === String(v))) el.selectedIndex = -1
@@ -368,20 +359,6 @@ export default function ConnectionsView() {
     }
   }
 
-  // Admins can change an existing instance's gateway policy inline.
-  async function setPolicy(c: Connection, policy: string) {
-    if (!policy || policy === c.policy) return
-    const put = (v: string) => setConns((l) => l.map((x) => (x.id === c.id ? { ...x, policy: v } : x)))
-    put(policy) // 受控下拉:不先写进去,请求期间会跳回旧值
-    try {
-      await api.setConnectionPolicy(c.id, policy)
-      await load()
-    } catch (e) {
-      put(c.policy)
-      notifyError(e, t('actionFailed'))
-    }
-  }
-
   const newModal = useRef<NewModalHandle>(null)
   const impModal = useRef<ImportModalHandle>(null)
   const editModal = useRef<EditModalHandle>(null)
@@ -508,7 +485,6 @@ export default function ConnectionsView() {
   const selectedConns = conns.filter((c) => sel.has(c.id))
 
   const [batchBusy, setBatchBusy, batchBusyRef] = useStateRef(false)
-  const [batchPolicy, setBatchPolicy] = useState('')
 
   /**
    * 选中的实例里有多少台在**受管控的分层**上。
@@ -524,37 +500,6 @@ export default function ConnectionsView() {
     const tier = envtier.tierOf(c.env)
     return !!tier && (tier.dangerBanner || tier.requireMfa)
   }).length
-
-  // 批量改网关策略。改的是**这些实例此后怎么被判**,所以先说清"多少台、其中多少台
-  // 在生产分层",再让人按确认 —— 一次点错在这里等于把一批生产库的闸门一起挪了。
-  // 逐台走同一个接口,不另开批量端点:批量入口绕过单台的服务端校验是很常见的漏法。
-  async function runBatchPolicy(p: string) {
-    setBatchPolicy(p)
-    const rows = selectedConns
-    if (!p || !rows.length || batchBusyRef.current) return
-    // 没有受管控分层被选中时就不提那一句 —— "其中 0 台"是句废话,而废话读多了
-    // 会让人把整段确认文案一起跳过。
-    const msg = selGuarded
-      ? t('connBatchConfirmGuarded', { n: rows.length, p, d: selGuarded })
-      : t('connBatchConfirm', { n: rows.length, p })
-    if (!(await confirmAction(msg))) return
-    setBatchBusy(true)
-    let ok = 0
-    const failed: string[] = []
-    try {
-      for (const c of rows) {
-        if (c.policy === p) { ok++; continue }
-        try { await api.setConnectionPolicy(c.id, p); ok++ } catch { failed.push(c.name) }
-      }
-    } finally {
-      setBatchBusy(false)
-      setBatchPolicy('')
-      await load()
-    }
-    // 部分失败要点名,不是给个总数了事:没改成的那几台仍然按老策略在跑。
-    if (failed.length) notify(t('connBatchPartial', { ok, bad: failed.length, names: failed.slice(0, 3).join(', ') }), 'error', 6000)
-    else notify(t('connBatchDone', { ok }), 'success')
-  }
 
   // 批量巡检:逐台真的连过去试一次。并发限 4 —— 这是往目标库上连,不是本地循环。
   //
@@ -647,8 +592,8 @@ export default function ConnectionsView() {
     if (!rows.length) return
     // 实例名、标签是人填的:以 = + - @ 开头的会被表格软件当公式执行(2026-10 安全审计 L-FE2)
     const esc = csvCell
-    const head = ['name', 'engine', 'env', 'host', 'port', 'database', 'policy', 'defaultRole', 'status', 'tags']
-    const body = rows.map((c) => [c.name, c.engine, c.env, c.host, c.port, c.database, c.policy, c.defaultRole, c.status, c.tags].map(esc).join(','))
+    const head = ['name', 'engine', 'env', 'host', 'port', 'database', 'defaultRole', 'status', 'tags']
+    const body = rows.map((c) => [c.name, c.engine, c.env, c.host, c.port, c.database, c.defaultRole, c.status, c.tags].map(esc).join(','))
     // BOM:这份表是要在 Excel 里打开的,不带的话中文实例名会读成乱码。
     const url = URL.createObjectURL(new Blob([UTF8_BOM + [head.join(','), ...body].join('\n')], { type: 'text/csv;charset=utf-8' }))
     const a = document.createElement('a')
@@ -724,13 +669,6 @@ export default function ConnectionsView() {
             </button>
           </div>
           <div className="mono" style={{ color: roleColor(c.defaultRole) }}>{c.defaultRole}</div>
-          <div>
-            {isAdmin ? (
-              <select ref={blankIfUnknown(c.policy)} className={clsx('polsel', polCls(c.policy))} value={c.policy ?? ''} title={t('fPolicy')} onChange={(e) => setPolicy(c, e.target.value)}>
-                {policyOpts.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            ) : <span className={clsx('polpill', polCls(c.policy))}>{c.policy}</span>}
-          </div>
           {/* 状态回到"一颗点 + 两个字"。它此前是个填色胶囊,和同一行里的策略
               胶囊长得一样重,而两者一个是事实、一个是配置。 */}
           <div>
@@ -871,7 +809,7 @@ export default function ConnectionsView() {
               </span>
             )}
             <span>{t('colInst')}</span><span>{t('colEngine')}</span><span>{t('colAddr')}</span>
-            <span>{t('colRole')}</span><span>{t('colPolicy')}</span><span>{t('colStatus')}</span>
+            <span>{t('colRole')}</span><span>{t('colStatus')}</span>
             <span className="tar">{t('apActions')}</span>
           </div>
 
@@ -927,10 +865,6 @@ export default function ConnectionsView() {
         <div className="fab">
           <span className="fcnt">{t('connSelected', { n: selCount })}</span>
           {selGuarded > 0 && <span className="fprod">{t('connSelGuarded', { n: selGuarded })}</span>}
-          <select value={batchPolicy} className="fsel" disabled={batchBusy} onChange={(e) => runBatchPolicy(e.target.value)}>
-            <option value="">{t('connBatchPolicy')}</option>
-            {policyOpts.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
           <button className="fbtn" disabled={batchBusy} onClick={runBatchCheck}><Activity size={13} />{t('connBatchCheck')}</button>
           <button className="fbtn" disabled={batchBusy} onClick={exportSelected}><Download size={13} />{t('connBatchExport')}</button>
           <button className="fbtn ghosty" disabled={batchBusy} onClick={clearSel}><X size={13} />{t('connSelClear')}</button>
