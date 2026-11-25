@@ -1619,6 +1619,8 @@ const (
 	NotifApprovalApproved = "approval-approved"
 	NotifApprovalRejected = "approval-rejected"
 	NotifApprovalExpired  = "approval-expired"
+	// 审批单超时升级,发给默认审批人;单子仍是待审批,所以界面按"提醒"着色,既不是成功也不是失败。
+	NotifApprovalEscalated = "approval-escalated"
 	// 通过了的工单执行失败(在线变更失败 / 中止、别人替你执行但失败了)。不能沿用
 	// approval-approved:界面按类型着色,失败会弹成一条绿色的"成功"提示。
 	NotifExecFailed = "exec-failed"

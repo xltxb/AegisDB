@@ -1361,6 +1361,7 @@ func (s *Services) SweepApprovalTimeouts() {
 	if err != nil {
 		return
 	}
+	var escalated []model.Approval
 	for _, a := range aps {
 		conn, _ := s.Repo.GetConnection(a.ConnectionID)
 		initiator, _ := s.Repo.GetUserByID(a.InitiatorID)
@@ -1380,14 +1381,27 @@ func (s *Services) SweepApprovalTimeouts() {
 				apimsg.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
 			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
 		case "auto-escalate":
-			// Keep pending for the final approver (owner) but raise an escalation
-			// alert ONCE — claim the escalation atomically so repeated sweeps don't
-			// re-audit/re-notify the same ticket every 60s (R13).
+			// Keep pending but call the default approvers in, ONCE — claim the
+			// escalation atomically so repeated sweeps don't re-audit/re-notify the
+			// same ticket every 60s (R13).
 			if claimed, _ := s.Repo.ClaimEscalation(a.ID); !claimed {
 				continue
 			}
 			s.recordAuditSrc(approvalAuditSource(&a), initiator, conn, a.Command, a.RiskLevel, model.ResultWarn, a.ApNo, "approve")
+			s.notifyEscalation(&a)
+			escalated = append(escalated, a)
 		}
+	}
+	s.Webhook.SendLarkEscalations(escalated)
+}
+
+// notifyEscalation 告诉默认审批人有一张单超时没人处理。
+//
+// 正文不带语句:发布单可以用别的审批链,默认审批人不一定在那张单的链上,也就不一定看得到它。
+func (s *Services) notifyEscalation(a *model.Approval) {
+	for _, u := range s.approverPool() {
+		s.notify(u.ID, model.NotifApprovalEscalated, apimsg.T("审批超时未处理"),
+			apimsg.Sprintf("%s 在 %s 上发起的审批超过时限仍未处理，请跟进", a.Initiator, a.Instance), a.ApNo)
 	}
 }
 

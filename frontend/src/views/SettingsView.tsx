@@ -70,7 +70,6 @@ const num = (n: number): Num => n
 
 const INITIAL = {
   apprTimeout: 'auto-escalate' as string,
-  escalate: true,
   allowSelf: false,
   ttl: '8h' as string,
   idle: true,
@@ -164,7 +163,6 @@ function parse<T>(raw: string | undefined, def: T): T {
 /** 服务端存着的那份设置 → 表单。两个 IP 白名单之外的密钥类字段一律留空(见各处注释)。 */
 function formOf(g: Record<string, string | undefined>): Form {
   return {
-    escalate: parse(g['approval.escalate'], true),
     allowSelf: parse(g['approval.allowSelfApprove'], false),
     mfa: parse(g['security.requireMFA'], true),
     mfaMandatory: parse(g['security.mfaMandatory'], false),
@@ -238,7 +236,6 @@ function settingsPayload(f: Form) {
   const ttlKey = keyOf(f.ttl, SESSION_TTL_KEYS, '8h')
   return {
     'approval.onTimeout': onTimeout,
-    'approval.escalate': f.escalate,
     'approval.allowSelfApprove': f.allowSelf,
     'gateway.execTimeout': clampInt(f.execTimeout, 30, 1, 3600),
     'terminal.resultPageSize': clampInt(f.resultPageSize, 1000, 100, 50000),
@@ -575,7 +572,6 @@ export default function SettingsView() {
             <Head icon={GitPullRequestArrow} title="setAppr" desc="setApprSub" />
             <Row title="setApprTimeout" desc="setApprTimeoutD"><div className="w180"><VSelect value={labelOf(f.apprTimeout, t)} options={APPROVAL_TIMEOUT_KEYS.map((k) => labelOf(k, t))} onChange={(l) => patch({ apprTimeout: keyForLabel(l, APPROVAL_TIMEOUT_KEYS, t, 'auto-escalate') })} /></div></Row>
             <Row title="setDefApprovers" desc="setDefApproversD"><div className="approvers">{approvers.map((a) => <span key={a.id} className="apv"><span className="ava">{a.initials}</span>{a.name}</span>)}{!approvers.length && <span className="apv-empty">{t('setApproversEmpty')}</span>}<a className="apv-manage" onClick={goPerms}>{t('setApproversManage')}</a></div></Row>
-            <Row title="setEscalate" desc="setEscalateD"><VSwitch {...sw('escalate')} /></Row>
             <Row title="setSelfApprove" desc="setSelfApproveD"><VSwitch {...sw('allowSelf')} /></Row>
             {/* External 飞书审批(审批魔方) */}
             <Row title="setExtAppr" desc="setExtApprD" last={!f.extEnabled}><VSwitch {...sw('extEnabled')} /></Row>
