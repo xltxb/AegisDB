@@ -1,0 +1,117 @@
+.askadmin { margin-left: auto; font: 500 12px var(--font-body); color: var(--text-muted); }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+/* 左栏定宽、右栏吃掉剩下的全部宽度。左边是一张表单,它的宽度由内容决定(再宽也
+   只是把输入框拉长);右边是列表,宽度越多越有用 —— 语句和报错都能少截一点。 */
+.col { display: grid; grid-template-columns: minmax(400px, 440px) minmax(0, 1fr); gap: 24px; align-items: start; }
+/* 表单跟着滚:任务多起来的时候,提交栏不该被滚出屏幕。 */
+.col > .formcard { position: sticky; top: 0; }
+@media (max-width: 1080px) {
+  .col { display: flex; flex-direction: column; max-width: 760px; }
+  .col > .formcard { position: static; }
+}
+.card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+/* 表单卡片**不能** overflow:hidden —— 实例选择器的浮层要能从卡片里探出去。
+   下拉被裁掉的时候看着像"菜单只有半截",而其实是卡片把它剪了。 */
+.formcard { overflow: visible; }
+.shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.grow { flex: 1; min-width: 0; }
+.st { font: 600 14px var(--font-display); color: var(--text-strong); }
+.ss { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
+.poll { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--font-body); color: var(--accent-text); white-space: nowrap; }
+.refresh { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; white-space: nowrap; }
+.refresh:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.refresh:disabled { opacity: .6; cursor: default; }
+
+/* ---------------- 左侧表单 ---------------- */
+.body { padding: 16px 20px 20px; }
+.notice { display: flex; align-items: center; gap: 9px; padding: 11px 14px; margin-bottom: 12px; border-radius: 10px; background: var(--warning-subtle); color: var(--warning-text); font: 600 12px var(--font-body); }
+.notice span { flex: 1; }
+.field { margin-bottom: 14px; }
+.lbl { margin-bottom: 7px; font: 600 11px var(--font-mono); color: var(--text-muted); }
+.sel, .nameinput { width: 100%; box-sizing: border-box; height: 38px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); color: var(--text-strong); font: 500 12.5px var(--font-mono); outline: none; }
+.sel { font-weight: 600; cursor: pointer; }
+.sel:focus, .nameinput:focus { border-color: var(--accent-text); }
+.prodwarn { margin: -4px 0 14px; display: flex; align-items: center; gap: 6px; font: 700 11.5px var(--font-mono); color: var(--danger-text); }
+/* 语句框给足高度:导出用的 SQL 通常带 WHERE 和几个字段,四行的框要一直滚。 */
+.sqlarea { width: 100%; box-sizing: border-box; min-height: 180px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); color: var(--text-strong); padding: 11px 13px; resize: vertical; font: 500 12.5px/1.7 var(--font-mono); outline: none; }
+.sqlarea::placeholder { color: var(--text-faint); }
+.sqlarea:focus { border-color: var(--accent-text); }
+.senschk { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.senstxt { font: 500 12.5px var(--font-body); color: var(--text-body); }
+.senshint { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; padding: 8px 10px;
+  border-radius: 8px; background: var(--warning-subtle); color: var(--warning-text);
+  font: 500 11.5px var(--font-body); line-height: 1.5; }
+.err { margin-top: 10px; font: 600 12px var(--font-body); color: var(--danger-text); }
+.submit { margin-top: 16px; width: 100%; }
+.fmtseg { display: inline-flex; border: 1px solid var(--border-subtle); border-radius: 9px; overflow: hidden; }
+.fmtseg button { padding: 6px 18px; background: var(--surface-page); border: 0; cursor: pointer;
+  font: 600 12px var(--font-mono); color: var(--text-muted); }
+.fmtseg button + button { border-left: 1px solid var(--border-subtle); }
+.fmtseg button.on { background: var(--accent-subtle); color: var(--accent-text); }
+.fmthint { margin-top: 6px; font: 500 12px var(--font-body); color: var(--text-muted); }
+.jfmt { margin-left: 8px; padding: 1px 6px; border-radius: 5px; font: 600 10px var(--font-mono); background: var(--accent-subtle); color: var(--accent-text); vertical-align: 1px; }
+.subhint { margin-top: 9px; display: flex; justify-content: center; flex-wrap: wrap; gap: 5px; font: 500 12px var(--font-body); color: var(--text-faint); text-align: center; }
+
+/* ---------------- 右侧任务列表 ---------------- */
+/* 一行四栏:状态 | 实例与语句 | 时间 | 操作。执行详情与报错另起一行占满 2..-1,
+   因为语句和报错都长 —— 硬塞进第五栏只会把它们截得都读不出来。 */
+.jhead, .jrow { display: grid; grid-template-columns: 104px minmax(0, 1fr) 104px 128px; gap: 12px; align-items: center; }
+.jhead { padding: 10px 20px; background: var(--surface-page); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; }
+.jhead .right { text-align: right; }
+.jobs { display: flex; flex-direction: column; }
+.jrow { padding: 13px 20px; border-bottom: 1px solid var(--border-subtle); transition: background var(--dur-fast, .15s) var(--ease-out, ease); }
+.jrow:last-child { border-bottom: none; }
+.jrow:hover { background: var(--surface-sunken); }
+.jbadge { justify-self: start; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); white-space: nowrap; }
+.jbadge.wait { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.jbadge.gone { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+.jbadge.run { background: var(--accent-subtle); color: var(--accent-text); }
+.jbadge.ok { background: var(--success-subtle); color: var(--success-text); }
+.jbadge.bad { background: var(--danger-subtle); color: var(--danger-text); }
+.jmain { min-width: 0; }
+.jname { font: 700 13.5px var(--font-body); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 2px; }
+.jname.unnamed { font-weight: 500; color: var(--text-faint); font-style: italic; }
+.jinst { font: 600 12px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jdl { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--success-subtle); color: var(--success-text); font: 600 11px var(--font-body); white-space: nowrap; }
+.jdlt { margin-left: 4px; font: 500 10.5px var(--font-mono); opacity: .8; }
+.req { color: var(--danger-text); }
+.nameinput.invalid { border-color: var(--danger-text); }
+.jdb { color: var(--text-faint); font-weight: 500; }
+.jsql { margin-top: 3px; font: 500 12px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jtime { text-align: right; font: 500 10.5px/1.6 var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.jact { justify-self: end; }
+.jdet { grid-column: 2 / -1; margin-top: 9px; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.jstat { flex-shrink: 0; font: 500 11px var(--font-mono); color: var(--text-muted); }
+.dot { margin: 0 5px; color: var(--text-faint); }
+.jpw { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-faint); }
+.jpw .pl { font: 600 10px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+.pw { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 10px; border-radius: 7px; background: var(--accent-subtle); color: var(--accent-text); font: 800 12.5px var(--font-mono); letter-spacing: 1px; }
+.iconbtn { width: 30px; height: 28px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-card); color: var(--text-body); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.iconbtn:hover { color: var(--accent-text); border-color: var(--accent-text); }
+.gtip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font: 600 11px var(--font-body); color: var(--text-faint); }
+/* 报错自成一块浅红区域,默认单行:三条失败任务各占五行,列表就没法看了。
+   但截断不等于看不到 —— 报错原文是排查的起点,点一下展开。 */
+.jerr { flex: 1; min-width: 0; display: flex; align-items: flex-start; gap: 7px; padding: 8px 11px; border-radius: 8px; background: var(--danger-subtle); color: var(--danger-text); font: 500 11.5px/1.6 var(--font-mono); cursor: pointer; }
+.jerr .ei { flex-shrink: 0; margin-top: 1px; }
+.jerr .etext { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jerr.open .etext { white-space: pre-wrap; word-break: break-word; }
+.jerr .ec { flex-shrink: 0; margin-top: 1px; transition: transform var(--dur-fast, .15s) var(--ease-out, ease); }
+.jerr .ec.up { transform: rotate(180deg); }
+/* 被终止不是出错:灰底,与"已终止"徽标同色 */
+.jerr.muted { background: var(--surface-sunken); color: var(--text-muted); }
+
+/* ---------------- 骨架与空态 ---------------- */
+.skel { pointer-events: none; }
+.sk { height: 14px; border-radius: 6px; background: var(--surface-sunken); animation: pulse 1.4s ease-in-out infinite; }
+.sk-badge { height: 22px; border-radius: 999px; }
+.sk-main { height: 32px; }
+.sk-act { height: 30px; border-radius: 8px; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.empty { padding: 46px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.eic { width: 46px; height: 46px; border-radius: 14px; background: var(--surface-sunken); display: flex; align-items: center; justify-content: center; }
+.et { font: 600 13px var(--font-body); color: var(--text-body); }
+.es { font: 500 12px var(--font-body); color: var(--text-faint); text-align: center; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

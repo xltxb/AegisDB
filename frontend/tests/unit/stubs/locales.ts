@@ -7,30 +7,25 @@
 // the i18n singleton. That singleton lives in `src/locales/index.ts`, which does
 // two things the bare Node runner cannot do:
 //
-//   1. `import zh from './zh.json5'` — JSON5 is a Vite/unplugin-vue-i18n
-//      concern; Node's TypeScript transform hands the file to the JS parser and
+//   1. `import zh from './zh.json5'` — JSON5 is a Vite plugin's
+//      concern (build/json5Locales); Node's TypeScript transform hands the file to the JS parser and
 //      dies on line 4 ("Missing semicolon"), taking the WHOLE run down with it.
 //      Not two specs — collection aborts, and every test in the suite silently
 //      stops existing.
 //   2. `localStorage.getItem('aegisdb_lang')` — no such global in Node.
 //
 // So the *loading* is stubbed and nothing else. The catalogue is the real
-// `zh.json5` / `en.json5` off disk, and the i18n instance is a real vue-i18n
-// one, because the assertions that matter here check the actual Chinese a user
+// `zh.json5` / `en.json5` off disk, and the i18n instance is the app's
+// own (src/locales/core), because the assertions that matter here check the actual Chinese a user
 // will read ("# 实例: …", "已丢弃最早的 50 条记录"). A stub that returned keys,
 // or hand-rolled `{n}` interpolation, would turn those into tests of the stub.
 import fs from 'fs'
 import path from 'path'
-import { createI18n } from 'vue-i18n'
+import { createI18n } from '../../../src/locales/core'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { parseForESLint, getStaticJSONValue } from 'jsonc-eslint-parser'
 
-// jsonc-eslint-parser is what @intlify/bundle-utils (under the repo's own
-// unplugin-vue-i18n) parses these very files with, so it is the same reader the
-// build uses — but it arrives transitively, not from package.json. json5 itself
-// would be the honest direct dependency; installing one is not possible from
-// this network. If the transitive copy ever goes away this throws by name rather
-// than failing as another cryptic parse error.
+// The other catalogue specs read these files with the same parser.
 function readCatalogue(file: string): Record<string, string> {
   const p = path.resolve('src/locales', file)
   const text = fs.readFileSync(p, 'utf8')
@@ -44,7 +39,6 @@ const en = readCatalogue('en.json5')
 export type LocaleKey = string
 
 export const i18n = createI18n({
-  legacy: false,
   // No localStorage in Node, and no user to have picked anything: the fallback
   // locale is the one these tests assert against.
   locale: 'zh',

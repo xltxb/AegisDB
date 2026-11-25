@@ -78,7 +78,7 @@ http.interceptors.request.use((cfg) => {
 function endSession() {
   // Lazy import breaks the http ↔ auth-store dependency cycle (R21).
   import('@/stores/auth')
-    .then((m) => m.useAuthStore().clearSession())
+    .then((m) => m.useAuthStore.getState().clearSession())
     .catch(() => clearSessionMarker())
   if (location.hash !== '#/login') location.hash = '#/login'
 }

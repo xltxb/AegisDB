@@ -1,27 +1,23 @@
 import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
-import VueI18nPlugin from '@intlify/unplugin-vue-i18n/vite'
+import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
+import { scopedCss } from './build/scopedCss.ts'
+import { json5Locales } from './build/json5Locales.ts'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    vue(),
-    // Pre-compile locale resources at build time. A malformed message template
-    // (e.g. a raw "@"/"|"/"{" that vue-i18n reads as linked/plural/interp syntax)
-    // now fails `vite build` instead of throwing "SyntaxError: <code>" in prod.
-    // runtimeOnly drops the runtime message compiler from the bundle.
-    VueI18nPlugin({
-      include: [fileURLToPath(new URL('./src/locales/*.json5', import.meta.url))],
-      runtimeOnly: true,
-      strictMessage: true,
-      escapeHtml: false,
-    }),
-  ],
+  plugins: [scopedCss(), react(), json5Locales()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
+  },
+  // 依赖一次性预打包:懒加载的页面里才出现的依赖若等到用时才发现,开发服务器会让页面整页重载。
+  optimizeDeps: {
+    include: [
+      'react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-router', 'react-router/dom',
+      'zustand', 'clsx', 'lucide-react', 'axios', 'qrcode', '@intlify/core-base', '@xterm/xterm', '@xterm/addon-fit',
+    ],
   },
   server: {
     // 监听所有网卡(0.0.0.0),让同网段的同事/手机能用本机 IP 访问联调。
@@ -32,6 +28,8 @@ export default defineConfig({
     // 于是浏览器书签、Playwright 脚本、同事手里的地址全指向一台上一轮遗留的旧服务
     // —— 看到的是旧代码,而日志里那行改了端口的提示没人会去读。
     strictPort: true,
+    // e2e 跑的时候关掉热更新:边改边跑会让页面中途重载,测试因此失败得莫名其妙。
+    hmr: process.env.AEGISDB_NO_HMR ? false : undefined,
     proxy: {
       // Proxy API + WS to the Go backend during dev (ws:true forwards the
       // /terminal/ws upgrade — without it the terminal silently falls back to REST).

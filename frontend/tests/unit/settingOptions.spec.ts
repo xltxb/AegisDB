@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 
 import { APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '../../src/lib/settingOptions'
 
-// Two "languages". Like vue-i18n, these are keyed by MESSAGE ID, not by the
+// Two "languages". Like the app's i18n, these are keyed by MESSAGE ID, not by the
 // stored value — the indirection under test.
 const zh: Record<string, string> = {
   autoReject: '超时自动驳回',

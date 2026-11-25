@@ -1,6 +1,6 @@
 // envTierLabels — resolving a tier/environment code to a label and a colour.
 //
-// Pure functions over the two lists, kept out of the Pinia store so they can be
+// Pure functions over the two lists, kept out of the store so they can be
 // tested directly (the store pulls in the axios client, which needs
 // bundler-provided import.meta.env).
 //

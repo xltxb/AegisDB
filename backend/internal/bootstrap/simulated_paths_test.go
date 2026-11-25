@@ -48,7 +48,7 @@ var scanRoots = []string{
 	filepath.Join("frontend", "src"),
 }
 
-var scanExts = map[string]bool{".go": true, ".ts": true, ".vue": true}
+var scanExts = map[string]bool{".go": true, ".ts": true, ".tsx": true}
 
 func repoRoot(t *testing.T) string {
 	t.Helper()

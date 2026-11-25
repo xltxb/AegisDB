@@ -7,7 +7,7 @@ package handler
 // 设置页显示"已保存",实际生效的是另一个数。
 //
 // 现在每个键都要在下面这张表里:未知键拒绝,非法值整次拒绝(一项都不存)。表里的范围与设置页
-// 输入框的上下界一致(SettingsView.vue 的 clampInt),前端发出的合法请求一个都不会被挡 ——
+// 输入框的上下界一致(SettingsView.tsx 的 clampInt),前端发出的合法请求一个都不会被挡 ——
 // TestSettings_FrontendPayloadIsAccepted 把那一整包原样钉住。
 
 import (

@@ -1,0 +1,164 @@
+/* 卡片把整张表包起来:表头、行、分页都在同一张白卡上,而不是几块内容各自浮在
+   页面底色上。页面底色由外层壳提供(--surface-page),卡片是它上面唯一的白。 */
+.card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); }
+.chead { justify-content: flex-end;  display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 18px; border-bottom: 1px solid var(--border-subtle); }
+/* 那句"待办审批后会自动发起…"降成一行小灰字带图标:它是背景说明,不是标题 */
+.hint { display: inline-flex; align-items: center; gap: 6px; }
+.ctrls { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.searchbox { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); }
+.searchbox input { width: 190px; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 12px var(--font-body); }
+.sclear { display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 5px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.sclear:hover { color: var(--text-body); }
+/* 宽度跟着文字走:英文的「All statuses」放不进写死的 132px,被截成「All statu…」(黑盒 2026-10 工单 05) */
+.stsel { width: auto; min-width: 132px; }
+.tabs { display: flex; border: 1px solid var(--border-default); border-radius: 9px; overflow: hidden; }
+.tab { display: flex; align-items: center; height: 32px; padding: 0 13px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); border-left: 1px solid var(--border-subtle); white-space: nowrap; }
+.tab:first-child { border-left: none; }
+.tab.active { background: var(--accent-subtle); color: var(--accent-text); }
+.refresh { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-card); color: var(--text-muted); cursor: pointer; }
+.refresh:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.refresh:disabled { opacity: .6; cursor: default; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 每一行是**各自独立**的一个 grid(.thead 和每个 .tr 分别声明 display:grid),所以
+   列宽必须是与内容无关的定值 —— 一旦写 min-content / max-content / auto,每行会按
+   自己那一行的内容各算一套,表头和各行的分栏就对不齐了。
+
+   定值按**英文**量,不是中文:照着中文词量出来的宽度,"Privilege P2"、"Rejected"
+   一上去就顶破,徽章在定高胶囊里折行,整张表的行高参差不齐。 */
+.thead, .tr { display: grid; grid-template-columns: 208px minmax(200px, 1fr) 150px 96px 96px 116px 184px; gap: 12px; align-items: center; padding: 0 18px; }
+.thead { height: 42px; background: var(--surface-page); border-bottom: 1px solid var(--border-subtle); font: 500 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.thead .right { text-align: right; }
+.tr { min-height: 56px; padding-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); cursor: pointer; transition: background var(--dur-fast, .15s) var(--ease-out, ease); }
+.tr:last-child { border-bottom: none; }
+.tr:hover { background: var(--surface-page); }
+.mono { font-family: var(--font-mono); }
+
+/* 单号 + 优先级 */
+.idcell { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+/* 单号是一个整体:不许在连字符处断成「#AP-」与「2417」两行;放不下时让后面的徽章换行 */
+.idcell .apno, .idcell .badge { white-space: nowrap; flex: none; }
+.apno { color: var(--accent-text); font: 600 12.5px var(--font-mono); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
+.tr:hover .apno { text-decoration-color: currentColor; }
+.tybadge { padding: 1px 6px; border-radius: 5px; font: 600 10px var(--font-body); white-space: nowrap; }
+.tybadge.release { background: var(--accent-subtle); color: var(--accent-text); }
+.tybadge.window { background: var(--warning-subtle); color: var(--warning-text); }
+.tybadge.export { background: var(--success-subtle); color: var(--success-text); }
+.badge { flex-shrink: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font: 600 10px var(--font-mono); white-space: nowrap; border: 1px solid transparent; }
+.badge.p1 { background: var(--danger-subtle); color: var(--danger-text); }
+.badge.p2 { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
+
+/* 目标表 / 实例 / 库 */
+.tgtcell { min-width: 0; }
+.tbl { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbl code { padding: 2px 6px; border-radius: 5px; background: var(--surface-sunken); color: var(--text-strong); font: 500 11.5px var(--font-mono); }
+.none { color: var(--text-faint); }
+.inst { margin-top: 4px; display: flex; align-items: center; gap: 6px; min-width: 0; font: 500 11px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 环境标签按**分层**着色,不按环境名 —— 名字不决定它是什么环境,绑的分层才决定 */
+.envtag { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; font: 600 9.5px var(--font-mono); background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.envtag.prod { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envtag.gli, .envtag.staging { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+
+.who { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-strong); }
+.ava { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-subtle); color: var(--accent-text);
+  font: 600 10px var(--font-mono); display: grid; place-items: center; }
+.timecell { text-align: right; font: 500 11.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+
+/* 状态胶囊。等待类的带一颗呼吸的点 —— 它是唯一一种"还会自己变"的状态。 */
+.stcell { min-width: 0; }
+.stbadge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font: 600 11px var(--font-body); white-space: nowrap; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.stbadge.pending, .stbadge.waitrun { background: var(--warning-subtle); color: var(--warning-text); }
+.stbadge.pending .sdot, .stbadge.waitrun .sdot { animation: breathe 1.8s ease-in-out infinite; }
+.stbadge.approved { background: var(--success-subtle); color: var(--success-text); }
+.stbadge.rejected, .stbadge.failed { background: var(--danger-subtle); color: var(--danger-text); }
+.stbadge.running { background: var(--accent-subtle); color: var(--accent-text); }
+.stbadge.running .sdot { animation: breathe 1.2s ease-in-out infinite; }
+.rhead { display: flex; align-items: center; gap: 8px; font: 600 12.5px var(--font-body); margin-bottom: 8px; color: var(--text-muted); }
+.rhead.success { color: var(--success-text); }
+.rhead.failed { color: var(--danger-text); }
+.rhead.running { color: var(--accent-text); }
+.rhead .rmeta { font: 500 11.5px var(--font-mono); color: var(--text-faint); }
+.spin { animation: apspin 0.9s linear infinite; }
+@keyframes apspin { to { transform: rotate(360deg); } }
+/* 已失效是"没人管过",不是"被拒绝" —— 用中性灰,不占用红色 */
+.stbadge.expired { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+.acth { text-align: right; padding-left: 18px; }
+.acts { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; padding-left: 18px; min-height: 28px; }
+.rowbtn {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; cursor: pointer;
+  border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-card);
+  font: 600 11px var(--font-body); color: var(--text-muted); white-space: nowrap;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.rowbtn.ok:hover { color: var(--success-text); border-color: var(--success); background: var(--success-subtle); }
+.rowbtn.cxl { color: var(--text-muted); }
+.rowbtn.cxl:hover:not(:disabled) { color: var(--text-strong); border-color: var(--border-strong); background: var(--surface-sunken); }
+.rowbtn.rej:hover { color: var(--danger-text); border-color: var(--danger); background: var(--danger-subtle); }
+/* 执行是这一行里唯一真的会落到库上的动作,所以它比另外两个显眼一档 */
+.rowbtn.run { color: #fff; background: var(--accent); border-color: var(--accent); }
+.rowbtn.run:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.rowbtn:disabled { opacity: .55; cursor: default; }
+
+/* 空态与分页 */
+.empty { padding: 52px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.eic { width: 46px; height: 46px; border-radius: 14px; background: var(--surface-sunken); display: grid; place-items: center; }
+.et { font: 600 13px var(--font-body); color: var(--text-muted); }
+.eclear { padding: 6px 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--accent-text); font: 600 11.5px var(--font-body); cursor: pointer; }
+.pfootbar { display: flex; align-items: center; gap: 14px; padding: 12px 18px; border-top: 1px solid var(--border-subtle); }
+.ptotal { font: 500 12px var(--font-body); color: var(--text-muted); }
+.pager { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.psize { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
+.psize select { height: 28px; padding: 0 6px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-sunken); color: var(--text-body); font: 500 11.5px var(--font-mono); cursor: pointer; outline: none; }
+.pg { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border-subtle);
+  border-radius: 8px; background: var(--surface-card); color: var(--text-body); cursor: pointer; }
+.pg:disabled { opacity: .4; cursor: default; }
+.pgn { font: 500 12px var(--font-mono); color: var(--text-muted); }
+
+.overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; }
+.mask { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.dcard { position: relative; width: min(760px, 92vw); max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; }
+.dhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.dtitle { font: 600 14px var(--font-display); color: var(--text-strong); }
+.dx { margin-left: auto; cursor: pointer; color: var(--text-muted); }
+.dbody { padding: 14px 16px; overflow: auto; }
+.dlbl, .ml { font: 600 11px var(--font-body); color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; margin-top: 10px; }
+.dcmd { margin: 6px 0 0; padding: 10px 12px; border-radius: 9px; background: var(--surface-page);
+  border: 1px solid var(--border-subtle); font: 400 12px/1.65 var(--font-mono); color: var(--text-strong);
+  white-space: pre-wrap; word-break: break-word; }
+.dcmd.out { color: var(--text-muted); }
+.dcmd.full { max-height: 50vh; overflow: auto; }
+.fullbar { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; font: 500 12px var(--font-body); color: var(--accent-text); }
+.linkbtn:disabled { opacity: .6; cursor: default; }
+.scripterr { font: 500 12px var(--font-body); color: var(--danger-text); }
+.dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+.tgt, .rt { font: 500 12px var(--font-body); color: var(--text-body); margin-top: 4px; }
+.chain { display: flex; align-items: center; gap: 6px; font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 4px; }
+.dfoot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle); }
+.waitc { font: 500 12px var(--font-body); color: var(--text-muted); }
+
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+.sub { font: 500 13px var(--font-body); color: var(--text-muted); margin-top: 4px; }
+.tabs { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.tab {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 1px solid var(--border-default);
+  border-radius: 10px; font: 500 12px var(--font-mono); color: var(--text-muted); cursor: pointer;
+}
+.tab.active { border-color: var(--accent-subtle-border); background: var(--accent-subtle); color: var(--accent-text); font-weight: 600; }
+/* 定高的胶囊里不能折行,否则文字会溢出到胶囊外面 */
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 11px var(--font-mono); white-space: nowrap; }
+.apno { margin-left: auto; font: 600 12px var(--font-mono); color: #8facff; }
+.ml { font: 500 11px var(--font-body); color: var(--text-faint); }
+.who { display: flex; align-items: center; gap: 7px; margin-top: 3px; font: 600 12px var(--font-body); color: var(--text-body); }
+.ava { width: 22px; height: 22px; border-radius: 50%; background: #232838; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; font: 600 9px var(--font-body); color: var(--text-muted); }
+.tgt { font: 600 12px var(--font-mono); color: var(--text-body); margin-top: 5px; }
+.rt { font: 400 12.5px/1.5 var(--font-body); color: var(--text-body); margin-top: 3px; }
+.apnotice { margin-top: 10px; padding: 8px 12px; border-radius: 8px; background: var(--warning-subtle); color: var(--warning-text); font: 600 12.5px/1.5 var(--font-body); }
+.chain { display: flex; align-items: center; gap: 7px; font: 500 11px var(--font-mono); color: var(--text-muted); }
+.waitc { margin-left: auto; font: 600 11.5px var(--font-mono); color: var(--text-faint); }

@@ -1,0 +1,80 @@
+.scan-overlay { position: fixed; inset: 0; z-index: 50; }
+.scan-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.modal {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 680px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column;
+  background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 18px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7); overflow: hidden;
+  animation: modalIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.topbar { height: 4px; background: linear-gradient(90deg, #3b6ef6, #2dcde6); }
+.target { display: flex; align-items: center; gap: 9px; margin: 12px 0 4px; padding: 10px 12px; border: 1px solid var(--accent-subtle-border); background: var(--accent-subtle); border-radius: 10px; }
+.tl { font: 600 12px var(--font-body); color: var(--text-strong); }
+.tsel { flex: 1; height: 32px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-strong); font: 600 12.5px var(--font-mono); padding: 0 10px; outline: none; cursor: pointer; }
+.tinst { font: 600 11px var(--font-mono); color: var(--text-faint); }
+.confirm { font: 600 12px var(--font-mono); color: var(--accent-text); }
+.mustpick { font: 600 12px var(--font-mono); color: var(--warning-text); }
+.pad { padding: 20px 24px 0; }
+.hdr { display: flex; align-items: flex-start; gap: 13px; }
+.ic { width: 40px; height: 40px; border-radius: 11px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.grow { flex: 1; }
+.titlerow { display: flex; align-items: center; gap: 10px; }
+.title { font: 700 17px var(--font-display); color: var(--text-strong); letter-spacing: -0.02em; }
+.fn { font: 600 12px var(--font-mono); color: #8facff; }
+.desc { margin-top: 3px; font: 400 12.5px/1.5 var(--font-body); color: var(--text-muted); }
+.x { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-faint); }
+.x:hover { background: var(--surface-sunken); }
+.stats { margin-top: 16px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.stat { border: 1px solid var(--border-subtle); border-radius: 11px; padding: 11px 14px; background: var(--surface-sunken); }
+.stat.danger { border-color: rgba(240, 71, 62, 0.3); background: var(--danger-subtle); }
+.stat.warn { border-color: rgba(245, 165, 36, 0.3); background: var(--warning-subtle); }
+.stat .n { font: 700 22px var(--font-display); color: var(--text-strong); }
+.stat.danger .n { color: var(--danger-text); }
+.stat.warn .n { color: var(--warning-text); }
+.stat .n.green { color: var(--success-text); }
+.stat .l { font: 500 11px var(--font-mono); color: var(--text-muted); margin-top: 1px; }
+.banner { margin-top: 14px; display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-radius: 10px; }
+.banner span { font: 600 12.5px var(--font-body); }
+.archive { margin-top: 12px; display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken); color: var(--text-muted); }
+.archive .al { font: 600 11px var(--font-mono); color: var(--text-faint); }
+.archive .ap { flex: 1; min-width: 0; font: 600 12px var(--font-mono); color: var(--accent-text); word-break: break-all; }
+.eyebrow { margin-top: 16px; font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; }
+.list-wrap { flex: 1; min-height: 80px; margin-top: 10px; padding: 0 24px; }
+.list { display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: 11px; overflow: hidden; }
+.srow { display: flex; align-items: flex-start; gap: 11px; padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); }
+.idx { font: 600 11px var(--font-mono); color: var(--text-faint); margin-top: 1px; }
+.sgrow { flex: 1; min-width: 0; }
+.sql { font: 500 12.5px var(--font-mono); color: var(--text-body); word-break: break-all; }
+.nw { margin-top: 4px; display: inline-flex; align-items: center; gap: 4px; font: 600 10px var(--font-mono); color: var(--danger-text); }
+.bdg { flex-shrink: 0; display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
+.submitted { margin: 14px 24px 0; display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-radius: 10px; background: var(--warning-subtle); }
+.submitted span { font: 600 12.5px var(--font-body); color: var(--warning-text); }
+.footer { margin-top: 16px; display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.fl { display: flex; align-items: center; gap: 6px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.ok { color: var(--success-text); }
+.acts { margin-left: auto; display: flex; gap: 10px; }
+.ranmark { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--success-text); }
+/* 下发中的遮罩。铺满弹窗、吃掉所有指针事件 —— 它不是装饰,拦住重复下发靠的就是它。
+   cursor: progress 让"现在点什么都没用"这件事在指针上就能看出来。 */
+.busy {
+  position: absolute; inset: 0; z-index: 2; cursor: progress;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 0 32px; text-align: center;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  backdrop-filter: blur(2px);
+}
+.busy .bt { font: 700 14px var(--font-display); color: var(--text-strong); }
+.busy .bs { font: 500 12px/1.6 var(--font-body); color: var(--text-muted); max-width: 380px; }
+.pcard { width: min(440px, 100%); padding: 16px 18px; border: 1px solid var(--accent-subtle-border); border-radius: 13px; background: var(--surface-card); box-shadow: 0 14px 40px -18px rgba(0, 0, 0, 0.5); text-align: left; }
+.ph { display: flex; align-items: center; gap: 8px; }
+.pt { font: 700 13.5px var(--font-display); color: var(--text-strong); }
+.pp { margin-left: auto; font: 700 13px var(--font-mono); color: var(--accent-text); }
+.pbar { margin-top: 10px; height: 7px; border-radius: 999px; background: var(--border-subtle); overflow: hidden; }
+.pfill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #3b6ef6, #2dcde6); transition: width 0.3s ease; }
+.pcur { margin-top: 10px; font: 500 12px var(--font-mono); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pmeta { margin-top: 8px; display: flex; justify-content: space-between; gap: 12px; font: 500 11px var(--font-body); color: var(--text-faint); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* 遮罩期间关闭入口一并失效,鼠标上也要看得出来 */
+.x.off { opacity: 0.4; cursor: default; }
+.x.off:hover { background: transparent; }

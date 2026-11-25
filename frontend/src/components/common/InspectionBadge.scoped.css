@@ -1,0 +1,3 @@
+.ibadge { display: inline-flex; align-items: center; flex-shrink: 0; cursor: pointer; margin-left: 4px; }
+.ibadge.critical { color: var(--danger-text); }
+.ibadge.warning { color: var(--warning-text); }

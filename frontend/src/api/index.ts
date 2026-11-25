@@ -267,7 +267,7 @@ export const api = {
     })
     if (res.status === 401) {
       // 与 http 拦截器同一个处理:会话失效就整份清掉再回登录页。
-      import('@/stores/auth').then((m) => m.useAuthStore().clearSession()).catch(() => clearSessionMarker())
+      import('@/stores/auth').then((m) => m.useAuthStore.getState().clearSession()).catch(() => clearSessionMarker())
       if (location.hash !== '#/login') location.hash = '#/login'
       throw new Error('HTTP 401')
     }
@@ -324,7 +324,7 @@ export const api = {
     })
     if (res.status === 401) {
       // 与 http 拦截器同一个处理:会话失效就整份清掉再回登录页。
-      import('@/stores/auth').then((m) => m.useAuthStore().clearSession()).catch(() => clearSessionMarker())
+      import('@/stores/auth').then((m) => m.useAuthStore.getState().clearSession()).catch(() => clearSessionMarker())
       if (location.hash !== '#/login') location.hash = '#/login'
       throw new Error('HTTP 401')
     }

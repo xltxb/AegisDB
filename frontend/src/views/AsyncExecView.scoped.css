@@ -1,0 +1,30 @@
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; overflow: auto; }
+.grid { display: grid; grid-template-columns: 380px 1fr; gap: 18px; align-items: start; }
+.card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 16px 18px; }
+.form .fl { font: 500 11px var(--font-body); color: var(--text-faint); margin: 12px 0 6px; }
+.form .fl:first-child { margin-top: 0; }
+.in { width: 100%; box-sizing: border-box; height: 38px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); padding: 0 12px; font: 500 13px var(--font-mono); color: var(--text-strong); outline: none; }
+.sqlbox { width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); padding: 10px 12px; font: 500 13px var(--font-mono); color: var(--text-strong); outline: none; }
+.acts { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.err { flex: 1; font: 600 12px var(--font-mono); color: var(--danger-text); }
+.hint { margin-top: 10px; font: 500 11px var(--font-body); color: var(--text-faint); line-height: 1.5; }
+.jobs { min-height: 200px; }
+.jhead { font: 600 13px var(--font-display); color: var(--text-strong); margin-bottom: 10px; }
+.empty { padding: 30px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.job { border: 1px solid var(--border-subtle); border-radius: 10px; margin-bottom: 8px; cursor: pointer; overflow: hidden; }
+.job.open { border-color: var(--accent-text); }
+.jrow { display: grid; grid-template-columns: 20px 44px 1.2fr 2fr 1.1fr; gap: 10px; align-items: center; padding: 10px 12px; }
+.jno { font: 600 12px var(--font-mono); color: var(--text-muted); }
+.jinst { color: var(--text-body); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dbtag { color: var(--text-faint); }
+.jsql { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jtime { color: var(--text-faint); font-size: 11px; text-align: right; }
+.mono { font-family: var(--font-mono); }
+.log { border-top: 1px solid var(--border-subtle); background: var(--surface-sunken); padding: 10px 12px; }
+.logpre { margin: 0; max-height: 360px; overflow: auto; font: 500 12px var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-word; }
+.logfoot { margin-top: 8px; font: 600 12px var(--font-mono); display: flex; align-items: center; gap: 6px; }
+.logfoot.ok { color: var(--success-text); }
+.logfoot.err { color: var(--danger-text); }
+.logfoot.run { color: var(--accent-text); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }

@@ -1,0 +1,103 @@
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+.head :deep(.vbtn) { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+/* 「提交不等于生效」放在页面上而不是 toast 里 —— toast 会消失,这条约束一直成立。 */
+.banner {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
+  padding: 10px 14px; border-radius: var(--radius-md);
+  background: var(--accent-subtle); border: 1px solid var(--accent-subtle-border);
+  color: var(--accent-text); font: 500 12px/1.6 var(--font-body);
+}
+.card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); overflow: hidden; }
+.scx { overflow-x: auto; }
+.wgrid { min-width: 960px; }
+.segtabs { display: flex; gap: 6px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-card); width: fit-content; max-width: 100%; flex-wrap: wrap; box-shadow: var(--shadow-xs); }
+.segtab { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border: none; border-radius: 9px; background: transparent; color: var(--text-muted); font: 600 12.5px var(--font-body); cursor: pointer; white-space: nowrap; transition: color .12s, background .12s; }
+.segtab:hover { color: var(--text-strong); }
+.segtab.on { background: var(--accent-subtle); color: var(--accent-text); }
+.allnote { margin: -4px 0 12px; font-size: 12px; color: var(--text-muted); }
+.th, .tr { display: grid; grid-template-columns: 1.5fr 1.4fr 1.6fr 1.3fr 0.9fr 110px; gap: 12px; align-items: center; }
+.th { padding: 10px 16px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); }
+.tr { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.tr:last-child { border-bottom: none; }
+.tr:hover { background: var(--surface-sunken); }
+.tr.empty { display: block; padding: 32px 16px; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.ctr { text-align: right; }
+.cn { font: 700 12.5px var(--font-body); color: var(--text-strong); }
+.cl2 { margin-top: 2px; font: 500 11px var(--font-body); color: var(--text-faint); }
+.apno { display: inline-block; margin-top: 4px; font: 600 10.5px var(--font-mono); color: var(--accent-text); text-decoration: none; }
+.apno:hover { text-decoration: underline; }
+.mono { font: 500 11.5px var(--font-mono); color: var(--text-body); }
+.mono.mute { color: var(--text-muted); }
+.daycell { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.daydot { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--surface-sunken); color: var(--text-faint); font: 600 9.5px var(--font-body); }
+.daydot.on { background: var(--accent-subtle); color: var(--accent-text); }
+.dash { color: var(--text-faint); }
+/* 状态:四种,各自一枚淡底徽章。待审批与已驳回排在"开没开"之前 —— 还没签字的
+   窗口显示"未到时间"会让人以为只是时候未到。 */
+.wst { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: var(--radius-full); font: 600 10.5px var(--font-mono); }
+.wst.pending { background: var(--warning-subtle); color: var(--warning-text); }
+.wst.rejected { background: var(--danger-subtle); color: var(--danger-text); }
+.wst.off { background: var(--surface-sunken); color: var(--text-faint); }
+.wst.open { background: var(--success-subtle); color: var(--success-text); }
+.wst.closed { background: var(--surface-sunken); color: var(--text-muted); }
+.acts { display: flex; justify-content: flex-end; gap: 6px; }
+.iconbtn { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--surface-card); color: var(--text-muted); cursor: pointer; }
+.iconbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.iconbtn.danger:hover:not(:disabled) { color: var(--danger-text); border-color: var(--danger-text); }
+.iconbtn:disabled { opacity: 0.5; cursor: default; }
+/* 居中弹窗 */
+.ovl { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--surface-overlay); backdrop-filter: blur(2px); }
+/* 宽一点,并且**屏幕放得下就不滚**:表单本身只有五六行,先前被压在 640px 里,
+   两列一挤就长出一条本不必要的滚动条。max-height 只是矮屏上的兜底。 */
+.modal {
+  width: min(760px, 96vw); max-height: min(92vh, 860px); display: flex; flex-direction: column;
+  background: var(--surface-card); border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); overflow: hidden;
+}
+.dhead { display: flex; align-items: flex-start; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.dic { width: 32px; height: 32px; border-radius: var(--radius-md); background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.grow { flex: 1; min-width: 0; }
+.dt { font: 700 14px var(--font-display); color: var(--text-strong); }
+.ds { margin-top: 3px; font: 500 11.5px/1.6 var(--font-body); color: var(--text-muted); }
+.x { color: var(--text-faint); cursor: pointer; display: flex; }
+.x:hover { color: var(--text-strong); }
+/* 只在真的放不下时才滚。日期面板已经 Teleport 到 body,不会再被这里裁掉。 */
+.dbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 18px 22px; }
+.dfoot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+/* 窄屏(或把窗口拖窄)时两列并一列:两个 datetime 字段并排挤到 150px 时,里面的
+   `2026-09-20 00:00` 会被截断,而这正是要核对的东西。 */
+@media (max-width: 768px) {
+  .frow { grid-template-columns: 1fr; gap: 12px; }
+  .ovl { padding: 12px; }
+}
+.fl { margin-bottom: 6px; font: 500 11px var(--font-body); color: var(--text-faint); }
+/* :not(checkbox) —— 星期是复选框,套上输入框的高度会变成七个 38px 的方块。 */
+.frow input:not([type='checkbox']), .dbody > input {
+  width: 100%; box-sizing: border-box; height: 36px; padding: 0 11px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-sunken); color: var(--text-body); font: 500 12.5px var(--font-mono); outline: none;
+}
+.frow input:focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--focus-ring); }
+.dberr { margin-top: 6px; font: 500 11px/1.5 var(--font-body); color: var(--danger-text); }
+.dbwarn { margin-top: 6px; padding: 6px 9px; border-radius: var(--radius-sm); background: var(--warning-subtle); font: 500 11px/1.6 var(--font-body); color: var(--warning-text); }
+.chk { display: flex; align-items: center; gap: 9px; height: 36px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.days { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.day { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 30px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; user-select: none; }
+.day.on { background: var(--accent-text); border-color: var(--accent-text); color: var(--text-on-accent); }
+.day input { display: none; }
+.note { font: 500 11px/1.7 var(--font-body); color: var(--text-faint); border-left: 2px solid var(--border-default); padding-left: 9px; }
+/* 回看弹窗:一行元信息 + 一段原文。窄一点的行距,因为一次要读的是十几条。 */
+.stmtmodal { width: min(920px, 96vw); }
+.stmtsum { margin-bottom: 10px; font: 600 12px var(--font-body); color: var(--text-strong); }
+.stmtinfo { padding: 22px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.stmt { padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.smeta { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin-bottom: 6px; font: 500 11px var(--font-body); }
+.who { color: var(--text-body); font-weight: 600; }
+.rbadge { height: 18px; display: inline-flex; align-items: center; padding: 0 7px; border-radius: var(--radius-full); font: 600 10px var(--font-mono); }
+/* 「窗口放行」是这一页唯一要一眼认出的东西:没有它,一条被免审批放行的 DROP 和
+   一条本来就不用审批的 SELECT 在列表里长得一模一样。 */
+.bywin { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: var(--radius-full); background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); }
+/* 语句原文不截断、不横滚:要核对的正是它。长语句换行,读得完整。 */
+.sql { margin: 0; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text-body); font: 500 11.5px/1.6 var(--font-mono); white-space: pre-wrap; word-break: break-word; }
+.stmtmodal .note { margin-top: 12px; }

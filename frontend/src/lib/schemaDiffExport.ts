@@ -1,6 +1,6 @@
 // 表结构对比报告的导出:Markdown(贴变更单 / 群聊)与 CSV(逐条差异)。
 //
-// 纯函数,文案从外面传进来(t),这样中英文界面导出各自语言的报告,测试也不用起 vue-i18n。
+// 纯函数,文案从外面传进来(t),这样中英文界面导出各自语言的报告,测试也不用起 i18n。
 
 import type { SchemaDiffResp, SchemaDiffColumn, SchemaDiffIndex, SchemaDiffTable } from '@/types'
 import { csvCell } from '@/lib/csv'

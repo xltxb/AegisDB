@@ -1,0 +1,101 @@
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max-narrow); margin-inline: auto; width: 100%; }
+/* 左导航 + 右正文。导航吸顶,正文长了滚动时页签一直够得着。 */
+.layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 24px; align-items: start; }
+.col { min-width: 0; display: flex; flex-direction: column; gap: 18px; }
+/* 页签竖排分组。仍用 .tabs / .tab 这两个类名 —— e2e 靠它们找页签。 */
+.tabs { position: sticky; top: 0; display: flex; flex-direction: column; gap: 2px; }
+.tgroup { padding: 14px 12px 6px; font: 600 10.5px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); }
+.tgroup:first-child { padding-top: 0; }
+.pair { display: flex; align-items: center; gap: 6px; width: 220px; }
+.pair .lkin { width: 100%; }
+.pair span { color: var(--text-faint); }
+.tab {
+  position: relative; display: flex; align-items: center; gap: 9px; width: 100%; height: 36px; padding: 0 12px;
+  border: none; border-radius: 9px; background: transparent; text-align: left;
+  font: 500 13px var(--font-body); color: var(--text-muted); cursor: pointer;
+  transition: color .12s, background .12s;
+}
+.tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab:hover { color: var(--text-body); background: var(--surface-sunken); }
+.tab.active { background: var(--accent-subtle); color: var(--accent-text); font-weight: 600; }
+.tab.active::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
+.card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.shead { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--accent-subtle), transparent 140%); }
+.sic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--accent-subtle-border); display: flex; align-items: center; justify-content: center; }
+.st { font: 650 15px var(--font-display); color: var(--text-strong); }
+.ss { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.srlink { flex-shrink: 0; font: 600 12px var(--font-body); color: var(--accent-text); text-decoration: none; white-space: nowrap; }
+.srlink:hover { text-decoration: underline; }
+.srow { display: flex; align-items: center; gap: 24px; padding: 16px 22px; border-bottom: 1px solid var(--border-subtle); transition: background .12s; }
+.srow:hover { background: color-mix(in srgb, var(--surface-sunken) 55%, transparent); }
+.larkcfg { padding: 6px 22px 16px; border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 10px; }
+.lkrow { display: flex; align-items: center; gap: 12px; }
+.lkl { width: 128px; flex-shrink: 0; font: 500 12px var(--font-body); color: var(--text-muted); }
+/* min-width:0 —— 没有它,flex 项目不会缩到 input 的固有宽度(number 约 197px)以下,
+   160px 的槽位就装不下,数值框会压出卡片边缘。 */
+.lkin { flex: 1; min-width: 0; height: 36px; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); padding: 0 12px; font: 500 12.5px var(--font-mono); color: var(--text-strong); outline: none; }
+.lkin:focus { border-color: var(--accent-text); }
+.lkhint { margin: -4px 0 2px 140px; font: 500 11.5px var(--font-body); color: var(--text-faint); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lkhint .mono { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+.lkfoot { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+.lkmsg { flex: 1; font: 600 12px var(--font-mono); color: var(--text-muted); }
+.lkmsg.ok { color: var(--success-text); }
+.lkmsg.err { color: var(--danger-text); }
+.lkmsg.sending { color: var(--accent-text); }
+.srow.last { border-bottom: none; }
+.grow { flex: 1; min-width: 0; }
+.rt { font: 600 13px var(--font-body); color: var(--text-strong); }
+.rd { font: 400 12px/1.55 var(--font-body); color: var(--text-muted); margin-top: 3px; }
+.w180 { width: 180px; }
+/* 里面的 input 是 flex:1,父级不是 flex 容器时它按 type=number 的默认宽度
+   撑到 ~177px,溢出卡片右边 —— 四个导出数值框一直是歪的。 */
+.w160 { width: 160px; display: flex; flex-shrink: 0; }
+.wurl { width: min(460px, 50%); display: flex; flex-shrink: 0; }
+.wurl .lkin { width: 100%; }
+.w160 > * { flex: 1; min-width: 0; }
+.chipval { font: 600 13px var(--font-mono); color: var(--text-body); background: var(--surface-sunken); border: 1px solid var(--border-default); border-radius: 8px; padding: 7px 14px; }
+.pathinput { width: 300px; height: 34px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-strong); font: 500 12px var(--font-mono); outline: none; }
+.pathinput:focus { border-color: var(--accent-text); }
+.approvers { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.apv-empty { font: 500 12px var(--font-body); color: var(--warning-text); }
+.apv-manage { font: 600 12px var(--font-body); color: var(--accent-text); cursor: pointer; white-space: nowrap; }
+.apv-manage:hover { text-decoration: underline; }
+.apv { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 5px; border: 1px solid var(--border-default); border-radius: 999px; font: 600 11px var(--font-body); color: var(--text-body); }
+.ava { width: 20px; height: 20px; border-radius: 50%; background: var(--surface-sunken); display: flex; align-items: center; justify-content: center; font: 600 9px var(--font-body); color: var(--text-muted); }
+.ipwrap { display: flex; align-items: center; gap: 10px; }
+.ipwrap .mono { font: 600 12px var(--font-mono); color: var(--text-muted); }
+.badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 10px var(--font-mono); }
+.badge.on { background: var(--success-subtle); color: var(--success-text); }
+.badge.off { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+.seg { display: flex; border: 1px solid var(--border-default); border-radius: 9px; overflow: hidden; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 34px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { display: flex; align-items: center; height: 34px; padding: 0 16px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+.si:first-child { border-left: none; }
+.si.active { background: var(--accent-subtle); color: var(--accent-text); }
+.about { display: flex; align-items: center; gap: 10px; margin-top: 18px; padding: 14px 12px 0; border-top: 1px solid var(--border-subtle); }
+.alogo { width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px; background: linear-gradient(135deg, #3b6ef6, #2dcde6); display: flex; align-items: center; justify-content: center; }
+.alogo.custom { background: none; }
+.an { font: 700 11.5px var(--font-display); color: var(--text-strong); letter-spacing: .02em; }
+.av { font: 500 10.5px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
+/* 吸底保存栏:内容长到要滚动时,保存按钮也一直在手边。 */
+.savebar {
+  position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 14px; padding: 12px 16px 12px 22px;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent); backdrop-filter: blur(8px); box-shadow: var(--shadow-md);
+}
+.sbhint { font: 500 12px var(--font-body); color: var(--text-muted); }
+.savedtag { font: 600 12px var(--font-mono); color: var(--success-text); }
+
+.ssowarn { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font: 500 12px/1.55 var(--font-body); color: var(--warning-text); background: var(--warning-subtle); }
+/* 窄屏:导航改成顶部横向滚动条,不再占一列。 */
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .tabs { position: static; flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
+  .tgroup, .about { display: none; }
+  .tab { width: auto; flex-shrink: 0; }
+  .tab.active::before { display: none; }
+  .srow { flex-wrap: wrap; gap: 12px; }
+  .sbhint { display: none; }
+}

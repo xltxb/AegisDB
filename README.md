@@ -22,7 +22,7 @@ AegisDB 是面向 DBA、研发与运维团队的统一数据库访问网关。�
 | 依赖 | 版本 | 说明 |
 |---|---|---|
 | Go | ≥ 1.23 | 纯 Go，不需要 cgo |
-| Node.js | 建议 22 | 前端构建与测试 |
+| Node.js | ≥ 22.22 | 前端构建与测试 |
 | Docker | 可选 | 只有用 PostgreSQL / MySQL 做本地存储库时才需要 |
 
 ### macOS / Linux（零依赖，SQLite）
@@ -121,7 +121,7 @@ AegisDB/
 
 | 层 | 选型 |
 |---|---|
-| 前端 | Vue 3 · TypeScript · Vite · Pinia · Vue Router · vue-i18n（构建期预编译）· xterm.js |
+| 前端 | React 19 · TypeScript · Vite · Zustand · React Router · @intlify/core-base（词条构建期校验）· xterm.js |
 | 后端 | Go · Gin · GORM · gorilla/websocket · JWT · bcrypt · AES-GCM · TOTP |
 | 目标库 | MySQL · PolarDB · Aurora MySQL · TiDB · MariaDB · PostgreSQL · GaussDB (DWS) · Oracle · SQLite |
 | 自身存储 | MySQL 8 / PostgreSQL（生产）· SQLite（本地开发） |

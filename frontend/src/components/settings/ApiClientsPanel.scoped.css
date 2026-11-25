@@ -1,0 +1,59 @@
+.ac { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.achead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.acic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; min-width: 0; }
+.act { font: 600 14px var(--font-display); color: var(--text-strong); }
+.acs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.issued { margin: 14px 20px 0; border: 1px solid var(--warning-text); border-radius: 12px; background: var(--warning-subtle); padding: 12px 14px; }
+.ihead { display: flex; align-items: center; gap: 8px; color: var(--warning-text); }
+.it { font: 600 12.5px var(--font-body); flex: 1; }
+.ix { cursor: pointer; }
+.ibody { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.tok { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding: 8px 10px; border-radius: 8px; background: var(--surface-card); border: 1px solid var(--border-default); font: 500 11.5px var(--font-mono); color: var(--text-strong); }
+.ihint { margin-top: 7px; font: 500 11px var(--font-body); color: var(--text-muted); }
+.sablk { margin: 14px 20px 0; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-sunken); padding: 10px 12px; }
+.sahead { display: flex; align-items: center; gap: 8px; color: var(--text-body); }
+.sat { font: 600 12.5px var(--font-body); color: var(--text-strong); }
+.sasub { flex: 1; font: 500 11px var(--font-body); color: var(--text-faint); }
+.saform { margin-top: 9px; display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--border-default); border-radius: 10px; background: var(--surface-card); }
+.sarow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sarowi { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
+.sarowi.off { opacity: 0.55; }
+.saic { color: var(--accent-text); flex-shrink: 0; }
+.san { font: 600 12.5px var(--font-body); color: var(--text-strong); white-space: nowrap; }
+.sam { font: 500 11px var(--font-body); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sam.right { margin-left: auto; flex-shrink: 0; }
+.saempty { margin-top: 8px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
+.list { padding: 14px 20px 6px; display: flex; flex-direction: column; gap: 8px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 11px; background: var(--surface-sunken); }
+.item.off { opacity: 0.55; }
+.itop { display: flex; align-items: center; gap: 9px; }
+.iname { font: 600 13px var(--font-body); color: var(--text-strong); }
+.ikey { font: 500 11px var(--font-mono); color: var(--text-muted); background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 6px; padding: 1px 6px; }
+.imeta { margin-top: 4px; font: 500 11px var(--font-mono); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; }
+.sep { color: var(--text-faint); }
+.del { width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; border: 1px solid var(--border-subtle); color: var(--danger-text); cursor: pointer; }
+.del.edit { color: var(--text-muted); }
+.anyip { color: var(--warning-text); }
+.in.ta { height: auto; padding: 8px 12px; font: 500 12.5px var(--font-mono); resize: vertical; }
+.empty { padding: 16px; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.sample { padding: 8px 20px 18px; }
+.fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
+.code { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 500 11px var(--font-mono); color: var(--text-body); white-space: pre-wrap; word-break: break-all; overflow-x: auto; }
+.overlay { position: fixed; inset: 0; z-index: 50; }
+.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 560px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 18px; box-shadow: var(--shadow-xl); }
+.mhead { display: flex; align-items: center; gap: 12px; padding: 15px 20px; border-bottom: 1px solid var(--border-subtle); }
+.mic { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.mt { font: 700 14.5px var(--font-display); color: var(--text-strong); }
+.ms { font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.mx { color: var(--text-muted); margin-left: auto; cursor: pointer; }
+.mbody { padding: 6px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
+.in { width: 100%; box-sizing: border-box; height: 38px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-body); color: var(--text-body); outline: none; }
+.hint { margin-top: 5px; font: 500 11px var(--font-body); color: var(--text-faint); }
+.scopes { display: flex; flex-wrap: wrap; gap: 7px; }
+.sc.grant { border-style: dashed; }
+.hint.warn { color: var(--warning-text); }
+.sc { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: 1px dashed var(--border-default); font: 600 11px var(--font-mono); color: var(--text-faint); cursor: pointer; }
+.sc.on { background: var(--accent-subtle); color: var(--accent-text); border-style: solid; border-color: transparent; }
+.mfoot { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }

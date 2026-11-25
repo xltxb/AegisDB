@@ -1,0 +1,70 @@
+.appr-overlay { position: fixed; inset: 0; z-index: 50; }
+.appr-mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.modal {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 580px; max-width: 92vw; background: var(--surface-card);
+  border: 1px solid var(--border-default); border-radius: 18px;
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(45, 205, 230, 0.12);
+  overflow: hidden; animation: modalIn 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  /* 纵向弹性 + 视口上限:内容再长也只让**正文**滚动,页脚那两个按钮永远钉在可见处。
+     少了这一条,长 SQL 会把整个弹窗撑得比屏幕高,而它是居中定位的 —— 溢出的部分上下
+     两头一起被裁掉,提交按钮就再也点不到了。 */
+  display: flex; flex-direction: column; max-height: calc(100vh - 56px);
+}
+.topbar { height: 4px; background: linear-gradient(90deg, #f0473e, #ffb648); }
+.pad { padding: 22px 26px 0; overflow-y: auto; flex: 1; min-height: 0; }
+.hdr { display: flex; align-items: flex-start; gap: 14px; }
+.ic { width: 42px; height: 42px; border-radius: 12px; background: var(--danger-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.grow { flex: 1; }
+.titlerow { display: flex; align-items: center; gap: 10px; }
+.title { font: 700 18px var(--font-display); color: var(--text-strong); letter-spacing: -0.02em; }
+.badge { display: inline-flex; align-items: center; height: 22px; padding: 0 9px; border-radius: 999px; font: 600 11px var(--font-mono); }
+.desc { margin-top: 5px; font: 400 12.5px/1.55 var(--font-body); color: var(--text-muted); }
+.desc .b { color: var(--text-body); }
+.cmdbox { margin-top: 18px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: 10px; padding: 12px 14px; }
+.cl { font: 500 11px var(--font-mono); color: var(--text-faint); margin-bottom: 6px; }
+.cmd { font: 500 13.5px var(--font-mono); color: var(--text-strong); word-break: break-all;
+  white-space: pre-wrap; }
+/* 收起态:给一个高度上限,底下用渐变告诉人"还有" —— 硬切一刀会让人以为 SQL 就这么长,
+   而那正是他要签字确认的东西。 */
+.cmd.clamp { max-height: 156px; overflow: hidden; }
+.cmdbox.clamped { position: relative; }
+.cmdbox.clamped::after {
+  content: ''; position: absolute; left: 1px; right: 1px; bottom: 34px; height: 46px;
+  background: linear-gradient(transparent, var(--surface-sunken)); pointer-events: none;
+}
+/* 展开态:自己滚,不去撑弹窗 —— 否则展开一条长 SQL 又把表单顶下去了。
+   上限刻意收在 34vh:46vh 时这一格自己是够看了,但底下的「操作原因」正好被挤出可见区,
+   于是人展开读完 SQL、抬头看见提交按钮是灰的,却不知道还差一个必填项 —— 要再往回滚
+   一次才找得到。这个弹窗的任务是"确认 + 填理由 + 提交",读全文有展开-滚动,而表单必须
+   一直在眼皮底下。 */
+.cmd.scroll { max-height: 34vh; overflow-y: auto; }
+.cmd-more { position: relative; z-index: 1; margin-top: 8px; padding: 3px 10px;
+  font: 500 11px var(--font-mono); color: var(--text-muted); cursor: pointer;
+  background: var(--surface-raised); border: 1px solid var(--border-subtle); border-radius: 999px; }
+.cmd-more:hover { color: var(--text-strong); border-color: var(--border-default); }
+.grid3 { margin-top: 14px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.gl { font: 500 11px var(--font-body); color: var(--text-faint); }
+.gv { font: 600 12px var(--font-mono); color: var(--text-body); margin-top: 3px; }
+.gv.danger { color: var(--danger-text); }
+.gv.warn { color: var(--warning-text); }
+.eyebrow { margin-top: 16px; font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; }
+.chain { margin-top: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.node { display: flex; align-items: center; gap: 7px; padding: 5px 11px 5px 5px; border: 1px solid var(--border-default); border-radius: 999px; }
+.node.me { border-color: var(--accent-subtle-border); background: var(--accent-subtle); }
+.node span { font: 600 11px var(--font-body); color: var(--text-body); }
+.node.me span { color: var(--accent-text); }
+.ava { width: 22px; height: 22px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 9px var(--font-body); color: var(--text-muted); }
+.ava.me { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; }
+.reason { margin-top: 16px; }
+.req { color: var(--danger-text); }
+.reason textarea {
+  width: 100%; box-sizing: border-box; min-height: 62px; resize: none; margin-top: 6px;
+  border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken);
+  padding: 11px 13px; font: 400 13px var(--font-body); color: var(--text-body); outline: none;
+}
+.lark { margin-top: 14px; display: flex; align-items: center; gap: 8px; font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+.azure { color: #8facff; }
+.footer { margin-top: 18px; flex-shrink: 0; display: flex; align-items: center; gap: 12px; padding: 14px 26px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.aud { font: 500 11px var(--font-mono); color: var(--text-faint); }
+.acts { margin-left: auto; display: flex; gap: 10px; }

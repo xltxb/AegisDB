@@ -1,0 +1,63 @@
+.page { padding: 22px 26px 40px; }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; }
+.ghostbtn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-body); font: 600 12.5px var(--font-body); cursor: pointer; }
+.ghostbtn:disabled { opacity: 0.6; cursor: default; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.stat { position: relative; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.stat.click { cursor: pointer; }
+.stat.click:hover { border-color: var(--border-default); }
+.stat .si { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted); }
+.stat .sv { font: 700 24px var(--font-mono); color: var(--text-strong); }
+.stat .sv .of { font-size: 13px; color: var(--text-faint); font-weight: 600; }
+.stat .sl { margin-top: 2px; font: 500 12px var(--font-body); color: var(--text-muted); }
+.stat.act { border-color: var(--warning-text); }
+.stat.act .sv { color: var(--warning-text); }
+.stat.bad { border-color: var(--danger-text); }
+.stat.bad .sv { color: var(--danger-text); }
+/* 两栏等高:一边空、一边满时,空的那张卡片也撑到同高,空状态居中 —— 不再像缺了半块。 */
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; align-items: stretch; }
+.grid2 > .card { display: flex; flex-direction: column; }
+.grid2 > .card > .empty { flex: 1; display: flex; align-items: center; justify-content: center; }
+@media (max-width: 1180px) { .grid2, .stats { grid-template-columns: 1fr; } }
+.conncard { margin-bottom: 12px; }
+/* 实例多列排:宽屏一行三四个,窄屏一列。异常与展开后的正常实例同一套网格。 */
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); column-gap: 24px; padding: 4px 16px 8px; }
+/* 异常实例带分层与报错时间,一格要宽一些,实例名不被挤成省略号 */
+.conncard > .cgrid { grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); }
+.tgroup .cgrid { padding: 0; }
+.allok { display: flex; align-items: center; gap: 8px; padding: 16px; font: 600 12.5px var(--font-body); color: var(--success-text); }
+.crow.click { cursor: pointer; }
+.crow.click:hover .cname { color: var(--accent-text); }
+.ifind { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.missing { padding: 8px 16px 12px; }
+.missing .link { margin-left: 0; }
+.mchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.mchip { padding: 2px 8px; border-radius: 4px; background: var(--surface-sunken); color: var(--text-muted); font: 500 11.5px var(--font-body); cursor: pointer; }
+.mchip:hover { color: var(--accent-text); }
+.ctier { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; background: var(--surface-sunken); color: var(--text-muted); font-size: 10.5px; font-weight: 600; }
+.chead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.ct { font: 700 13.5px var(--font-display); color: var(--text-strong); }
+.cs { font: 500 11.5px var(--font-body); color: var(--text-faint); }
+.link { margin-left: auto; font: 600 12px var(--font-body); color: var(--accent-text); cursor: pointer; }
+.note { margin: 10px 16px 0; padding: 7px 10px; border-radius: 6px; background: var(--warning-subtle); color: var(--warning-text); font: 500 11.5px/1.5 var(--font-body); }
+.empty { padding: 22px 16px; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.tgroup { padding: 8px 16px 4px; }
+.tlabel { font: 700 11px var(--font-body); color: var(--text-muted); margin: 4px 0 6px; }
+.tn { color: var(--text-faint); font-weight: 600; }
+.crow { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px dashed var(--border-subtle); font: 500 12px var(--font-body); }
+.crow .hi { flex-shrink: 0; color: var(--success-text); }
+.crow.fail .hi { color: var(--danger-text); }
+.crow.maint .hi { color: var(--warning-text); }
+.crow.unknown .hi { color: var(--text-faint); }
+.cname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); font-weight: 600; }
+.ceng { flex-shrink: 0; color: var(--text-faint); font-size: 11px; }
+.cst { flex-shrink: 0; color: var(--text-muted); font-size: 11px; }
+.crow.fail .cst { color: var(--danger-text); }
+.arow { padding: 8px 16px; border-top: 1px solid var(--border-subtle); }
+.arow:first-of-type { border-top: none; }
+.atop { display: flex; align-items: baseline; gap: 8px; font: 600 12.5px var(--font-body); color: var(--text-strong); }
+.aage { margin-left: auto; flex-shrink: 0; font: 500 11px var(--font-body); color: var(--text-faint); }
+.ameta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.acmd { margin-top: 3px; font-size: 11.5px; color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mono { font-family: var(--font-mono); }
+.online .opad { padding: 4px 8px 8px; }

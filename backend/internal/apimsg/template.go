@@ -39,11 +39,11 @@ func ParseVerbs(format string) (verbs []string, ok bool) {
 	return verbs, true
 }
 
-// vue-i18n 消息语法里有含义的字符:在词条里要写成字面量插值 {'@'}。
+// intlify 消息语法里有含义的字符:在词条里要写成字面量插值 {'@'}。
 // < > 是因为构建期 strictMessage 不许词条里出现像 HTML 的东西。
 const special = "{}@|<>%$"
 
-// Template 把一条文案转成 vue-i18n 词条:格式串的动词依次变成 {0} {1} …,其余字符原样,
+// Template 把一条文案转成 intlify 词条:格式串的动词依次变成 {0} {1} …,其余字符原样,
 // 特殊字符转义。前端用 t(key, [参数…]) 渲染,结果与 Go 端 fmt 出来的中文一致。
 func Template(e Entry) string {
 	var b strings.Builder
