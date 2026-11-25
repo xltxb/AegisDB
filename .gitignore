@@ -1,0 +1,53 @@
+# ---- Backend (Go) ----
+/backend/bin/
+/backend/server
+/backend/server.exe
+*.test
+*.out
+# dev 环境的网关存储库是 SQLite(configs/config.yaml 的 sqlite_path)；
+# 从 backend/ 起服务时，相对路径的 SQLite 目标库也会建在这里。
+vela-gateway.db
+/backend/*.db
+*.db-journal
+*.db-wal
+*.db-shm
+# 从 backend/ 起服务(或跑测试)时产生的导出包与上传脚本，含真实数据，不进仓库
+/backend/export/
+/backend/uploads/
+/backend/internal/bootstrap/export/
+/backend/internal/bootstrap/uploads/
+
+# ---- Packaged build output (build.sh) ----
+/dist/
+/vela-gateway-*.tar.gz
+/vela-web-*.zip
+
+# ---- Frontend (Node) ----
+/frontend/node_modules/
+/frontend/dist/
+/frontend/dist.zip
+/frontend/.vite/
+/frontend/test-results/
+/frontend/playwright-report/
+*.tsbuildinfo
+*.local
+
+# ---- Env / secrets ----
+.env
+.env.*
+!.env.example
+# deploy/vela.env.example 的实际副本
+vela.env
+/backend/configs/config.local.yaml
+
+# ---- Editor / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Local tooling ----
+.agents/
+.claude/
+.scratch/
+.codegraph/
