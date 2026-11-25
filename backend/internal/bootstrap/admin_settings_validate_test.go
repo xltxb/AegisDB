@@ -22,7 +22,6 @@ func (a *testApp) settingRaw(key string) string {
 func frontendSettingsPayload() map[string]any {
 	return map[string]any{
 		"approval.onTimeout":                 "auto-escalate",
-		"approval.escalate":                  true,
 		"approval.allowSelfApprove":          false,
 		"gateway.execTimeout":                30,
 		"terminal.resultPageSize":            1000,
@@ -107,10 +106,11 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	p["security.mfaGraceMinutes"] = 0
 	p["approval.onTimeout"] = "keep-waiting"
 	p["security.sessionTTL"] = "24h"
-	// 界面上已拿掉(issue #123、#129)、没有逻辑读的键:老调用方整包提交仍要收下。
+	// 界面上已拿掉(issue #123、#129、#131)、没有逻辑读的键:老调用方整包提交仍要收下。
 	p["gateway.defaultPolicy"] = "approve-1"
 	p["notify.email"] = true
 	p["notify.push"] = false
+	p["approval.escalate"] = true
 	r = app.do(http.MethodPut, "/api/v1/settings", admin, p)
 	eq(t, r.Code, 0, "填满值的整包保存:"+r.Msg)
 

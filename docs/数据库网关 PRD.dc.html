@@ -66,7 +66,7 @@
 </table>
 
 <p style="font:400 12.5px/1.5 var(--font-body); color:var(--text-faint); margin:14px 0 0">优先级定义:<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono);margin:0 2px">P0 必须</span>本期上线必备 ·<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono);margin:0 2px">P1 重要</span>强烈建议 ·<span style="display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:5px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono);margin:0 2px">P2 增强</span>可迭代。</p>
-<p style="font:400 13.5px/1.6 var(--font-body); color:var(--text-body); margin:8px 0 6px; padding:9px 12px; background:var(--surface-sunken); border-left:3px solid var(--accent)"><strong>怎么读这份文档：</strong>需求编号与原文是 2026-06 的评审稿，保留不改（代码按编号引用）；“实现情况”按 2026-11-25 的代码逐条核对。共 43 条：<strong style="color:var(--success-text)">已实现</strong> 21 · <strong style="color:var(--accent-text)">有变更</strong> 15（已按后来的决定实现，与原文不同）· <strong style="color:var(--warning-text)">部分实现</strong> 7 · <strong style="color:var(--danger-text)">未实现</strong> 0。原文与现状不一致时，以“实现情况”为准；实现细节见前后端开发文档与 <code style="font:600 12px var(--font-mono)">docs/adr</code>。</p>
+<p style="font:400 13.5px/1.6 var(--font-body); color:var(--text-body); margin:8px 0 6px; padding:9px 12px; background:var(--surface-sunken); border-left:3px solid var(--accent)"><strong>怎么读这份文档：</strong>需求编号与原文是 2026-06 的评审稿，保留不改（代码按编号引用）；“实现情况”按 2026-11-25 的代码逐条核对。共 43 条：<strong style="color:var(--success-text)">已实现</strong> 21 · <strong style="color:var(--accent-text)">有变更</strong> 16（已按后来的决定实现，与原文不同）· <strong style="color:var(--warning-text)">部分实现</strong> 6 · <strong style="color:var(--danger-text)">未实现</strong> 0。原文与现状不一致时，以“实现情况”为准；实现细节见前后端开发文档与 <code style="font:600 12px var(--font-mono)">docs/adr</code>。</p>
 
 
 <!-- ===== 1. OVERVIEW ===== -->
@@ -162,7 +162,7 @@
     <tr><td class="id">FR-APPR-02</td><td>提交卡展示待执行命令、环境、实例、风险标签(不可逆/锁表),并强制填写操作原因(必填)。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：原因必填；只有“高危 P1 / 权限 P2”与高 / 中风险，没有“不可逆 / 锁表”标签。</td></tr>
     <tr><td class="id">FR-APPR-03</td><td>生成审批单(含审批单号、审计 ID),继承飞书(Lark)审批卡格式,并同步告警至 #dba-oncall 与值班负责人。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：推送飞书卡片到配置的群机器人；没有固定的 #dba-oncall 与值班人概念。另可外发审批魔方（ADR 0003）。</td></tr>
     <tr><td class="id">FR-APPR-04</td><td>审批待办页支持"待我审批 / 全部",卡片展示命令、发起人、目标、原因与审批链,可通过 / 拒绝并即时反馈状态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：通过后不自动执行，由有权的人在这里或总览点执行（ADR 0010）。</td></tr>
-    <tr><td class="id">FR-APPR-05</td><td>审批链支持多级(发起 → 组长 → 负责人),并可配置审批超时处理(自动驳回 / 自动升级 / 保持等待)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：不是逐级审批：链上任意一人的决定即生效。超时三种处理都有；“自动升级”只写一条审计告警，不通知任何人。</td></tr>
+    <tr><td class="id">FR-APPR-05</td><td>审批链支持多级(发起 → 组长 → 负责人),并可配置审批超时处理(自动驳回 / 自动升级 / 保持等待)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：不是逐级审批：链上任意一人的决定即生效。超时三种处理都有；“自动升级”：站内通知默认审批人并推送飞书群，每张单一次，单子继续等待。</td></tr>
   </tbody>
 </table>
 
@@ -240,7 +240,7 @@
   <thead><tr><th style="width:13%">需求 ID</th><th>需求描述</th><th style="width:9%">优先级</th><th style="width:36%">实现情况</th></tr></thead>
   <tbody>
     <tr><td class="id">FR-SET-01</td><td>网关策略:默认策略、严格模式、命令执行超时。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：执行超时生效；严格模式移到分层；“默认策略”从不参与判定，已拿掉。</td></tr>
-    <tr><td class="id">FR-SET-02</td><td>审批:超时处理、默认审批人、超时升级到负责人。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：超时处理生效；默认审批人 = DBA 负责人角色成员；“升级到负责人”开关没有任何逻辑读它。</td></tr>
+    <tr><td class="id">FR-SET-02</td><td>审批:超时处理、默认审批人、超时升级到负责人。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：超时处理生效；默认审批人 = DBA 负责人角色成员；超时升级由超时处理的“自动升级”承担，没有单独开关。</td></tr>
     <tr><td class="id">FR-SET-03</td><td>会话与安全:会话有效期、空闲自动锁定、强制 MFA、IP 允许列表。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--success-text)">已实现</strong>：MFA 按分层；另有管理后台独立的 IP 白名单与空闲超时。</td></tr>
     <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：飞书卡片生效；邮件通知、拦截即时通知没有实现，两个开关已拿掉。</td></tr>
     <tr><td class="id">FR-SET-05</td><td>外观与语言:界面语言(中文/English)、主题(深色/浅色)。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--success-text)">已实现</strong>：主题另有跟随系统。</td></tr>
@@ -280,12 +280,11 @@
     <tr><td>存储库可用 PostgreSQL</td><td>并提供从 MySQL 的停机搬迁。</td><td>ADR 0020</td></tr>
   </tbody>
 </table>
-<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:20px 0 7px">3.11 没有实现、或有界面但不起作用</h3>
-<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">写在这里是为了不让人以为它们生效。是补做还是从界面上拿掉，待产品决定。</p>
+<h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:20px 0 7px">3.11 没有实现</h3>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">写在这里是为了不让人以为它们存在；是否补做待产品决定。</p>
 <table class="prd-table">
   <thead><tr><th style="width:26%">项</th><th>现状</th><th style="width:26%">对应需求</th></tr></thead>
   <tbody>
-    <tr><td>“升级到负责人”开关</td><td>没有任何逻辑读它；超时“自动升级”也只写审计告警。</td><td>FR-APPR-05、FR-SET-02</td></tr>
     <tr><td>邮件通知、拦截即时通知</td><td>没有实现；界面上的开关已拿掉。</td><td>FR-SET-04</td></tr>
     <tr><td>逐级审批</td><td>一人决定即生效，没有“组长 → 负责人”。</td><td>FR-APPR-05</td></tr>
     <tr><td>组织目录</td><td>没有对接。</td><td>FR-USER-04</td></tr>

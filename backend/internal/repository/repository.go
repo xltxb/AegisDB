@@ -1317,9 +1317,11 @@ func (r *Repo) ClaimApprovalCancel(id int64) (bool, error) {
 // ClaimEscalation atomically marks an approval as escalated, but only if it was
 // not already. Returns true iff this caller flipped it (RowsAffected == 1), so a
 // timeout sweep escalates each overdue ticket exactly once (R13).
+//
+// 还要求单子仍是待审批:扫描先列出再逐张抢占,中间被决定掉的单不能再喊人来处理。
 func (r *Repo) ClaimEscalation(id int64) (bool, error) {
 	res := r.db.Model(&model.Approval{}).
-		Where("id = ? AND escalated = ?", id, false).
+		Where("id = ? AND status = ? AND escalated = ?", id, model.StatusPending, false).
 		Update("escalated", true)
 	return res.RowsAffected == 1, res.Error
 }

@@ -297,8 +297,8 @@
   setGw: 'Command execution', setGwSub: 'Global proxy & execution limits',
   setPageSize: 'Terminal rows per batch', setPageSizeD: 'How many rows the web terminal shows at a time (100–50000); the rest can be loaded with Load more. A query reads at most 50,000 rows; use Data export for more.',
   setStrict: 'Strict mode', setStrictD: 'Block DELETE / UPDATE without WHERE — now switched per environment tier', setTimeout: 'Command timeout', setTimeoutD: 'Auto-abort terminal statements on timeout (seconds, 1–3600)', setApprovalTimeout: 'Approved-ticket timeout', setApprovalTimeoutD: 'Per-statement limit when an approved ticket runs; long DDL uses this (seconds, 1–86400, default 3600)',
-  setAppr: 'Approval', setApprSub: 'Approval flow & timeouts', setApprTimeout: 'On approval timeout', setApprTimeoutD: 'What happens when no one acts',
-  setDefApprovers: 'Default approvers', setDefApproversD: "Chain = 'DBA owner' role members (admins as fallback) — manage on Permissions", setApproversEmpty: 'No approvers set', setApproversManage: 'Manage in Permissions', setEscalate: 'Escalate to owner', setEscalateD: 'Escalate after lead timeout', setSelfApprove: 'Allow self-approval', setSelfApproveD: 'Let the initiator approve their own ticket (off by default; two-person control when off)',
+  setAppr: 'Approval', setApprSub: 'Approval flow & timeouts', setApprTimeout: 'On approval timeout', setApprTimeoutD: 'What happens when no one acts. Escalate: notify the default approvers in the console and the Lark group; the ticket keeps waiting',
+  setDefApprovers: 'Default approvers', setDefApproversD: "Chain = 'DBA owner' role members (admins as fallback) — manage on Permissions", setApproversEmpty: 'No approvers set', setApproversManage: 'Manage in Permissions', setSelfApprove: 'Allow self-approval', setSelfApproveD: 'Let the initiator approve their own ticket (off by default; two-person control when off)',
   setSec: 'Session & security', setSecSub: 'Sessions & access control', setTtl: 'Session TTL', setTtlD: 'Re-login required after',
   setIdle: 'Idle auto-lock', setIdleD: 'Lock terminal after 15 min idle', setMfa: 'Require MFA', setMfaD: '2FA required for PROD',
   setAdminIdle: 'Admin console idle timeout (minutes)', setAdminIdleD: 'After this long without activity in the Admin console you are sent back to the workspace (no logout; terminals keep running). Never longer than the idle lock above.', adminLockTitle: 'Admin console idle — this page is locked', adminLockBody: 'This page has unsaved changes and they are still here. Re-enter the Admin console to pick up where you left off.', adminLockResume: 'Re-enter and keep editing', adminLockLeave: 'Discard changes and go to Overview', adminIdleBack: 'Admin console idle timeout — back to the workspace; click Admin to enter again',
@@ -1465,6 +1465,8 @@
     m425988b7: 'Invalid value for {0}',
     // %s 只能是 %s
     m319ea174: '{0} must be one of {1}',
+    // %s 在 %s 上发起的审批超过时限仍未处理，请跟进
+    mf54408da: 'The approval raised by {0} on {1} is overdue and still undecided; please follow up',
     // %s 必须在 %d ~ %d 之间,当前 %d
     mdf3152fe: '{0} must be between {1} and {2} (got {3})',
     // %s 必须是字符串
@@ -2167,6 +2169,8 @@
     md058bc7e: 'Approver role "{0}" ({1}) has no members, so nobody could approve the ticket. Add members to the role first, or use another approver role',
     // 审批角色「%s」(%s)里只有服务账号或已停用的账号,他们登录不了控制台、无法审批 —— 请加入在职的真人成员,或改用其它审批角色
     m6ff7d024: 'Approver role "{0}" ({1}) contains only service accounts or disabled accounts, which cannot sign in to the console to approve. Add active human members, or use another approver role',
+    // 审批超时未处理
+    m81da8912: 'Approval overdue',
     // 审批魔方 PATCH 返回 %d: %s
     m87b1a34c: 'Approval Cube PATCH returned {0}: {1}',
     // 审批魔方返回 %d: %s

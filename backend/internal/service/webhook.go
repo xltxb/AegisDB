@@ -589,6 +589,29 @@ func (d *Dispatcher) SendLarkApproval(ap *model.Approval) {
 	}()
 }
 
+// SendLarkEscalations 给每张超时升级的单发一张卡片(沿用审批卡片的开关与地址)。
+// 一次扫描可能升级很多张(例如刚从「保持等待」切过来),所以在一个 goroutine 里逐张发,不并发打飞书。
+func (d *Dispatcher) SendLarkEscalations(aps []model.Approval) {
+	if len(aps) == 0 || !d.setBool("notify.lark", true) {
+		return
+	}
+	webhook := d.setStr("notify.larkWebhook")
+	if webhook == "" {
+		return
+	}
+	secret, consoleURL := d.setStr("notify.larkSecret"), d.setStr("notify.consoleURL")
+	brand := LoadBrand(d.repo).Text(BrandDefaultLegacy, false)
+	go func() {
+		for i := range aps {
+			ok, msg := d.postLark(webhook, secret, larkCard("审批超时未处理 · "+aps[i].ApNo, &aps[i], consoleURL, brand))
+			d.record("lark-escalation", webhook, ok, msg, 1)
+			if !ok {
+				slog.Warn("lark escalation card failed", "ap", aps[i].ApNo, "err", msg)
+			}
+		}
+	}()
+}
+
 // TestLark sends a sample approval card synchronously and reports the outcome.
 func (d *Dispatcher) TestLark() (bool, string) {
 	webhook := d.setStr("notify.larkWebhook")
@@ -671,6 +694,11 @@ func dbOrDefault(db string) string {
 }
 
 func larkApprovalCard(ap *model.Approval, consoleURL, brand string) map[string]any {
+	return larkCard("高危命令待审批 · "+ap.ApNo, ap, consoleURL, brand)
+}
+
+// larkCard 是审批单卡片的正文;标题由调用方给(新单 / 超时升级)。
+func larkCard(title string, ap *model.Approval, consoleURL, brand string) map[string]any {
 	tmpl, riskLabel := "orange", "🟠 中危"
 	if ap.RiskLevel == "high" {
 		tmpl, riskLabel = "red", "🔴 高危"
@@ -702,7 +730,7 @@ func larkApprovalCard(ap *model.Approval, consoleURL, brand string) map[string]a
 		map[string]any{"tag": "plain_text", "content": brand + " · " + ap.ApNo}}})
 	return map[string]any{
 		"config":   map[string]any{"wide_screen_mode": true},
-		"header":   map[string]any{"template": tmpl, "title": map[string]any{"tag": "plain_text", "content": "高危命令待审批 · " + ap.ApNo}},
+		"header":   map[string]any{"template": tmpl, "title": map[string]any{"tag": "plain_text", "content": title}},
 		"elements": elements,
 	}
 }
