@@ -23,10 +23,9 @@ import (
 // Services is the application service container wired in bootstrap.
 type Services struct {
 	Repo       *repository.Repo
-	// mfaFails:MFA 验证码失败计数(按用户);callbackFails:审批回调鉴权失败计数(按来源 IP)。
-	// 见 mfa_guard.go。挂在实例上而不是包级变量:每个 Services 各算各的。
+	// mfaFails:MFA 验证码失败计数(按用户)。见 mfa_guard.go。
+	// 挂在实例上而不是包级变量:每个 Services 各算各的。
 	mfaFails      *failBook[int64]
-	callbackFails *failBook[string]
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager
@@ -77,7 +76,6 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		Webhook:  NewDispatcher(repo),
 
 		mfaFails:      newFailBook[int64](mfaMaxFails, mfaWindow, mfaLockout),
-		callbackFails: newFailBook[string](callbackMaxFails, callbackFailWindow, callbackLockout),
 	}
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.

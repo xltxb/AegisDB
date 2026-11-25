@@ -1493,8 +1493,6 @@
     m6b7069aa: 'The gateway account of {0} is disabled; cannot grant access',
     // %s 第 %d 行第 %d 列 %s
     mfc648c5d: '{0} line {1} column {2} {3}',
-    // %s 至少 %d 个字符
-    m7aed7478: '{0} must be at least {1} characters',
     // %s 超出范围(%d ~ %d):%d
     m239545e0: '{0} is out of range ({1} ~ {2}): {3}',
     // %s 过长
@@ -2057,12 +2055,6 @@
     m19f376f6: 'Command refused: forbidden by the capability matrix',
     // 命令被拦截,需审批
     m519f19f9: 'Command intercepted; approval required',
-    // 回调与该审批单不匹配
-    mf7a69ff3: 'The callback does not match this approval ticket',
-    // 回调处理失败
-    m15fc9422: 'Failed to process the callback',
-    // 回调鉴权失败
-    me52404c9: 'Callback authentication failed',
     // 在 schema %s 下找不到 %s %s
     m34046b7b: 'No {1} {2} found in schema {0}',
     // 在影子表上应用变更: %w
@@ -2147,8 +2139,6 @@
     m25632caf: 'approval {0}',
     // 审批单 %s 已被%s取代,不能再用它修改授权 #%d
     m569b6ce8: 'Approval {0} has been superseded by {1} and can no longer modify grant #{2}',
-    // 审批单不存在
-    m41dab328: 'Approval ticket not found',
     // 审批单与导出任务不匹配
     m0ebf7e09: 'The approval ticket does not match the export task',
     // 审批失败
@@ -2171,10 +2161,6 @@
     m6ff7d024: 'Approver role "{0}" ({1}) contains only service accounts or disabled accounts, which cannot sign in to the console to approve. Add active human members, or use another approver role',
     // 审批超时未处理
     m81da8912: 'Approval overdue',
-    // 审批魔方 PATCH 返回 %d: %s
-    m87b1a34c: 'Approval Cube PATCH returned {0}: {1}',
-    // 审批魔方返回 %d: %s
-    mc12e4442: 'Approval Cube returned {0}: {1}',
     // 密码至少 %d 位
     m08cbac36: 'The password must be at least {0} characters',
     // 密码过于常见,请换一个

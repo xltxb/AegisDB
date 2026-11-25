@@ -176,19 +176,6 @@ func secret(key string, v any) (any, error) {
 	return str(key, v)
 }
 
-// callbackSecret:同 secret,但新填的值不得短于 service.CallbackSecretMinLen —— 回调能把语句
-// 送去执行,短密钥经不起猜(2026-10 安全审计 M2)。只管新保存的值,已存的短密钥不受影响。
-func callbackSecret(key string, v any) (any, error) {
-	out, err := secret(key, v)
-	if err != nil {
-		return nil, err
-	}
-	if s, ok := out.(string); ok && s != "" && len(strings.TrimSpace(s)) < service.CallbackSecretMinLen {
-		return nil, apimsg.Errorf("%s 至少 %d 个字符", key, service.CallbackSecretMinLen)
-	}
-	return out, nil
-}
-
 // passthrough:由专门的整体校验负责的键(业务查询那一组,见 service.CheckBizQuerySettings)。
 func passthrough(_ string, v any) (any, error) { return v, nil }
 
@@ -240,14 +227,15 @@ var settingSchema = map[string]settingCheck{
 	"approval.escalate":         boolean,
 	"approval.allowSelfApprove": boolean,
 
-	// 外部飞书审批(审批魔方)
+	// 外部飞书审批(审批魔方):对接已移除(#137),这 8 个键仍收下、不生效 —— 老调用方整包提交
+	// 不该因此报错。
 	"approval.external.enabled":          boolean,
 	"approval.external.releaseEnabled":   boolean,
 	"approval.external.baseURL":          outboundURL,
 	"approval.external.token":            secret,
 	"approval.external.aiGroup":          str,
 	"approval.external.callbackBaseURL":  httpURL,
-	"approval.external.callbackSecret":   callbackSecret,
+	"approval.external.callbackSecret":   secret,
 	"approval.external.callbackAllowIPs": ipList,
 
 	// 安全

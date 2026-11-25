@@ -681,8 +681,7 @@ func (s *Services) createApprovalWith(u *model.User, conn *model.Connection, sql
 		slog.Error("create approval failed", "apNo", apNo, "err", err)
 		return nil, "", err
 	}
-	s.Webhook.SendLarkApproval(ap)     // push an interactive Lark card to the approvers
-	s.dispatchExternalApproval(u, ap)  // (审批魔方) best-effort external interactive approval
+	s.Webhook.SendLarkApproval(ap) // push an interactive Lark card to the approvers
 	return ap, auditID, nil
 }
 
@@ -759,13 +758,12 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // finalizeApproval is the shared decision core: atomically claim pending →
 // approved/rejected, then (approve) execute the fixed ap.Command on behalf of the
 // initiator + audit + notify, or (reject) record the rejection. It is reused by
-// the in-app decision path (DecideApproval) and the external审批魔方 callback
-// (DecideApprovalExternal); authorization is the caller's responsibility — this
+// the in-app decision path (DecideApproval); authorization is the caller's responsibility — this
 // function assumes the decision is already authorized. operatorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.
 // approverID 是实际做决定的人:审批步骤记在他那一步上(Repo.DecideStepBy,工单 01 第 6 条);
-// 外部回调只有名字,传 0,退回记在 active 那一步。
+// 传 0 表示只有名字、不知道是谁(没有这样的调用方了,保留是为了不改签名),退回记在 active 那一步。
 func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string, approverID int64) (*dto.ExecResp, error) {
 	// 窗口单只认窗口此刻挂着的那一张:窗口改过(另起了新单)或删了,旧单就作废,
 	// 批准它不能让改过之后的定义生效(2026-10 黑盒,工单 01 第 2、3 条)。顺手把它撤掉,
@@ -1379,7 +1377,6 @@ func (s *Services) SweepApprovalTimeouts() {
 			s.recordAuditSrc(approvalAuditSource(&a), initiator, conn, a.Command, a.RiskLevel, model.ResultRejected, a.ApNo, "approve")
 			s.notify(a.InitiatorID, model.NotifApprovalExpired, apimsg.T("审批已超时作废"),
 				apimsg.Sprintf("超过时限未审批，已自动作废：%s", safeClip(a.Command, 80)), a.ApNo)
-			s.cancelExternalApproval(a) // (审批魔方) collapse the still-open Lark card, best-effort
 		case "auto-escalate":
 			// Keep pending but call the default approvers in, ONCE — claim the
 			// escalation atomically so repeated sweeps don't re-audit/re-notify the

@@ -199,3 +199,21 @@ func TestApprovalTimeout_MissingPolicyKeepsWaiting(t *testing.T) {
 	eq(t, app.approvalRow(admin, ap.ApNo).Status, "pending", "单子仍待审批")
 	eq(t, app.countEscalations(admin, ap.ApNo), 0, "不该升级")
 }
+
+// auto-reject 策略下,超时扫描把还在待审批的单作废成 expired(原先由外部审批的"超时作废卡片"
+// 测试顺带覆盖,外部审批移除后留在这里)。人已经批过的单不受影响。
+func TestApprovalTimeout_AutoRejectExpiresPendingTicket(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	app.setSettings(admin, map[string]any{"approval.onTimeout": "auto-reject", "approval.timeoutMinutes": 0})
+	ap := app.submitProdHighRisk(admin)
+	decided := app.submitProdHighRisk(admin)
+	if ok, err := app.repo.ClaimApproval(decided.ID, "pending", "rejected"); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+
+	app.svc.SweepApprovalTimeouts()
+
+	eq(t, app.approvalRow(admin, ap.ApNo).Status, "expired", "超时作废")
+	eq(t, app.approvalRow(admin, decided.ApNo).Status, "rejected", "已有结论的单不被改动")
+}

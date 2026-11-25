@@ -821,13 +821,10 @@ type Approval struct {
 	RiskLevel    string    `gorm:"size:16;not null" json:"riskLevel"` // high|mid|low
 	Status       string     `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
 	AuditID      string     `gorm:"size:32" json:"auditId"`
-	// External (审批魔方) integration: ExternalTaskID is the vendor's task_id, used
-	// by the timeout PATCH write-back. Callback correlation uses our ApNo (echoed
-	// back as external_task_id), not this.
-	ExternalTaskID string   `gorm:"size:128;index:idx_approval_ext" json:"externalTaskId,omitempty"`
-	// ExternalDispatched:这张单已经(或正在)外发给审批魔方(迁移 0062)。task id 是异步写回的,审批魔方
-	// 也不保证回,所以回调不能只靠它;没外发过的单不该接受回调(见 DecideApprovalExternal)。
-	ExternalDispatched bool `gorm:"column:external_dispatched" json:"-"`
+	// 历史列:审批魔方对接(已移除,#137)留下的两列。列名与索引不动 —— 不做破坏性迁移,
+	// SQLite 与 MySQL 的表结构保持同形 —— 代码不读不写,也不再透出到接口。
+	ExternalTaskID     string `gorm:"size:128;index:idx_approval_ext" json:"-"`
+	ExternalDispatched bool   `gorm:"column:external_dispatched" json:"-"`
 	// ReleaseID links a ticket raised by a release pipeline's approve stage back
 	// to its release. It also keeps the ticket OUT of the manual execute path
 	// (ExecuteApproved): the pipeline owns the execute stage, and letting someone

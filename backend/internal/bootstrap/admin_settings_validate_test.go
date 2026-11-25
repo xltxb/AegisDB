@@ -21,63 +21,55 @@ func (a *testApp) settingRaw(key string) string {
 // 取的是页面初次打开时的默认值。键名、类型照抄:数值是数,开关是布尔,路径可以为空。
 func frontendSettingsPayload() map[string]any {
 	return map[string]any{
-		"approval.onTimeout":                 "auto-escalate",
-		"approval.allowSelfApprove":          false,
-		"gateway.execTimeout":                30,
-		"terminal.resultPageSize":            1000,
-		"gateway.approvalExecTimeout":        3600,
-		"osc.minRows":                        1000000,
-		"osc.minBytes":                       1 << 30,
-		"osc.maxThreadsRunning":              50,
-		"osc.maxReplicaLagSec":               10,
-		"osc.chunkSize":                      1000,
-		"script.savePath":                    "",
-		"inspection.savePath":                "",
-		"export.savePath":                    "",
-		"export.maxRows":                     5000000,
-		"export.maxBytes":                    2000000000,
-		"export.execTimeout":                 1800,
-		"export.retentionDays":               3,
-		"meta.sync.enabled":                  false,
-		"meta.sync.intervalHours":            24,
-		"bizQuery.defaultMaxRows":            1000,
-		"bizQuery.maxRowsCap":                10000,
-		"bizQuery.defaultTimeoutSec":         30,
-		"bizQuery.timeoutCapSec":             300,
-		"bizQuery.maxGrantDays":              90,
-		"bizQuery.maxConcurrentPerUser":      2,
-		"bizQuery.maxConcurrentPerSource":    5,
-		"bizQuery.maxDailyPerUser":           0,
-		"bizQuery.exportEnabled":             false,
-		"bizQuery.applyUrl":                  "https://srd.bssrvc66.com/service-center/query/db-gateway-grant",
-		"meta.sync.concurrency":              2,
-		"conn.check.enabled":                 false,
-		"conn.check.intervalMinutes":         10,
-		"conn.check.concurrency":             4,
-		"security.sessionTTL":                "8h",
-		"security.requireMFA":                true,
-		"security.mfaMandatory":              false,
-		"security.mfaGraceMinutes":           30,
-		"security.idleLock":                  true,
-		"security.idleMinutes":               15,
-		"security.adminIdleMinutes":          5,
-		"security.ipAllowlist":               "",
-		"security.ipAllowEnabled":            false,
-		"sso.enabled":                        false,
-		"sso.baseUrl":                        "",
-		"sso.cookieName":                     "CS-Token",
-		"notify.lark":                        true,
-		"notify.larkWebhook":                 "",
-		"notify.larkSecret":                  "",
-		"notify.consoleURL":                  "",
-		"approval.external.enabled":          false,
-		"approval.external.releaseEnabled":   false,
-		"approval.external.baseURL":          "",
-		"approval.external.token":            "",
-		"approval.external.aiGroup":          "",
-		"approval.external.callbackBaseURL":  "",
-		"approval.external.callbackSecret":   "",
-		"approval.external.callbackAllowIPs": "",
+		"approval.onTimeout":              "auto-escalate",
+		"approval.allowSelfApprove":       false,
+		"gateway.execTimeout":             30,
+		"terminal.resultPageSize":         1000,
+		"gateway.approvalExecTimeout":     3600,
+		"osc.minRows":                     1000000,
+		"osc.minBytes":                    1 << 30,
+		"osc.maxThreadsRunning":           50,
+		"osc.maxReplicaLagSec":            10,
+		"osc.chunkSize":                   1000,
+		"script.savePath":                 "",
+		"inspection.savePath":             "",
+		"export.savePath":                 "",
+		"export.maxRows":                  5000000,
+		"export.maxBytes":                 2000000000,
+		"export.execTimeout":              1800,
+		"export.retentionDays":            3,
+		"meta.sync.enabled":               false,
+		"meta.sync.intervalHours":         24,
+		"bizQuery.defaultMaxRows":         1000,
+		"bizQuery.maxRowsCap":             10000,
+		"bizQuery.defaultTimeoutSec":      30,
+		"bizQuery.timeoutCapSec":          300,
+		"bizQuery.maxGrantDays":           90,
+		"bizQuery.maxConcurrentPerUser":   2,
+		"bizQuery.maxConcurrentPerSource": 5,
+		"bizQuery.maxDailyPerUser":        0,
+		"bizQuery.exportEnabled":          false,
+		"bizQuery.applyUrl":               "https://srd.bssrvc66.com/service-center/query/db-gateway-grant",
+		"meta.sync.concurrency":           2,
+		"conn.check.enabled":              false,
+		"conn.check.intervalMinutes":      10,
+		"conn.check.concurrency":          4,
+		"security.sessionTTL":             "8h",
+		"security.requireMFA":             true,
+		"security.mfaMandatory":           false,
+		"security.mfaGraceMinutes":        30,
+		"security.idleLock":               true,
+		"security.idleMinutes":            15,
+		"security.adminIdleMinutes":       5,
+		"security.ipAllowlist":            "",
+		"security.ipAllowEnabled":         false,
+		"sso.enabled":                     false,
+		"sso.baseUrl":                     "",
+		"sso.cookieName":                  "CS-Token",
+		"notify.lark":                     true,
+		"notify.larkWebhook":              "",
+		"notify.larkSecret":               "",
+		"notify.consoleURL":               "",
 	}
 }
 
@@ -99,9 +91,6 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	p["notify.consoleURL"] = "https://gw.corp.io"
 	p["security.ipAllowlist"] = "10.20.0.0/16, 203.0.113.5"
 	p["security.ipAllowEnabled"] = true
-	p["approval.external.baseURL"] = "https://approval.corp.io"
-	p["approval.external.callbackBaseURL"] = "https://gw.corp.io"
-	p["approval.external.callbackAllowIPs"] = "10.1.2.3,10.9.0.0/16"
 	p["export.retentionDays"] = 0
 	p["security.mfaGraceMinutes"] = 0
 	p["approval.onTimeout"] = "keep-waiting"
@@ -111,6 +100,15 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	p["notify.email"] = true
 	p["notify.push"] = false
 	p["approval.escalate"] = true
+	// 审批魔方对接已移除(#137):设置页不再发这 8 个键,但老调用方整包提交仍要收下(值照旧校验)。
+	p["approval.external.enabled"] = true
+	p["approval.external.releaseEnabled"] = false
+	p["approval.external.baseURL"] = "https://approval.corp.io"
+	p["approval.external.token"] = "tok-0123456789"
+	p["approval.external.aiGroup"] = "ops"
+	p["approval.external.callbackBaseURL"] = "https://gw.corp.io"
+	p["approval.external.callbackSecret"] = "s3cr3t-0123456789"
+	p["approval.external.callbackAllowIPs"] = "10.1.2.3,10.9.0.0/16"
 	r = app.do(http.MethodPut, "/api/v1/settings", admin, p)
 	eq(t, r.Code, 0, "填满值的整包保存:"+r.Msg)
 

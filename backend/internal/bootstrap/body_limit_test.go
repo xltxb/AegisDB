@@ -40,9 +40,6 @@ func TestBodyLimit_UnauthenticatedEndpointsAreSmall(t *testing.T) {
 	if r := app.rawPost("/api/v1/auth/login", "", "application/json", big); r.Code != 41300 {
 		t.Fatalf("2MB 的登录请求应 41300,实际 %d %s", r.Code, r.Msg)
 	}
-	if r := app.rawPost("/api/v1/approvals/lark/callback", "", "application/json", big); r.Code != 41300 {
-		t.Fatalf("2MB 的回调请求应 41300,实际 %d", r.Code)
-	}
 	// 正常大小照常
 	if tok := app.login("linwei@aegisdb.io", "aegisdb123"); tok == "" {
 		t.Fatal("正常登录应成功")

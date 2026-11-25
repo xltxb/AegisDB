@@ -10,34 +10,8 @@ import (
 
 	"aegisdb/internal/model"
 	"aegisdb/internal/service"
-	"aegisdb/pkg/resp"
 	"aegisdb/pkg/totp"
 )
-
-// V-08:没外发过的工单不接受回调;已外发、task id 还没写回的照旧接受。
-func TestV08_CallbackRefusedForNeverDispatchedTicket(t *testing.T) {
-	app := newTestApp(t)
-	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
-
-	ap := app.submitProdHighRisk(token) // 按已外发标记
-	id := app.approvalIDByNo(ap.ApNo)
-	if err := app.repo.SetApprovalExternalDispatched(id, false); err != nil {
-		t.Fatal(err)
-	}
-	body := map[string]any{"external_task_id": ap.ApNo, "approved": true, "approver": []string{"herbert@tbu.net"}}
-	env, _ := app.postLarkCallback("s3cr3t-callback-key", body)
-	eq(t, env.Code, resp.CodeForbidden, "未外发的单回调应被拒")
-	eq(t, app.approvalRow(token, ap.ApNo).Status, "pending", "工单不动")
-
-	// 外发了但 task id 还没写回(EA10 竞态 / 审批魔方不回 task id):照旧放行。
-	if err := app.repo.SetApprovalExternalDispatched(id, true); err != nil {
-		t.Fatal(err)
-	}
-	env, _ = app.postLarkCallback("s3cr3t-callback-key", body)
-	eq(t, env.Code, 0, "已外发的单回调放行")
-	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "工单通过")
-}
 
 // V-09 / V-11:重音变体不是这个账号。MySQL ai_ci 排序规则下 LOWER(email)=? 会匹配变体,SQLite 不会,
 // 所以这里直接测比较函数覆盖的那一层:用真实流程走一遍精确邮箱,确认原有登录不受影响。

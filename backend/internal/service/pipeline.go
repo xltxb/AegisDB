@@ -803,11 +803,6 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 		return failStage(model.RelLogApCreateFail, "err", err.Error())
 	}
 	s.Webhook.SendLarkApproval(ap)
-	// 发布审批推不推审批魔方单独一个开关(默认关):发布单在控制台 / 飞书卡片里批即可,
-	// 不跟着高危命令一起进审批魔方。没外发的单回调一律被拒(见 external_approval.go)。
-	if s.settingBool("approval.external.releaseEnabled", false) {
-		s.dispatchExternalApproval(creator, ap)
-	}
 	s.recordAuditFrom(model.AuditSourceRelease, creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
 		status: model.RunWaiting, approvalID: ap.ID, approvalNo: ap.ApNo,
@@ -1273,8 +1268,8 @@ func releaseApprovalLabel(rel *model.Release, body string) string {
 // that has since been decided and moves them on.
 //
 // A sweeper rather than a callback from finalizeApproval, because a decision can
-// arrive through four different doors — the console, the 飞书 card, the 审批魔方
-// callback, and the timeout expiry — and a hook on one of them would leave
+// arrive through several different doors — the console, the 飞书 card and the
+// timeout expiry — and a hook on one of them would leave
 // releases hanging when a decision came through another. Polling a row that
 // already records the outcome works no matter who wrote it.
 func (s *Services) ResumeReleaseApprovals() {
@@ -1475,8 +1470,7 @@ func (s *Services) AbortRelease(u *model.User, id int64) error {
 }
 
 // afterVoided is the best-effort follow-up to tickets voided with their release:
-// the stage that raised one says so in its log, and the 审批魔方/飞书 card still
-// open on it is collapsed. The voiding itself already happened, in the transaction
+// the stage that raised one says so in its log. The voiding itself already happened, in the transaction
 // that ended the release.
 func (s *Services) afterVoided(voided []model.Approval) {
 	for _, ap := range voided {
@@ -1485,7 +1479,6 @@ func (s *Services) afterVoided(voided []model.Approval) {
 				_ = s.Repo.UpdateReleaseStage(st.ID, relLogOf(model.RelLogApVoided, "no", ap.ApNo).fields())
 			}
 		}
-		s.cancelExternalApproval(ap)
 	}
 }
 
