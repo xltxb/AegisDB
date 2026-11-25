@@ -131,6 +131,19 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		slog.Warn("reconciled interrupted releases on startup", "failed", n, "voidedTickets", len(voided))
 		s.afterVoided(voided)
 	}
+	// 从前发布单结束时没能作废的审批单(#111 之前):还在请人审批一张早就结束的单,清掉。
+	voided, err := repo.VoidOrphanReleaseTickets()
+	if err != nil {
+		slog.Error("orphaned release tickets could not be voided on startup", "err", err)
+	}
+	if len(voided) > 0 {
+		nos := make([]string, len(voided))
+		for i, ap := range voided {
+			nos[i] = ap.ApNo
+		}
+		slog.Warn("voided tickets of releases that already ended", "tickets", nos)
+		s.afterVoided(voided)
+	}
 	// 审批单的执行同理:上一个进程在库上跑到一半的,结果无从得知,判失败并写明,不重跑。
 	// 在线变更同理:进行中的判失败(原表没切换),残留的影子表在后台尽力删掉。
 	s.ReconcileOSCJobs()
