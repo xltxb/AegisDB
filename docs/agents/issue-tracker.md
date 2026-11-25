@@ -5,12 +5,13 @@
 | Problems to fix (bugs, security, stale docs, code smells) | GitHub Issues on `xltxb/AegisDB` |
 | Feature PRDs and their implementation issues | Local markdown in `.scratch/` (gitignored, never committed) |
 
-## Fixing a problem: issue → branch → PR
+## Fixing a problem: issue → branch → PR → delete branch
 
 1. **Open an issue** with `gh issue create`: symptom, reproduction steps, impact. Search first (`gh issue list --state all --search "..."`) so as not to file a duplicate.
 2. **Branch** from the latest `main`: `fix/<slug>` (or `docs/<slug>`, `chore/<slug>`). Never commit to `main` directly.
 3. **Open a PR** against `main` with `gh pr create`. Put `Closes #<N>` in the body, and say which tests ran and what was not verified.
 4. **Merge through the PR** with a merge commit, once the relevant tests pass. Don't merge locally and push `main`.
+5. **Delete the branch**, local and remote, right after the merge (`gh pr merge <N> --merge --delete-branch`). No need to ask; check that the PR shows as merged and that `main` contains the commits.
 
 The repo is **public**. For an exploitable vulnerability, ask the user before putting any detail in an issue, branch name, commit or PR.
 

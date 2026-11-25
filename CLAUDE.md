@@ -7,7 +7,7 @@
 
 ### Issue tracker
 
-修复问题一律先开 GitHub issue（`xltxb/AegisDB`），再开分支修，最后提 PR 合并；不直接往 `main` 提交。
+修复问题一律先开 GitHub issue（`xltxb/AegisDB`），再开分支修，最后提 PR 合并，合并后直接删除本地和远端分支；不直接往 `main` 提交。
 功能的 PRD 与拆分工单仍以本地 markdown 形式存于 `.scratch/<feature>/`（不入库）。
 See `docs/agents/issue-tracker.md`.
 
