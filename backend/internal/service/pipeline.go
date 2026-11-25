@@ -494,9 +494,19 @@ func (s *Services) enqueueRelease(id int64) {
 	select {
 	case s.releaseQueue <- id:
 	default:
-		_ = s.Repo.UpdateRelease(id, releaseErrFields(model.NewRuleRef(model.RelErrQueueFull), map[string]any{
-			"status": model.RunFailed, "finished_at": time.Now(),
-		}))
+		s.failInterrupted(id, model.RunPending, model.NewRuleRef(model.RelErrQueueFull))
+	}
+}
+
+// failInterrupted fails a run that was cut off rather than finished by a stage,
+// provided it is still in `from`, and settles its stages the way finishRelease
+// does. No notification: one of its callers is recovering from a panic, and the
+// notification is as likely as anything to be what panicked.
+func (s *Services) failInterrupted(id int64, from string, errRef *model.RuleRef) {
+	now := time.Now()
+	fields := releaseErrFields(errRef, map[string]any{"status": model.RunFailed, "finished_at": now})
+	if _, err := s.Repo.FinishRelease(id, from, fields, true, now); err != nil {
+		slog.Error("发布单终态写库失败", "release", id, "status", model.RunFailed, "err", err)
 	}
 }
 
@@ -515,14 +525,14 @@ func (s *Services) dispatchReleaseJob(id int64) {
 }
 
 // guardRelease runs fn with panic recovery so a single bad run never kills the
-// worker or leaves the release stuck mid-flight.
+// worker or leaves the release stuck mid-flight. Only a run still `running` is
+// failed: one that already finished, or parked on a human, has its state fully
+// stored, and a panic after that (while notifying, say) does not change it.
 func (s *Services) guardRelease(id int64, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {
 			slog.Error("release run panicked", "release", id, "err", r)
-			_ = s.Repo.UpdateRelease(id, releaseErrFields(model.NewRuleRef(model.RelErrPanic, "err", fmt.Sprint(r)), map[string]any{
-				"status": model.RunFailed, "finished_at": time.Now(),
-			}))
+			s.failInterrupted(id, model.RunRunning, model.NewRuleRef(model.RelErrPanic, "err", fmt.Sprint(r)))
 		}
 	}()
 	fn()
@@ -530,20 +540,14 @@ func (s *Services) guardRelease(id int64, fn func()) {
 
 // runReleaseSafe claims a queued run and drives it.
 func (s *Services) runReleaseSafe(id int64) {
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("release run panicked", "release", id, "err", r)
-			_ = s.Repo.UpdateRelease(id, releaseErrFields(model.NewRuleRef(model.RelErrPanic, "err", fmt.Sprint(r)), map[string]any{
-				"status": model.RunFailed, "finished_at": time.Now(),
-			}))
+	s.guardRelease(id, func() {
+		now := time.Now()
+		claimed, err := s.Repo.ClaimRelease(id, model.RunPending, model.RunRunning, &now)
+		if err != nil || !claimed {
+			return // already running, or reconciled by another worker
 		}
-	}()
-	now := time.Now()
-	claimed, err := s.Repo.ClaimRelease(id, model.RunPending, model.RunRunning, &now)
-	if err != nil || !claimed {
-		return // already running, or reconciled by another worker
-	}
-	s.driveRelease(id)
+		s.driveRelease(id)
+	})
 }
 
 // driveRelease advances a run through its stages until one blocks on a human,
@@ -1317,7 +1321,8 @@ func (s *Services) continueRelease(id int64) {
 	select {
 	case s.releaseQueue <- -id: // negative id = resume, not a fresh claim
 	default:
-		s.driveRelease(id) // queue full: drive it inline rather than strand it
+		// queue full: drive it inline rather than strand it — guarded like a worker would
+		s.guardRelease(id, func() { s.driveRelease(id) })
 	}
 }
 
