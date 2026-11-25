@@ -106,6 +106,7 @@ AegisDB/
 │  │  ├─ sqlparse/       SQL 解析器（只用来让判定更严）
 │  │  ├─ review/         数据库规范审查规则
 │  │  ├─ osc/            MySQL 在线表结构变更
+│  │  ├─ chat/           聊天审批卡片的渠道（Lark）
 │  │  ├─ schemadiff/     表结构对比
 │  │  └─ storemigrate/   存储库 MySQL → PostgreSQL 搬迁
 │  ├─ migrations/        MySQL 迁移；pg/ 下是 PostgreSQL 基线
@@ -172,7 +173,9 @@ MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，�
   一张单只能执行一次，执行前重新判定。单据最终状态以数据库返回的结果为准。
 - 例外：发布单由流水线推进，敏感导出单批准后由后台任务执行，执行窗口单批准后窗口生效。
 - 网关在执行途中重启的单子判失败并写明「结果未知，请到库上核实」，不会重跑。
-- 审批在站内进行；发布单另可由持 `release:approve` 的开放接口凭据代批（须点名链上审批人，规则同控制台）。新单与超时升级会推送飞书群机器人（Webhook）通知。
+- 审批可在站内进行，也可在聊天里的审批卡片上直接通过 / 拒绝（Lark / 飞书，默认关闭，见 `docs/chat-approval-setup.md`）：
+  网关主动连出去，不需要公网入口；审批人先用一次性绑定码绑定聊天账号，规则与站内完全一致。
+- 发布单另可由持 `release:approve` 的开放接口凭据代批（须点名链上审批人，规则同控制台）。新单与超时升级会推送飞书群机器人（Webhook）通知。
 
 ### 执行窗口（班车）
 
@@ -238,6 +241,7 @@ MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，�
 - 登录与管理后台各有独立 IP 白名单；管理后台另有空闲超时。只信任配置里列出的反向代理。
 - 内置角色：平台管理员、DBA 负责人、DBA L2、研发只读、审计员、业务查询。一人可挂多个角色，
   权限取并集。
+- 聊天审批的绑定是比会话活得更久的凭据：停用账号、改口令、MFA 变更会自动解绑；用户 IP 白名单管不到卡片上的点击（ADR 0021）。
 - 可接 SRD 授权登录（公司 SSO）：只做认证，按邮箱对应已有账号。**未开通的邮箱会被拒绝**，
   需管理员先建号或邀请。
 
@@ -366,7 +370,7 @@ sudo systemctl enable --now aegisdb
 | 文档 | 用途 |
 |---|---|
 | `GET /docs` | Swagger UI，仅本地开发环境；Try it out 打的是真接口 |
-| `backend/docs/openapi.yaml` | 完整契约（155 条路径、189 个操作） |
+| `backend/docs/openapi.yaml` | 完整契约（160 条路径、194 个操作） |
 | `docs/控制台接口说明.md` | 控制台接口按业务分组说明 |
 | `docs/开放接口对接文档.md` | 外部系统对接 |
 
@@ -386,9 +390,9 @@ cd frontend && npm run test:e2e
 
 | 套件 | 规模 | 说明 |
 |---|---|---|
-| 后端 | 462 个文件、1610 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
+| 后端 | 482 个文件、1784 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
 | 前端单测 | 55 个文件、408 个用例 | `src/lib` 纯逻辑、词条一致性 |
-| 前端 e2e | 95 个文件、376 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
+| 前端 e2e | 100 个文件、410 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
 
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
 - 需要真实数据库的用例默认跳过，设置 `AEGISDB_TEST_MYSQL`、`AEGISDB_TEST_PG`、
@@ -408,8 +412,8 @@ cd frontend && npm run test:e2e
 | 主题 | 位置 |
 |---|---|
 | 部署 | [`DEPLOY.md`](DEPLOY.md)、`docs/上线部署SOP.md`、`docs/上线部署SOP-存储库搬迁到PG.md` |
-| 架构决策 | `docs/adr/`（0003–0020，共 18 篇） |
-| 对接 | `docs/开放接口对接文档.md`、`docs/巡检报告接入说明.md`、`docs/事件中心平台接入文档.md` |
+| 架构决策 | `docs/adr/`（0003–0021，共 19 篇） |
+| 对接 | `docs/开放接口对接文档.md`、`docs/巡检报告接入说明.md`、`docs/事件中心平台接入文档.md`、`docs/chat-approval-setup.md` |
 | 数据库规范 | `docs/MySQL規範.md`、`docs/TIDB規範.md`、`docs/Oracle規範.md`、`docs/DWS对象设计和业务开发规范-ABLE.md` |
 | 安全审计 | `docs/白盒安全审计报告.md` |
 | 设计稿 | `docs/*.dc.html`、`docs/_ds/` |

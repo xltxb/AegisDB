@@ -100,6 +100,7 @@
 │  ├─ sqlparse/         <span class="c"># SQL 解析器收敛层</span>
 │  ├─ review/           <span class="c"># 数据库规范审查规则</span>
 │  ├─ osc/              <span class="c"># MySQL 在线表结构变更</span>
+│  ├─ chat/             <span class="c"># 聊天审批卡片：渠道接口、卡片模型；lark/ 是飞书长连接</span>
 │  ├─ schemadiff/       <span class="c"># 表结构对比</span>
 │  ├─ storemigrate/     <span class="c"># 存储库 MySQL → PostgreSQL 搬迁</span>
 │  └─ apimsg/ metrics/ presence/   <span class="c"># 报错文案身份、延迟统计、在线用户</span>
@@ -180,7 +181,7 @@ v, win := s.judge(u, conn, stmts)<span class="c">                               
   <thead><tr><th style="width:50%">路径</th><th>说明</th></tr></thead>
   <tbody>
     <tr><td class="id">/auth/login · /auth/sso · /auth/me · /auth/logout</td><td>登录、SSO、身份、登出</td></tr>
-    <tr><td class="id">/auth/mfa/* · /auth/password</td><td>自助 MFA、改密码</td></tr>
+    <tr><td class="id">/auth/mfa/* · /auth/password · /auth/chat-bindings</td><td>自助 MFA、改密码、审批机器人绑定</td></tr>
     <tr><td class="id">/admin/enter · /admin/heartbeat</td><td>进入管理后台、心跳</td></tr>
     <tr><td class="id">/risk/check</td><td>命令风险预检</td></tr>
     <tr><td class="id">/terminal/ws · /terminal/exec · /terminal/exec-async</td><td>终端流式 / REST / 后台执行</td></tr>
@@ -196,7 +197,7 @@ v, win := s.judge(u, conn, stmts)<span class="c">                               
     <tr><td class="id">/bizquery/* · /query-grants</td><td>业务查询、查询授权</td></tr>
     <tr><td class="id">/schema-diff · /inspection-reports</td><td>表结构对比、巡检报告</td></tr>
     <tr><td class="id">/audit · /audit/export · /audit/verify</td><td>审计、导出、链校验</td></tr>
-    <tr><td class="id">/settings · /api-clients · /service-accounts</td><td>设置、开放接口凭据、服务账号</td></tr>
+    <tr><td class="id">/settings · /settings/chat-status|chat-test · /api-clients · /service-accounts</td><td>设置、审批机器人状态与测试、开放接口凭据、服务账号</td></tr>
   </tbody>
 </table>
 <p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">逐条路由、参数与所需权限以 <code class="inl">docs/openapi.yaml</code> 为准（见第 11 章），另见《控制台接口说明》《开放接口对接文档》。</p>
@@ -209,14 +210,16 @@ v, win := s.judge(u, conn, stmts)<span class="c">                               
   <li><strong>链上任意一人的决定即生效</strong>；同一张单只认第一个决定。能否自审由设置决定。</li>
   <li><strong>通过不等于执行</strong>（ADR 0010）：普通单停在「待执行」，由够得到该实例、自己有权执行的人点执行，届时按执行人重新过标签、MFA 与判定；一张单只执行一次。</li>
   <li>发布单的审批只授权流水线，执行归执行阶段；执行窗口批准即生效；敏感导出批准即入队。</li>
-  <li>新单推送飞书群机器人通知；审批在站内决策；发布单另可由持 <code class="inl">release:approve</code> 的开放接口凭据代批（须点名链上审批人，规则同控制台）。</li>
+  <li>新单推送飞书群机器人通知（只通知）；审批在站内或聊天卡片上决策；发布单另可由持 <code class="inl">release:approve</code> 的开放接口凭据代批（须点名链上审批人，规则同控制台）。</li>
   <li>超时策略：保持等待 / 自动作废 / 自动升级（站内通知默认审批人 + 飞书卡片，每张单一次，单子仍待审批）；初始化写入自动升级、720 分钟，库里没有这项设置时按保持等待。每 60 秒扫描 <code class="inl">tbl_approval</code>。</li>
   <li>发布单失败或终止时，它名下待审批的单在同一事务里作废。</li>
+  <li><strong>聊天审批卡片</strong>（ADR 0021，默认关闭）：<code class="inl">internal/chat</code> 只管收发，不认识审批；绑定、排队、点击、连接管理在 <code class="inl">service/chat_*.go</code>。建单只写 <code class="inl">tbl_chat_card</code> 的 queued 行，发送与收敛由扫描做，渠道出事不影响建单与站内审批。点击核对令牌、绑定、在职、菜单之后走同一个决定核心，<code class="inl">decided_via</code> 记渠道。</li>
 </ul>
 <p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px">后台定时任务（<code class="inl">cmd/server/main.go</code>）：</p>
 <table class="t">
   <thead><tr><th style="width:18%">周期</th><th>任务</th></tr></thead>
   <tbody>
+    <tr><td class="id">5 秒</td><td>审批卡片的发送与收敛；核对聊天渠道的设置</td></tr>
     <tr><td class="id">15 秒</td><td>推进审批已有结论的发布单</td></tr>
     <tr><td class="id">60 秒</td><td>审批超时、查询授权到期、终端会话与结果缓存清理</td></tr>
     <tr><td class="id">1 小时</td><td>导出文件保留期清理</td></tr>
@@ -285,8 +288,11 @@ req.Header.Set("X-AegisDB-Pushed-At", pushedAt)
 <table class="t">
   <thead><tr><th style="width:34%">表</th><th>说明</th></tr></thead>
   <tbody>
-    <tr><td class="id">tbl_approval</td><td>审批单；release_id / export_job_id / window_id / osc_job_id 指明它属于谁</td></tr>
+    <tr><td class="id">tbl_approval</td><td>审批单；release_id / export_job_id / window_id / osc_job_id 指明它属于谁；decided_via 决定渠道、reject_reason 拒绝原因（0065）</td></tr>
     <tr><td class="id">tbl_approval_step</td><td>审批链</td></tr>
+    <tr><td class="id">tbl_chat_binding</td><td>网关账号与聊天账号的绑定（0065）</td></tr>
+    <tr><td class="id">tbl_chat_bind_code</td><td>一次性绑定码，只存摘要（0065）</td></tr>
+    <tr><td class="id">tbl_chat_card</td><td>要发 / 已发的审批卡片，令牌只存摘要（0065）</td></tr>
     <tr><td class="id">tbl_exec_window</td><td>执行窗口</td></tr>
     <tr><td class="id">tbl_exec_window_db</td><td>窗口覆盖的库</td></tr>
     <tr><td class="id">tbl_async_job</td><td>后台执行</td></tr>
@@ -333,6 +339,8 @@ req.Header.Set("X-AegisDB-Pushed-At", pushedAt)
   <tbody>
     <tr><td class="id">tbl_audit_log.prev_hash 唯一</td><td>审计链不能分叉</td></tr>
     <tr><td class="id">tbl_approval.ap_no · tbl_release.rel_no 唯一</td><td>单号不重复</td></tr>
+    <tr><td class="id">tbl_chat_binding (channel, user) · (channel, bot, account) 唯一</td><td>每个渠道一人一个绑定、一个聊天账号一个人</td></tr>
+    <tr><td class="id">tbl_chat_card (approval, user, channel) 唯一</td><td>同一张单同一人同一渠道只有一张卡片</td></tr>
     <tr><td class="id">tbl_release.idem_key 唯一</td><td>外部系统重试不会产生第二张发布单</td></tr>
     <tr><td class="id">tbl_connection.name · tbl_user.email · tbl_role.code 唯一</td><td>业务标识</td></tr>
     <tr><td class="id">tbl_query_grant (user, conn, db) 唯一</td><td>同一人同一库只有一条授权</td></tr>

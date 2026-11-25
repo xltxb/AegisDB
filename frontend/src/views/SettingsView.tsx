@@ -13,8 +13,9 @@ import SensitiveColumnsPanel from '@/components/settings/SensitiveColumnsPanel'
 import ProjectsPanel from '@/components/settings/ProjectsPanel'
 import BrandPanel from '@/components/settings/BrandPanel'
 import BrandMark from '@/components/BrandMark'
+import ChatChannelsPanel from './ChatChannelsPanel'
 import { brandText } from '@/lib/brand'
-import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
+import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, CHAT_LANG_KEYS, CHAT_REGION_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '@/lib/settingOptions'
 import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
@@ -134,8 +135,16 @@ const INITIAL = {
   bizMaxDailyPerUser: num(0),
   bizExportEnabled: false,
   bizApplyUrl: BIZ_APPLY_URL,
+  // 聊天审批机器人。默认值与后端的种子、以及读不到键时的默认值一致:老库第一次整包保存只会把它们存下来,
+  // 不会顺手打开。
+  chatCardLang: 'zh' as string,
+  chatLarkEnabled: false,
+  chatLarkRegion: 'feishu' as string,
+  chatLarkAppId: '',
+  chatLarkAppSecret: '',
 }
-type Form = typeof INITIAL
+export type SettingsForm = typeof INITIAL
+type Form = SettingsForm
 /** 表单里取值为某一类型的那些字段 */
 type KeysOf<V> = { [K in keyof Form]: Form[K] extends V ? (V extends Form[K] ? K : never) : never }[keyof Form]
 
@@ -206,6 +215,11 @@ function formOf(g: Record<string, string | undefined>): Form {
     connCheckEnabled: parse(g['conn.check.enabled'], false),
     connCheckInterval: clampInt(parse(g['conn.check.intervalMinutes'], 10), 10, 1, 1440),
     connCheckConcurrency: clampInt(parse(g['conn.check.concurrency'], 4), 4, 1, 16),
+    chatCardLang: keyOf(parse<string>(g['chat.cardLang'], ''), CHAT_LANG_KEYS, 'zh'),
+    chatLarkEnabled: parse<boolean>(g['chat.lark.enabled'], false),
+    chatLarkRegion: keyOf(parse<string>(g['chat.lark.region'], ''), CHAT_REGION_KEYS, 'feishu'),
+    chatLarkAppId: parse<string>(g['chat.lark.appId'], ''),
+    chatLarkAppSecret: '', // 密钥不回显,留空 = 不改
   }
 }
 
@@ -267,6 +281,11 @@ function settingsPayload(f: Form) {
     'notify.larkWebhook': f.larkWebhook.trim(),
     'notify.larkSecret': f.larkSecret.trim(),
     'notify.consoleURL': f.consoleURL.trim(),
+    'chat.cardLang': keyOf(f.chatCardLang, CHAT_LANG_KEYS, 'zh'),
+    'chat.lark.enabled': f.chatLarkEnabled,
+    'chat.lark.region': keyOf(f.chatLarkRegion, CHAT_REGION_KEYS, 'feishu'),
+    'chat.lark.appId': f.chatLarkAppId.trim(),
+    'chat.lark.appSecret': f.chatLarkAppSecret.trim(),
   }
 }
 // 改没改过:和读进来 / 上次保存时的那一份比。两个 IP 白名单在各自的弹窗里即存即生效,不算在内。
@@ -383,6 +402,7 @@ export default function SettingsView() {
   }
 
   const [hasLarkSecret, setHasLarkSecret] = useState(false)
+  const [hasChatSecret, setHasChatSecret] = useState(false)
   const [larkTest, setLarkTest, larkTestRef] = useStateRef<{ state: 'idle' | 'sending' | 'ok' | 'err'; msg: string }>({ state: 'idle', msg: '' })
   async function testLark() {
     if (larkTestRef.current.state === 'sending') return
@@ -395,17 +415,19 @@ export default function SettingsView() {
   }
   // 清除一个已配置的密钥(工单 02 第 8 条):后端约定 null = 清除,"" = 不改。即点即存,不等底部的保存 ——
   // 清除是一个明确的动作,与"这次没填"是两回事。
-  async function clearSecret(key: 'notify.larkSecret') {
+  async function clearSecret(key: 'notify.larkSecret' | 'chat.lark.appSecret') {
     if (!(await confirmAction(t('secretClearConfirm')))) return
     try {
       await api.saveSettings({ [key]: null })
       if (key === 'notify.larkSecret') { setHasLarkSecret(false); patch({ larkSecret: '' }) }
+      else { setHasChatSecret(false); patch({ chatLarkAppSecret: '' }) }
       notify(t('secretCleared'), 'success')
     } catch (e) {
       notifyError(e, t('saveFailed'))
     }
   }
   const [saved, setSaved] = useState(false)
+  const [saves, setSaves] = useState(0) // 存成过几次:审批机器人据此马上重取状态
   const [approvers, setApprovers] = useState<Member[]>([])
 
   const [baseline, setBaseline] = useState('')
@@ -418,6 +440,7 @@ export default function SettingsView() {
         const s = await api.settings()
         setF(formOf(s.settings || {}))
         setHasLarkSecret(!!s.secretsSet?.['notify.larkSecret'])
+        setHasChatSecret(!!s.secretsSet?.['chat.lark.appSecret'])
         setAdminIpEnabled(parse<boolean>(s.settings?.['security.adminIpAllowEnabled'], false))
         setAdminIpList(parse<string>(s.settings?.['security.adminIpAllowlist'], ''))
         setAdminIpForcedOff(!!(s as any).adminIpAllowlistForcedOff)
@@ -430,8 +453,12 @@ export default function SettingsView() {
 
   async function save() {
     try {
-      await api.saveSettings(settingsPayload(fRef.current))
+      const p = settingsPayload(fRef.current)
+      await api.saveSettings(p)
+      // 存进去的密钥不留在页面里
+      if (p['chat.lark.appSecret']) { setHasChatSecret(true); patch({ chatLarkAppSecret: '' }) }
       takeBaseline()
+      setSaves((v) => v + 1)
       setSaved(true)
       setTimeout(() => setSaved(false), 2200)
       notify(t('settingsSaved'), 'success')
@@ -535,6 +562,10 @@ export default function SettingsView() {
             <Row title="setDefApprovers" desc="setDefApproversD"><div className="approvers">{approvers.map((a) => <span key={a.id} className="apv"><span className="ava">{a.initials}</span>{a.name}</span>)}{!approvers.length && <span className="apv-empty">{t('setApproversEmpty')}</span>}<a className="apv-manage" onClick={goPerms}>{t('setApproversManage')}</a></div></Row>
             <Row title="setSelfApprove" desc="setSelfApproveD" last><VSwitch {...sw('allowSelf')} /></Row>
           </section>
+          <ChatChannelsPanel
+            style={showOn('approval')} active={activeTab === 'approval'} saves={saves} f={f} patch={patch}
+            secrets={{ lark: hasChatSecret }} onClearSecret={() => clearSecret('chat.lark.appSecret')}
+          />
 
           {/* Security */}
           <section style={showOn('security')} className="card">

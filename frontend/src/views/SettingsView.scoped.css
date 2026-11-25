@@ -98,3 +98,10 @@
   .srow { flex-wrap: wrap; gap: 12px; }
   .sbhint { display: none; }
 }
+/* 审批机器人(ChatChannelsPanel) */
+.chsel { flex: 1; min-width: 0; }
+.chstate { flex: 1; min-width: 0; font: 600 12px/1.5 var(--font-body); color: var(--text-muted); overflow-wrap: anywhere; }
+.chstate.connected { color: var(--success-text); }
+.chstate.connecting { color: var(--accent-text); }
+.chstate.conflict, .chstate.error { color: var(--danger-text); }
+.chwhy { margin-left: 8px; font: 500 11.5px/1.5 var(--font-mono); }

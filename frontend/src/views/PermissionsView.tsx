@@ -2,7 +2,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import {
   Crown, Shield, UserCog, Code, Eye, SquareTerminal, ClipboardCheck, Database,
-  ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound, Rocket,
+  ShieldAlert, Layers, UsersRound, ScrollText, Settings, UserPlus, X, Search, Check, MailPlus, ShieldCheck, Tag, KeyRound, Rocket, Bot,
   CircleCheck, Lock, Minus, Plus, Clock, GitCompare, Stethoscope, type LucideIcon,
 } from 'lucide-react'
 import QRCode from 'qrcode'
@@ -396,13 +396,14 @@ export default function PermissionsView() {
   const [newPw, setNewPw] = useState('')
   const [pwMsg, setPwMsg] = useState('')
   const [otpMsg, setOtpMsg] = useState('')
+  const [chatMsg, setChatMsg] = useState('')
   const [otpBind, setOtpBind] = useState<{ secret: string; otpauthUri: string } | null>(null)
   const [otpQr, setOtpQr] = useState('')
 
   function openUser(u: UserView) {
     if (!isAdmin) return
     setUserModal(u)
-    setNewPw(''); setPwMsg(''); setOtpMsg(''); setOtpBind(null); setOtpQr('')
+    setNewPw(''); setPwMsg(''); setOtpMsg(''); setOtpBind(null); setOtpQr(''); setChatMsg('')
     setRoleSel([...(u.roleIds || [])]); setRoleMsg('')
     setTagMsg(''); setUserTags([])
     void loadUserTags(u.id)
@@ -485,6 +486,14 @@ export default function PermissionsView() {
     if (!(await confirmAction(t('pmResetMfaConfirm', { name: m.name })))) return
     try { await api.resetUserMfa(m.id); setOtpBind(null); setOtpQr(''); setOtpMsg(t('otpUnbound')); await loadUsers(); syncModal() }
     catch { setOtpMsg(t('otpFailed')) }
+  }
+  // 解除他在所有审批机器人上的聊天绑定。没绑定也算成功:用户列表不带绑定状态。
+  async function unbindChat() {
+    const m = userModalRef.current
+    if (!m) return
+    if (!(await confirmAction(t('pmChatUnbindConfirm', { name: m.name }), { danger: true }))) return
+    try { await api.chatUnbindUser(m.id); setChatMsg(t('pmChatUnbound')) }
+    catch (e) { setChatMsg((e as any)?.message || t('actionFailed')) }
   }
 
   const selName = roleName(detail?.name || '')
@@ -752,7 +761,7 @@ export default function PermissionsView() {
       {userModal && (
         <div className="overlay">
           <div className="mask" onClick={() => setUserModal(null)} />
-          <div className="pmodal">
+          <div className="pmodal umodal">
             <div className="phead">
               <div className="pic"><UserCog size={19} color="var(--accent-text)" /></div>
               <div><div className="pt">{userModal.name}</div><div className="ps mono">{userModal.email}</div></div>
@@ -811,6 +820,12 @@ export default function PermissionsView() {
                 </div>
               )}
               {otpMsg && <div className="umsg">{otpMsg}</div>}
+            </div>
+            <div className="usec" data-testid="user-chat-sec">
+              <div className="uslbl"><Bot size={14} />{t('chatBindTitle')}</div>
+              <div className="chathint">{t('pmChatHint')}</div>
+              <div className="otprow"><VButton variant="danger" height="38px" data-testid="user-chat-unbind" onClick={unbindChat}>{t('pmChatUnbind')}</VButton></div>
+              {chatMsg && <div className="umsg" data-testid="user-chat-msg">{chatMsg}</div>}
             </div>
           </div>
         </div>

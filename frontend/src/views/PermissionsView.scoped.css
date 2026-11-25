@@ -220,3 +220,7 @@
 /* SSO 绑定 */
 .ssotag.act { cursor: pointer; }
 .ssotag.act:hover { text-decoration: line-through; }
+.chathint { margin-top: 6px; font: 400 12px/1.55 var(--font-body); color: var(--text-muted); }
+/* 用户弹窗:内容比窗口高时自己滚动,表头留在原处。 */
+.umodal { max-height: calc(100vh - 56px); overflow-y: auto; }
+.umodal .phead { position: sticky; top: 0; z-index: 1; background: var(--surface-card); }

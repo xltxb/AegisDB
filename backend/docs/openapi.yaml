@@ -2330,6 +2330,8 @@ paths:
           description: |
             OK。每张单带 `steps`:审批链上的人和各自的处理状态,即这张单的审批人。
             发布单审批阶段生成的单 `releaseId` 非 0、`type` 为 release,单号即发布单阶段上的 `approvalNo`。
+            `decidedVia` 是决定来自哪个渠道(console / api / lark / telegram;空 = 没有人做过决定或老单),
+            `rejectReason` 是拒绝时填的原因(只有聊天卡片上能填,纯文本)。
           content:
             application/json:
               schema:

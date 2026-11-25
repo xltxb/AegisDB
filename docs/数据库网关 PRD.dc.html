@@ -160,8 +160,8 @@
   <tbody>
     <tr><td class="id">FR-APPR-01</td><td>识别高危命令:命中字典中标记为"拦截/审批"的命令,或开启严格模式时无 WHERE 的 DELETE/UPDATE。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--success-text)">已实现</strong>：无 WHERE 拦截改为按分层开关（ADR 0013）；能力矩阵为“需审批”的也转审批。</td></tr>
     <tr><td class="id">FR-APPR-02</td><td>提交卡展示待执行命令、环境、实例、风险标签(不可逆/锁表),并强制填写操作原因(必填)。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：原因必填；只有“高危 P1 / 权限 P2”与高 / 中风险，没有“不可逆 / 锁表”标签。</td></tr>
-    <tr><td class="id">FR-APPR-03</td><td>生成审批单(含审批单号、审计 ID),继承飞书(Lark)审批卡格式,并同步告警至 #dba-oncall 与值班负责人。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：推送飞书卡片到配置的群机器人；没有固定的 #dba-oncall 与值班人概念。</td></tr>
-    <tr><td class="id">FR-APPR-04</td><td>审批待办页支持"待我审批 / 全部",卡片展示命令、发起人、目标、原因与审批链,可通过 / 拒绝并即时反馈状态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：通过后不自动执行，由有权的人在这里或总览点执行（ADR 0010）。</td></tr>
+    <tr><td class="id">FR-APPR-03</td><td>生成审批单(含审批单号、审计 ID),继承飞书(Lark)审批卡格式,并同步告警至 #dba-oncall 与值班负责人。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：推送飞书卡片到配置的群机器人；没有固定的 #dba-oncall 与值班人概念。另可私聊发可审批的卡片（ADR 0021）。</td></tr>
+    <tr><td class="id">FR-APPR-04</td><td>审批待办页支持"待我审批 / 全部",卡片展示命令、发起人、目标、原因与审批链,可通过 / 拒绝并即时反馈状态。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：通过后不自动执行，由有权的人在这里或总览点执行（ADR 0010）。也可在聊天卡片上通过 / 拒绝，驳回的单显示拒绝原因与决定渠道。</td></tr>
     <tr><td class="id">FR-APPR-05</td><td>审批链支持多级(发起 → 组长 → 负责人),并可配置审批超时处理(自动驳回 / 自动升级 / 保持等待)。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：不是逐级审批：链上任意一人的决定即生效。超时三种处理都有；“自动升级”：站内通知默认审批人并推送飞书群，每张单一次，单子继续等待。</td></tr>
   </tbody>
 </table>
@@ -242,7 +242,7 @@
     <tr><td class="id">FR-SET-01</td><td>网关策略:默认策略、严格模式、命令执行超时。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：执行超时生效；严格模式移到分层；“默认策略”从不参与判定，已拿掉。</td></tr>
     <tr><td class="id">FR-SET-02</td><td>审批:超时处理、默认审批人、超时升级到负责人。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：超时处理生效；默认审批人 = DBA 负责人角色成员；超时升级由超时处理的“自动升级”承担，没有单独开关。</td></tr>
     <tr><td class="id">FR-SET-03</td><td>会话与安全:会话有效期、空闲自动锁定、强制 MFA、IP 允许列表。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--success-text)">已实现</strong>：MFA 按分层；另有管理后台独立的 IP 白名单与空闲超时。</td></tr>
-    <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：飞书卡片生效；邮件通知、拦截即时通知没有实现，两个开关已拿掉。</td></tr>
+    <tr><td class="id">FR-SET-04</td><td>通知:Lark 告警频道、邮件通知、拦截即时通知。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：飞书群卡片生效，另有可审批的聊天卡片（ADR 0021）；邮件通知、拦截即时通知没有实现，两个开关已拿掉。</td></tr>
     <tr><td class="id">FR-SET-05</td><td>外观与语言:界面语言(中文/English)、主题(深色/浅色)。</td><td><span style="color:var(--accent-text);font:600 11px var(--font-mono)">P2</span></td><td><strong style="color:var(--success-text)">已实现</strong>：主题另有跟随系统。</td></tr>
   </tbody>
 </table>
@@ -265,6 +265,7 @@
     <tr><td>规范审查</td><td>按公司规范的规则库，提交前自查与流水线卡点。</td><td>ADR 0005、0007</td></tr>
     <tr><td>执行窗口</td><td>申请某段时间、某个库内免逐条审批。</td><td>ADR 0015</td></tr>
     <tr><td>在线表结构变更</td><td>生产大表的索引等变更走在线方式，可限流、暂停、续跑。</td><td>ADR 0011</td></tr>
+    <tr><td>聊天审批卡片</td><td>审批人绑定聊天账号后，在 Lark / 飞书私聊卡片上通过或拒绝；默认关闭，不需要公网入口。</td><td>ADR 0021、《聊天审批卡片接入》</td></tr>
     <tr><td>敏感字段脱敏</td><td>服务端打码；导出原值须审批。</td><td>ADR 0009</td></tr>
     <tr><td>数据导出</td><td>CSV / SQL 异步导出，加密压缩、保留期、可终止。</td><td>《控制台接口说明》</td></tr>
     <tr><td>业务方数据查询</td><td>按外部审批下发的授权，只读查询指定的库。</td><td>ADR 0018</td></tr>
@@ -317,7 +318,7 @@
     <tr><td><strong>Role 角色</strong></td><td>id、name、layer、menus[]、capabilityMatrix（能力 × 分层 × 三态）、members[]、tags[]</td></tr>
     <tr><td><strong>User 用户</strong></td><td>id、name、email、roleId + 附加角色、status、kind（真人 / 服务账号）、SSO 绑定</td></tr>
     <tr><td><strong>RiskCommand 高危命令</strong></td><td>command、tier→level（high / mid / off）</td></tr>
-    <tr><td><strong>Approval 审批单</strong></td><td>apNo、command、env、tier、instance、initiator、reason、chain[]、status、执行状态、auditId、所属（发布单 / 导出 / 窗口 / 在线变更）</td></tr>
+    <tr><td><strong>Approval 审批单</strong></td><td>apNo、command、env、tier、instance、initiator、reason、chain[]、status、决定渠道、拒绝原因、执行状态、auditId、所属（发布单 / 导出 / 窗口 / 在线变更）</td></tr>
     <tr><td><strong>AuditLog 审计</strong></td><td>time、actor、来源 IP、入口、instance、database、分层、command、risk、result、增删改查、apNo、prevHash、hash</td></tr>
     <tr><td><strong>WebhookConfig</strong></td><td>endpoint、secret（Bearer，加密存储）、events[]（增删改查）、envs[]、retry；投递另有记录</td></tr>
   </tbody>

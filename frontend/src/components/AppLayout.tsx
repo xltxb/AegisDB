@@ -6,7 +6,7 @@ import { FolderKanban, ShieldHalf, ArrowLeftRight,
   LayoutDashboard, SquareTerminal, ClipboardCheck, Database, ShieldAlert, Layers, UsersRound, Rocket, GitBranch, SpellCheck,
   ScrollText, Settings, Activity as ActivityIcon, Languages, Bell, BellOff, BellRing, Play, ChevronRight, Hourglass,
   CircleCheck, CircleX, Clock, DatabaseZap, Upload, LogOut, Sun, Moon, ShieldCheck, SearchCode, GitCompare, Stethoscope,
-  LockKeyhole, Ellipsis,
+  LockKeyhole, Ellipsis, Bot, Link2, Unlink2,
 } from 'lucide-react'
 import Watermark from '@/components/Watermark'
 import BrandMark from '@/components/BrandMark'
@@ -24,7 +24,8 @@ import api from '@/api'
 import { localizeText } from '@/api/http'
 import MfaModal from '@/components/modals/MfaModal'
 import PasswordModal from '@/components/modals/PasswordModal'
-import type { ApprovalTodoItem, Notification, RuleRef } from '@/types'
+import ChatBindModal from '@/components/modals/ChatBindModal'
+import type { ApprovalTodoItem, ChatBinding, Notification, RuleRef } from '@/types'
 import { useBrand } from '@/hooks/useBrand'
 import { useEvent } from '@/hooks/useEvent'
 import { useI18n } from '@/hooks/useI18n'
@@ -82,7 +83,9 @@ const adminNavItems: NavItem[] = [
 
 const okTypes = ['approval-approved', 'export-done', 'release-done']
 const badTypes = ['approval-rejected', 'export-failed', 'release-failed', 'exec-failed']
-const notifIcon = (t: string): Icon => (okTypes.includes(t) ? CircleCheck : badTypes.includes(t) ? CircleX : Clock)
+// 聊天账号绑上 / 解绑:谁能替我批单变了,和审批结果分得开。没列进 okTypes —— 不是本人绑的就不是好消息。
+const chatNotif: Record<string, Icon> = { 'chat-bound': Link2, 'chat-unbound': Unlink2 }
+const notifIcon = (t: string): Icon => chatNotif[t] ?? (okTypes.includes(t) ? CircleCheck : badTypes.includes(t) ? CircleX : Clock)
 const notifCls = (t: string) => (okTypes.includes(t) ? 'ok' : badTypes.includes(t) ? 'bad' : 'warn')
 
 // ---- 右上角"待办":此刻在等我动手的三类事 ----
@@ -239,6 +242,13 @@ export default function AppLayout() {
   const [pwOpen, setPwOpen] = useState(false)
   // ---- user menu / manual logout ----
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  // ---- 审批机器人绑定。打开菜单时才问一次有没有开着的渠道;没有、或读不到,就不显示这一项 ----
+  const [chatBindings, setChatBindings] = useState<ChatBinding[]>([])
+  const [chatOpen, setChatOpen] = useState(false)
+  function toggleUserMenu() {
+    setUserMenuOpen(!userMenuOpen)
+    if (!userMenuOpen) api.chatBindings().then((l) => setChatBindings(l ?? []), () => setChatBindings([]))
+  }
 
   // 窄屏(手机宽度)下顶栏放不下的次要按钮收进这个「更多」菜单:语言、深色、前后台切换、网关状态。
   // 宽屏时它不显示(CSS 控制),按钮照常摆在顶栏上。
@@ -411,7 +421,7 @@ export default function AppLayout() {
             ))}
           </nav>
           <div className="rail-bottom">
-            <div className="avatar" title={t('accountMenu')} onClick={() => setUserMenuOpen(!userMenuOpen)}>{auth.me?.initials || 'LW'}</div>
+            <div className="avatar" title={t('accountMenu')} onClick={toggleUserMenu}>{auth.me?.initials || 'LW'}</div>
             {userMenuOpen && (
               <>
                 <div className="um-mask" onClick={() => setUserMenuOpen(false)} />
@@ -431,6 +441,12 @@ export default function AppLayout() {
                   <div className="um-mfa" data-testid="menu-password" onClick={() => { setUserMenuOpen(false); setPwOpen(true) }}>
                     <LockKeyhole size={15} />{t('pwTitle')}
                   </div>
+                  {!!chatBindings.length && (
+                    <div className="um-mfa" data-testid="menu-chat" onClick={() => { setUserMenuOpen(false); setChatOpen(true) }}>
+                      <Bot size={15} />{t('chatBindTitle')}
+                      <span className={clsx('um-tag', chatBindings.some((b) => b.bound) && 'on')}>{chatBindings.some((b) => b.bound) ? t('otpBound') : t('otpUnboundState')}</span>
+                    </div>
+                  )}
                   <div className="um-logout" onClick={logout}><LogOut size={15} />{t('logout')}</div>
                 </div>
               </>
@@ -582,6 +598,7 @@ export default function AppLayout() {
       )}
       <MfaModal open={mfaOpen} enabled={mfaBound} onClose={() => setMfaOpen(false)} onChanged={onMfaChanged} />
       <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
+      <ChatBindModal open={chatOpen} bindings={chatBindings} onChange={setChatBindings} onClose={() => setChatOpen(false)} />
     </>
   )
 }
