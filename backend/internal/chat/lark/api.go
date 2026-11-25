@@ -125,7 +125,7 @@ func (s *scrubber) text(msg string, extra ...string) string {
 			msg = strings.ReplaceAll(msg, form, "***")
 		}
 	}
-	msg = oneLine(bearerWord.ReplaceAllString(msg, "***"))
+	msg = chat.OneLine(bearerWord.ReplaceAllString(msg, "***"))
 	if r := []rune(msg); len(r) > maxErrRunes {
 		msg = string(r[:maxErrRunes]) + "…"
 	}
