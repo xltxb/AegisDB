@@ -40,7 +40,6 @@ export default function RiskRulesView() {
   const [ruleForm, setRuleForm] = useState(false)
 
   // new-rule form state (functional: creates dictionary entries)
-  const [rfName, setRfName] = useState('')
   const [rfTriggers, setRfTriggers] = useState(defaultTriggers)
   const [rfTrigDraft, setRfTrigDraft] = useState('')
   const [rfEnv, setRfEnv] = useState('prod')
@@ -50,7 +49,6 @@ export default function RiskRulesView() {
   const tierCodes = envtier.tierCodes
 
   function openRule() {
-    setRfName('')
     setRfTriggers(defaultTriggers())
     setRfTrigDraft('')
     setRfEnv(tierCodes[0] ?? 'prod')
@@ -321,7 +319,6 @@ export default function RiskRulesView() {
               <X size={18} className="rfx" onClick={() => setRuleForm(false)} />
             </div>
             <div className="rfbody">
-              <div><div className="fl">{t('rfName')}</div><input value={rfName} onChange={(e) => setRfName(e.target.value)} placeholder={t('rfNamePh')} /></div>
               <div>
                 <div className="fl">{t('rfTriggers')}</div>
                 <div className="trigs">

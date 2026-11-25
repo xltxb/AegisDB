@@ -39,3 +39,25 @@ test('统计卡说的是需审批,页面上没有"告警"', async ({ page }) => 
   await expect(stat.locator('.n')).toHaveText('2')
   await expect(page.locator('.page')).not.toContainText('告警')
 })
+
+// issue #127:「规则名称」填了不提交也不保存 —— 字典按命令存,没有规则名。弹窗里唯一的输入框是自定义命令。
+test('新建规则没有规则名称,触发命令照常新增', async ({ page }) => {
+  const writes: any[] = []
+  await stubCommon(page)
+  await page.route('**/api/v1/risk-commands*', (r) => {
+    if (r.request().method() !== 'GET') writes.push(r.request().postDataJSON())
+    return r.fulfill(envelope(CMDS))
+  })
+  await page.goto('/#/admin/risk-rules')
+  await page.getByRole('button', { name: '新建规则' }).click()
+  const modal = page.locator('.rfmodal')
+  await expect(modal.locator('.trigs')).toBeVisible()
+  await expect(modal).not.toContainText('规则名称')
+  await expect(modal.locator('input')).toHaveCount(1)
+  await modal.locator('input').fill('revoke')
+  await modal.locator('input').press('Enter')
+  await expect(modal.locator('.trig', { hasText: 'REVOKE' })).toBeVisible()
+  await modal.getByRole('button', { name: '创建规则' }).click()
+  await expect.poll(() => writes.map((w) => w.command)).toEqual(['DROP', 'TRUNCATE', 'REVOKE'])
+  await expect(modal).toHaveCount(0)
+})

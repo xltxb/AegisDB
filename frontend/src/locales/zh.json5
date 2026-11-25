@@ -303,9 +303,8 @@
   mLarkNote1: '提交后同步告警至', mLarkNote2: '与值班负责人', mCancel: '取消', mSubmit: '提交审批', auditId: '审计 ID',
   // rule form
   rfTitle: '新建高危规则', rfSub: '命中后在网关侧执行拦截 / 审批',
-  rfName: '规则名称', rfNamePh: '例如：禁止生产库 DROP DATABASE',
   rfTriggers: '触发命令 · 可自定义', rfCustomPh: '自定义…',
-  rfEnv: '适用环境', rfAction: '命中动作', rfChain: '审批链', rfAddApprover: '增加审批人',
+  rfEnv: '适用环境', rfAction: '命中动作',
   rfActBlock: '拦截+审批', rfActApprove: '仅审批',
   rfFootHint: '保存后立即对匹配会话生效', rfCreate: '创建规则',
   // role form
