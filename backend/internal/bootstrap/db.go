@@ -130,6 +130,7 @@ var allModels = []any{
 	&model.Release{}, &model.ReleaseStage{}, &model.APIClient{}, &model.Project{}, &model.DatabaseProject{}, &model.SensitiveColumn{},
 	&model.MetaTable{}, &model.MetaColumn{}, &model.MetaSync{},
 	&model.InspectionReport{},
+	&model.ChatBinding{}, &model.ChatBindCode{}, &model.ChatCard{},
 }
 
 // storeMovedMarker 与 storemigrate.MovedMarkerTable 同名(本包不依赖 storemigrate)。

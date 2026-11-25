@@ -1,6 +1,6 @@
 # ADR-0003 · 外部飞书审批(审批魔方)对接
 
-Status: Superseded —— 对接代码已移除(#137);下文为当时的设计记录,不再描述现状
+Status: Superseded by [ADR 0021](0021-chat-approval-cards.md) —— 对接代码已移除(#137);下文为当时的设计记录,不再描述现状
 Date: 2026-07-23
 Supersedes: 无
 Related: `.scratch/lark-approval-integration/`(PRD + 实现工单)

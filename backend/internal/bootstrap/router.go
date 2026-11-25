@@ -142,6 +142,10 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/auth/mfa/disable", h.MFADisable)
 		// 自助修改密码(黑盒 2026-10 工单 05):旧密码 + 新密码,成功后其它会话作废、当前会话重签
 		a.POST("/auth/password", h.ChangePassword)
+		// 审批机器人绑定(.scratch/chat-approval-cards):本人的聊天账号。挂在 /auth 下,审计来源因此记 auth
+		a.GET("/auth/chat-bindings", h.ChatBindings)
+		a.POST("/auth/chat-bindings/:channel/code", h.ChatBindCode)
+		a.DELETE("/auth/chat-bindings/:channel", h.ChatUnbind)
 
 		// notifications — every authenticated user has an inbox (no menu gate)
 		a.GET("/notifications", h.ListNotifications)
@@ -324,6 +328,7 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.POST("/users/:id/password", menu("perms"), admin, h.SetUserPassword)
 		a.POST("/users/:id/mfa/reset", menu("perms"), admin, h.ResetUserMFA)
 		a.POST("/users/:id/mfa/bind", menu("perms"), admin, h.BindUserMFA)
+		a.DELETE("/users/:id/chat-bindings", menu("perms"), admin, h.ChatUnbindUser)
 			// Per-user data-access scope (overrides the role scope; see model.UserTag)
 			a.GET("/users/:id/tags", menu("perms"), admin, h.UserTags)
 			a.PUT("/users/:id/tags", menu("perms"), admin, h.SetUserTags)
@@ -394,6 +399,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.PUT("/settings/webhook", menu("settings"), admin, h.SaveWebhook)
 		a.POST("/settings/webhook/test", menu("settings"), admin, h.TestWebhook)
 		a.POST("/settings/lark/test", menu("settings"), admin, h.TestLark)
+		a.GET("/settings/chat-status", menu("settings"), admin, h.ChatStatus)
+		a.POST("/settings/chat-test", menu("settings"), admin, h.ChatTest)
 		// 投递记录里带着目标 URL(飞书机器人的 hook URL 本身就是凭据)与响应体,
 		// 读它等于读凭据 —— 与写配置同级,收归管理员(L-13)。
 		a.GET("/settings/webhook/deliveries", menu("settings"), admin, h.WebhookDeliveries)

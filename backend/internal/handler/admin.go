@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ import (
 var encryptedSettingKeys = map[string]bool{
 	"approval.external.token":          true,
 	"approval.external.callbackSecret": true,
+	"chat.lark.appSecret":              true,
 }
 
 // ---------------------------------------------------------------- Connections
@@ -1298,6 +1300,31 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		resp.FailErr(c, resp.CodeBadRequest, verr)
 		return
 	}
+	// 聊天审批机器人:启用时必填项要齐,不齐这次一项都不存。
+	chatStored, err := h.Repo.SettingsByPrefix(chatLarkPrefix)
+	if err != nil {
+		slog.Error("read chat settings failed", "err", err)
+		resp.Fail(c, resp.CodeInternalError, "保存失败")
+		return
+	}
+	if err := checkChatSettings(values, chatStored); err != nil {
+		resp.FailErr(c, resp.CodeBadRequest, err)
+		return
+	}
+	// 先把要加密的都加好再开始存:加密不成就一项都不存,绝不退回去存明文。
+	for k := range encryptedSettingKeys {
+		sv, ok := values[k].(string)
+		if !ok || strings.TrimSpace(sv) == "" {
+			continue
+		}
+		enc, err := crypto.EncryptSecret(sv)
+		if err != nil {
+			slog.Error("encrypt setting failed", "key", k, "err", err)
+			resp.Fail(c, resp.CodeInternalError, "保存失败")
+			return
+		}
+		values[k] = enc
+	}
 	// SSO 那几项决定"谁能绕开 SSO、谁会被挡在门外",存之前整体校验一遍:任何一项不对,
 	// 这一次一项都不存 —— 半存半不存的 SSO 配置,比没配更难查。
 	ssoChanged, ssoErr := h.checkSSOSettings(body)
@@ -1318,6 +1345,9 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	// 先算好要写的,再在一个事务里一起写:写到一半失败,或者连接管理恰好在中途来读,都不能看到新旧
+	// 混着的一份(新的 App Secret 配旧的地区,密钥就发去了另一个平台)。
+	writes := map[string]string{}
 	var changed []string
 	for _, k := range keys {
 		v := values[k]
@@ -1333,7 +1363,7 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			// 就再也清不掉了。
 			if _, clear := v.(settingClear); clear {
 				if settingHasValue(old) {
-					_ = h.Repo.SetSetting(k, `""`)
+					writes[k] = `""`
 					changed = append(changed, k+"=已清除")
 				}
 				continue
@@ -1344,20 +1374,12 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			if sv, ok := v.(string); ok && strings.TrimSpace(sv) == "" {
 				continue
 			}
-			// Encrypt high-impact secrets at rest (token / callback secret).
-			if encryptedSettingKeys[k] {
-				if sv, ok := v.(string); ok && sv != "" {
-					if enc, err := crypto.EncryptSecret(sv); err == nil {
-						v = enc
-					}
-				}
-			}
-			_ = h.Repo.SetSetting(k, toJSON(v))
+			writes[k] = toJSON(v)
 			changed = append(changed, k+"=已修改")
 			continue
 		}
 		s := toJSON(v)
-		_ = h.Repo.SetSetting(k, s)
+		writes[k] = s
 		if s != old {
 			if k == service.SettingBrandLogo {
 				// LOGO 是几百 KB 的 data URI,截 200 字只剩一段 base64,什么也说明不了。
@@ -1368,8 +1390,16 @@ func (h *Handler) SaveSettings(c *gin.Context) {
 			changed = append(changed, k+"="+clip(s, 200))
 		}
 	}
+	if err := h.Repo.SetSettings(writes); err != nil {
+		slog.Error("save settings failed", "err", err)
+		resp.Fail(c, resp.CodeInternalError, "保存失败")
+		return
+	}
 	if len(changed) > 0 {
 		h.auditAdmin(c, "admin.settings.update "+clip(strings.Join(changed, " "), 2000))
+	}
+	if slices.ContainsFunc(changed, func(s string) bool { return strings.HasPrefix(s, "chat.") }) {
+		h.Svc.ReloadChat() // 马上生效,不等轮询
 	}
 	if ssoChanged != "" {
 		// 开关 SSO、改本地登录范围是权限级别的变更:谁能从哪扇门进来。进审计链。
@@ -1419,6 +1449,46 @@ func (h *Handler) checkSSOSettings(body map[string]any) (string, error) {
 	}
 	return fmt.Sprintf("enabled=%v baseUrl=%s cookie=%s",
 		next.Enabled, next.BaseURL, next.CookieName), nil
+}
+
+const chatLarkPrefix = "chat.lark."
+
+// checkChatSettings 按「存进去之后」的样子核对聊天审批机器人:开着就要有 App ID 与 App Secret。
+//
+// 这次没改到 chat.lark.* 的不核对:设置页每次整包发回来,库里一份坏配置不该挡住改别的设置。关着的
+// 不核对,所以关掉永远放行。
+func checkChatSettings(values map[string]any, stored map[string]string) error {
+	const prefix = chatLarkPrefix
+	next, changed := map[string]string{}, false
+	for k, v := range stored {
+		next[k] = v
+	}
+	for k, v := range values {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		raw := toJSON(v)
+		if isSecretKey(k) {
+			if sv, ok := v.(string); ok && sv == "" {
+				continue // 不改
+			}
+			if _, clear := v.(settingClear); clear {
+				raw = `""`
+			}
+		}
+		changed = changed || raw != stored[k]
+		next[k] = raw
+	}
+	if !changed || next[prefix+"enabled"] != "true" {
+		return nil
+	}
+	if !settingHasValue(next[prefix+"appId"]) {
+		return apimsg.Errorf("启用 Lark 审批机器人必须填写 App ID")
+	}
+	if !settingHasValue(next[prefix+"appSecret"]) {
+		return apimsg.Errorf("启用 Lark 审批机器人必须填写 App Secret")
+	}
+	return nil
 }
 
 func settingBoolRaw(h *Handler, key string) bool {

@@ -642,6 +642,13 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.mfaGraceMinutes": 30,
 		"security.ipAllowlist":    "",
 		"notify.larkChannel":      "",
+
+		// 聊天审批卡片,默认关着。老库里没有这些键,读的一侧按同样的默认值(service/chat_runtime.go)。
+		"chat.cardLang":       "zh",
+		"chat.lark.enabled":   false,
+		"chat.lark.region":    "feishu",
+		"chat.lark.appId":     "",
+		"chat.lark.appSecret": "",
 	}
 	for k, v := range settings {
 		b, _ := json.Marshal(v)

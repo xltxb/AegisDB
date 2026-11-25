@@ -9,7 +9,7 @@ import type {
   SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RuleRef, RiskCommandView, RoleBrief, RoleDetail,
   ScriptProgress, ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery, OnlineSession, OSCJobView,
-  ApprovalTodo, WindowStatements, AuditChainReport, InspectionLatestRow, InspectionReport,
+  ApprovalTodo, WindowStatements, AuditChainReport, InspectionLatestRow, InspectionReport, ChatBinding, ChatBindCode, ChatStatus,
 } from '@/types'
 
 // auditQS builds the audit query string, omitting empty filters. An absolute
@@ -176,6 +176,13 @@ export const api = {
     http.post<any, Envelope<{ secret: string; otpauthUri: string }>>('/auth/mfa/setup', password ? { password } : {}).then(ok),
   mfaEnable: (code: string) => http.post<any, Envelope<any>>('/auth/mfa/enable', { code }).then(ok),
   mfaDisable: (code: string) => http.post<any, Envelope<any>>('/auth/mfa/disable', { code }).then(ok),
+  // ---- 审批机器人(聊天审批卡片)----
+  /** 本人在各渠道上的绑定;只列开着的渠道,一个都没开是空数组 */
+  chatBindings: () => http.get<any, Envelope<ChatBinding[]>>('/auth/chat-bindings').then(ok),
+  /** 生成一次性绑定码;启用了 MFA 的账号要带验证码,没带回 42800 */
+  chatBindCode: (channel: string, mfaCode = '') =>
+    http.post<any, Envelope<ChatBindCode>>(`/auth/chat-bindings/${channel}/code`, mfaCode ? { mfaCode } : {}).then(ok),
+  chatUnbind: (channel: string) => http.delete<any, Envelope<any>>(`/auth/chat-bindings/${channel}`).then(ok),
   // 自助修改密码:成功后其它会话作废,返回当前会话重签的 token(调用方换上)
   changePassword: (oldPassword: string, newPassword: string) =>
     http.post<any, Envelope<{ session: string; expiresAt: string }>>('/auth/password', { oldPassword, newPassword }).then(ok),
@@ -403,6 +410,7 @@ export const api = {
   setUserPassword: (id: number, password: string) =>
     http.post<any, Envelope<any>>(`/users/${id}/password`, { password }).then(ok),
   resetUserMfa: (id: number) => http.post<any, Envelope<any>>(`/users/${id}/mfa/reset`).then(ok),
+  chatUnbindUser: (id: number) => http.delete<any, Envelope<any>>(`/users/${id}/chat-bindings`).then(ok),
   bindUserMfa: (id: number) =>
     http.post<any, Envelope<{ secret: string; otpauthUri: string }>>(`/users/${id}/mfa/bind`).then(ok),
 
@@ -567,6 +575,8 @@ export const api = {
   saveWebhook: (body: Partial<WebhookConfig>) =>
     http.put<any, Envelope<WebhookConfig>>('/settings/webhook', body).then(ok),
   testWebhook: () => http.post<any, Envelope<any>>('/settings/webhook/test').then(ok),
+  chatStatus: () => http.get<any, Envelope<Record<string, ChatStatus>>>('/settings/chat-status').then(ok),
+  chatTest: (channel: string) => http.post<any, Envelope<any>>('/settings/chat-test', { channel }).then(ok),
   testLark: () => http.post<any, Envelope<{ ok: boolean; message: string }>>('/settings/lark/test').then(ok),
   webhookDeliveries: (limit = 50) =>
     http.get<any, Envelope<WebhookDelivery[]>>(`/settings/webhook/deliveries?limit=${limit}`).then(ok),

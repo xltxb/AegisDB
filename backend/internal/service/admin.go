@@ -851,10 +851,19 @@ func (s *Services) PatchUser(actor *model.User, id int64, req dto.UserPatchReq) 
 	// 状态一变,已发出的会话全部作废。状态检查只挡"此刻不是 active",挡不住恢复:
 	// invited → active 之后,那个没过期的旧 token 又能用了。角色不在此列 —— 权限每次
 	// 请求都按库里的成员关系现算,改角色当场生效,不需要把人踢下线。
+	var bumpErr error
 	if req.Status != "" && req.Status != target.Status {
-		if err := s.Repo.BumpTokenVersion(id); err != nil {
-			return err
-		}
+		bumpErr = s.Repo.BumpTokenVersion(id)
+	}
+	// 解绑排在作废会话之后、不论它成没成(理由见 revokeSessionsAndChat)。
+	switch req.Status {
+	case "disabled":
+		s.autoUnbindChat(actor, id, apimsg.Text("账号被停用"))
+	case "invited":
+		s.autoUnbindChat(actor, id, apimsg.Text("账号状态变更"))
+	}
+	if bumpErr != nil {
+		return bumpErr
 	}
 	// 停用只改状态,不动角色(2026-10 黑盒测试,工单 02 第 1 条)。
 	//

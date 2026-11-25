@@ -211,6 +211,9 @@ func main() {
 		}
 	}()
 
+	// Background: 聊天审批机器人的长连接与卡片扫描。默认都关着;关着时只是每 5 秒看一眼设置。
+	go svc.RunChat(context.Background())
+
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
 	slog.Info("AegisDB listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
 	if cfg.Env == "prod" && !tls {

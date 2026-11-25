@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"aegisdb/internal/apimsg"
+	"aegisdb/internal/chat"
 	"aegisdb/internal/dto"
 	"aegisdb/internal/gateway"
 	"aegisdb/internal/model"
@@ -682,22 +683,29 @@ func (s *Services) createApprovalWith(u *model.User, conn *model.Connection, sql
 		return nil, "", err
 	}
 	s.Webhook.SendLarkApproval(ap) // push an interactive Lark card to the approvers
+	s.queueChatCards(ap, false)
 	return ap, auditID, nil
 }
 
 // isChainMember reports whether the user is an approver on the given approval's
 // chain (i.e. one of its step approvers).
 func (s *Services) isChainMember(approvalID int64, u *model.User) bool {
+	member, _ := s.chainMember(approvalID, u)
+	return member
+}
+
+// chainMember 是 isChainMember 再带上「审批链读不出来」的错误。
+func (s *Services) chainMember(approvalID int64, u *model.User) (bool, error) {
 	if u == nil {
-		return false
+		return false, nil
 	}
-	steps, _ := s.Repo.StepsOf(approvalID)
+	steps, err := s.Repo.StepsOf(approvalID)
 	for _, st := range steps {
 		if st.ApproverID == u.ID {
-			return true
+			return true, err
 		}
 	}
-	return false
+	return false, err
 }
 
 // defaultChainSteps returns the fallback approval chain (DBA-owner role members).
@@ -737,13 +745,29 @@ func (s *Services) approverPool() []model.User {
 // Approve / Reject act on an approval; on approval the gateway executes the
 // command and returns the execution result (output + rows).
 func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*dto.ExecResp, error) {
+	return s.DecideApprovalVia(actor, id, approve, viaConsole, "")
+}
+
+// DecideApprovalVia 是带渠道的 DecideApproval:站内与聊天卡片走的是同一套规则、同一个决定核心,
+// 区别只在审计里看得出是从哪里点的。reason 只对拒绝有意义,通过时忽略。
+func (s *Services) DecideApprovalVia(actor *model.User, id int64, approve bool, via, reason string) (*dto.ExecResp, error) {
+	// via 会写进库里、决定审计上的操作人,只认已知的几个。
+	switch via {
+	case viaConsole, viaAPI, string(chat.Lark), string(chat.Telegram):
+	default:
+		return nil, ErrBadRequest
+	}
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 	// 能不能决定这张单,只有一处判断(DecideBlockFor)—— 它同时喂给待办列表,
 	// 所以按钮亮不亮和点下去放不放行,永远说的是同一件事。
-	switch block := s.DecideBlockFor(actor, ap); block {
+	block, err := s.decideBlock(actor, ap)
+	if err != nil {
+		return nil, err
+	}
+	switch block {
 	case BlockNone:
 	case BlockNotPending:
 		return nil, ErrAlreadyDecided
@@ -752,7 +776,45 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 		// 不在链上要去找管理员,自己发起的要去找同事,两件事完全不同。
 		return nil, &DecideRefusal{Block: block}
 	}
-	return s.finalizeApproval(ap, approve, actor.Name, actor.ID)
+	return s.finalizeApproval(ap, decision{Approve: approve, ActorID: actor.ID, ActorName: actor.Name, Via: via, Reason: reason})
+}
+
+// 决定的渠道(tbl_approval.decided_via)。聊天渠道就是 chat.Channel 的值(lark / telegram)。
+const (
+	viaConsole = "console"
+	viaAPI     = "api"
+)
+
+// rejectReasonWidth 是 tbl_approval.reject_reason 的列宽。
+const rejectReasonWidth = 512
+
+// rejectReasonNotifMax 是拒绝原因在通知里最多占的字数。通知正文那一列也只有 512,前面还有姓名
+// (≤64)、命令节选(≤81)和固定文字;放不下时 notify 写库失败、发起人什么都收不到。完整原因在审批页上。
+const rejectReasonNotifMax = 300
+
+// decision 是一个人对一张审批单的决定。
+type decision struct {
+	Approve   bool
+	ActorID   int64  // 实际做决定的人:审批步骤记在他那一步上(Repo.DecideStepBy,工单 01 第 6 条)
+	ActorName string // 给发起人的通知只写这个
+	Via       string // console | api | lark | telegram
+	Reason    string // 拒绝原因,可空
+}
+
+// auditOperator 是审计里的操作人。聊天渠道写「张伟 (Lark)」;站内与开放接口是既有口径,只写姓名。
+func (d decision) auditOperator() string {
+	switch ch := chat.Channel(d.Via); ch {
+	case chat.Lark, chat.Telegram:
+		return d.ActorName + " (" + ch.Name() + ")"
+	}
+	return d.ActorName
+}
+
+// rejectReason 是要落库的拒绝原因:去掉首尾空白、截到列宽。坏 UTF-8 与 NUL 一并去掉 —— 文字来自
+// 聊天平台,MySQL 拒收前者、PG 拒收后者,而它和状态在同一条 UPDATE 里,写不进去就是这次决定失败。
+func (d decision) rejectReason() string {
+	s := strings.ReplaceAll(strings.ToValidUTF8(d.Reason, ""), "\x00", "")
+	return clipColumn(strings.TrimSpace(s), rejectReasonWidth)
 }
 
 // finalizeApproval is the shared decision core: atomically claim pending →
@@ -760,18 +822,22 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // initiator + audit + notify, or (reject) record the rejection. It is reused by
 // the in-app decision path (DecideApproval) and the open-API release approval
 // (DecideReleaseForClient, open_release_approve.go); authorization is the caller's responsibility — this
-// function assumes the decision is already authorized. operatorName is who acted
+// function assumes the decision is already authorized. d.ActorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.
-// approverID 是实际做决定的人:审批步骤记在他那一步上(Repo.DecideStepBy,工单 01 第 6 条);
-// 传 0 表示只有名字、不知道是谁(没有这样的调用方了,保留是为了不改签名),退回记在 active 那一步。
-func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorName string, approverID int64) (*dto.ExecResp, error) {
+func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecResp, error) {
 	// 窗口单只认窗口此刻挂着的那一张:窗口改过(另起了新单)或删了,旧单就作废,
 	// 批准它不能让改过之后的定义生效(2026-10 黑盒,工单 01 第 2、3 条)。顺手把它撤掉,
 	// 别让它继续躺在待办里。
-	if ap.WindowID > 0 && !s.windowTicketCurrent(ap) {
-		s.cancelStaleWindowTicket(nil, ap, apimsg.Text("执行窗口已修改或删除,此单作废"))
-		return nil, ErrAlreadyDecided
+	if ap.WindowID > 0 {
+		current, err := s.windowTicketCurrent(ap)
+		if err != nil {
+			return nil, err // 读不出来不等于旧单,不能就此把它撤掉
+		}
+		if !current {
+			s.cancelStaleWindowTicket(nil, ap, apimsg.Text("执行窗口已修改或删除,此单作废"))
+			return nil, ErrAlreadyDecided
+		}
 	}
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	// 走 applyTargetDatabase,不要裸赋值:Oracle 上 conn.Database 是服务名,直接写
@@ -784,18 +850,18 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		initiator = &model.User{ID: ap.InitiatorID, Name: ap.Initiator}
 	}
 	now := time.Now()
-	if approve {
+	if d.Approve {
 		// Atomically claim the pending → approved transition. If we lose the race
 		// (already decided/rejected/expired by a concurrent caller or the timeout
 		// sweep), stop here so the command is never executed twice.
-		claimed, cerr := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusApproved)
+		claimed, cerr := s.Repo.ClaimApprovalDecision(ap.ID, model.StatusApproved, d.Via, "")
 		if cerr != nil {
 			return nil, cerr
 		}
 		if !claimed {
 			return nil, ErrAlreadyDecided // someone else already decided/expired it
 		}
-		_ = s.Repo.DecideStepBy(ap.ID, approverID, model.StatusApproved, now)
+		_ = s.Repo.DecideStepBy(ap.ID, d.ActorID, model.StatusApproved, now)
 		// 通过不再执行任何命令,两条分支的区别只是**接下来由谁执行**:
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
@@ -839,43 +905,48 @@ func (s *Services) finalizeApproval(ap *model.Approval, approve bool, operatorNa
 		// 没有跑。记成 exec 会让审计里出现一条查不到对应库变更的"执行",也会让只
 		// 订阅 exec 的 webhook 在什么都没执行时收到通知。真正的执行由
 		// ExecuteApproved 自己写一条 exec —— 那条才对得上库里的变化。
-		s.recordAuditFrom(approvalAuditSource(ap), initiator, operatorName, conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "approve")
+		s.recordAuditFrom(approvalAuditSource(ap), initiator, d.auditOperator(), conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "approve")
 		// 话要说清"还需要你去执行" —— 一句"已通过"会让人以为事情办完了,然后那条
 		// 命令就一直挂在那里,直到有人发现变更根本没生效。
 		body := apimsg.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
-			operatorName, safeClip(ap.Command, 60))
+			d.ActorName, safeClip(ap.Command, 60))
 		if ap.WindowID > 0 {
 			body = apimsg.Sprintf("%s 通过了你的执行窗口申请：%s\n窗口已生效,到点自动开启、到点自动关闭。",
-				operatorName, safeClip(ap.Command, 60))
+				d.ActorName, safeClip(ap.Command, 60))
 		} else if ap.ExportJobID > 0 {
 			body = apimsg.Sprintf("%s 通过了你的导出申请：%s\n任务已进入队列,完成后会再通知你。",
-				operatorName, safeClip(ap.Command, 60))
+				d.ActorName, safeClip(ap.Command, 60))
 		} else if ap.ReleaseID > 0 {
 			body = apimsg.Sprintf("%s 通过了发布单里的这一步：%s\n流水线将继续执行,无需手动操作。",
-				operatorName, safeClip(ap.Command, 60))
+				d.ActorName, safeClip(ap.Command, 60))
 		}
 		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title, body, ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, OutputRef: res.OutputRef, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}
+	reason := d.rejectReason()
 	// Same atomic guard on the reject path.
-	claimed, cerr := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusRejected)
+	claimed, cerr := s.Repo.ClaimApprovalDecision(ap.ID, model.StatusRejected, d.Via, reason)
 	if cerr != nil {
 		return nil, cerr
 	}
 	if !claimed {
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
-	_ = s.Repo.DecideStepBy(ap.ID, approverID, model.StatusRejected, now)
+	_ = s.Repo.DecideStepBy(ap.ID, d.ActorID, model.StatusRejected, now)
 	_ = s.Repo.SetApprovalResult(ap.ID, "", nil, 0, now)
 	if ap.WindowID > 0 {
 		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
 		s.applyWindowDecision(ap, false)
 	}
 	s.abortAwaitingOSC(ap.OSCJobID, "工单被驳回,未执行")
-	s.recordAuditFrom(approvalAuditSource(ap), initiator, operatorName, conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
-	s.notify(ap.InitiatorID, model.NotifApprovalRejected, apimsg.T("审批被拒绝"),
-		apimsg.Sprintf("%s 驳回了你的命令：%s", operatorName, safeClip(ap.Command, 80)), ap.ApNo)
+	s.recordAuditFrom(approvalAuditSource(ap), initiator, d.auditOperator(), conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
+	body := apimsg.Sprintf("%s 驳回了你的命令：%s", d.ActorName, safeClip(ap.Command, 80))
+	if reason != "" {
+		body = apimsg.Sprintf("%s 驳回了你的命令：%s\n原因：%s",
+			d.ActorName, safeClip(ap.Command, 80), clip(reason, rejectReasonNotifMax))
+	}
+	s.notify(ap.InitiatorID, model.NotifApprovalRejected, apimsg.T("审批被拒绝"), body, ap.ApNo)
 	return nil, nil
 }
 
@@ -1622,7 +1693,21 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 	if !u.MFAEnabled {
 		return nil
 	}
-	// 失败次数限制(mfa_guard.go):锁定期间不能用任何码关掉第二因子
+	if err := s.spendMFACode(u, code, "关闭 MFA"); err != nil {
+		return err
+	}
+	if err := s.Repo.UpdateUserMFA(u.ID, false, ""); err != nil {
+		return err
+	}
+	// 关掉第二因子是**降低**这个账号的保护等级,比开启它更该留痕(M-8)。
+	s.auditAdminAction(u, "mfa.disable 自助停用 MFA(该账号此后仅凭口令登录)")
+	return nil
+}
+
+// spendMFACode 核对并消费一个当前的 TOTP 码:同一个码只能用一次(R15)。what 是这一步的名字,
+// 触发锁定时写进审计。调用方自己先判这个账号启没启用 MFA。
+func (s *Services) spendMFACode(u *model.User, code, what string) error {
+	// 失败次数限制(mfa_guard.go):锁定期间任何码都不认
 	if s.mfaFails.locked(u.ID, time.Now()) {
 		return ErrMFALocked
 	}
@@ -1631,17 +1716,12 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 	}
 	ok, counter := totp.ValidateWithCounter(u.MFASecret, code, time.Now())
 	if !ok {
-		return s.mfaFailed(u, "关闭 MFA", ErrMFARequired)
+		return s.mfaFailed(u, what, ErrMFARequired)
 	}
 	if !s.Repo.ConsumeMFACounter(u.ID, int64(counter)) {
 		return ErrMFARequired // code already used (e.g. for a step-up)
 	}
 	s.mfaFails.succeed(u.ID)
-	if err := s.Repo.UpdateUserMFA(u.ID, false, ""); err != nil {
-		return err
-	}
-	// 关掉第二因子是**降低**这个账号的保护等级,比开启它更该留痕(M-8)。
-	s.auditAdminAction(u, "mfa.disable 自助停用 MFA(该账号此后仅凭口令登录)")
 	return nil
 }
 
@@ -1672,9 +1752,10 @@ func (s *Services) AdminSetPassword(actor *model.User, id int64, newPassword str
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return err
 	}
-	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
 	// A password reset must invalidate the user's existing sessions (M1).
-	return s.Repo.BumpTokenVersion(u.ID)
+	err = s.revokeSessionsAndChat(actor, u.ID, apimsg.Text("管理员重置了登录口令"))
+	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
+	return err
 }
 
 // AdminResetMFA unbinds a user's OTP (disable + clear secret) so they can
@@ -1687,9 +1768,10 @@ func (s *Services) AdminResetMFA(actor *model.User, id int64) error {
 	if err := s.Repo.UpdateUserMFA(id, false, ""); err != nil {
 		return err
 	}
-	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
 	// 解绑多半是因为手机丢了:丢的那台设备上开着的会话不能继续活着,与改口令同理(M1)。
-	return s.Repo.BumpTokenVersion(u.ID)
+	err = s.revokeSessionsAndChat(actor, u.ID, apimsg.Text("管理员重置了 MFA"))
+	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
+	return err
 }
 
 // AdminBindMFA generates a fresh OTP secret, binds it (enabled) to the user, and
@@ -1703,6 +1785,8 @@ func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp,
 	if err := s.Repo.UpdateUserMFA(u.ID, true, secret); err != nil {
 		return nil, err
 	}
+	// 这里不作废会话(一直如此):旧会话此后要绑聊天账号,得先过这个新因子,它拿不到。
+	s.autoUnbindChat(actor, u.ID, apimsg.Text("管理员重新绑定了 MFA"))
 	s.auditAdminAction(actor, "admin.mfa.bind user="+u.Email)
 	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, s.Brand().Text(BrandDefaultUI, true))}, nil
 }

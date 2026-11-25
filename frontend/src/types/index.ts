@@ -395,8 +395,40 @@ export interface Approval {
   resultRef?: string
   resultRows: number
   decidedAt: string | null
+  /** 决定来自哪个渠道(console | api | lark | telegram);空 = 没有人做过决定,或这一列之前的老单 */
+  decidedVia?: string
+  /** 拒绝时填的原因(只有聊天卡片上能填);没填为空 */
+  rejectReason?: string
   createdAt: string
   steps: ApprovalStep[]
+}
+
+/** 聊天审批机器人的渠道。后端另有 telegram,界面上还没有它。 */
+export type ChatChannel = 'lark'
+
+/** 本人在一个开着的渠道上的绑定状态。 */
+export interface ChatBinding {
+  channel: string
+  botName: string
+  bound: boolean
+  boundAt?: string
+}
+
+/** 一次性绑定码:只显示这一次。 */
+export interface ChatBindCode {
+  code: string
+  expiresAt: string
+  botName: string
+}
+
+/** 一个渠道的连接状态(管理员看)。 */
+export interface ChatStatus {
+  enabled: boolean
+  state: 'off' | 'connecting' | 'connected' | 'conflict' | 'error'
+  /** 冲突 / 出错的原因;detailRef 非空时按读者语言显示 */
+  detail: string
+  detailRef?: RuleRef
+  botName: string
 }
 
 export interface AuditRow {

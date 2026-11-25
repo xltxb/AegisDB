@@ -849,6 +849,41 @@ paths:
       tags: [auth]
       summary: 解绑 TOTP(需当前验证码)
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings:
+    get:
+      tags: [auth]
+      summary: 本人在各审批机器人渠道上的绑定状态
+      description: |
+        只列开着的渠道,一个都没开是空数组。每项:`channel`(lark / telegram)、`botName`、`bound`、
+        `boundAt`(已绑定才有)。机器人换过之后的旧绑定算未绑定。不返回聊天账号与机器人的标识。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings/{channel}/code:
+    post:
+      tags: [auth]
+      summary: 生成审批机器人的一次性绑定码
+      description: |
+        返回 `code`(只显示这一次)、`expiresAt`(10 分钟后)、`botName`。把码私聊发给机器人即完成绑定。
+        重新生成会作废旧码;改 / 重置口令、停用账号、管理员重置或代绑 MFA 也会作废。
+
+        启用了 MFA 的账号要带 `mfaCode`:没带返回 `42800`,错误或已用过返回 `40001`,连续错误被锁返回
+        `42900`。15 分钟内生成满 10 次也返回 `42900`。渠道没开、机器人没连上、服务账号返回 `40001`。
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string, enum: [lark, telegram] } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mfaCode: { type: string, description: 启用了 MFA 的账号必填 }
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /auth/chat-bindings/{channel}:
+    delete:
+      tags: [auth]
+      summary: 本人解除一个渠道的审批机器人绑定
+      description: 没绑定也返回成功。没用掉的绑定码一并作废;解除成功会给本人发站内通知并进审计(`chat.unbind`)。
+      parameters: [{ name: channel, in: path, required: true, schema: { type: string, enum: [lark, telegram] } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /auth/password:
     post:
       tags: [auth]
@@ -2056,6 +2091,15 @@ paths:
       summary: '[perms · admin] 代为生成并绑定 TOTP(返回密钥与 otpauth URI)'
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /users/{id}/chat-bindings:
+    delete:
+      tags: [users]
+      summary: '[perms · admin] 解除该用户的全部审批机器人绑定'
+      description: |
+        没用掉的绑定码一并作废;本人收到站内通知,动作进审计(`chat.unbind`)。停用账号、重置口令、
+        重置或代绑 MFA 时会自动解绑,不必另调。没有绑定也返回成功;用户不存在返回 `40001`。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/{id}/tags:
     get:
       tags: [users]
@@ -2286,6 +2330,8 @@ paths:
           description: |
             OK。每张单带 `steps`:审批链上的人和各自的处理状态,即这张单的审批人。
             发布单审批阶段生成的单 `releaseId` 非 0、`type` 为 release,单号即发布单阶段上的 `approvalNo`。
+            `decidedVia` 是决定来自哪个渠道(console / api / lark / telegram;空 = 没有人做过决定或老单),
+            `rejectReason` 是拒绝时填的原因(只有聊天卡片上能填,纯文本)。
           content:
             application/json:
               schema:
@@ -2548,6 +2594,10 @@ paths:
         defaultMaxRows / maxRowsCap / defaultTimeoutSec / timeoutCapSec / maxGrantDays /
         maxConcurrentPerUser / maxConcurrentPerSource / exportEnabled / maxDailyPerUser
         (每人每天执行 + 导出次数,0 = 不限,上限 100000)。
+
+        聊天审批卡片:`chat.cardLang`(zh / en)、`chat.lark.enabled`、`chat.lark.region`(feishu / lark)、
+        `chat.lark.appId`、`chat.lark.appSecret`(密钥,加密存)。开着时缺 App ID 或 App Secret 整次拒绝;
+        保存后马上重连,不用重启。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/webhook:
     put:
@@ -2584,6 +2634,32 @@ paths:
     post:
       tags: [settings]
       summary: '[settings · admin] 测试飞书连通性'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/chat-status:
+    get:
+      tags: [settings]
+      summary: '[settings · admin] 各审批机器人渠道的连接状态'
+      description: |
+        以渠道(lark / telegram)为键,每项:`enabled`(设置里是否开着)、`state`
+        (off / connecting / connected / conflict / error)、`detail`(冲突或出错的原因,可能有
+        `detailRef` 供翻译)、`botName`。不含任何密钥。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/chat-test:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 给自己发一张测试卡片'
+      description: |
+        发给当前登录人在该渠道上绑定的聊天账号;按钮只回一句提示,不碰任何审批单。渠道没开、机器人没连上、
+        没有绑定、平台报错返回 `40001`;同一人 5 秒内再发返回 `42900`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string, enum: [lark, telegram] }
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /service-accounts:
     get:

@@ -1431,6 +1431,29 @@
   pmRemoveMemberConfirm: 'Remove {name} from {role}?',
   pmDisableUserConfirm: 'Disable {name}? Every session of theirs ends immediately.',
   pmResetMfaConfirm: 'Unbind MFA for {name}? They must enrol again before they can pass a step-up.',
+  // ---- Approval bots (chat approval cards) ----
+  btnClose: 'Close',
+  chatBindTitle: 'Approval bots', chatBindDesc: 'Link your chat account to your gateway account. Requests that need your approval are sent to you privately and can be handled on the card. Without a link, approve in the gateway as usual.',
+  chatBindNone: 'No approval bot is turned on right now.', chatCh_lark: 'Lark (Feishu)',
+  chatGen: 'Generate code', chatRegen: 'Regenerate', chatCopy: 'Copy', chatCopyFailed: 'Copy failed. Select the code and copy it manually',
+  chatCodeValid: 'Valid for 10 minutes, single use. Generating a new code voids this one.', chatCodeExpired: 'The binding code has expired. Generate a new one.',
+  chatHow_lark: 'Find the approval bot in Lark (Feishu) and send it this code in a private chat; codes sent in group chats are ignored. This page updates once you are linked. If the bot does not reply, ask an administrator to check its connection status.',
+  chatBoundAt: 'Linked at {at}', chatUnbind: 'Unlink',
+  chatUnbindConfirm: 'Unlink the 「{channel}」 approval bot? You will stop receiving approval cards, and cards you already received can no longer be used.',
+  chatPanelSub: 'Approvers get cards in chat and approve or reject there. The gateway connects out; no public endpoint is needed',
+  chatEnable: '{channel} approval bot', chatLarkD: 'Uses the long connection of a custom app. Once enabled, users link their account under “Approval bots” in the user menu (top right). Group-bot webhook notifications keep working separately.',
+  chatNoteIp: 'The user IP allowlist does not cover clicks on cards: a click counts wherever the approver is.',
+  chatNoteLeave: 'When someone leaves the company, their chat link keeps working until an administrator disables their account in the gateway. This also applies to people who sign in through SSO only: disabling them on the company side is not enough.',
+  chatRegion: 'Region', chatRegionFeishu: 'China (Feishu, feishu.cn)', chatRegionLark: 'International (Lark, larksuite.com) · not verified',
+  chatRegionUnverified: 'International is not verified: the official docs do not say that it supports long connections. Check with a test app before enabling it.',
+  chatSecretPh: 'App Secret of the custom app', chatStatus: 'Connection', chatSaveFirst: 'Changes take effect after you save. Status and test cards use the saved configuration.',
+  chatSt_off: 'Off', chatSt_connecting: 'Connecting', chatSt_connected: 'Connected', chatSt_conflict: 'Conflict: this app is also connected elsewhere', chatSt_error: 'Error',
+  chatTest: 'Send me a test card', chatTestSent: 'Sent. Check {channel}.',
+  chatCardLang: 'Card language', chatCardLangD: 'Language of the cards and replies sent to chat, for everyone', chatLangZh: 'Chinese', chatLangEn: 'English',
+  apDecidedVia: 'Decided via {channel}', apRejectReason: 'Reason for rejecting',
+  pmChatHint: 'Removes this user\'s links on all approval bots. Disabling the account, resetting the password or resetting MFA unlinks automatically.',
+  pmChatUnbind: 'Remove chat links', pmChatUnbound: 'Chat links removed',
+  pmChatUnbindConfirm: 'Remove all chat links of {name}? They can no longer approve in chat until they link again.',
   pmRolesHint: '{n} roles · tiered auth', pmUsersHint: '{n} users · click a status to enable or disable',
   pmMembersN: '{n} members', pmRemoveMember: 'Remove member',
   secretConfiguredPh: 'Configured · leave blank to keep',
@@ -1460,6 +1483,8 @@
     m425988b7: 'Invalid value for {0}',
     // %s 只能是 %s
     m319ea174: '{0} must be one of {1}',
+    // %s 只能是字母、数字、下划线和短横线,最多 64 个字符
+    m0b63f98e: '{0} may contain only letters, digits, underscores and hyphens, up to 64 characters',
     // %s 在 %s 上发起的审批超过时限仍未处理，请跟进
     mf54408da: 'The approval raised by {0} on {1} is overdue and still undecided; please follow up',
     // %s 必须在 %d ~ %d 之间,当前 %d
@@ -1506,6 +1531,8 @@
     m8256a1a6: '{0} contains an invalid CIDR range: {1}',
     // %s 驳回了你的命令：%s
     m082ca5d0: '{0} rejected your command: {1}',
+    // %s 驳回了你的命令：%s\n原因：%s
+    m66d48011: '{0} rejected your command: {1}\nReason: {2}',
     // %s, %s
     m43463257: '{0}, {1}',
     // %s.%s 已经在敏感字段列表里(#%d)
@@ -1840,16 +1867,26 @@
     mba778d5a: 'Your session is no longer valid; please sign in again',
     // 会话已过期，请重新登录
     m32f89bb4: 'Your session has expired; please sign in again',
+    // 你修改了登录口令
+    me71eac1c: 'you changed your sign-in password',
+    // 你在网关里解除了绑定
+    m0e41d2e3: 'you removed it in the gateway',
     // 你已有 5 个任务在排队或执行中,请等它们完成后再提交
     ma29c3063: 'You already have 5 tasks queued or running; wait for them to finish before submitting more',
     // 你打开的终端标签占用的数据库连接已达上限(%d 条),请关闭不用的标签后重试
     me6a2e173: 'Your open terminal tabs have reached the database connection limit ({0}); close unused tabs and try again',
+    // 你的 %s 审批机器人绑定已解除:%s。
+    me0d55aed: 'Your {0} approval bot link was removed: {1}.',
     // 你的工单已由他人执行
     m44b040b1: 'Your ticket was executed by someone else',
     // 你的工单由他人执行,但失败了
     m5764e0b7: 'Your ticket was executed by someone else, but it failed',
+    // 你的账号已绑定 %s 审批机器人,可以直接在聊天里审批。\n不是你本人操作的话,请立即在右上角用户菜单的「审批机器人」里解绑,并联系管理员。
+    ma8cd94cb: 'Your account is now linked to the {0} approval bot, and you can approve directly in chat.\nIf this was not you, remove the link at once under "Approval bots" in the user menu (top right) and contact an administrator.',
     // 你还没有开通网关账号,无权限访问。请联系管理员开通后再登录
     mbfec1947: 'You do not have a gateway account yet, so access is denied. Ask an administrator to open one, then sign in',
+    // 你还没有绑定这个审批机器人,请先在右上角用户菜单的「审批机器人」里绑定
+    m6dc78302: 'You have not linked this approval bot yet. Link it first under "Approval bots" in the user menu (top right)',
     // 使用了 %s 分区,规范要求 RANGE 分区
     m50c94203: '{0} partitioning is used; the standard requires RANGE partitioning',
     // 使用了 SELECT *,建议显式列出所需字段
@@ -2042,6 +2079,10 @@
     ma9f03c30: 'The name can be at most {0} characters',
     // 向 PUBLIC 授权会让所有数据库用户获得该权限
     m6352928d: 'Granting to PUBLIC gives the privilege to every database user',
+    // 启用 Lark 审批机器人必须填写 App ID
+    mb0566601: 'The App ID is required to enable the Lark approval bot',
+    // 启用 Lark 审批机器人必须填写 App Secret
+    mdb4c55c5: 'The App Secret is required to enable the Lark approval bot',
     // 启用 SSO 必须填写%s
     mf395a22c: 'Enabling SSO requires {0}',
     // 命令名不能为空,且不超过 32 个字符
@@ -2144,6 +2185,10 @@
     mbe55732e: 'Approved; the release pipeline continues',
     // 审批已通过,请前往执行
     mbe6b9072: 'Approved; please go and execute it',
+    // 审批机器人已解绑
+    m8b9d978c: 'Approval bot unlinked',
+    // 审批机器人还没连上,请稍后再试
+    m9ec49329: 'The approval bot is not connected yet; please try again later',
     // 审批被拒绝
     maaba03ff: 'Approval rejected',
     // 审批角色 %q 不存在
@@ -2160,6 +2205,8 @@
     m08cbac36: 'The password must be at least {0} characters',
     // 密码过于常见,请换一个
     m83d1b69f: 'This password is too common, please choose another',
+    // 密钥无法解密
+    m5d4b86df: 'The secret cannot be decrypted',
     // 对比失败
     m3a7c4883: 'Comparison failed',
     // 对象 %s 未带 schema 限定,应写作 schema.%s
@@ -2248,6 +2295,8 @@
     mb3a959fe: 'A command is already running; please wait for it to finish',
     // 已清除
     m1214e985: 'Cleared',
+    // 已绑定审批机器人
+    m7b0ff132: 'Approval bot linked',
     // 已被 %s 终止
     m6e436095: 'Stopped by {0}',
     // 平台里没有这个实例
@@ -2466,6 +2515,8 @@
     ma3737e4f: 'Service account not found',
     // 服务账号不能带平台管理员角色:它的唯一入口是 API 凭据,带上 admin 就成了一串密钥即可用的管理员
     m89f2ce14: 'A service account cannot hold the platform admin role: its only entry point is API credentials, and with admin it becomes an admin usable by anyone holding the key',
+    // 服务账号不能绑定审批机器人
+    m012dbd45: 'Service accounts cannot be linked to an approval bot',
     // 服务账号不能设置登录口令,它只通过 API 凭据访问
     ma5396e8b: 'Service accounts cannot have a sign-in password; they access only through API credentials',
     // 服务账号名称不能为空
@@ -2524,6 +2575,10 @@
     mdf480bdf: 'One side of a comparison is a subquery (scalar subquery); rewrite it as LEFT JOIN + aggregation',
     // 没有回看执行窗口的权限
     me6a262d1: 'You do not have permission to review execution windows',
+    // 没有填写 App ID 或 App Secret
+    m94d595ab: 'The App ID or App Secret is missing',
+    // 没有这个审批机器人渠道
+    m1f930af0: 'No such approval bot channel',
     // 没有选定库,无法确定表 %s 的数据量
     m26d8c665: 'No database selected, so the data volume of table {0} cannot be determined',
     // 流程「%s」已存在
@@ -2536,6 +2591,10 @@
     m30813e75: 'A flow needs at least one stage',
     // 流程阶段最多 20 个
     m9eeaf2b3: 'A flow can have at most 20 stages',
+    // 测试卡片发得太频繁,请稍后再试
+    m7afbfec7: 'Test cards are being sent too often. Try again later',
+    // 测试卡片发送失败:%s
+    ma6dff19f: 'Failed to send the test card: {0}',
     // 添加失败
     m9d563ebb: 'Add failed',
     // 环境不存在
@@ -2544,6 +2603,8 @@
     m912d1f8f: 'Production operations require MFA verification',
     // 生成失败
     m64ba75d9: 'Generation failed',
+    // 生成绑定码太频繁,请 15 分钟后再试
+    me763ece6: 'Binding codes are being generated too often; try again in 15 minutes',
     // 用 EXISTS / IN 接子查询,优化器较难找到稳定计划,建议改写为 JOIN
     m8c8beb3e: 'EXISTS / IN with a subquery makes a stable plan hard for the optimizer; rewrite it as a JOIN',
     // 用到的 %s 带自治事务(PRAGMA AUTONOMOUS_TRANSACTION),在查询里调用也会真的改数据
@@ -2626,6 +2687,14 @@
     m1d90d252: 'The level must be high / mid / off: {0}',
     // 管理后台已空闲超时,请重新进入
     md096af10: 'The Admin console has been idle too long; please enter again',
+    // 管理员解除了绑定
+    m7b54c96b: 'an administrator removed it',
+    // 管理员重新绑定了 MFA
+    m99ca4fae: 'an administrator re-bound your MFA',
+    // 管理员重置了 MFA
+    mc684d6de: 'an administrator reset your MFA',
+    // 管理员重置了登录口令
+    m71b0d11b: 'an administrator reset your sign-in password',
     // 系统名称不能包含换行、控制字符或尖括号
     m07d2b5d2: 'The system name must not contain line breaks, control characters or angle brackets',
     // 系统名称不能超过 %d 个字
@@ -2966,6 +3035,12 @@
     mdb567b5a: 'Account unavailable',
     // 账号不存在
     m37f36ca8: 'Account not found',
+    // 账号状态刚刚变化,请刷新后重试
+    m63792ac6: 'Your account has just changed; please refresh and try again',
+    // 账号状态变更
+    m6a5bc13e: 'the account status changed',
+    // 账号被停用
+    me2cae465: 'the account was disabled',
     // 超时上限(秒)
     m1f4ccf69: 'Timeout limit (seconds)',
     // 超过时限未审批，已自动作废：%s
@@ -2988,6 +3063,8 @@
     m687a65b8: 'This online change has already run ({0})',
     // 这个在线变更没有在运行
     m9b89824d: 'This online change is not running',
+    // 这个审批机器人没有开启
+    mf8988eed: 'This approval bot is turned off',
     // 这个终端标签已关闭,语句没有执行
     mfe89908a: 'This terminal tab is closed; the statement was not executed',
     // 这份结果已过期(暂存 10 分钟),请重新执行查询

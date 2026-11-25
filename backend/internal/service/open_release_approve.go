@@ -93,7 +93,7 @@ func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, re
 	}
 
 	approve := action == OpenActionApprove
-	if _, ferr := s.finalizeApproval(ap, approve, approver.Name, approver.ID); ferr != nil {
+	if _, ferr := s.finalizeApproval(ap, decision{Approve: approve, ActorID: approver.ID, ActorName: approver.Name, Via: viaAPI}); ferr != nil {
 		if errors.Is(ferr, ErrAlreadyDecided) {
 			// 和控制台(或另一次调用)抢输了:报对方的结论,不报错。
 			return s.openDecided(out, ap.ID, rel.ID), nil

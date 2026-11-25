@@ -16,6 +16,11 @@ export const APPROVAL_TIMEOUT_KEYS = ['auto-reject', 'auto-escalate', 'keep-wait
 /** Values `security.sessionTTL` accepts. */
 export const SESSION_TTL_KEYS = ['8h', '4h', '24h'] as const
 
+/** `chat.cardLang`:卡片语言(全局,用户的语言偏好只存在浏览器里)。 */
+export const CHAT_LANG_KEYS = ['zh', 'en'] as const
+/** `chat.lark.region`:国内版 / 国际版。 */
+export const CHAT_REGION_KEYS = ['feishu', 'lark'] as const
+
 export type ApprovalTimeoutKey = (typeof APPROVAL_TIMEOUT_KEYS)[number]
 export type SessionTTLKey = (typeof SESSION_TTL_KEYS)[number]
 
@@ -33,6 +38,10 @@ const MESSAGE_ID: Record<string, string> = {
   '4h': 'ttl4',
   '8h': 'ttl8',
   '24h': 'ttl24',
+  zh: 'chatLangZh',
+  en: 'chatLangEn',
+  feishu: 'chatRegionFeishu',
+  lark: 'chatRegionLark',
 }
 
 /** labelOf renders a key for display in the current language. */

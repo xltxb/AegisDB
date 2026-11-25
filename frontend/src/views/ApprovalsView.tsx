@@ -100,6 +100,10 @@ function chainText(a: Approval) {
   const names = (a.steps || []).map((s) => s.approver).filter(Boolean)
   return [a.initiator, ...names].join(' → ')
 }
+// 在聊天卡片上决定的:写出渠道。只看这两种结局 —— 通过之后又撤回的单也留着当初的渠道,但撤回不是在聊天里做的。
+const CHAT_NAMES: Record<string, string> = { lark: 'Lark', telegram: 'Telegram' }
+const chatVia = (a: Approval) =>
+  a.status === 'approved' || a.status === 'rejected' ? CHAT_NAMES[a.decidedVia ?? ''] ?? '' : ''
 const envText = (a: Approval) => (a.env || '').toUpperCase()
 
 export default function ApprovalsView() {
@@ -446,7 +450,7 @@ export default function ApprovalsView() {
                   待执行、被驳回/撤回)给一个短横,不拿提交时间或审批时间充数。 */}
               <span className="timecell">{a.executedAt ? listTime(a.executedAt) : <span className="none">—</span>}</span>
               <span className="stcell">
-                <span className={clsx('stbadge', rowState(a))}>
+                <span className={clsx('stbadge', rowState(a))} title={a.status === 'rejected' && a.rejectReason ? a.rejectReason : undefined}>
                   <span className="sdot" /><span>{t(rowLabel(a))}</span>
                 </span>
               </span>
@@ -566,7 +570,10 @@ export default function ApprovalsView() {
               {/* 在线变更单:进度与控制(审批前也显示变更内容、数据量与前置检查提示) */}
               {!!detail.oscJobId && <OscJobPanel jobId={detail.oscJobId} onChanged={load} />}
               <div className="ml">{t('apChain')}</div>
-              <div className="chain"><GitPullRequestArrow size={14} color="#8facff" />{chainText(detail)}</div>
+              <div className="chain"><GitPullRequestArrow size={14} color="#8facff" />{chainText(detail)}{chatVia(detail) && <span className="via" data-testid="ap-decided-via">{t('apDecidedVia', { channel: chatVia(detail) })}</span>}</div>
+              {detail.status === 'rejected' && detail.rejectReason && (
+                <><div className="ml">{t('apRejectReason')}</div><div className="rt rejreason" data-testid="ap-reject-reason">{detail.rejectReason}</div></>
+              )}
               {/* 执行结果。判据是 executedAt,不是"result 有没有内容":
                   一次失败可能什么输出都没留下,而那恰恰是最需要看到"它跑过、并且挂了"
                   的时候;反过来,一张刚批准还没跑的工单,result 里躺着的是审批时写下的

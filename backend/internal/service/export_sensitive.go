@@ -13,10 +13,29 @@ package service
 
 import (
 	"log/slog"
+	"strings"
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/model"
 )
+
+// 导出单的 Command 以这两个前缀之一开头。它们是单子上"放的是原值还是仍按脱敏"的唯一记录
+// (exportMasked 按它认),改字会让在途的单认不出来。
+const (
+	exportRawPrefix    = "EXPORT [含敏感字段(原值)] "
+	exportMaskedPrefix = "EXPORT [结构可能绕过脱敏 · 仍按脱敏导出] "
+)
+
+// exportCommand 是导出单的描述。masked:仍按脱敏导出,只是查询结构要人看过。
+func exportCommand(masked bool, sql string) string {
+	if masked {
+		return exportMaskedPrefix + sql
+	}
+	return exportRawPrefix + sql
+}
+
+// exportMasked 报告一张导出单批的是不是「按脱敏导出」。只认前缀:SQL 里写上同样的字样不算数。
+func exportMasked(ap *model.Approval) bool { return strings.HasPrefix(ap.Command, exportMaskedPrefix) }
 
 // raiseSensitiveExportApproval parks the job on an approval ticket.
 //
@@ -33,9 +52,8 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 	// Command 是一句**描述**而不是可执行的语句:这张单授权的事情是"让导出 worker 去
 	// 跑这次导出",不是"在终端里执行一句 SQL"。审批人看到的应该是这件事的样子 ——
 	// 前缀里明写这次到底放的是什么,因为那才是他要签字的东西。
-	tag, reason := "[含敏感字段(原值)]", "导出包含敏感字段的原始值"
+	command, reason := exportCommand(structural, job.SQL), "导出包含敏感字段的原始值"
 	if structural {
-		tag = "[结构可能绕过脱敏 · 仍按脱敏导出]"
 		// 把字段名写进去:审批人要判断的正是"这条查询是不是把 id_card 改名带了出来",
 		// 只说"结构可疑"等于让他自己再从 SQL 里找一遍。
 		reason = "查询含子查询/UNION/CTE 且引用了敏感字段 " + evasionCol + ",脱敏按列名比对可能覆盖不到;批准后仍按脱敏导出,不放原值"
@@ -43,7 +61,7 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 	ap := &model.Approval{
 		ApNo: s.nextApNo(), ConnectionID: conn.ID, Env: conn.Env, TierCode: tierCode,
 		Instance: conn.Name, Database: job.Database,
-		Command:  "EXPORT " + tag + " " + job.SQL,
+		Command:  command,
 		Keyword:  "EXPORT", InitiatorID: u.ID, Initiator: u.Name,
 		Reason:   reason,
 		// 敏感数据出库按高危记。它不改任何数据,但风险等级衡量的是后果,而这条的
@@ -64,8 +82,9 @@ func (s *Services) raiseSensitiveExportApproval(u *model.User, conn *model.Conne
 	if err := s.Repo.LinkExportApproval(job.ID, ap.ID, ap.ApNo); err != nil {
 		return err
 	}
-	s.recordAuditSrc(model.AuditSourceExport, u, conn, "EXPORT "+tag+" "+job.SQL, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
+	s.recordAuditSrc(model.AuditSourceExport, u, conn, command, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
 	s.Webhook.SendLarkApproval(ap)
+	s.queueChatCards(ap, false)
 	job.ApNo = ap.ApNo
 	job.ApprovalID = ap.ID
 	return nil

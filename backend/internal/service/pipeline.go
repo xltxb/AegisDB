@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/dto"
@@ -412,7 +413,7 @@ func (s *Services) submitRelease(u *model.User, req dto.ReleaseReq, origin relea
 		Env: conn.Env, TierCode: tier, Engine: conn.Engine, ChangeType: changeType,
 		ProjectID: projectID, ProjectName: projectName,
 		SQL: sql, ScriptUploadID: req.ScriptUploadID, ScriptSHA256: sha,
-		Reason: clip(req.Reason, 400), Precheck: precheckJSON(pre),
+		Reason: clip(req.Reason, releaseReasonMax), Precheck: precheckJSON(pre),
 		CreatorID: u.ID, Creator: u.Name,
 		Status: model.RunPending, Risk: v.Risk,
 		Source:   orDefault(origin.Source, model.ReleaseSourceConsole),
@@ -803,6 +804,8 @@ func (s *Services) stageApprove(rel *model.Release, conn *model.Connection, st *
 		return failStage(model.RelLogApCreateFail, "err", err.Error())
 	}
 	s.Webhook.SendLarkApproval(ap)
+	// 单子上的正文、原因有一样是截断的,卡片就不是全文。
+	s.queueChatCards(ap, releaseLabelTruncated(rel, body) || releaseReasonTruncated(rel))
 	s.recordAuditFrom(model.AuditSourceRelease, creator, releaseOperator(rel), conn, label, risk, model.ResultPending, ap.ApNo, "intercept")
 	return stageOutcome{
 		status: model.RunWaiting, approvalID: ap.ID, approvalNo: ap.ApNo,
@@ -1253,13 +1256,36 @@ func (s *Services) releaseBody(rel *model.Release) (string, error) {
 
 func releaseApprovalLabel(rel *model.Release, body string) string {
 	head := fmt.Sprintf("[发布 %s] %s @ %s/%s\n", rel.RelNo, rel.Title, rel.Instance, rel.Database)
+	text, _ := releaseLabelBody(rel, body)
+	return head + text
+}
+
+// releaseLabelTruncated 报告发布单的审批单上存的正文是不是截断过的。和标签出自同一处:
+// 单子上只有截断后的文字,事后从它身上猜不出来(聊天卡片要写明「未显示全文」)。
+func releaseLabelTruncated(rel *model.Release, body string) bool {
+	_, truncated := releaseLabelBody(rel, body)
+	return truncated
+}
+
+// releaseReasonMax 是提交时发布原因最多留的字数。
+const releaseReasonMax = 400
+
+// releaseReasonTruncated 报告发布原因在提交时是不是被截断过:clip 截断后比上限多一个省略号,没截断的
+// 不会超过上限。接上单号之后离审批单的列宽(512)还远,那里不会再截。
+func releaseReasonTruncated(rel *model.Release) bool {
+	return utf8.RuneCountInString(rel.Reason) > releaseReasonMax
+}
+
+// releaseLabelBody 是审批单标签里正文的那一段,与它截断没有。先遮口令再截断(见 safeClip),
+// 所以"截断没有"也按遮掉之后的长度算。
+func releaseLabelBody(rel *model.Release, body string) (text string, truncated bool) {
+	limit := 4000
 	if rel.ScriptUploadID > 0 {
-		return head + safeClip(strings.Join(strings.Fields(body), " "), 800)
+		body, limit = strings.Join(strings.Fields(body), " "), 800
+	} else if len(body) <= limit {
+		return body, false
 	}
-	if len(body) > 4000 {
-		return head + safeClip(body, 4000)
-	}
-	return head + body
+	return safeClip(body, limit), utf8.RuneCountInString(sqlutil.RedactSecrets(body)) > limit
 }
 
 // ---------------------------------------------------------------- 恢复 / 人工推进

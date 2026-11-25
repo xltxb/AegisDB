@@ -5,6 +5,8 @@ package repository
 import (
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -1282,6 +1284,18 @@ func (r *Repo) ClaimApproval(id int64, from, to string) (bool, error) {
 	return res.RowsAffected == 1, res.Error
 }
 
+// ClaimApprovalDecision 是一个人的决定抢占一张待审批的单:pending → approved | rejected,连同决定的
+// 渠道与拒绝原因写进**同一条** UPDATE。返回是否抢到(RowsAffected == 1)。
+//
+// 分成两条写不行:先抢状态再补渠道,抢输的一方补的那一笔会盖掉赢家的值,或者赢家补之前崩了,
+// 留下一张没有渠道的已决定单。
+func (r *Repo) ClaimApprovalDecision(id int64, to, via, rejectReason string) (bool, error) {
+	res := r.db.Model(&model.Approval{}).
+		Where("id = ? AND status = ?", id, model.StatusPending).
+		Updates(map[string]any{"status": to, "decided_via": via, "reject_reason": rejectReason})
+	return res.RowsAffected == 1, res.Error
+}
+
 // ClaimApprovalCancel atomically withdraws a ticket that has NOT run.
 //
 // 它比 ClaimApproval(from→to) 多管一件事:executed_at IS NULL。
@@ -2076,6 +2090,31 @@ func (r *Repo) AllSettings() (map[string]string, error) {
 		out[s.K] = s.V
 	}
 	return out, nil
+}
+
+// SettingsByPrefix 读一组同前缀的设置。键不存在不是错误,也不会让 GORM 记一行日志(GetSetting 会)。
+func (r *Repo) SettingsByPrefix(prefix string) (map[string]string, error) {
+	var rows []model.Setting
+	if err := r.db.Where("k LIKE ?", prefix+"%").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, s := range rows {
+		out[s.K] = s.V
+	}
+	return out, nil
+}
+
+// SetSettings 一次写一组设置:要么全写下,要么一项不写。按键排序写,两次保存不会互相等死。
+func (r *Repo) SetSettings(values map[string]string) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, k := range slices.Sorted(maps.Keys(values)) {
+			if err := tx.Save(&model.Setting{K: k, V: values[k]}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Repo) SetSetting(k, v string) error {

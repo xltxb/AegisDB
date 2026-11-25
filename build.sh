@@ -135,6 +135,12 @@ set -a; . ./aegisdb.env; set +a
 - 前置反向代理终止 TLS,或配 \`AEGISDB_TLS_CERT\`/\`AEGISDB_TLS_KEY\` 让网关直接跑 HTTPS。
 - 用 systemd 托管:见 \`deploy/aegisdb.service\`。
 
+## 5. (可选)启用聊天审批卡片(Lark / 飞书)
+
+审批人在聊天里直接通过 / 拒绝。**运行时设置**,在 \`设置 › 审批 › 审批机器人\` 里配置,默认关闭;
+网关主动连出去,不需要公网入口。每个环境一个自建应用。用户 IP 白名单管不到卡片上的点击。
+建应用、权限、绑定、排查与回滚见仓库的 \`docs/chat-approval-setup.md\`。
+
 ## 常用命令
 - \`./$BIN$EXT version\`   查看版本
 - \`./$BIN$EXT migrate\`   仅应用待执行的迁移

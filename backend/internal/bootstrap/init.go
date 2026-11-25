@@ -80,6 +80,11 @@ func UpsertAdmin(repo *repository.Repo, email, password, name string) (*model.Us
 		if err := db.Save(&u).Error; err != nil {
 			return nil, err
 		}
+		// 聊天绑定是比会话活得更久的凭据:绑上的人不登录也能批单,改密同样要让它失效。删不掉就报错 ——
+		// 操作的人以为账号已经收回来了。排在 bump 之后,理由见 service.revokeSessionsAndChat。
+		if _, err := repo.DeleteChatBindings(u.ID, ""); err != nil {
+			return nil, fmt.Errorf("remove chat bindings: %w", err)
+		}
 	} else {
 		u = model.User{
 			Name: name, Email: email, RoleID: role.ID, Status: "active",

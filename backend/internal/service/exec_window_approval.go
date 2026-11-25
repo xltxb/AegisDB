@@ -13,10 +13,13 @@ package service
 // 等待期间它一行都不放行(闸门在 repository.ExecWindowsFor 的 status 条件上)。
 
 import (
+	"errors"
 	"log/slog"
 	"strconv"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/model"
@@ -103,6 +106,7 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 	// 能查的事。
 	s.recordAudit(u, conn, ap.Command, model.RiskHigh, model.ResultPending, ap.ApNo, "intercept")
 	s.Webhook.SendLarkApproval(ap)
+	s.queueChatCards(ap, false)
 	return nil
 }
 
@@ -111,12 +115,15 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 // 窗口改一次就另起一张单(UpdateExecWindow),旧单描述的是旧定义。批准旧单若也能让窗口
 // 生效,审批人签的是"1 小时",生效的却是改过之后的样子(2026-10 黑盒,工单 01 第 2 条)。
 // 窗口已经删了的,当然也不是当前的单(第 3 条)。
-func (s *Services) windowTicketCurrent(ap *model.Approval) bool {
+func (s *Services) windowTicketCurrent(ap *model.Approval) (bool, error) {
 	if ap == nil || ap.WindowID <= 0 {
-		return false
+		return false, nil
 	}
 	w, err := s.Repo.GetExecWindow(ap.WindowID)
-	return err == nil && w.ApprovalID == ap.ID
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	return err == nil && w.ApprovalID == ap.ID, err
 }
 
 // withdrawWindowTicket 把窗口挂着的那张还在等审批的单撤回 —— 窗口被改或被删时调用。
@@ -167,8 +174,8 @@ func (s *Services) cancelStaleWindowTicket(actor *model.User, ap *model.Approval
 // 驳回 = 永久留在 rejected:判定层不认,列表里仍然看得见它被驳回过。
 func (s *Services) applyWindowDecision(ap *model.Approval, approve bool) {
 	// 兜底:finalizeApproval 已经挡掉了旧单,这里再认一次 —— 状态只跟着当前那张单走。
-	if !s.windowTicketCurrent(ap) {
-		slog.Warn("执行窗口:忽略非当前单的审批结果", "window", ap.WindowID, "apNo", ap.ApNo)
+	if current, err := s.windowTicketCurrent(ap); err != nil || !current {
+		slog.Warn("执行窗口:忽略非当前单的审批结果", "window", ap.WindowID, "apNo", ap.ApNo, "err", err)
 		return
 	}
 	status := model.WindowRejected

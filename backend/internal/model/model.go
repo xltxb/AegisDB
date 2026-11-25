@@ -884,6 +884,13 @@ type Approval struct {
 	// 它也是一次性的闸:占住它才允许执行,所以一次批准只换一次执行。
 	ExecutedAt   *time.Time `json:"executedAt"`
 	DecidedAt    *time.Time `json:"decidedAt"`                   // when approved/rejected
+	// DecidedVia 是决定来自哪个渠道:console | api | lark | telegram(迁移 0065)。空 = 没有人做过
+	// 决定(超时、撤回、作废),或这一列之前的老单;通过之后又撤回的,留着当初那次通过的渠道。
+	// 它和 RejectReason 只由 Repo.ClaimApprovalDecision 在抢占状态的同一条 UPDATE 里写:抢输的一方
+	// 碰不到赢家的值。
+	DecidedVia string `gorm:"column:decided_via;size:16;not null;default:''" json:"decidedVia"`
+	// RejectReason 是拒绝时填的原因;通过的、没填的为空。
+	RejectReason string `gorm:"column:reject_reason;size:512;not null;default:''" json:"rejectReason"`
 	CreatedAt    time.Time  `json:"createdAt"`
 }
 
@@ -1630,6 +1637,9 @@ const (
 	NotifReleaseDone   = "release-done"
 	NotifReleaseFailed = "release-failed"
 	NotifReleaseWait   = "release-waiting"
+	// 聊天账号绑上 / 解绑了审批机器人,发给本人。谁能替自己批单变了,本人必须知道。
+	NotifChatBound   = "chat-bound"
+	NotifChatUnbound = "chat-unbound"
 )
 
 // Notification — an in-app message to a single user (e.g. their approval was
