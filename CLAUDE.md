@@ -1,6 +1,6 @@
 # AegisDB 数据库管理网关 — Agent 指引
 
-全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（Vue 3 · TS · Vite · Pinia）。
+全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（React 19 · TS · Vite · Zustand）。
 本地零依赖启动见 `README.md`（双击根目录 `start-dev.bat`，演示登录 `linwei@aegisdb.io / aegisdb123`）。
 
 ## Agent skills

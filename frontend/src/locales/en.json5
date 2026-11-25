@@ -797,7 +797,7 @@
     oscBlocked: '· The online-change pre-check on {table} did not pass; no ticket was raised:',
     oscStarted: '· The online change has started; follow its progress in the ticket',
     oscWindowStarted: '· No approval needed inside execution window “{window}”; the online change has started — follow its progress in ticket {no}',
-    // row(s) 而不是 rows:vue-i18n 的复数形式要靠 `|` 分隔,而 `|` 在这个仓库里是
+    // row(s) 而不是 rows:消息语法的复数形式要靠 `|` 分隔,而 `|` 在这个仓库里是
     // 已知的雷(见 vite 的 strictMessage 预编译),为一句话把计数一路传进渲染器不划算。
     execAffected: 'Executed successfully · {n} row(s) affected',
     execFailed: '· Database execution failed: {err}',

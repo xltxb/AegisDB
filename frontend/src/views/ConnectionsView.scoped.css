@@ -1,0 +1,279 @@
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+/* 悬浮条会盖住最后一两行 —— 给页面垫一段底,让它盖的是空白而不是数据。 */
+.page.hasfab { padding-bottom: calc(var(--page-pad) + 72px); }
+.hbadges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+/* 轻标签:只是把两个数字从句子里拎出来,不是状态,所以不带语义色。 */
+.hbadge {
+  display: inline-flex; align-items: center; height: 22px; padding: 0 9px;
+  border-radius: var(--radius-full); background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle); color: var(--text-muted);
+  font: 600 11px var(--font-mono);
+}
+.prpanel { margin-bottom: 16px; }
+.dbtoggle { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 5px; border: 1px dashed var(--border-strong); color: var(--text-muted); font: 600 10px var(--font-body); cursor: pointer; }
+.dbtoggle:hover, .dbtoggle.on { border-style: solid; border-color: var(--accent-text); color: var(--accent-text); }
+.dbpanel { margin: 0 0 10px 18px; padding: 8px 12px; border-left: 2px solid var(--border-default); display: flex; flex-direction: column; gap: 6px; }
+.dbrow { display: flex; align-items: center; gap: 10px; }
+.dbname { min-width: 180px; font: 600 11.5px var(--font-mono); color: var(--text-body); }
+.dbnone { font: 500 10.5px var(--font-body); color: var(--text-faint); }
+.dbnote { font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.dbnote.err { color: var(--danger-text); }
+.prsel { height: 20px; max-width: 150px; padding: 0 4px; border: 1px solid var(--accent-text); border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); cursor: pointer; }
+.prchip { padding: 1px 7px; border-radius: 5px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-body); }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+/* 260–320px 之间伸缩:窄屏让给筛选器,宽屏也不无谓拉长 —— 搜的是实例名,不是句子。 */
+.searchbox {
+  display: flex; align-items: center; gap: 8px; flex: 0 1 320px; min-width: 260px;
+  padding: 0 12px; height: 36px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-faint);
+}
+.searchbox:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+/* 快捷过滤下拉:和搜索框同高,但更窄更安静 —— 它们是副条件。 */
+.fsel {
+  height: 36px; padding: 0 10px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-body);
+  font: 500 12px var(--font-body); cursor: pointer; outline: none;
+}
+.fsel:focus-visible { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--focus-ring); }
+.tbright { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.tbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 11px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-card); color: var(--text-muted);
+  font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.tbtn:hover { color: var(--accent-text); border-color: var(--accent-text); }
+.seg.dens { padding: 3px; }
+.seg.dens .segi { padding: 0 9px; height: 28px; }
+.sin { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: 500 12.5px var(--font-body); color: var(--text-strong); }
+.sclear { cursor: pointer; color: var(--text-muted); }
+/* 分段控制器。凹槽一条,选中的那一段用卡片色浮起来 + 一点投影 —— 这是"同一组、
+   只能选一个"的读法。环境是运维自建的,数量不定,所以允许换行而不是硬挤。 */
+.seg {
+  display: flex; align-items: center; gap: 3px; flex-wrap: wrap;
+  padding: 3px; border-radius: var(--radius-md);
+  background: var(--surface-sunken); border: 1px solid var(--border-subtle);
+}
+.segi {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px;
+  border: none; border-radius: var(--radius-sm); background: transparent;
+  font: 600 11.5px var(--font-body); color: var(--text-muted);
+  cursor: pointer; user-select: none;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.segi:hover { color: var(--text-body); }
+.segi.on { background: var(--surface-card); color: var(--text-strong); box-shadow: var(--shadow-xs); }
+.segi i { font: 600 10px var(--font-mono); font-style: normal; color: var(--text-faint); }
+.segi.on i { color: var(--accent-text); }
+.segi .ed { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
+.segi .ed.danger { background: var(--danger); }
+.segi .ed.warning { background: var(--warning); }
+.segi .ed.success { background: var(--success); }
+.segi .ed.info { background: #3b82f6; }
+.grouprow.click { cursor: pointer; user-select: none; }
+.grouprow.click:hover { background: var(--surface-raised); }
+.chev { transition: transform var(--dur-fast) var(--ease-out); color: var(--text-faint); }
+.chev.closed { transform: rotate(-90deg); }
+.noresult { padding: 36px 0; text-align: center; font: 500 12.5px var(--font-body); color: var(--text-faint); }
+.acts { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.acts :deep(.vbtn) { display: inline-flex; align-items: center; gap: 6px; }
+.roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
+.table {
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--surface-card); box-shadow: var(--shadow-sm);
+  overflow-x: auto; overflow-y: hidden;
+}
+/* 表头与数据行是**两个各自独立的 grid**,所以列宽只能用与内容无关的值(fr / px)。
+   写 auto / min-content 会让每一行按自己那行的内容各算一套,分栏当场错开。 */
+.tscroll { min-width: 1000px; }
+/* 管理员多一列复选框;只读用户没有批量动作,那一列也就不该占位置。 */
+.thead, .trow { display: grid; grid-template-columns: 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; gap: 12px; }
+.table.adm .thead, .table.adm .trow { grid-template-columns: 34px 1.6fr 0.9fr 1.8fr 0.85fr 0.85fr 0.7fr 64px; }
+.tar { text-align: right; }
+.cbcell { display: flex; align-items: center; }
+.cb { width: 14px; height: 14px; margin: 0; cursor: pointer; accent-color: var(--accent-text); }
+.trow.sel { background: var(--accent-subtle); }
+.namecell { min-width: 0; }
+/* 命中高亮。片段是切好的文本节点,不走 v-html —— 实例名和 host 是别人填进库里的。 */
+.hit { border-radius: 3px; padding: 0 1px; background: var(--warning-subtle); color: var(--warning-text); }
+
+/* 紧凑模式:行高压到 40px,副标题与标签行整行不渲染(不是藏起来)。 */
+.table.dense .trow { padding: 5px 16px; }
+.table.dense .cn { font: 600 12px var(--font-body); }
+.table.dense .engcell, .table.dense .mono { font-size: 11.5px; }
+.table.dense .eic { width: 18px; height: 18px; }
+.table.dense .polsel, .table.dense .polpill { height: 21px; }
+.table.dense .ghost { width: 22px; height: 22px; }
+.table.dense .grouprow { padding: 7px 16px; }
+.table.dense .typerow { padding-top: 4px; padding-bottom: 4px; }
+.thead { padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; color: var(--text-faint); text-transform: uppercase; }
+.trow { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); align-items: center; transition: background var(--dur-fast) var(--ease-out); }
+.trow:hover { background: var(--surface-sunken); }
+/* 折叠条:中性浅底 + 上下细线,像个小节标题,而不是一条警示带。 */
+.grouprow {
+  padding: 9px 16px; display: flex; align-items: center; gap: 9px;
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle);
+  font: 600 11.5px var(--font-body); color: var(--text-body);
+}
+.glabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grouprow .gcnt { margin-left: 0; }
+.grouprow .ghealth { margin-left: auto; }
+/* 颜色只剩这一颗点。来源仍是 envtier.dotForEnv —— 与树、审批列表同一套,
+   不在这一页另配一份。 */
+.grouprow .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+.grouprow .d.danger { background: var(--danger); }
+/* `warn` 是旧类名;分层调色板发出来的是 `warning`。 */
+.grouprow .d.warn, .grouprow .d.warning { background: var(--warning); }
+.grouprow .d.success { background: var(--success); }
+.grouprow .d.info { background: #3b82f6; }
+/* 解析不出分层的环境:中性 —— 谁也不能替它声称一个管控级别。 */
+.grouprow .d.muted { background: var(--text-faint); }
+/* 健康概况:两颗小点 + 数字。全部正常时不摆一个恒定的红色 0 —— 常年为零的
+   告警数字,过一阵谁都不看了。 */
+.ghealth { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; font: 600 10.5px var(--font-mono); color: var(--text-faint); }
+.ghealth .hd { width: 6px; height: 6px; border-radius: 50%; }
+.ghealth .hd.ok { background: var(--success); }
+.ghealth .hd.bad { background: var(--danger); margin-left: 4px; }
+.ghealth.bad { color: var(--danger-text); }
+.ck { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); font: 700 9.5px var(--font-mono); margin-left: 6px; }
+.ck.ok { background: var(--success-subtle); color: var(--success-text); }
+.ck.bad { background: var(--danger-subtle); color: var(--danger-text); }
+/* 不完整:既不是绿也不是红。用告警色是因为它要求的动作和失败不同 ——
+   失败是"再试一次",不完整是"去看看那几个库的权限"。 */
+.ck.warn { background: var(--warning-subtle); color: var(--warning-text); }
+.ck.run { background: var(--surface-sunken); color: var(--text-muted); }
+.morerow { padding: 10px 16px; display: flex; justify-content: center; border-bottom: 1px solid var(--border-subtle); }
+.mbtn {
+  height: 28px; padding: 0 14px; border: 1px solid var(--border-default); border-radius: var(--radius-full);
+  background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.mbtn:hover { color: var(--accent-text); border-color: var(--accent-text); background: var(--accent-subtle); }
+.gcnt {
+  margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center;
+  height: 19px; padding: 0 8px; border-radius: var(--radius-full);
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  font: 600 10px var(--font-mono); color: var(--text-muted);
+}
+/* Second-level group: quieter than the environment row, so the environment stays
+   the structure the eye follows down the table. */
+.typerow {
+  padding: 5px 16px 5px 32px; display: flex; align-items: center;
+  font: 600 10px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-faint); background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.typerow .gcnt { margin-left: 8px; height: 17px; padding: 0 7px; background: var(--surface-sunken); }
+.typerow.empty { padding-left: 16px; font-style: italic; text-transform: none; letter-spacing: 0; }
+.cn { font: 700 13px var(--font-body); color: var(--text-strong); letter-spacing: -0.01em; }
+.cl { margin-top: 1px; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
+.tags { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+/* 访问标签是中性的:一行里已经有真连接/仿真、归属项目、网关策略三种带色的东西,
+   标签再上色就只剩一片花。项目片保留强调色 —— 它是这一堆里唯一可点进去的线索。 */
+.tchip { display: inline-flex; height: 19px; align-items: center; padding: 0 8px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); color: var(--text-muted); font: 600 10px var(--font-mono); }
+.rbadge { display: inline-flex; height: 19px; align-items: center; padding: 0 8px; border-radius: 999px; font: 700 10px var(--font-mono); }
+.rbadge.real { background: var(--success-subtle); color: var(--success-text); }
+.rbadge.sim { background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+.tedit { display: inline-flex; align-items: center; gap: 3px; height: 19px; padding: 0 7px; border-radius: 999px; border: 1px dashed var(--border-default); color: var(--text-faint); font: 600 10px var(--font-mono); cursor: pointer; }
+.tedit:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+/* 业务查询源标记:开着是实心,关着是虚线(与"加标签"同一种"可以点"的样子)。 */
+.bizchip { display: inline-flex; align-items: center; gap: 3px; height: 19px; padding: 0 7px; border-radius: 999px; font: 600 10px var(--font-body); border: 1px dashed var(--border-default); color: var(--text-faint); white-space: nowrap; }
+.bizchip.on { border: 1px solid var(--success-border, var(--accent-subtle-border)); background: var(--success-subtle); color: var(--success-text); }
+.bizchip.act { cursor: pointer; }
+.bizchip.rep { border: 1px solid var(--accent-subtle-border); background: var(--accent-subtle); color: var(--accent-text); cursor: default; }
+.replica { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.rp-title { font: 600 13px var(--font-body); color: var(--text-strong); }
+.rp-sub { margin: 3px 0 12px; font: 400 12px/1.55 var(--font-body); color: var(--text-muted); }
+.bizchip.act:hover { border-color: var(--accent-subtle-border); }
+.mono { font: 500 12px var(--font-mono); color: var(--text-body); }
+.engcell { display: flex; align-items: center; gap: 7px; min-width: 0; font: 600 12px var(--font-body); color: var(--text-body); }
+.eic { width: 20px; height: 20px; flex-shrink: 0; border-radius: var(--radius-sm); display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted); }
+.hostcell { display: flex; align-items: center; gap: 4px; min-width: 0; }
+/* 截断而不是折行:一条 60 字符的 RDS 域名折起来能把整行撑成三倍高,而这一列
+   的作用是"认出是哪台",完整值给 title 和复制按钮。 */
+.hosttxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+/* 网关策略:紧凑的小 select,底色只到"淡"为止。strict 用的是同一枚玫瑰淡底,
+   而不是一块饱和红 —— 这一列是**配置**,不是告警。 */
+.polsel, .polpill {
+  display: inline-flex; align-items: center; height: 24px; max-width: 100%;
+  padding: 0 8px; border-radius: var(--radius-full);
+  font: 600 10.5px var(--font-mono); outline: none;
+}
+.polsel { cursor: pointer; border: 1px solid transparent; -webkit-appearance: none; appearance: none; padding-right: 8px; }
+.polsel:focus-visible { box-shadow: 0 0 0 3px var(--focus-ring); }
+.polsel option { background: var(--surface-card); color: var(--text-body); }
+.polsel.strict, .polpill.strict { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-subtle-border, transparent); }
+.polsel.approve, .polpill.approve { background: var(--warning-subtle); color: var(--warning-text); }
+.polsel.audit, .polpill.audit { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }
+.opscell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.opscell .ghost:disabled { opacity: .55; cursor: default; }
+/* 同步时让图标转起来 —— 一个点下去没有任何反应的按钮会被连点,
+   而每一次点击都是一次真的登录目标库。 */
+.spin { animation: metaspin 1s linear infinite; }
+@keyframes metaspin { to { transform: rotate(360deg); } }
+/* 状态:一颗点 + 两个字。点会呼吸,但只在"在线"时 —— 呼吸表示"还活着",
+   而维护态恰恰是不动的那个。 */
+.st { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px var(--font-body); color: var(--text-muted); }
+.st.click { cursor: pointer; }
+.st .sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+.st.online { color: var(--success-text); }
+.st.online .sdot { background: var(--success); animation: breathe 2.4s ease-in-out infinite; }
+.st.maintenance { color: var(--warning-text); }
+.st.maintenance .sdot { background: var(--warning); }
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .st.online .sdot { animation: none; } }
+/* 幽灵图标按钮:常态弱,悬停才亮起来并托一层圆底。 */
+.ghost {
+  width: 26px; height: 26px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: none; border-radius: var(--radius-full); background: transparent;
+  color: var(--text-faint); cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ghost:hover { color: var(--accent-text); background: var(--accent-subtle); }
+.ghost.cp { width: 22px; height: 22px; opacity: 0; }
+/* 复制按钮平时不显形,免得每行右边都挂一个图标;悬停整行、或键盘聚焦时出现。 */
+.trow:hover .ghost.cp, .ghost.cp:focus-visible { opacity: 1; }
+/* edit-instance modal */
+.ce-mask { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: var(--surface-overlay); backdrop-filter: blur(3px); padding: 24px; }
+.ce-card { width: 100%; max-width: 640px; max-height: 90vh; overflow-y: auto; border: 1px solid var(--border-default); border-radius: 16px; background: var(--surface-card); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); }
+.ce-head { padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); }
+.ce-title { font: 700 15px var(--font-display); color: var(--text-strong); }
+.ce-sub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
+.ce-body { padding: 18px 22px; }
+.ce-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); border-radius: 0 0 16px 16px; }
+.fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
+.fgrid input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-body); outline: none; }
+.fgrid input:focus { border-color: var(--accent-text); }
+.fl .req { margin-left: 3px; color: var(--danger-text); }
+.fgrid input.invalid { border-color: var(--danger-text); }
+.reqmsg { margin-top: 12px; font: 600 12px var(--font-body); color: var(--danger-text); }
+.ce-card.imp { max-width: 720px; }
+.imp-bar { display: flex; gap: 8px; margin-bottom: 12px; }
+.imp-ta { width: 100%; min-height: 180px; resize: vertical; padding: 10px 12px; border: 1px solid var(--border-subtle);
+  border-radius: 10px; background: var(--surface-page); color: var(--text-body); font: 400 12px/1.6 var(--font-mono); }
+.imp-hint { font: 500 11px var(--font-body); color: var(--text-faint); margin-top: 8px; }
+.imp-ok { margin-top: 12px; font: 600 12px var(--font-mono); color: var(--success-text); }
+.imp-bad { margin-top: 12px; border-left: 3px solid var(--danger-text); padding-left: 10px; }
+.imp-bad-t { font: 600 12px var(--font-body); color: var(--danger-text); margin-bottom: 4px; }
+.imp-bad-l { font: 400 12px/1.7 var(--font-mono); color: var(--text-muted); }
+.credhint { margin-top: 14px; font: 500 11.5px var(--font-mono); color: var(--text-faint); }
+/* 悬浮批量操作条:贴底居中,始终写着选了几台。 */
+.fab {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: 70;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; max-width: min(920px, 94vw);
+  padding: 10px 14px; border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-default); box-shadow: var(--shadow-lg);
+}
+.fcnt { font: 700 12.5px var(--font-body); color: var(--text-strong); }
+/* 选中里有生产实例时先说出来,而不是等到确认框才提 —— 那时人已经在按确定了。 */
+.fprod { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--danger-subtle); color: var(--danger-text); font: 700 10.5px var(--font-mono); }
+.fab .fsel { height: 30px; font-size: 11.5px; }
+.fbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-sunken); color: var(--text-body); font: 600 11.5px var(--font-body); cursor: pointer;
+}
+.fbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); background: var(--accent-subtle); }
+.fbtn:disabled { opacity: 0.55; cursor: default; }
+.fbtn.ghosty { border-color: transparent; background: transparent; color: var(--text-faint); }

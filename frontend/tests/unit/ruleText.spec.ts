@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test'
 import { renderRule } from '../../src/lib/ruleText'
 import type { RuleRef } from '../../src/types'
 
-// A stand-in for vue-i18n with just enough messages to exercise the renderer.
+// A stand-in for the app's i18n with just enough messages to exercise the renderer.
 const MSGS: Record<string, string> = {
   'ruleText.capApprove': 'Capability matrix · approval required',
   'ruleText.dictDeny': 'High-risk dictionary · direct execution forbidden on {tier}',

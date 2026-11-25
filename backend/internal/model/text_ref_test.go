@@ -39,7 +39,7 @@ func checkTextBlock(t *testing.T, ns string, codes []string, render func(*RuleRe
 	entry := regexp.MustCompile(`^\s*(\w+): (?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)"),\s*$`)
 	placeholder := regexp.MustCompile(`\{(\w+)\}`)
 	unescape := strings.NewReplacer(`\\`, `\`, `\'`, `'`, `\"`, `"`)
-	// vue-i18n 的特殊字符在词条里写成 {'@'} 这种字面量插值;比对前还原成字符本身。
+	// 消息语法的特殊字符在词条里写成 {'@'} 这种字面量插值;比对前还原成字符本身。
 	literal := regexp.MustCompile(`\{'([^']*)'\}`)
 
 	inZh := map[string]bool{}

@@ -24,7 +24,7 @@ function catalogue(file: string): Record<string, unknown> {
 const zh = catalogue('zh.json5')
 const en = catalogue('en.json5')
 
-/** vue-i18n 的极简替身:按 `outText.<code>` 取值并做参数替换。 */
+/** i18n 的极简替身:按 `outText.<code>` 取值并做参数替换。 */
 function i18nOf(cat: Record<string, unknown>) {
   const out = (cat.outText ?? {}) as Record<string, string>
   return {

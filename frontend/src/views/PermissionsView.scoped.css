@@ -1,0 +1,222 @@
+.wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.vtabs { display: flex; align-items: center; gap: 8px; height: 52px; flex-shrink: 0; padding: 0 24px; border-bottom: 1px solid var(--border-subtle); }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 32px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.vt { display: flex; align-items: center; height: 32px; padding: 0 16px; border-radius: 9px; cursor: pointer; font: 600 12px var(--font-body); color: var(--text-muted); }
+.vt.active { background: var(--accent-subtle); color: var(--accent-text); }
+.vhint { margin-left: auto; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.rolegrid { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); background: var(--surface-page); }
+@media (max-width: 1080px) { .rolegrid { grid-template-columns: 260px minmax(0, 1fr); } }
+
+/* ---------------- 左:角色导航 ---------------- */
+.rolepanel { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border-subtle); background: var(--surface-card); }
+.rphead { display: flex; align-items: center; gap: 10px; padding: 16px 14px 10px; }
+.rphead .eyebrow { flex: 1; font: 600 11px var(--font-mono); letter-spacing: 0.12em; color: var(--text-faint); text-transform: uppercase; }
+.rsearch { display: flex; align-items: center; gap: 7px; margin: 0 14px 10px; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); }
+.rsearch input { width: 100%; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 12px var(--font-body); }
+.sclear { display: grid; place-items: center; width: 18px; height: 18px; border: none; border-radius: 5px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.sclear:hover { color: var(--text-body); }
+.rl { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 14px 18px; }
+/* 选中态用左侧重点色边条,而不是整块换底:一整块蓝底在一列卡片里太重,而这一列
+   要一眼看出"现在编的是哪一个",边条比底色更快。 */
+.ritem { position: relative; padding: 11px 13px 11px 15px; border-radius: 10px; cursor: pointer; border: 1px solid var(--border-subtle); background: var(--surface-card); transition: background .15s ease, border-color .15s ease; }
+.ritem:hover { border-color: var(--border-default); background: var(--surface-sunken); }
+.ritem.active { background: var(--accent-subtle); border-color: transparent; }
+.ritem.active::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.rname { display: flex; align-items: center; gap: 8px; min-width: 0; font: 600 13px var(--font-body); color: var(--text-body); }
+.rn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ritem.active .rname { color: var(--accent-text); }
+.builtin { flex-shrink: 0; padding: 1px 6px; border-radius: 5px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 9.5px var(--font-mono); color: var(--text-faint); }
+.ritem.active .builtin { background: var(--surface-card); border-color: transparent; }
+.rlayer { margin-top: 4px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.sep { margin: 0 5px; opacity: .6; }
+.rempty { padding: 24px 4px; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+
+/* ---------------- 右:权限详情 ---------------- */
+.detailwrap { min-height: 0; padding: 22px 26px 32px; }
+/* 限宽:宽屏上一张横向铺满的表格,眼睛要从最左的动作名一路扫到最右的开关,中间
+   全是空白;而这张表的行本来就短。 */
+.detail { max-width: 1120px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); padding: 22px 24px 24px; }
+.mhead { display: flex; align-items: flex-start; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--border-subtle); }
+.mhead .grow { flex: 1; min-width: 0; }
+.mtitle { font: 700 17px var(--font-display); color: var(--text-strong); }
+.mtsub { margin-left: 8px; font: 500 12px var(--font-body); color: var(--text-faint); }
+.mhint { margin-top: 4px; font: 500 12px var(--font-body); color: var(--text-muted); }
+.roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
+
+.sec { margin-top: 22px; }
+.sec.last { margin-bottom: 2px; }
+.sechead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 11px; }
+.eyebrow2 { font: 600 11px var(--font-mono); letter-spacing: 0.1em; color: var(--text-muted); text-transform: uppercase; }
+.secsub { font: 500 12px var(--font-body); color: var(--text-faint); }
+.secbtn { margin-left: auto; }
+
+/* ---------------- 权限矩阵 ---------------- */
+.mtable { border: 1px solid var(--border-subtle); border-radius: 12px; overflow-y: hidden; background: var(--surface-card); }
+.mgrid { min-width: max-content; }
+.mth, .mtr { display: grid; gap: 10px; }
+.mth { padding: 10px 16px; border-bottom: 1px solid var(--border-default); background: var(--surface-page); font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-muted); text-transform: uppercase; align-items: center; }
+.mth .ctr { display: flex; justify-content: center; }
+/* 环境列头的颜色来自 envtier.dotFor —— 和树、审批列表、分层页同一个来源。 */
+.envhd { padding: 2px 9px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 700 10px var(--font-mono); color: var(--text-muted); }
+.envhd.danger { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envhd.warning { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+.envhd.success { background: var(--success-subtle); color: var(--success-text); border-color: transparent; }
+.envhd.info { background: var(--accent-subtle); color: var(--accent-text); border-color: transparent; }
+.mtr { padding: 7px 16px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
+.mtr:last-child { border-bottom: none; }
+/* 斑马纹弱到几乎看不见,整行 hover 才是主要的定位手段 —— 这张表最常做的动作是
+   横着看一行、竖着扫一列,而强斑马纹会跟竖向的列边框打架。 */
+.mtr:nth-child(even) { background: color-mix(in oklch, var(--surface-sunken) 30%, var(--surface-card)); }
+.mtr:hover { background: var(--surface-sunken); }
+.cellwrap, .mth .ctr { border-left: 1px solid var(--border-subtle); }
+.cap { font: 500 13px var(--font-body); color: var(--text-body); }
+.cellwrap { display: flex; justify-content: center; }
+/* 三种判定各自一块语义底色 + 一个图标。原先是三个裸字符,同字号同粗细,扫一列
+   下去要逐格辨认。 */
+.cell { width: 34px; height: 28px; border: 1px solid transparent; border-radius: 8px; display: grid; place-items: center; cursor: pointer; transition: box-shadow .12s ease, border-color .12s ease; }
+.cell.allow { background: var(--success-subtle); color: var(--success-text); }
+.cell.approve { background: var(--danger-subtle); color: var(--danger-text); }
+.cell.deny { background: transparent; color: var(--text-faint); }
+.cell:hover:not(.ro) { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.cell.ro { cursor: default; }
+.cell.sm { width: 20px; height: 20px; border-radius: 6px; }
+.legend { margin-top: 10px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.lg { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------------- 菜单权限 ---------------- */
+/* 网格卡片:开关紧跟在名字后面。原先是一行一项,名字在最左、开关在屏幕最右,
+   一千多像素的空白把两者拉断了 —— 要对准哪个开关属于哪一项得用手指比。 */
+.menugrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.menucard { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.menucard:hover { border-color: var(--border-default); background: var(--surface-sunken); }
+.menucard.on { border-color: var(--accent-subtle-border); background: var(--accent-subtle); }
+.menucard .mi { flex-shrink: 0; color: var(--text-faint); }
+.menucard.on .mi { color: var(--accent-text); }
+.menucard .ml { flex: 1; min-width: 0; font: 600 12.5px var(--font-body); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menucard.on .ml { color: var(--accent-text); }
+.menucard.locked { cursor: not-allowed; opacity: 0.6; }
+.menucard .mlock { flex-shrink: 0; padding: 1px 6px; border-radius: 4px; background: var(--surface-sunken); color: var(--text-faint); font: 600 10.5px var(--font-body); }
+
+/* ---------------- 授权范围 ---------------- */
+.rtags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-sunken); }
+.rtag { display: inline-flex; height: 24px; align-items: center; padding: 0 11px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 11.5px var(--font-mono); }
+.rtagall { display: inline-flex; height: 24px; align-items: center; padding: 0 11px; border-radius: 999px; background: var(--success-subtle); color: var(--success-text); font: 600 11.5px var(--font-mono); }
+.rtedit { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 11px; border: 1px dashed var(--border-default); border-radius: 999px; background: transparent; color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; }
+.rtedit:hover { border-color: var(--accent); color: var(--accent-text); }
+
+/* ---------------- 成员 ---------------- */
+.memgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.memcard { position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-card); }
+.memcard:hover { border-color: var(--border-default); }
+.mava { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; background: var(--surface-raised); border: 1px solid var(--border-default); display: grid; place-items: center; font: 600 11px var(--font-body); color: var(--text-muted); }
+.mava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; border: none; }
+.mbody { flex: 1; min-width: 0; }
+.mn { font: 600 12.5px var(--font-body); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me { font: 500 11px var(--font-mono); color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 移除按钮只在 hover 时露出来:它是一次不可逆的操作,常驻在每张卡片上等于把
+   最危险的那个按钮摆得到处都是。 */
+.mx { flex-shrink: 0; width: 22px; height: 22px; display: grid; place-items: center; border: none; border-radius: 6px; background: transparent; cursor: pointer; color: var(--text-faint); opacity: 0; transition: opacity .12s ease; }
+.memcard:hover .mx, .mx:focus-visible { opacity: 1; }
+.mx:hover { background: var(--danger-subtle); color: var(--danger-text); }
+.memempty { padding: 18px 4px; font: 500 12px var(--font-body); color: var(--text-faint); }
+
+/* user view */
+.userpage { flex: 1; min-height: 0; padding: 24px 28px; }
+.uhead { display: flex; align-items: center; margin-bottom: 18px; }
+.utitle { font: 700 16px var(--font-display); color: var(--text-strong); }
+.usub { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 3px; }
+.uhead :deep(.vbtn) { margin-left: auto; }
+.uacts { margin-left: auto; display: flex; gap: 10px; }
+.uacts :deep(.vbtn) { margin-left: 0; }
+.utable { border: 1px solid var(--border-subtle); border-radius: 14px; overflow: hidden; background: var(--surface-card); }
+/* 状态列按内容给最小宽度:OTP、SSO 两枚标签 + 启停徽章 + 管理按钮。给 1fr 时 SSO 标签一加上,
+   "启用"就被挤成两行。 */
+.uth, .utr { display: grid; grid-template-columns: 1.5fr 1.6fr 2fr 0.8fr minmax(250px, 1fr); gap: 12px; }
+.uth { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
+.uth .r { text-align: right; }
+.utr { padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); align-items: center; }
+.ucell { display: flex; align-items: center; gap: 10px; }
+.uava { width: 30px; height: 30px; border-radius: 50%; background: #232838; display: flex; align-items: center; justify-content: center; font: 600 11px var(--font-body); color: var(--text-muted); }
+.uava.first { background: linear-gradient(135deg, #5e83fb, #2dcde6); color: #fff; }
+.svcbadge { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); vertical-align: 1px; }
+.un { font: 600 13px var(--font-body); color: var(--text-strong); }
+.ud { font: 500 10px var(--font-mono); color: var(--text-faint); }
+.mono { font: 500 12px var(--font-mono); }
+.mute { color: var(--text-muted); }
+.uroles { display: flex; flex-wrap: wrap; gap: 5px; }
+.urole { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); }
+.ustatus { display: flex; justify-content: flex-end; align-items: center; gap: 9px; }
+.stbadge { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border-radius: 999px; cursor: pointer; font: 600 11px var(--font-mono); white-space: nowrap; flex-shrink: 0; }
+.dotc { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.otptag { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font: 700 10px var(--font-mono); background: var(--surface-sunken); color: var(--text-faint); border: 1px solid var(--border-subtle); }
+.otptag.on { background: var(--success-subtle); color: var(--success-text); border-color: transparent; }
+.manage { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
+.manage:hover { color: var(--accent-text); border-color: var(--accent-subtle-border); }
+/* user management modal */
+.usec { padding: 16px 22px; border-top: 1px solid var(--border-subtle); }
+.uslbl { display: flex; align-items: center; gap: 7px; font: 600 12px var(--font-display); color: var(--text-strong); }
+.pwrow { margin-top: 10px; display: flex; gap: 9px; }
+.pwrow input { flex: 1; height: 40px; box-sizing: border-box; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-strong); outline: none; }
+.pwrow input:focus { border-color: var(--accent-text); }
+.umsg { margin-top: 8px; font: 600 11.5px var(--font-mono); color: var(--accent-text); }
+.umsg.inline { margin-top: 0; }
+/* multi-role picker (user modal + create modal) */
+.urhint { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); }
+.rolepick { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+.rchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11.5px var(--font-body); cursor: pointer; transition: color .12s, border-color .12s, background .12s; }
+.rchip:hover { color: var(--text-body); border-color: var(--border-strong); }
+.rchip.on { border-color: var(--accent-subtle-border); background: var(--accent-subtle); color: var(--accent-text); }
+.urrow { margin-top: 11px; display: flex; align-items: center; gap: 12px; }
+.otprow { margin-top: 10px; display: flex; gap: 9px; }
+.otpstate { margin-left: auto; font: 700 10px var(--font-mono); padding: 2px 8px; border-radius: 999px; background: var(--surface-sunken); color: var(--text-faint); }
+.otpstate.on { background: var(--success-subtle); color: var(--success-text); }
+.otpresult { margin-top: 14px; display: flex; gap: 14px; align-items: center; padding: 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--surface-sunken); }
+.qrbox { width: 108px; height: 108px; flex-shrink: 0; border-radius: 10px; background: #fff; padding: 6px; box-sizing: border-box; }
+.qrbox img { width: 100%; height: 100%; display: block; }
+.otpinfo { min-width: 0; }
+.oih { font: 500 12px var(--font-body); color: var(--text-muted); }
+.oisecret { margin-top: 8px; font: 700 14px var(--font-mono); letter-spacing: 0.08em; color: var(--text-strong); word-break: break-all; }
+.ufoot { margin-top: 12px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+/* modals */
+.overlay { position: fixed; inset: 0; z-index: 50; }
+.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.pmodal, .imodal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 480px; max-width: 92vw; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-xl); animation: modalIn 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+.phead, .ihead { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); }
+.pic, .iic { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.pt, .it { font: 700 16px var(--font-display); color: var(--text-strong); }
+.ps, .is { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
+.px, .ix { color: var(--text-muted); margin-left: auto; cursor: pointer; }
+.psearch { display: flex; align-items: center; gap: 8px; margin: 14px 22px 6px; height: 38px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); font: 400 12px var(--font-body); color: var(--text-faint); }
+.plist { max-height: 300px; padding: 6px 14px 14px; }
+.prow { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
+.prow:hover { background: var(--surface-sunken); }
+.pava { width: 32px; height: 32px; border-radius: 50%; background: #232838; border: 1px solid var(--border-default); display: flex; align-items: center; justify-content: center; font: 600 11px var(--font-body); color: var(--text-muted); }
+.pgrow { flex: 1; min-width: 0; }
+.pn { font: 600 13px var(--font-body); color: var(--text-body); }
+.pd { font: 500 11px var(--font-mono); color: var(--text-faint); }
+.joined { display: inline-flex; align-items: center; gap: 5px; font: 600 11px var(--font-mono); color: var(--success-text); }
+.addbtn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border-radius: 8px; background: var(--accent-subtle); color: var(--accent-text); font: 600 11px var(--font-mono); }
+.addbtn .ic { font-weight: 700; }
+.pfoot, .ifoot { display: flex; align-items: center; padding: 13px 22px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.pfh { font: 500 11px var(--font-mono); color: var(--text-faint); }
+.pfoot :deep(.vbtn) { margin-left: auto; }
+.ifoot { gap: 10px; justify-content: flex-end; }
+.ibody { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
+.ibody input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-mono); color: var(--text-body); outline: none; }
+.ifield { height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); display: flex; align-items: center; padding: 0 12px; font: 500 13px var(--font-body); color: var(--text-body); }
+.inote { display: flex; align-items: flex-start; gap: 8px; padding: 11px 13px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken); font: 400 11.5px/1.5 var(--font-body); color: var(--text-muted); }
+.psearch input { flex: 1; background: transparent; border: none; outline: none; font: 400 12px var(--font-body); color: var(--text-body); }
+.er2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+.ibody textarea { width: 100%; box-sizing: border-box; min-height: 56px; resize: none; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 11px 13px; font: 400 13px var(--font-body); color: var(--text-body); outline: none; }
+.nrnote { padding: 10px 12px; border-radius: 9px; background: var(--warning-subtle); color: var(--warning-text); font: 500 12px/1.6 var(--font-body); }
+.ertoggle { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-sunken); }
+.ertoggle .rt { font: 600 13px var(--font-body); color: var(--text-strong); }
+.ertoggle .rd { font: 500 11px var(--font-mono); color: var(--text-muted); margin-top: 2px; }
+.pm-head { padding: 18px 24px 0; margin-bottom: 8px; }
+
+/* SSO 绑定 */
+.ssotag.act { cursor: pointer; }
+.ssotag.act:hover { text-decoration: line-through; }

@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
-// Playwright drives the real Vue app in a real browser — the PRD's "one e2e"
+// Playwright drives the real React app in a real browser — the PRD's "one e2e"
 // seam. The Vite dev server is started automatically. Today this covers the
 // US#57 reduced-motion guarantee; the full login→intercept→approve tracer
 // (which also needs the Go backend running) plugs into this same harness.
@@ -21,5 +21,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    env: { AEGISDB_NO_HMR: '1' },
   },
 })

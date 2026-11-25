@@ -1,0 +1,42 @@
+.vdt { position: relative; }
+.field {
+  width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 11px; cursor: pointer; text-align: left;
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-sunken); color: var(--text-body); font: 500 12.5px var(--font-mono);
+}
+.field.on, .field:hover { border-color: var(--accent-text); }
+.field .ph { color: var(--text-faint); }
+.field span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clr { flex-shrink: 0; color: var(--text-faint); }
+.clr:hover { color: var(--danger-text); }
+/* fixed + 挂在 body 上:没有祖先能裁它。z-index 要压过弹窗(80)。 */
+.pop {
+  position: fixed; z-index: 200; width: 252px;
+  padding: 10px; border-radius: var(--radius-md);
+  background: var(--surface-card); border: 1px solid var(--border-default); box-shadow: var(--shadow-lg);
+}
+.phead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.ym { font: 700 12.5px var(--font-mono); color: var(--text-strong); }
+.nav { width: 24px; height: 24px; display: grid; place-items: center; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; }
+.nav:hover { background: var(--surface-sunken); color: var(--accent-text); }
+.dows, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dows span { text-align: center; padding: 4px 0; font: 600 10px var(--font-mono); color: var(--text-faint); }
+.cell {
+  height: 28px; border: none; border-radius: var(--radius-sm); background: transparent;
+  color: var(--text-body); font: 500 11.5px var(--font-mono); cursor: pointer;
+}
+.cell:hover { background: var(--surface-sunken); }
+/* 相邻月份的日子留在格子里但压暗:抹掉它们会让月初月末那一行看着缺一块。 */
+.cell.out { color: var(--text-faint); }
+.cell.today { box-shadow: inset 0 0 0 1px var(--accent-subtle-border); }
+.cell.sel { background: var(--accent-text); color: var(--text-on-accent); }
+.pfoot { display: flex; align-items: center; gap: 6px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border-subtle); }
+.tin {
+  width: 92px; height: 28px; padding: 0 7px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm); background: var(--surface-sunken); color: var(--text-body);
+  font: 500 11.5px var(--font-mono); outline: none;
+}
+.lnk { border: none; background: transparent; color: var(--text-muted); font: 600 11px var(--font-body); cursor: pointer; padding: 0 4px; }
+.lnk:hover { color: var(--accent-text); }
+.lnk.primary { margin-left: auto; color: var(--accent-text); }

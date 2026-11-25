@@ -1,0 +1,85 @@
+.login {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(900px 500px at 50% -10%, rgba(59, 110, 246, 0.18), transparent 60%),
+    var(--surface-page);
+}
+.lang {
+  position: absolute;
+  top: 22px;
+  right: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  cursor: pointer;
+  font: 600 12px var(--font-mono);
+  color: var(--text-body);
+}
+.card {
+  width: 380px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 30px 32px 26px;
+  box-shadow: var(--shadow-xl);
+}
+.brand { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+.logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b6ef6, #2dcde6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.logo.custom { background: none; }
+.bn { font: 700 16px var(--font-display); color: var(--text-strong); }
+.bs { font: 500 11px var(--font-mono); color: var(--text-faint); margin-top: 2px; }
+.title { font: 700 22px var(--font-display); color: var(--text-strong); letter-spacing: -0.02em; }
+.sub { font: 400 13px var(--font-body); color: var(--text-muted); margin: 4px 0 20px; }
+.lbl { display: block; font: 500 11px var(--font-body); color: var(--text-faint); margin: 14px 0 6px; }
+.field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  padding: 0 12px;
+}
+.field input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-strong);
+  font: 400 13px var(--font-mono);
+}
+.err { color: var(--danger-text); font: 500 12px var(--font-body); margin: 12px 0 0; }
+.hint { text-align: center; font: 500 11px var(--font-mono); color: var(--text-faint); margin-top: 14px; }
+:deep(.vbtn) { margin-top: 20px; height: 44px; }
+
+/* 未开通账号的拦截弹窗 */
+.ovl { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--surface-overlay); backdrop-filter: blur(2px); }
+.dlg { width: min(400px, 100%); box-sizing: border-box; padding: 26px 24px 20px; text-align: center; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-xl); }
+.dlgic { width: 44px; height: 44px; margin: 0 auto 14px; border-radius: 50%; background: var(--danger-subtle); display: grid; place-items: center; }
+.dlgt { font: 700 15px var(--font-display); color: var(--text-strong); }
+.dlgb { margin: 8px 0 20px; font: 500 12.5px/1.7 var(--font-body); color: var(--text-muted); }
+/* SSO 入口 */
+.ssobtn { margin-top: 18px; gap: 8px; }
+.ssoalt { text-align: center; margin-top: 14px; }
+.ssolink { font: 500 12px var(--font-body); color: var(--text-muted); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.ssolink:hover { color: var(--accent-text); }
+.ssosep { display: flex; align-items: center; gap: 10px; margin: 16px 0 2px; font: 500 11px var(--font-body); color: var(--text-faint); }
+.ssosep::before, .ssosep::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+.ssohint { margin-top: 8px; font: 500 11px var(--font-body); color: var(--warning-text); text-align: center; }

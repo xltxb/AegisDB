@@ -1,10 +1,10 @@
 // confirmAction gates a destructive/high-risk operation behind an explicit
 // user confirmation (M15).
 //
-// 2026-10-29:从浏览器原生 confirm 换成样式化的弹窗(ConfirmDialog.vue,挂在 App.vue 根上)。原生框
+// 2026-10-29:从浏览器原生 confirm 换成样式化的弹窗(ConfirmDialog.tsx,挂在 App.tsx 根上)。原生框
 // 顶着"aegisdb.xxx.com 显示"、字挤在一起,命令也看不清;换了之后它返回 Promise,调用处一律
 // `if (!(await confirmAction(msg))) return`。
-import { reactive } from 'vue'
+import { observable } from './observable'
 
 export interface ConfirmOptions {
   title?: string
@@ -12,21 +12,21 @@ export interface ConfirmOptions {
   danger?: boolean
 }
 
-export const confirmState = reactive({ open: false, message: '', title: '', okText: '', danger: false })
+export const confirmState = observable({ open: false, message: '', title: '', okText: '', danger: false })
 
 let pending: ((ok: boolean) => void) | null = null
 
 export function confirmAction(message: string, opts: ConfirmOptions = {}): Promise<boolean> {
   if (typeof window === 'undefined') return Promise.resolve(true)
   pending?.(false) // 上一个还没答就又来一个:旧的按取消处理
-  Object.assign(confirmState, { open: true, message, title: opts.title ?? '', okText: opts.okText ?? '', danger: !!opts.danger })
+  confirmState.value = { open: true, message, title: opts.title ?? '', okText: opts.okText ?? '', danger: !!opts.danger }
   return new Promise((resolve) => { pending = resolve })
 }
 
 export function settleConfirm(ok: boolean) {
   const r = pending
   pending = null
-  confirmState.open = false
+  confirmState.value = { ...confirmState.value, open: false }
   r?.(ok)
 }
 

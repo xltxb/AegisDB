@@ -1,11 +1,11 @@
 // 系统名称与 LOGO(品牌),管理员在「系统设置 → 品牌」里配置,存后端 tbl_setting(多活共享)。
 //
-// 这里只放状态与纯函数,不引 api / pinia:终端会话日志(lib/transcript.ts)也要读它,而单元测试
-// 是在 Node 里直接跑 lib 的。拉取由 App.vue 在启动时做(GET /auth/branding,未登录也能读)。
+// 这里只放状态与纯函数,不引 api / store:终端会话日志(lib/transcript.ts)也要读它,而单元测试
+// 是在 Node 里直接跑 lib 的。拉取由 App.tsx 在启动时做(GET /auth/branding,未登录也能读)。
 //
 // **没配置时各处保持原来的字样**:界面是 "AegisDB",终端日志抬头是「AegisDB 数据库网关」。
 // 所以默认值由调用方带(brandText 的 def);只要配了任意一个名称,各处就统一换成配置的名称。
-import { reactive, ref } from 'vue'
+import { observable } from './observable'
 
 export interface Branding {
   name: string
@@ -16,12 +16,20 @@ export interface Branding {
 /** 界面上原来的系统名称:登录页、浏览器标题、设置页「关于」。 */
 export const DEFAULT_BRAND = 'AegisDB'
 
-export const brand = reactive<Branding>({ name: '', nameEn: '', logo: '' })
+/** 可订阅的品牌:组件里用 hooks/useBrand 读(会跟着变),别处直接读 brand.xxx。 */
+export const brandState = observable<Branding>({ name: '', nameEn: '', logo: '' })
+export const brand: Readonly<Branding> = {
+  get name() { return brandState.value.name },
+  get nameEn() { return brandState.value.nameEn },
+  get logo() { return brandState.value.logo },
+}
 
 export function setBrand(b: Partial<Branding> | null | undefined) {
-  brand.name = (b?.name || '').trim()
-  brand.nameEn = (b?.nameEn || '').trim()
-  brand.logo = (b?.logo || '').trim()
+  brandState.value = {
+    name: (b?.name || '').trim(),
+    nameEn: (b?.nameEn || '').trim(),
+    logo: (b?.logo || '').trim(),
+  }
 }
 
 /** 配了任意一个名称。 */
@@ -36,9 +44,9 @@ export function brandText(lang: string, def: string = DEFAULT_BRAND, b: Branding
 }
 
 // ---- 浏览器标题 ----
-// 标题只由 App.vue 一处写:品牌名 + 布局给的待办数前缀。从前布局在挂载时把 document.title 抄下来
+// 标题只由 App.tsx 一处写:品牌名 + 布局给的待办数前缀。从前布局在挂载时把 document.title 抄下来
 // 当底,品牌名后到就会被它盖回旧值。
-export const titleCount = ref(0)
+export const titleCount = observable(0)
 
 export function docTitle(base: string, n: number): string {
   return n > 0 ? `(${n}) ${base}` : base

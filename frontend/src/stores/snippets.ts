@@ -1,7 +1,24 @@
-import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { create } from 'zustand'
 import api from '@/api'
 import type { SnippetLimits, TerminalSnippet } from '@/types'
+
+interface SnippetState {
+  items: TerminalSnippet[]
+  limits: SnippetLimits
+  loaded: boolean
+  /** slot (1-9) -> snippet, for the hotkey lookup. */
+  bySlot: Record<number, TerminalSnippet>
+  load(force?: boolean): Promise<void>
+  /** Re-read after any write: binding a hotkey releases whichever snippet held
+   *  it, so the row that changed is not always the row that was saved. */
+  refresh(): Promise<void>
+}
+
+const slots = (items: TerminalSnippet[]) => {
+  const m: Record<number, TerminalSnippet> = {}
+  for (const s of items) if (s.slot > 0) m[s.slot] = s
+  return m
+}
 
 /**
  * The operator's saved terminal scripts, held here rather than per session.
@@ -12,34 +29,22 @@ import type { SnippetLimits, TerminalSnippet } from '@/types'
  * something other than what the list in front of you says it runs, which is the
  * one thing a hotkey must never do.
  */
-export const useSnippetStore = defineStore('snippets', () => {
-  const items = ref<TerminalSnippet[]>([])
-  const limits = ref<SnippetLimits>({ maxBytes: 8192, maxName: 64, maxSlot: 9, max: 50 })
-  const loaded = ref(false)
+export const useSnippetStore = create<SnippetState>()((set, get) => {
   let inflight: Promise<void> | null = null
-
-  /** slot (1-9) -> snippet, for the hotkey lookup. */
-  const bySlot = computed(() => {
-    const m: Record<number, TerminalSnippet> = {}
-    for (const s of items.value) if (s.slot > 0) m[s.slot] = s
-    return m
-  })
-
-  async function load(force = false): Promise<void> {
-    if (loaded.value && !force) return
-    if (inflight) return inflight
-    inflight = (async () => {
-      const [list, lim] = await Promise.all([api.snippets(), api.snippetLimits().catch(() => limits.value)])
-      items.value = list
-      limits.value = lim
-      loaded.value = true
-    })().finally(() => { inflight = null })
-    return inflight
+  return {
+    items: [],
+    limits: { maxBytes: 8192, maxName: 64, maxSlot: 9, max: 50 },
+    loaded: false,
+    bySlot: {},
+    async load(force = false) {
+      if (get().loaded && !force) return
+      if (inflight) return inflight
+      inflight = (async () => {
+        const [items, limits] = await Promise.all([api.snippets(), api.snippetLimits().catch(() => get().limits)])
+        set({ items, limits, bySlot: slots(items), loaded: true })
+      })().finally(() => { inflight = null })
+      return inflight
+    },
+    refresh: () => get().load(true),
   }
-
-  /** Re-read after any write: binding a hotkey releases whichever snippet held
-   *  it, so the row that changed is not always the row that was saved. */
-  const refresh = () => load(true)
-
-  return { items, limits, loaded, bySlot, load, refresh }
 })

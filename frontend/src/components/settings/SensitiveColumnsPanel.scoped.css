@@ -1,0 +1,71 @@
+.sc { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.schead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.scic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; min-width: 0; }
+.sct { font: 600 14px var(--font-display); color: var(--text-strong); }
+.scs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+/* ---- 工具栏 ---- */
+.tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 20px; border-bottom: 1px solid var(--border-subtle); }
+.cnt { font: 600 12px var(--font-body); color: var(--text-muted); }
+.cntoff { color: var(--warning-text); margin-left: 4px; }
+.sbox { margin-left: auto; display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); }
+.sbox input { width: 190px; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 12px var(--font-body); }
+.sx { display: grid; place-items: center; width: 16px; height: 16px; border: none; border-radius: 4px; background: transparent; color: var(--text-faint); cursor: pointer; }
+.sx:hover { color: var(--text-body); }
+.fsel { height: 30px; padding: 0 8px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-body); font: 500 12px var(--font-body); cursor: pointer; outline: none; }
+
+/* ---- 表格 ----
+   .th 与每个 .tr 各自是一个 grid,所以列宽必须是与内容无关的定值 —— 写 auto 的话每行
+   按自己那行的内容各算一套,表头和行就对不齐了。说明那一列吃掉剩下的宽度:原先每行
+   右边空着一大片,而说明恰恰是最该展开的一格。 */
+.th, .tr { display: grid; grid-template-columns: minmax(220px, 1.1fr) 96px minmax(160px, 1.6fr) 64px 74px; gap: 12px; align-items: center; padding: 0 20px; }
+.th { height: 34px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.th .c, .tr .c { text-align: center; justify-items: center; }
+.tr { min-height: 40px; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); }
+.tr:last-of-type { border-bottom: none; }
+.tr:hover { background: var(--surface-page); }
+/* 停用的行不是"淡一点"就完了:整行降透明度会让它的开关也看不清,而那正是要点回去的
+   那个控件。只灰掉字,并单独挂一个标记。 */
+.tr.off .col, .tr.off .notecell { color: var(--text-faint); }
+
+.colcell { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.tb { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--surface-sunken); color: var(--text-muted); font: 600 10px var(--font-mono); border: 1px solid var(--border-subtle); }
+.tb.any { background: transparent; color: var(--text-faint); border-style: dashed; }
+.col { font: 600 12.5px var(--font-mono); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offtag { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--surface-sunken); color: var(--text-faint); font: 600 10px var(--font-body); }
+
+.stcell { min-width: 0; }
+.style { display: inline-block; padding: 2px 8px; border-radius: 999px; font: 600 10.5px var(--font-body); white-space: nowrap; cursor: default; }
+/* 抹光最重 → 危险色;留头留尾 → 警示;同值同码是可核对的,最轻 → 强调色 */
+.style.s-full { background: var(--danger-subtle); color: var(--danger-text); }
+.style.s-partial { background: var(--warning-subtle); color: var(--warning-text); }
+.style.s-hash { background: var(--accent-subtle); color: var(--accent-text); }
+
+.notecell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+.acts { display: flex; justify-content: flex-end; gap: 6px; }
+.act { width: 26px; height: 26px; flex-shrink: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text-faint); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.tr:hover .act { border-color: var(--border-subtle); color: var(--text-muted); }
+.act:hover { border-color: var(--accent-text) !important; color: var(--accent-text) !important; }
+.act.del:hover { border-color: var(--danger-text) !important; color: var(--danger-text) !important; }
+.empty { padding: 26px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.eclear { margin-left: 10px; padding: 4px 10px; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-card); color: var(--accent-text); font: 600 11.5px var(--font-body); cursor: pointer; }
+.overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.mask { position: absolute; inset: 0; background: var(--surface-overlay); backdrop-filter: blur(3px); }
+.modal { position: relative; width: 100%; max-width: 560px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-lg); overflow: hidden; }
+.mhead { display: flex; align-items: center; gap: 11px; padding: 15px 18px; border-bottom: 1px solid var(--border-subtle); }
+.mic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.mt { font: 600 14px var(--font-display); color: var(--text-strong); }
+.ms { font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.mx { margin-left: auto; cursor: pointer; color: var(--text-faint); }
+.mbody { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fl { font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 5px; }
+.in { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); font: 500 12.5px var(--font-body); color: var(--text-strong); outline: none; }
+.in:focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.hint { font: 500 11.5px var(--font-body); color: var(--text-muted); line-height: 1.6; }
+.mfoot { display: flex; justify-content: flex-end; gap: 10px; padding: 13px 18px; border-top: 1px solid var(--border-subtle); }
+
+/* 弹层封顶(见 main.css 的 .v-modal 三件套):内容再长,底下的按钮永远点得到。 */
+.modal { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.modal .mbody { flex: 1; min-height: 0; overflow-y: auto; }
+.modal .mfoot { flex-shrink: 0; }

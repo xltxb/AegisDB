@@ -1,0 +1,17 @@
+.cat { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 7px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.cat:hover { color: var(--text-body); background: rgba(255, 255, 255, 0.03); }
+.cnt { margin-left: auto; font: 600 10px var(--font-mono); color: var(--text-faint); }
+.objs { padding-left: 16px; }
+/* 同 DbTree:图标不许被长名字压扁,名字自己截断 */
+.cat svg, .obj svg { flex-shrink: 0; }
+.nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.obj { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 6px; font: 400 12px var(--font-mono); color: var(--text-muted); cursor: pointer; user-select: none; }
+.obj:hover { color: var(--accent-text); background: rgba(255, 255, 255, 0.04); }
+.obj.on { color: var(--accent-text); background: var(--accent-subtle); box-shadow: inset 0 0 0 1px var(--accent-subtle-border); }
+.hint { padding: 4px 8px; font: 500 11px var(--font-mono); color: var(--text-faint); }
+.hint.err { color: var(--danger-text); white-space: normal; word-break: break-word; }
+
+.ctx { position: fixed; z-index: 1000; min-width: 200px; padding: 4px; border-radius: 9px; background: var(--surface-raised); border: 1px solid var(--border-default); box-shadow: var(--shadow-lg); }
+.ctx-i { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: var(--text-body); font: 500 12px var(--font-body); text-align: left; cursor: pointer; white-space: nowrap; }
+.ctx-i:hover, .ctx-i:focus-visible { background: rgba(255, 255, 255, 0.06); color: var(--accent-text); outline: none; }
+.ctx-sep { height: 1px; margin: 4px 2px; background: var(--border-subtle); }

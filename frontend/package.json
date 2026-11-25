@@ -5,31 +5,39 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
-    "type-check": "vue-tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "type-check": "tsc --noEmit",
     "preview": "vite preview",
     "test:e2e": "playwright test",
     "test:unit": "playwright test -c playwright.unit.config.ts"
   },
   "dependencies": {
+    "@intlify/core-base": "^11.4.23",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "axios": "^1.7.9",
-    "lucide-vue-next": "^0.468.0",
-    "pinia": "^2.3.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.468.0",
     "qrcode": "^1.5.4",
-    "vue": "^3.5.13",
-    "vue-i18n": "^10.0.5",
-    "vue-router": "^4.5.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^8.5.3",
+    "zustand": "^5.1.0"
   },
   "devDependencies": {
-    "@intlify/unplugin-vue-i18n": "^11.2.4",
+    "@intlify/message-compiler": "^11.4.23",
     "@playwright/test": "^1.61.1",
     "@types/node": "^22.10.5",
     "@types/qrcode": "^1.5.6",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "typescript": "~5.7.2",
-    "vite": "^6.0.5",
-    "vue-tsc": "^2.2.0"
+    "@types/react": "^19.3.1",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "json5": "^2.2.3",
+    "jsonc-eslint-parser": "^3.3.0",
+    "magic-string": "^1.4.5",
+    "postcss": "^8.5.33",
+    "postcss-selector-parser": "^7.2.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
   }
 }

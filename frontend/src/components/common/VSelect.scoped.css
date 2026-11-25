@@ -1,0 +1,72 @@
+.vsel { position: relative; outline: none; }
+.control {
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  font: 400 13px var(--font-mono);
+  color: var(--text-body);
+  cursor: pointer;
+}
+.val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.val.ph { color: var(--text-faint); }
+.opt.custom { color: var(--accent-text); }
+.chev { color: var(--text-faint); flex-shrink: 0; }
+/* 菜单宽度原先被 left:0 + right:0 钉死成控件的宽度。而控件宽度是各个页面按版面
+   排的(导出页上只有 225px),菜单里装的却是实例名 —— 一串长得很像的标识符,截断
+   之后正是最不该截的那一段。改成至少与控件同宽、按内容伸长、再给一个上限。 */
+.menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(460px, 92vw);
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+}
+.sbox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  margin-bottom: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-sunken);
+}
+.sbox input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-strong);
+  font: 400 12.5px var(--font-mono);
+}
+/* 220px 配 33px 的行高只露得出 6.67 行 —— 十来个实例要在一个切掉半行的小窗口里
+   翻,而那半行看着像渲染坏了。放到 360px(约 10 行),同时用 vh 兜住:矮屏幕上不能
+   让菜单长过视口。 */
+.list { max-height: min(360px, 52vh); }
+.opt {
+  padding: 8px 11px;
+  border-radius: 8px;
+  font: 400 13px var(--font-mono);
+  color: var(--text-body);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opt:hover { background: var(--surface-sunken); }
+.opt.active { background: var(--accent-subtle); color: var(--accent-text); }
+.nores { padding: 14px 11px; text-align: center; font: 500 12px var(--font-mono); color: var(--text-faint); }

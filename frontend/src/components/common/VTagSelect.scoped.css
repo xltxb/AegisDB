@@ -1,0 +1,31 @@
+.vtag { position: relative; outline: none; }
+.control {
+  border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-sunken);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px 4px 6px; box-sizing: border-box;
+  font: 400 13px var(--font-mono); color: var(--text-body); cursor: pointer;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; flex: 1; }
+.chip { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; height: 24px; padding: 0 2px 0 8px; border-radius: 6px;
+  background: var(--accent-subtle); color: var(--accent-text); font: 500 12px var(--font-mono); }
+.ct { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cx { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; border-radius: 4px;
+  background: transparent; color: inherit; cursor: pointer; opacity: .7; }
+.cx:hover { opacity: 1; background: color-mix(in oklch, var(--accent) 18%, transparent); }
+.ph { padding-left: 6px; color: var(--text-faint); }
+.chev { color: var(--text-faint); flex-shrink: 0; }
+.menu {
+  position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(460px, 92vw);
+  background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 5px;
+}
+.sbox { display: flex; align-items: center; gap: 7px; padding: 6px 9px; margin-bottom: 4px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); }
+.sbox input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-strong); font: 400 12.5px var(--font-mono); }
+.list { max-height: min(360px, 52vh); }
+.opt { display: flex; align-items: center; gap: 9px; padding: 8px 11px; border-radius: 8px; font: 400 13px var(--font-mono); color: var(--text-body); cursor: pointer; }
+.opt:hover { background: var(--surface-sunken); }
+.opt.active { color: var(--accent-text); }
+.opt.off { opacity: .4; cursor: not-allowed; }
+.box { display: flex; align-items: center; justify-content: center; width: 15px; height: 15px; flex-shrink: 0; border: 1.5px solid var(--border-strong); border-radius: 4px; }
+.opt.active .box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nores { padding: 14px 11px; text-align: center; font: 500 12px var(--font-mono); color: var(--text-faint); }
+.foot { padding: 6px 11px 2px; border-top: 1px solid var(--border-subtle); margin-top: 4px; font: 500 11px var(--font-body); color: var(--text-faint); }

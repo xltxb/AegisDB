@@ -1,0 +1,36 @@
+/* 与其余内容页同源:留白、最大宽度、超宽屏居中都来自同两个 token。 */
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+/* 弹性子项默认可被压缩(flex-shrink:1)。页面高度有限时,这两块卡片会被压扁到刚好
+   填满视口,而它们是 overflow:hidden 的 —— 于是项目一多,后面的就被裁掉看不见了,
+   看着像"只显示前 5 个",其实 14 条都在 DOM 里,只是被挡住。
+   让它们保持自身高度,由页面(.scy 带 overflow-y:auto)去滚。 */
+.page > * { flex-shrink: 0; }
+/* auto-fit 而不是写死三列:窄屏上三张并排会把"已归属的数据库"这类标签挤到换行,
+   放不下时自己换行更稳。 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.stat { padding: 16px 20px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); }
+.sv { font: 700 26px var(--font-display); color: var(--text-strong); }
+.sl { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.chead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.ct { font: 600 14px var(--font-display); color: var(--text-strong); }
+.cs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+/* 与上面那块面板(ProjectsPanel .list/.item)取同一套行样式:同一页里出现的是同一种
+   东西 —— 一个项目 —— 从前上面是带边框的沉底行、下面是纯白无分隔的行,两份列表并排,
+   看着像两个页面拼起来的。内边距、圆角、底色、间距都对齐它。 */
+.rows { padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+.row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  border: 1px solid var(--border-default); border-radius: 11px; background: var(--surface-sunken);
+  transition: border-color var(--dur-fast, 0.15s) var(--ease-out, ease);
+}
+.row.click { cursor: pointer; }
+.row.click:hover { border-color: var(--accent-text); }
+.grow { flex: 1; min-width: 0; }
+.rn { font: 600 13px var(--font-body); color: var(--text-strong); }
+.rm { margin-top: 3px; display: flex; align-items: center; gap: 7px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.rm span { display: inline-flex; align-items: center; gap: 4px; }
+.sep { color: var(--text-faint); }
+.go { display: inline-flex; align-items: center; gap: 4px; font: 600 11.5px var(--font-body); color: var(--accent-text); opacity: 0; transition: opacity 0.12s; }
+.row.click:hover .go { opacity: 1; }

@@ -1,0 +1,273 @@
+/* 页面底色由外层壳给(--surface-page,即 slate-50);这一页上的每一块内容都在白卡里,
+   卡与底之间靠这一级色差分开,而不是靠给每块内容各画一条线。 */
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+.card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px);
+  box-shadow: var(--shadow-sm);
+}
+.sub { display: inline-flex; align-items: center; gap: 6px; }
+.exp { margin-left: auto; font: 600 12px var(--font-mono); color: var(--success-text); }
+
+/* ---- 筛选栏 ----
+   两行:上面一格一格的筛选项按网格排齐(换行也对得上列),下面是搜索框 + 操作按钮。
+   从前所有东西挤在一个 flex-wrap 里,加了「来源」以后第一行五格、第二行两格再跟着
+   搜索和按钮,参差不齐。 */
+.fbar { display: flex; flex-direction: column; gap: 0; padding: 16px 18px; margin-bottom: 14px; }
+.fields {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 12px 14px; min-width: 0;
+}
+.f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.f.wide { grid-column: span 2; }
+/* 每个控件顶上一句小标签。没有它,七个下拉摆成一排全靠占位文字自我介绍,而占位文字
+   在选过之后就消失了 —— 于是"这一格筛的是什么"要靠回想。 */
+.fl { display: inline-flex; align-items: center; gap: 5px; font: 600 11.5px var(--font-body); color: var(--text-muted); letter-spacing: .02em; }
+.f :deep(.vsel) { min-width: 0; width: 100%; }
+.f :deep(.control) { height: 36px; border-radius: 9px; background: var(--surface-card); }
+.rangebox, .searchbox {
+  display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-card);
+  transition: border-color .15s, box-shadow .15s;
+}
+.rangebox:focus-within, .searchbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-subtle); }
+/* 起止两个日期选择器本身各带一层框,摆进这个框里就成了框中框。这里去掉内层的框,
+   让「起始 — 结束」看起来是一个输入。 */
+.rangebox { padding: 0 6px; }
+.rangebox :deep(.vdt) { flex: 1 1 0; min-width: 0; }
+.rangebox :deep(.field) { height: 30px; border: none; background: transparent; padding: 0 6px; border-radius: 6px; }
+.rangebox :deep(.field:hover), .rangebox :deep(.field.on) { background: var(--surface-sunken); }
+.rangebox .dash { color: var(--text-faint); flex: none; }
+.rangebox .clr { color: var(--text-faint); cursor: pointer; flex: none; }
+.rangebox .clr:hover { color: var(--danger-text); }
+.fbot {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border-subtle);
+}
+.fbot .f.grow { flex: 1 1 320px; }
+.searchbox { padding: 0 12px; gap: 8px; }
+.searchbox .sk { flex: none; padding-right: 8px; border-right: 1px solid var(--border-subtle); font: 600 11.5px var(--font-body); color: var(--text-muted); white-space: nowrap; }
+.searchbox input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: var(--text-strong); font: 500 13px var(--font-body); }
+.fbtns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+/* 改了条件还没按查询时说一句。没有它,一个改到一半的筛选栏配着上一次的结果,看起来
+   就像"筛选没生效"。 */
+.dirty {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px;
+  background: var(--warning-subtle, rgba(245, 158, 11, .12)); color: var(--warning-text);
+  font: 600 11.5px var(--font-body); white-space: nowrap;
+}
+.ddot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.gbtn {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 13px;
+  border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-card);
+  color: var(--text-body); font: 600 12.5px var(--font-body); cursor: pointer;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.gbtn:hover { border-color: var(--accent); color: var(--accent-text); }
+.gbtn.on { border-color: var(--accent); color: var(--accent-text); background: var(--accent-subtle); }
+.gbtn:disabled { opacity: .6; cursor: default; }
+.gbtn { white-space: nowrap; flex: none; }
+.fbtns :deep(.vbtn) { min-width: 76px; }
+/* 窄屏:筛选项两列,「起始 — 结束」独占一行;手机宽度一行一个,按钮区自己换行。
+   从前「起始 — 结束」带着 300px 的最小宽度冲出卡片,按钮被挤成逐字竖排(黑盒 2026-10 工单 05)。 */
+@media (max-width: 760px) {
+  .fields { grid-template-columns: minmax(0, 1fr); }
+  .f.wide { grid-column: auto; }
+  .fbot { flex-direction: column; align-items: stretch; }
+  .fbot .f.grow { flex: none; width: 100%; }
+  .searchbox .sk { display: none; }
+  .fbtns { margin-left: 0; }
+}
+
+/* 合并条目上的"共 N 条":点行打开详情,时间线里是全部 */
+.gcount { font: 600 10.5px var(--font-body); color: var(--accent-text); background: var(--accent-subtle); border-radius: 999px; padding: 1px 7px; }
+
+/* 审批单操作记录:一条竖线串起来的几步,当前打开的那一步高亮 */
+.trail { list-style: none; margin: 0; padding: 0 0 0 4px; border-left: 2px solid var(--border-subtle); }
+.titem { position: relative; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 10px; margin-left: 10px; border-radius: 8px; cursor: pointer; }
+.titem:hover { background: var(--surface-sunken); }
+.titem.on { background: var(--accent-subtle); }
+.tdot { position: absolute; left: -17px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface-card); border: 2px solid var(--border-strong, var(--border-default)); }
+.titem.on .tdot { border-color: var(--accent); background: var(--accent); }
+.ttime { font: 500 11.5px var(--font-mono); color: var(--text-muted); }
+.twho { font: 500 12px var(--font-body); color: var(--text-body); margin-left: auto; }
+
+/* 校验结论横幅。绿是"验过了",红是"这里断了" —— 后者要能被原样抄进事故记录里。 */
+.vbar {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding: 10px 14px;
+  border-radius: var(--radius-lg, 10px); border: 1px solid transparent;
+  background: var(--success-subtle); color: var(--success-text);
+  font: 600 12.5px var(--font-body);
+}
+.vbar.bad { background: var(--danger-subtle); color: var(--danger-text); }
+.vx { margin-left: auto; cursor: pointer; opacity: .7; }
+
+/* ---- 表格 ----
+   .thead 与每个 .tr 各自是一个 grid,所以列宽必须与内容无关:写 auto / max-content
+   的话每一行按自己那行的内容各算一套,表头和行就对不齐了。
+   时间列钉死 170px(两行排版,永不折);SQL 列是唯一可伸缩的那一列。 */
+.thead, .tr {
+  display: grid;
+  grid-template-columns: 170px 152px 92px 190px minmax(220px, 1fr) 108px 116px 66px;
+  gap: 12px; align-items: center; padding: 0 16px;
+}
+.thead {
+  height: 40px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 10px) var(--radius-lg, 10px) 0 0;
+  /* 表头用 slate-900 + 600,不是过去那种弱灰小字:它是每一列的名字,不是注脚 */
+  font: 600 11.5px var(--font-body); color: var(--text-strong); letter-spacing: .02em;
+}
+.thead .right { text-align: right; }
+.tr {
+  min-height: 58px; padding-top: 9px; padding-bottom: 9px;
+  border-bottom: 1px solid var(--border-subtle);
+  font: 500 12.5px var(--font-body); color: var(--text-body);
+  cursor: pointer; transition: background var(--dur-fast, .15s) var(--ease-out, ease);
+}
+.tr:last-of-type { border-bottom: none; }
+.tr:hover { background: var(--surface-page); }
+/* 高危那一行在左边留一道竖杠。扫一屏时它比任何一枚徽标都先被看见。 */
+.tr.high { box-shadow: inset 3px 0 0 var(--danger); }
+
+.tcell { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; }
+.clock { font: 600 13px var(--font-mono); color: var(--text-strong); font-variant-numeric: tabular-nums; }
+.date { font: 500 12px var(--font-mono); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wname { font: 600 12.5px var(--font-body); color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wip { font: 500 11.5px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tgt { display: flex; flex-direction: column; gap: 4px; min-width: 0; align-items: flex-start; }
+/* 实例胶囊按**分层**着色,不按环境名 —— 名字不决定它是什么环境,绑的分层才决定 */
+.envtag {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 8px; border-radius: 6px; font: 600 11px var(--font-mono);
+  background: var(--surface-sunken); color: var(--text-body); border: 1px solid var(--border-subtle);
+}
+.envtag.prod { background: var(--danger-subtle); color: var(--danger-text); border-color: transparent; }
+.envtag.gli, .envtag.staging { background: var(--warning-subtle); color: var(--warning-text); border-color: transparent; }
+.dbtbl { max-width: 100%; font: 500 11.5px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sqlcell { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.verb {
+  flex: none; padding: 2px 7px; border-radius: 5px; font: 700 10.5px var(--font-mono);
+  letter-spacing: .03em; white-space: nowrap;
+}
+.verb.v-high { background: var(--danger-subtle); color: var(--danger-text); }
+.verb.v-mid { background: var(--warning-subtle); color: var(--warning-text); }
+.verb.v-low { background: var(--accent-subtle); color: var(--accent-text); }
+/* 语句原文:等宽 12px,一行,溢出省略。完整的那份在抽屉里 —— 行里铺开会把表格撑垮,
+   而截断掉的往往正是要紧的那一段。 */
+.sql { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 12px var(--font-mono); color: var(--text-body); }
+.cp {
+  flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 6px;
+  border: 1px solid transparent; background: transparent; color: var(--text-faint); cursor: pointer;
+}
+.tr:hover .cp { border-color: var(--border-subtle); color: var(--text-muted); }
+.cp:hover { color: var(--accent-text) !important; border-color: var(--accent) !important; }
+
+.cat { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.evbadge, .actbadge { padding: 1px 7px; border-radius: 5px; font: 600 10.5px var(--font-body); white-space: nowrap; }
+.evbadge.ev-intercept { background: var(--warning-subtle); color: var(--warning-text); }
+.evbadge.ev-approve { background: var(--accent-subtle); color: var(--accent-text); }
+.evbadge.ev-exec { background: var(--success-subtle); color: var(--success-text); }
+.evbadge.ev-login { background: var(--surface-sunken); color: var(--text-muted); }
+.actbadge.act-create { background: var(--success-subtle); color: var(--success-text); }
+.actbadge.act-delete { background: var(--danger-subtle); color: var(--danger-text); }
+.actbadge.act-update { background: var(--warning-subtle); color: var(--warning-text); }
+.actbadge.act-read { background: var(--accent-subtle); color: var(--accent-text); }
+.actbadge.act-other { background: var(--surface-sunken); color: var(--text-muted); }
+/* "没记"是一个短横,和"记了、结论是这一类"必须一眼分得开 */
+/* 入口来源:数据通路(查询 / 终端 / 脚本 / 导出)各一种色相,流程类(审批 / 发布 / 开放接口)
+   偏冷,非数据操作中性;旧行是淡色的一句话,不画成某一类。 */
+.srccell { display: flex; align-items: center; min-width: 0; }
+.srcbadge { padding: 2px 8px; border-radius: 5px; font: 600 11px var(--font-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; background: var(--surface-sunken); color: var(--text-muted); }
+.srcbadge.src-query { background: var(--accent-subtle); color: var(--accent-text); }
+.srcbadge.src-terminal { background: var(--warning-subtle); color: var(--warning-text); }
+.srcbadge.src-script { background: var(--danger-subtle); color: var(--danger-text); }
+.srcbadge.src-export { background: var(--success-subtle); color: var(--success-text); }
+.srcbadge.src-approval, .srcbadge.src-release, .srcbadge.src-api { background: var(--surface-sunken); color: var(--text-strong); border: 1px solid var(--border-subtle); }
+.srcbadge.src-none { background: transparent; color: var(--text-faint); padding-left: 0; font-weight: 500; }
+.evbadge.ev-none, .actbadge.act-none { background: transparent; color: var(--text-faint); padding-left: 0; }
+
+.stcell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 0; }
+.stbadge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+  font: 600 11px var(--font-body); white-space: nowrap;
+}
+.st-ok { background: var(--success-subtle); color: var(--success-text); }
+.st-bad { background: var(--danger-subtle); color: var(--danger-text); }
+.st-warn { background: var(--warning-subtle); color: var(--warning-text); }
+.st-wait { background: var(--warning-subtle); color: var(--warning-text); }
+.st-info { background: var(--accent-subtle); color: var(--accent-text); }
+.st-pass { background: var(--accent-subtle); color: var(--accent-text); }
+.st-mute { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.ap { font: 600 11px var(--font-mono); color: var(--text-faint); }
+.ap.link { color: var(--accent-text); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+
+.acts { display: flex; justify-content: flex-end; }
+.lnk { border: none; background: transparent; padding: 0; cursor: pointer; font: 600 12px var(--font-body); color: var(--accent-text); }
+.lnk:hover { text-decoration: underline; }
+
+/* 骨架行:形状先立住,内容再填进来 */
+.tr.sk { cursor: default; }
+.tr.sk:hover { background: transparent; }
+.sk span { display: flex; flex-direction: column; gap: 5px; }
+.bar { height: 10px; border-radius: 5px; background: var(--surface-sunken); animation: pulse 1.4s ease-in-out infinite; }
+.w40 { width: 40%; } .w50 { width: 50%; } .w60 { width: 60%; } .w70 { width: 70%; } .w80 { width: 80%; } .w90 { width: 90%; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+
+.empty { padding: 56px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.eic { width: 46px; height: 46px; border-radius: 14px; background: var(--surface-sunken); display: grid; place-items: center; }
+.et { font: 600 13px var(--font-body); color: var(--text-muted); }
+.eclear { padding: 6px 12px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--accent-text); font: 600 11.5px var(--font-body); cursor: pointer; }
+
+/* 分页靠右,和总数分列两端 */
+.pfoot { display: flex; align-items: center; gap: 14px; padding: 11px 16px; border-top: 1px solid var(--border-subtle); }
+.ptotal { font: 500 12px var(--font-body); color: var(--text-muted); }
+.pager { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.psize { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.psize select { height: 28px; padding: 0 6px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-sunken); color: var(--text-body); font: 500 11.5px var(--font-mono); cursor: pointer; outline: none; }
+.pg { width: 30px; height: 28px; display: grid; place-items: center; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-card); color: var(--text-body); cursor: pointer; }
+.pg:disabled { opacity: .4; cursor: default; }
+.pgn { min-width: 84px; text-align: center; font: 500 12px var(--font-mono); color: var(--text-muted); }
+
+/* ---- 详情抽屉 ---- */
+.overlay { position: fixed; inset: 0; z-index: 60; }
+.mask { position: absolute; inset: 0; background: var(--surface-overlay); }
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(640px, 94vw);
+  display: flex; flex-direction: column; background: var(--surface-card);
+  border-left: 1px solid var(--border-subtle); box-shadow: var(--shadow-lg);
+  animation: slidein .18s var(--ease-out, ease);
+}
+@keyframes slidein { from { transform: translateX(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+.dhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--border-subtle); }
+.dtitle { font: 600 14px var(--font-display); color: var(--text-strong); }
+.dx { margin-left: auto; cursor: pointer; color: var(--text-muted); }
+.dbody { padding: 14px 16px 24px; overflow: auto; }
+.dsec { margin-bottom: 14px; }
+/* 元信息网格之后的那一段(链式校验值)要和网格拉开 —— 挨着的话,"结果"那一格的胶囊
+   和下面的小标题会读成同一块。 */
+.dgrid + .dsec { margin-top: 18px; margin-bottom: 0; }
+.dlbl { display: flex; align-items: center; gap: 10px; font: 600 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.dtools { margin-left: auto; display: flex; align-items: center; gap: 8px; text-transform: none; letter-spacing: 0; }
+.seg { display: inline-flex; border: 1px solid var(--border-subtle); border-radius: 7px; overflow: hidden; }
+.seg button { border: none; background: var(--surface-card); color: var(--text-muted); font: 600 11px var(--font-body); padding: 4px 9px; cursor: pointer; }
+.seg button.on { background: var(--accent-subtle); color: var(--accent-text); }
+.cp2 { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-card); color: var(--text-muted); font: 600 11px var(--font-body); cursor: pointer; }
+.cp2:hover { color: var(--accent-text); border-color: var(--accent); }
+.dcmd {
+  margin: 7px 0 0; padding: 12px 14px; border-radius: 9px; background: var(--surface-page);
+  border: 1px solid var(--border-subtle); font: 400 12.5px/1.7 var(--font-mono); color: var(--text-strong);
+  white-space: pre-wrap; word-break: break-word; max-height: 44vh; overflow: auto;
+}
+.dgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.ml { font: 600 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; }
+.dv { margin-top: 4px; font: 500 12.5px var(--font-body); color: var(--text-body); word-break: break-word; }
+.dv.mono { font-family: var(--font-mono); }
+.dv.none { color: var(--text-faint); font-size: 11.5px; }
+.dv.ap.link { color: var(--accent-text); cursor: pointer; }
+.hash { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--surface-sunken); font: 400 11px/1.6 var(--font-mono); color: var(--text-muted); word-break: break-all; }

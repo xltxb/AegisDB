@@ -1,0 +1,88 @@
+.addpanel { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--surface-sunken); }
+.apt { font: 600 12px var(--font-body); color: var(--text-strong); margin-bottom: 10px; }
+.aprow { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.apc { min-width: 92px; font: 600 11px var(--font-mono); color: var(--text-body); }
+.apn { flex: 1; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.apseg { display: flex; gap: 4px; }
+.apseg span { padding: 3px 10px; border: 1px solid var(--border-subtle); border-radius: 7px; font: 600 10.5px var(--font-mono); color: var(--text-muted); cursor: pointer; }
+.apseg span.on.lv-high { background: var(--danger-subtle); color: var(--danger-text); border-color: var(--danger-text); }
+.apseg span.on.lv-mid { background: var(--warning-subtle); color: var(--warning-text); border-color: var(--warning-text); }
+.apseg span.on.lv-off { background: var(--surface-card); color: var(--text-body); border-color: var(--border-strong); }
+.apfoot { margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px; }
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; }
+.head .roflag { margin-left: auto; }
+.roflag { display: inline-flex; align-items: center; height: 26px; padding: 0 11px; border-radius: 999px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); color: var(--text-muted); }
+.head :deep(.vbtn) { margin-left: auto; }
+.dict { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 18px 20px; margin-bottom: 18px; }
+.dhead { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.dic { width: 32px; height: 32px; border-radius: 9px; background: var(--danger-subtle); display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; }
+.dt { font: 600 14px var(--font-display); color: var(--text-strong); }
+.ds { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
+.envtabs { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 32px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.et { display: flex; align-items: center; height: 32px; padding: 0 14px; cursor: pointer; font: 600 11px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+.et:first-child { border-left: none; }
+.et.active { background: var(--accent-subtle); color: var(--accent-text); }
+.chips { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; border-radius: 999px; transition: opacity 0.15s ease; }
+.cname { font: 600 12px var(--font-mono); }
+.ctag { font: 700 9px var(--font-mono); padding: 2px 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.1); cursor: pointer; }
+.cx { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; background: rgba(255, 255, 255, 0.08); }
+.addchip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 6px 0 12px; border: 1px dashed var(--border-default); border-radius: 999px; }
+.addchip input { width: 104px; background: transparent; border: none; outline: none; font: 600 12px var(--font-mono); color: var(--text-body); text-transform: uppercase; }
+.addbtn { width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent); color: #fff; cursor: pointer; }
+.stats { display: flex; gap: 14px; margin-bottom: 18px; }
+.stat { flex: 1; border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); padding: 16px 18px; }
+.stat .n { font: 700 26px var(--font-display); letter-spacing: -0.02em; color: var(--text-strong); }
+.stat .n.danger { color: var(--danger-text); }
+.stat .n.warn { color: var(--warning-text); }
+.stat .n.grad { background: linear-gradient(135deg, #5e83fb, #2dcde6); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.stat .l { font: 500 12px var(--font-mono); color: var(--text-muted); margin-top: 2px; }
+.rules { display: flex; flex-direction: column; gap: 12px; }
+.rhint { margin-top: 5px; font: 400 11.5px var(--font-body); color: var(--text-faint); }
+.rlink { flex-shrink: 0; font: 600 12px var(--font-body); color: var(--accent-text); text-decoration: none; white-space: nowrap; }
+.rlink:hover { text-decoration: underline; }
+.rule { border: 1px solid var(--border-subtle); border-left: 3px solid; border-radius: 12px; background: var(--surface-card); padding: 16px 18px; display: flex; align-items: center; gap: 18px; transition: opacity 0.2s ease; }
+.rgrow { flex: 1; min-width: 0; }
+.rtop { display: flex; align-items: center; gap: 10px; }
+.rn { font: 600 14px var(--font-body); color: var(--text-strong); }
+.rtag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font: 600 10px var(--font-mono); }
+.rexpr { margin-top: 8px; font: 500 12px var(--font-mono); color: var(--text-muted); background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 11px; display: inline-block; }
+/* rule modal */
+.overlay { position: fixed; inset: 0; z-index: 50; }
+.mask { position: absolute; inset: 0; background: rgba(4, 6, 12, 0.7); backdrop-filter: blur(3px); }
+.rfmodal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 600px; max-width: 92vw; background: var(--surface-card); border: 1px solid var(--border-default); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow-xl); animation: modalIn 0.26s cubic-bezier(0.16, 1, 0.3, 1); }
+.rfhead { display: flex; align-items: center; gap: 12px; padding: 18px 24px; border-bottom: 1px solid var(--border-subtle); }
+.rfic { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.rft { font: 700 16px var(--font-display); color: var(--text-strong); }
+.rfs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
+.rfx { color: var(--text-muted); margin-left: auto; cursor: pointer; }
+.rfbody { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+.fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
+.rfbody input { width: 100%; box-sizing: border-box; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; font: 400 13px var(--font-body); color: var(--text-body); outline: none; }
+.trigs { display: flex; flex-wrap: wrap; gap: 7px; }
+.trig { display: inline-flex; align-items: center; height: 28px; padding: 0 11px; border-radius: 8px; font: 600 11px var(--font-mono); background: var(--danger-subtle); color: var(--danger-text); cursor: pointer; }
+.trig.off { background: transparent; color: var(--text-faint); border: 1px dashed var(--border-default); }
+.trig.add { background: transparent; border: 1px dashed var(--border-default); color: var(--text-body); cursor: default; gap: 6px; padding: 0 8px 0 11px; }
+.trig.add input { width: 78px; background: transparent; border: none; outline: none; font: 600 11px var(--font-mono); color: var(--text-body); text-transform: uppercase; }
+.trig.add svg { cursor: pointer; color: var(--accent-text); }
+.si { cursor: pointer; }
+.rf2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.seg { display: flex; border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
+/* 用 flex 居中,不用 line-height —— `font:` 简写会把 line-height 一并重置成
+   normal,而这里原先正是 `line-height: 38px; ... font: 600 ...`,后者把前者吹掉了,
+   于是文字在盒子里贴着上边。改成 flex 之后,字号怎么调都不会再把居中弄丢。 */
+.si { flex: 1; display: flex; align-items: center; justify-content: center; height: 38px; font: 600 12px var(--font-mono); color: var(--text-muted); border-left: 1px solid var(--border-subtle); }
+.si:first-child { border-left: none; }
+.si.active { background: var(--accent-subtle); color: var(--accent-text); }
+.si.active.danger { background: var(--danger-subtle); color: var(--danger-text); }
+.rffoot { display: flex; align-items: center; gap: 10px; padding: 14px 24px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.rfhint { font: 500 11px var(--font-mono); color: var(--text-faint); }
+.rfacts { margin-left: auto; display: flex; gap: 10px; }
+
+/* 弹层封顶(见 main.css 的 .v-modal 三件套):内容再长,底下的按钮永远点得到。 */
+.rfmodal { display: flex; flex-direction: column; max-height: calc(100vh - 56px); }
+.rfmodal .rfbody { flex: 1; min-height: 0; overflow-y: auto; }

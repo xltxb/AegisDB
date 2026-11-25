@@ -1,0 +1,185 @@
+/* 与其余内容页同源:留白、最大宽度、超宽屏居中都来自同两个 token。 */
+.page { flex: 1; min-height: 0; padding: var(--page-pad); max-width: var(--page-max); margin-inline: auto; width: 100%; display: flex; flex-direction: column; gap: 16px; }
+/* 见 ProjectsView:弹性子项默认可压缩,而卡片是 overflow:hidden 的,不钉住就会被压扁
+   到刚好填满视口,后面的行看着像"只显示前几个"。让页面去滚,卡片保持自身高度。 */
+.page > * { flex-shrink: 0; }
+
+/* ---------------- 页眉 ---------------- */
+.cta {
+  display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; height: var(--control-md);
+  border: 0; border-radius: var(--radius-md); background: var(--accent); color: #fff; cursor: pointer;
+  font: 600 12.5px var(--font-body); transition: background var(--dur-fast) var(--ease-out);
+}
+.cta:hover { background: var(--accent-hover); }
+.ghostbtn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; height: var(--control-md);
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--surface-card); color: var(--text-muted); cursor: pointer; font: 600 12px var(--font-body);
+}
+.ghostbtn:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+.ghostbtn:disabled { opacity: 0.55; cursor: default; }
+.ghostbtn.sm { height: 28px; padding: 0 10px; font-size: 11.5px; }
+
+/* ---------------- KPI ---------------- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+.stat {
+  position: relative; padding: 15px 18px; border-radius: var(--radius-lg);
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+}
+.stat.click { cursor: pointer; }
+.stat.click:hover { box-shadow: var(--shadow-sm); border-color: var(--border-default); }
+/* 数字用等宽:五张牌并排时,比例字体下"11"和"0.7ms"的基线宽度不一样,一列数字
+   扫下去会左右跳。 */
+.sv { font: 700 25px/1.1 var(--font-mono); color: var(--text-strong); letter-spacing: -0.02em; }
+.sl { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+/* 图标坐在一小块淡底里,而不是裸挂在角上 —— 裸图标和数字抢的是同一种注意力。 */
+.si {
+  position: absolute; top: 14px; right: 16px; width: 28px; height: 28px; border-radius: 9px;
+  display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted);
+}
+/* act:要人动手的两张牌。左边一条竖条 + 一层极淡的底,数字换成强调色。
+   为 0 时它和别的牌一模一样 —— 一张长期亮着的警示牌很快就没人看了。 */
+.stat.act { background: var(--accent-subtle); border-color: var(--accent-subtle-border); }
+.stat.act::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+.stat.act .sv { color: var(--accent-text); }
+.stat.act .si { background: var(--surface-card); color: var(--accent-text); }
+/* warn:门开着。它比"有活要干"更重一档,所以用琥珀。 */
+.stat.warn { background: var(--warning-subtle); border-color: transparent; }
+.stat.warn::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--warning); }
+.stat.warn .sv { color: var(--warning-text); }
+.stat.warn .si { background: var(--surface-card); color: var(--warning-text); }
+
+/* 巡检异常:有严重问题时整块换成红色(卡片与面板) */
+.stat.bad { background: var(--danger-subtle); border-color: transparent; }
+.stat.bad::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--danger-text); }
+.stat.bad .sv { color: var(--danger-text); }
+.stat.bad .si { background: var(--surface-card); color: var(--danger-text); }
+.ipanel .picon { flex-shrink: 0; color: var(--warning-text); }
+.ipanel .grow { flex: 1; min-width: 0; }
+.ipanel.danger { border-color: var(--danger-text); }
+.ipanel.danger .phead { background: var(--danger-subtle); }
+.ipanel.danger .pt, .ipanel.danger .picon { color: var(--danger-text); }
+.ir { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font: 500 12.5px var(--font-body); cursor: pointer; }
+.ir:last-child { border-bottom: none; }
+.ir:hover .iname { color: var(--accent-text); }
+.ilv { flex-shrink: 0; padding: 1px 7px; border-radius: 4px; font: 600 11px var(--font-body); }
+.ilv.critical { background: var(--danger-subtle); color: var(--danger-text); }
+.ilv.warning { background: var(--warning-subtle); color: var(--warning-text); }
+.iname { flex-shrink: 0; font-weight: 600; color: var(--text-strong); }
+.ifind { flex: 1; min-width: 0; color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icnt { flex-shrink: 0; color: var(--text-muted); font-size: 11.5px; }
+.imore { padding-top: 8px; font: 600 12px var(--font-body); color: var(--accent-text); cursor: pointer; }
+
+/* ---------------- 当前执行窗口面板 ---------------- */
+.panel { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--warning); overflow: hidden; }
+.phead { display: flex; align-items: center; gap: 11px; padding: 13px 18px; background: var(--warning-subtle); }
+.pt { font: 700 13.5px var(--font-body); color: var(--warning-text); }
+.ps { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+/* 呼吸点:它表示"此刻正开着",而这块面板存在的全部理由就是这件事。 */
+.pulse { position: relative; width: 9px; height: 9px; border-radius: 50%; background: var(--warning); flex-shrink: 0; }
+.pulse::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--warning); animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite; }
+@keyframes ping { 0% { transform: scale(0.7); opacity: 0.9; } 100% { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pulse::after { animation: none; opacity: 0.35; } }
+.pbody { padding: 6px 18px 14px; }
+.pw { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.pw:last-child { border-bottom: none; }
+.pwn { font: 600 13px var(--font-body); color: var(--text-strong); }
+.pwr { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwm { min-width: 0; }
+
+/* ---------------- 卡片 ---------------- */
+.cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
+/* 1366 及以下换成一栏:两栏各剩 600px 出头时,右边那条命令已经只剩几个字。 */
+@media (max-width: 1440px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; }
+.chead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
+.cic { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.ct { font: 700 13.5px var(--font-display); color: var(--text-strong); }
+.cs { font: 500 11.5px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.cnum { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 700 11px var(--font-mono); color: var(--text-muted); }
+.grow { flex: 1; min-width: 0; }
+
+/* ---------------- 行 ---------------- */
+.rows { padding: 8px 10px; display: flex; flex-direction: column; }
+.row {
+  display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+  align-items: center; gap: 14px; padding: 11px 10px; border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.row + .row { border-top: 1px solid var(--border-subtle); border-radius: 0; }
+.row.click { cursor: pointer; }
+.row:hover { background: var(--surface-sunken); }
+.rleft { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.rright { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.rname { font: 600 12.5px var(--font-body); color: var(--text-strong); white-space: nowrap; }
+/* 单号是等宽小徽章:它是要被念出来、被复制、被粘到聊天里的东西。 */
+.apno { padding: 1px 7px; border-radius: var(--radius-sm); background: var(--accent-subtle); color: var(--accent-text); font: 700 11px var(--font-mono); white-space: nowrap; }
+.tag { padding: 1px 7px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 600 10px var(--font-mono); color: var(--text-muted); text-transform: uppercase; white-space: nowrap; }
+.tag.high { background: var(--danger-subtle); border-color: transparent; color: var(--danger-text); }
+.chip { display: inline-block; max-width: 100%; padding: 2px 8px; border-radius: var(--radius-sm); background: var(--surface-sunken); font: 500 11px var(--font-mono); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 命令用代码片。它在这一页永远是**一行**:落地页给的是"有这么一条",要读全文
+   得进它自己的页面(或者看确认框)。 */
+.code { display: block; min-width: 0; padding: 4px 9px; border-radius: var(--radius-sm); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 500 11.5px var(--font-mono); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.code.plain { background: transparent; border-color: transparent; color: var(--text-muted); padding-left: 0; }
+.who { font: 500 11px var(--font-body); color: var(--text-faint); white-space: nowrap; }
+.wtag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: var(--radius-full); font: 700 10px var(--font-mono); white-space: nowrap; }
+.wtag.pend { background: var(--warning-subtle); color: var(--warning-text); }
+.wtag.ok { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+.d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+.d.danger { background: var(--danger); }
+.d.warning { background: var(--warning); }
+.d.success { background: var(--success); }
+.d.info { background: var(--accent); }
+.d.muted { background: var(--text-faint); }
+
+/* ---------------- 行内按钮 ---------------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 5px; height: 27px; padding: 0 11px;
+  border: 1px solid var(--border-default); border-radius: var(--radius-sm);
+  background: var(--surface-card); color: var(--text-muted); font: 600 11.5px var(--font-body);
+  cursor: pointer; white-space: nowrap;
+}
+.btn:disabled { opacity: 0.55; cursor: default; }
+/* 执行是这一页唯一会真的落到库上的动作,所以只有它是实色。 */
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn.ok:hover:not(:disabled) { color: var(--success-text); border-color: var(--success); background: var(--success-subtle); }
+.btn.ghost:hover:not(:disabled) { color: var(--accent-text); border-color: var(--accent-text); }
+
+/* ---------------- 待我审批:一行一张小卡 ---------------- */
+.trow { padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; }
+.trow + .trow { border-top: 1px solid var(--border-subtle); }
+.tmeta { display: flex; align-items: center; gap: 10px; }
+.av { width: 28px; height: 28px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: var(--accent-subtle); color: var(--accent-text); font: 700 11px var(--font-body); }
+.av.sm { width: 24px; height: 24px; font-size: 10px; }
+.why { font: 500 11.5px/1.6 var(--font-body); color: var(--text-muted); }
+.tacts { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ---------------- 审计时间轴 ---------------- */
+.tl { padding: 10px 18px 14px; position: relative; }
+.tli { display: flex; gap: 11px; padding: 9px 0; cursor: pointer; }
+.tli + .tli { border-top: 1px solid var(--border-subtle); }
+.tli:hover .rname { color: var(--accent-text); }
+.ago { margin-left: auto; font: 500 10.5px var(--font-mono); color: var(--text-faint); white-space: nowrap; }
+/* 状态胶囊。executed 用翠绿,pending 琥珀,撤回/导出中性 —— 常态不该是满屏彩色。 */
+.cap { padding: 1px 7px; border-radius: var(--radius-full); font: 700 9.5px var(--font-mono); text-transform: uppercase; }
+.cap.ok { background: var(--success-subtle); color: var(--success-text); }
+.cap.pass { background: var(--accent-subtle); color: var(--accent-text); }
+.cap.wait { background: var(--warning-subtle); color: var(--warning-text); }
+.cap.bad { background: var(--danger-subtle); color: var(--danger-text); }
+.cap.neutral { background: var(--surface-sunken); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+
+/* ---------------- 空态 ---------------- */
+/* 说的是"都处理完了",不是"没有数据" —— 对读的人这是两句完全不同的话。 */
+.blank { padding: 28px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.bic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-faint); }
+.bt { font: 600 12.5px var(--font-body); color: var(--text-muted); }
+.bs { font: 500 11.5px var(--font-body); color: var(--text-faint); }
+
+/* 窄屏:行内三段改成上下堆叠,免得命令被挤成几个字。 */
+@media (max-width: 768px) {
+  .row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .rright { justify-content: flex-start; }
+  .pw { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+}

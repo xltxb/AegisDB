@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { ref, nextTick } from 'vue'
-import { hasUnsavedChanges, setUnsaved, clearUnsaved, useUnsavedFlag, sameForm } from '../../src/lib/unsavedChanges'
+import { hasUnsavedChanges, setUnsaved, clearUnsaved, sameForm } from '../../src/lib/unsavedChanges'
 
 // 管理后台空闲锁屏问的那一句"有没有没保存的改动"(2026-10-26 回归排查 10)。登记错了的后果:
 // 漏登 → 改到一半被弹回总览、内容丢失(原来的 bug);多登 / 不注销 → 以后每次空闲都锁屏而不是回总览。
@@ -19,17 +18,7 @@ test('按 id 登记与注销,多个来源互不覆盖', () => {
   expect(hasUnsavedChanges()).toBe(false)
 })
 
-test('useUnsavedFlag 跟着来源变', async () => {
-  const dirty = ref(false)
-  useUnsavedFlag(() => dirty.value)
-  expect(hasUnsavedChanges()).toBe(false)
-  dirty.value = true
-  await nextTick()
-  expect(hasUnsavedChanges()).toBe(true)
-  dirty.value = false
-  await nextTick()
-  expect(hasUnsavedChanges()).toBe(false)
-})
+// hooks/useUnsavedFlag 跟着来源变、卸载即注销:由 e2e/admin-idle-unsaved.spec.ts 在真浏览器里钉住。
 
 test('clearUnsaved 清空全部(锁屏里放弃修改)', () => {
   setUnsaved(Symbol('x'), true)

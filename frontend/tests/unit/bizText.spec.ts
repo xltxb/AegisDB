@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseForESLint, getStaticJSONValue } from 'jsonc-eslint-parser'
-import { createI18n } from 'vue-i18n'
+import { createI18n } from '../../src/locales/core'
 
 import { renderBizReason, BIZ_GRANT_GONE } from '../../src/lib/ruleText'
 
@@ -19,9 +19,9 @@ function catalogue(file: string): Record<string, unknown> {
 const zh = catalogue('zh.json5')
 const en = catalogue('en.json5')
 
-// 用真正的 vue-i18n 编译词条:文案里的引号、反斜杠在消息语法里会不会被吃掉,只有它说了算。
+// 用应用自己的消息编译器编译词条:文案里的引号、反斜杠在消息语法里会不会被吃掉,只有它说了算。
 function realI18n(cat: Record<string, unknown>) {
-  const i = createI18n({ legacy: false, locale: 'x', messages: { x: { bizText: cat.bizText } as never } })
+  const i = createI18n({ locale: 'x', fallbackLocale: 'x', messages: { x: { bizText: cat.bizText } as never } })
   return { t: i.global.t as never, te: i.global.te as never }
 }
 

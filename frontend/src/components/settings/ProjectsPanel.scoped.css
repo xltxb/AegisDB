@@ -1,0 +1,37 @@
+.pr { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.prhead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.pric { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; min-width: 0; }
+.prt { font: 600 14px var(--font-display); color: var(--text-strong); }
+.prs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.list { padding: 14px 20px; display: flex; flex-direction: column; gap: 8px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-default); border-radius: 11px; background: var(--surface-sunken); }
+.itop { display: flex; align-items: center; gap: 9px; }
+.iname { font: 600 13px var(--font-body); color: var(--text-strong); }
+.iowner { padding: 1px 7px; border-radius: 999px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10.5px var(--font-body); }
+.imeta { margin-top: 3px; display: flex; align-items: center; gap: 7px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.sep { color: var(--text-faint); }
+.dim { color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.act { width: 30px; height: 28px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-card); color: var(--text-body); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.act:hover { border-color: var(--accent-text); color: var(--accent-text); }
+.act.del:hover { border-color: var(--danger-text); color: var(--danger-text); }
+.empty { padding: 22px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
+.overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.mask { position: absolute; inset: 0; background: var(--surface-overlay); backdrop-filter: blur(3px); }
+.modal { position: relative; width: 100%; max-width: 520px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-lg); overflow: hidden; }
+.mhead { display: flex; align-items: center; gap: 11px; padding: 15px 18px; border-bottom: 1px solid var(--border-subtle); }
+.mic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.mt { font: 600 14px var(--font-display); color: var(--text-strong); }
+.ms { font: 500 11.5px var(--font-body); color: var(--text-muted); }
+.mx { margin-left: auto; cursor: pointer; color: var(--text-faint); }
+.mbody { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.fl { font: 600 11px var(--font-mono); letter-spacing: 0.06em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 5px; }
+.in { width: 100%; box-sizing: border-box; height: 36px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--surface-sunken); font: 500 12.5px var(--font-body); color: var(--text-strong); outline: none; }
+.in:focus { border-color: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-subtle); }
+.hint { font: 500 11.5px var(--font-body); color: var(--text-muted); line-height: 1.6; }
+.mfoot { display: flex; justify-content: flex-end; gap: 10px; padding: 13px 18px; border-top: 1px solid var(--border-subtle); }
+
+/* 弹层封顶(见 main.css 的 .v-modal 三件套):内容再长,底下的按钮永远点得到。 */
+.modal { display: flex; flex-direction: column; max-height: calc(100vh - 48px); }
+.modal .mbody { flex: 1; min-height: 0; overflow-y: auto; }
+.modal .mfoot { flex-shrink: 0; }

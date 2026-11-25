@@ -17,7 +17,7 @@ func (a *testApp) settingRaw(key string) string {
 	return v
 }
 
-// frontendSettingsPayload 是设置页「保存设置」实际发出的那一整包(SettingsView.vue 的 save()),
+// frontendSettingsPayload 是设置页「保存设置」实际发出的那一整包(SettingsView.tsx 的 save()),
 // 取的是页面初次打开时的默认值。键名、类型照抄:数值是数,开关是布尔,路径可以为空。
 func frontendSettingsPayload() map[string]any {
 	return map[string]any{

@@ -1,0 +1,129 @@
+/* minmax(0,1fr) row caps every cell to the grid height so inner panels scroll
+   instead of stretching the row to their content. */
+/* 三栏:数据库树 · 终端 · 执行上下文。
+   列宽交给媒体查询,不再写死 —— 两侧是固定像素,中间那栏拿到的是"剩下的",
+   于是窗口一窄,被挤没的永远是终端本身。1100px 宽的窗口里它只剩约 390px:
+   命令回显开始逐字断行(`dba` / `_l2`),工具栏按钮被裁掉一半,状态栏叠成两行。
+   所以窄下来的时候由两侧依次让位,而不是让主角一直缩。 */
+/* 每一处列宽都写成 var(--x, 默认):没拖过就是下面这套逐级让位的默认值,拖过了
+   就在每个断点上都听人的。变量只在拖过的那一侧由内联样式给出。 */
+.grid { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--tree-w, 268px) 1fr var(--insp-w, 340px); grid-template-rows: minmax(0, 1fr); }
+.grid.tree-collapsed { grid-template-columns: 30px 1fr var(--insp-w, 340px); }
+.grid.insp-collapsed { grid-template-columns: var(--tree-w, 268px) 1fr 30px; }
+.grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
+/* 拖动时别让指针划过终端就选中里面的文字。 */
+.grid.resizing { cursor: col-resize; user-select: none; }
+/* 沉浸模式:两侧一起收成导轨,只留终端。 */
+.grid.zen { grid-template-columns: 30px 1fr !important; }
+
+/* 第一步:先收窄右侧的执行上下文,它的内容本来就是窄栏排布。 */
+@media (max-width: 1440px) {
+  .grid { grid-template-columns: var(--tree-w, 248px) 1fr var(--insp-w, 296px); }
+  .grid.tree-collapsed { grid-template-columns: 30px 1fr var(--insp-w, 296px); }
+  .grid.insp-collapsed { grid-template-columns: var(--tree-w, 248px) 1fr 30px; }
+  .grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr 30px; }
+}
+/* 第二步:整块收起执行上下文。它是辅助信息 —— 风险判定的结论终端里照样会打印,
+   而终端本身不可替代。让出这 296px,中间那栏差不多翻倍。 */
+@media (max-width: 1280px) {
+  .grid { grid-template-columns: var(--tree-w, 248px) 1fr; }
+  .grid.tree-collapsed { grid-template-columns: 30px 1fr; }
+  .grid > :last-child { display: none; }
+  /* 执行上下文这一档整块没了,右边那根把手也就没有东西可调。 */
+  .edge.right { display: none; }
+}
+/* 第三步(手机宽度):树也收成导轨,点一下以抽屉展开。到这个宽度,保住终端比同时看见三样东西要紧。
+   断点与脚本里的 narrowMq 一致;768–1080 沿用上一档(树嵌在页面里)。 */
+@media (max-width: 767px) {
+  /* 四种组合都写全:上面 1440 那一档的 .grid.insp-collapsed 选择器更具体,只写 .grid 压不住它,
+     树会照旧占着 248px 把终端挤走。展开的树在这一档是抽屉(见 .drawer),不占列。 */
+  .grid, .grid.tree-collapsed, .grid.insp-collapsed, .grid.tree-collapsed.insp-collapsed { grid-template-columns: 30px 1fr; }
+  .edge.left { display: none; }
+}
+/* 收起后的导轨:只留一个能点回来的图标。左右两侧共用一套样式,只是边框在哪一侧不同。 */
+.rail { display: flex; justify-content: center; padding-top: 14px; background: var(--surface-sunken); color: var(--text-muted); cursor: pointer; }
+.rail:hover { color: var(--accent-text); }
+.rail.left { border-right: 1px solid var(--border-subtle); }
+/* 窄屏下展开的树:浮在终端上的抽屉,点遮罩收起。不占网格的列,所以终端宽度不受影响。 */
+.grid { position: relative; }
+.drawer-mask { position: absolute; inset: 0; z-index: 29; background: rgba(4, 6, 12, 0.35); }
+.drawer { position: absolute; left: 0; top: 0; bottom: 0; width: min(300px, 86vw); z-index: 30; box-shadow: var(--shadow-xl); }
+.rail.right { border-left: 1px solid var(--border-subtle); }
+.term { position: relative; display: flex; flex-direction: column; min-width: 0; background: var(--surface-page); }
+/* 把手:平时只是一条看不见的 6px 热区,悬停/聚焦时才显出那道竖线 —— 一条常驻的
+   竖线会在这一屏上多出两条与内容无关的分隔,而边界本来就已经有边框了。 */
+.edge {
+  position: absolute; top: 0; bottom: 0; width: 6px; z-index: 5;
+  display: flex; align-items: center; justify-content: center;
+  cursor: col-resize; background: transparent; border: none; padding: 0;
+}
+.edge.left { left: 0; }
+.edge.right { right: 0; }
+.edge .grip { width: 2px; height: 40px; border-radius: 2px; background: transparent; }
+.edge:hover .grip, .edge:focus-visible .grip { background: var(--accent-text); }
+.edge:focus-visible { outline: none; }
+.tabstrip { display: flex; align-items: stretch; gap: 4px; height: 40px; padding: 6px 10px 0; border-bottom: 1px solid var(--border-subtle); overflow-x: auto; }
+.termsplit { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* 百分比负责比例,像素下限负责"再拖也不会变成一条缝"。两个都要:百分比在矮窗口
+   上会退化 —— 15% 在 600px 高的窗口里只有 90px,连表头带一行都放不下。终端一侧
+   同理,见下面 .session 的下限。 */
+.gridpanel { flex: 0 0 42%; min-height: 120px; }
+.termsplit > :deep(.session) { min-height: 140px; }
+
+/* 分隔条。命中区比看得见的线宽,鼠标不用瞄准 —— 一条 1px 的线拖起来是折磨。 */
+.splitter {
+  position: relative; flex: 0 0 10px; cursor: row-resize;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: none; padding: 0;
+  touch-action: none; /* 触摸时由脚本接管,不要让浏览器先滚页面 */
+}
+.splitter .grip {
+  width: 44px; height: 3px; border-radius: var(--radius-full);
+  background: var(--border-default);
+  transition: background var(--dur-fast, 0.15s) var(--ease-out, ease),
+              width var(--dur-fast, 0.15s) var(--ease-out, ease);
+}
+.splitter:hover .grip, .splitter.dragging .grip { background: var(--accent-text); width: 64px; }
+.splitter:focus-visible { outline: none; }
+.splitter:focus-visible .grip { background: var(--accent-text); width: 64px; box-shadow: 0 0 0 3px var(--accent-subtle); }
+/* 拖动时整页禁选,否则一拖就把终端里的文字选中一片。 */
+.splitter.dragging { cursor: row-resize; }
+:global(body:has(.splitter.dragging)) { cursor: row-resize; user-select: none; }
+.tabspacer { flex: 1; min-width: 8px; }
+.tord { margin-left: 4px; font: 600 10.5px var(--font-mono); color: var(--text-faint); }
+.tbtn { display: inline-flex; align-items: center; gap: 6px; align-self: center; height: 26px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-sunken); color: var(--text-muted); font: 600 11px var(--font-mono); cursor: pointer; flex-shrink: 0; white-space: nowrap; }
+.tbtn:hover { color: var(--text-body); }
+.tbtn.on { background: var(--accent-subtle); color: var(--accent-text); border-color: var(--accent-text); }
+/* 这个会话此刻连没连上。整站的网关延迟在顶栏,这里说的是**这一条 socket**。 */
+.wschip { display: inline-flex; align-items: center; gap: 5px; align-self: center; height: 26px; padding: 0 9px; border-radius: 8px; font: 600 10.5px var(--font-mono); flex-shrink: 0; white-space: nowrap; }
+.wschip.open { background: var(--success-subtle); color: var(--success-text); }
+.wschip.connecting { background: var(--warning-subtle); color: var(--warning-text); }
+.wschip.closed { background: var(--danger-subtle); color: var(--danger-text); }
+
+/* 生产安全横幅:常驻在终端上方,不会被滚屏顶走。 */
+.safety { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid; font: 500 11.5px var(--font-body); }
+.safety.danger { background: var(--danger-subtle); border-color: var(--danger); color: var(--danger-text); }
+.safety.warn { background: var(--warning-subtle); border-color: var(--warning); color: var(--warning-text); }
+.safety .sbi { flex-shrink: 0; }
+.sbtxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbtxt b { font-weight: 700; }
+.sbtxt code { font: 600 11px var(--font-mono); }
+.sbsep { margin: 0 6px; opacity: .5; }
+.sbbtn { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border: 1px solid currentColor; border-radius: 7px; background: transparent; color: inherit; font: 600 10.5px var(--font-body); cursor: pointer; }
+.sbbtn:hover { background: rgba(255, 255, 255, .35); }
+.tab {
+  display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 10px 0 12px; border-radius: 9px 9px 0 0;
+  background: var(--surface-sunken); border: 1px solid var(--border-subtle); border-bottom: none;
+  font: 500 12px var(--font-mono); color: var(--text-muted); cursor: pointer; white-space: nowrap;
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tab:hover { color: var(--text-body); }
+.tab.active { background: var(--surface-page); color: var(--text-strong); border-color: var(--border-default); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.dot.off { background: var(--warning); }
+.tname { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.tdb { color: var(--text-faint); font-weight: 400; }
+.tab.active .tdb { color: var(--text-muted); }
+.close { display: flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 5px; color: var(--text-faint); }
+.close:hover { background: var(--danger-subtle); color: var(--danger-text); }
+.empty { flex: 1; display: flex; align-items: center; justify-content: center; font: 500 13px var(--font-mono); color: var(--text-faint); }

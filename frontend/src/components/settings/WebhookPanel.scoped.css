@@ -1,0 +1,40 @@
+.wh { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
+.whhead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
+.whic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.grow { flex: 1; }
+.wht { font: 600 14px var(--font-display); color: var(--text-strong); }
+.whs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
+.whbadge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font: 600 11px var(--font-mono); }
+.dotc { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.whgrid { padding: 18px 20px; display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px 22px; }
+.fl { font: 500 11px var(--font-body); color: var(--text-faint); margin-bottom: 6px; }
+/* 提示跟在小标题后面,比它还弱一档 —— 它是一句说明,不该跟那四个格子抢注意力。 */
+.fl .hint { margin-left: 8px; opacity: 0.75; }
+.span2 { grid-column: 1 / -1; }
+.whbox { display: flex; align-items: center; gap: 8px; height: 40px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--surface-sunken); padding: 0 12px; }
+.method { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 6px; background: var(--accent-subtle); color: var(--accent-text); font: 600 10px var(--font-mono); }
+.ep { font: 500 13px var(--font-mono); color: var(--text-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+input.ep { flex: 1; min-width: 0; background: transparent; border: none; outline: none; }
+.mono { font: 500 13px var(--font-mono); }
+.mute { color: var(--text-muted); }
+.evs { display: flex; flex-wrap: wrap; gap: 7px; }
+.ev { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 11px; border-radius: 8px; font: 600 11px var(--font-mono); }
+.ev.danger { background: var(--danger-subtle); color: var(--danger-text); }
+.ev.warn { background: var(--warning-subtle); color: var(--warning-text); }
+.ev.accent { background: var(--accent-subtle); color: var(--accent-text); }
+.ev.off { border: 1px dashed var(--border-default); color: var(--text-faint); }
+.retry { display: flex; align-items: center; gap: 14px; font: 500 12px var(--font-mono); color: var(--text-muted); }
+.retry .sep { color: var(--border-strong); }
+.retry .green { color: var(--success-text); }
+.whfoot { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--border-subtle); background: var(--surface-raised); }
+.whstatus { display: flex; align-items: center; gap: 7px; font: 500 12px var(--font-mono); }
+.whacts { margin-left: auto; display: flex; gap: 10px; }
+.whlog { border-top: 1px solid var(--border-subtle); background: var(--surface-sunken); padding: 8px 20px 14px; display: flex; flex-direction: column; }
+.whlog-empty { padding: 14px 0; font: 500 12px var(--font-body); color: var(--text-faint); text-align: center; }
+.whlog-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-mono); }
+.whlog-row:last-child { border-bottom: none; }
+.whlog-ev { color: var(--text-strong); min-width: 78px; }
+.whlog-att { color: var(--text-muted); }
+.whlog-time { margin-left: auto; color: var(--text-faint); }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
