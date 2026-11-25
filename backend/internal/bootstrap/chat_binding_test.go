@@ -78,6 +78,15 @@ func (a *testApp) bindAs(email, account string) (token string) {
 	return token
 }
 
+func (a *testApp) chatUser(ch chat.Channel, bot, account string) *model.User {
+	a.t.Helper()
+	u, err := a.svc.ChatUserOf(ch, bot, account)
+	if err != nil {
+		a.t.Fatal(err)
+	}
+	return u
+}
+
 func (a *testApp) chatRows(userID int64) []model.ChatBinding {
 	a.t.Helper()
 	var rows []model.ChatBinding
@@ -178,14 +187,14 @@ func TestChatBind_HappyPath(t *testing.T) {
 			t.Errorf("列表不该带 %q: %s", secret, raw)
 		}
 	}
-	if got := app.svc.ChatUserOf(chat.Lark, chatBot, "ou_1"); got == nil || got.ID != u.ID {
+	if got := app.chatUser(chat.Lark, chatBot, "ou_1"); got == nil || got.ID != u.ID {
 		t.Errorf("ChatUserOf = %+v", got)
 	}
 	for what, got := range map[string]*model.User{
-		"别的账号":  app.svc.ChatUserOf(chat.Lark, chatBot, "ou_2"),
-		"别的机器人": app.svc.ChatUserOf(chat.Lark, "cli_other", "ou_1"),
-		"别的渠道":  app.svc.ChatUserOf(chat.Telegram, chatBot, "ou_1"),
-		"大小写不同": app.svc.ChatUserOf(chat.Lark, chatBot, "OU_1"),
+		"别的账号":  app.chatUser(chat.Lark, chatBot, "ou_2"),
+		"别的机器人": app.chatUser(chat.Lark, "cli_other", "ou_1"),
+		"别的渠道":  app.chatUser(chat.Telegram, chatBot, "ou_1"),
+		"大小写不同": app.chatUser(chat.Lark, chatBot, "OU_1"),
 	} {
 		if got != nil {
 			t.Errorf("ChatUserOf %s 应为 nil", what)
@@ -323,7 +332,7 @@ func TestChatBind_AccountTakenAndReplace(t *testing.T) {
 	if rows := app.chatRows(chen.ID); len(rows) != 1 || rows[0].AccountID != "ou_9" || rows[0].ChatID != "oc_ou_9" {
 		t.Errorf("应替换成新账号: %+v", rows)
 	}
-	if app.svc.ChatUserOf(chat.Lark, chatBot, "ou_1") != nil {
+	if app.chatUser(chat.Lark, chatBot, "ou_1") != nil {
 		t.Error("旧聊天账号应不再算数")
 	}
 	// 腾出来的旧账号可以给别人
@@ -462,7 +471,7 @@ func TestChatBind_BotChanged(t *testing.T) {
 	}
 	for _, bot := range []string{"cli_new", ""} { // 空 = 机器人还没连上
 		fc.setBot(bot, "New")
-		if app.svc.ChatBindingOf(u.ID, chat.Lark) != nil || app.svc.ChatUserOf(chat.Lark, chatBot, "ou_1") != nil {
+		if app.svc.ChatBindingOf(u.ID, chat.Lark) != nil || app.chatUser(chat.Lark, chatBot, "ou_1") != nil {
 			t.Errorf("机器人是 %q 时旧绑定不该算数", bot)
 		}
 		if _, list := app.chatBindings(token); len(list) != 1 || list[0].Bound || list[0].BoundAt != nil {
@@ -477,7 +486,7 @@ func TestChatBind_BotChanged(t *testing.T) {
 		t.Errorf("应替换旧绑定: %+v", rows)
 	}
 	app.svc.SetChatTransport(chat.Lark, nil)
-	if app.svc.ChatBindingOf(u.ID, chat.Lark) != nil || app.svc.ChatUserOf(chat.Lark, "cli_new", "ou_7") != nil {
+	if app.svc.ChatBindingOf(u.ID, chat.Lark) != nil || app.chatUser(chat.Lark, "cli_new", "ou_7") != nil {
 		t.Error("渠道关掉后不该算数")
 	}
 }
@@ -565,7 +574,7 @@ func TestChatUnbind_Automatic(t *testing.T) {
 			if rows := app.chatRows(u.ID); len(rows) != 0 {
 				t.Errorf("绑定应没了: %+v", rows)
 			}
-			if app.svc.ChatUserOf(chat.Lark, chatBot, "ou_1") != nil {
+			if app.chatUser(chat.Lark, chatBot, "ou_1") != nil {
 				t.Error("聊天账号应不再算数")
 			}
 			// 即使账号此刻是在职的(停用后又启用),旧码也兑不了

@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
@@ -133,22 +135,26 @@ func (s *Services) ChatBindingOf(userID int64, ch chat.Channel) *model.ChatBindi
 	return b
 }
 
-// ChatUserOf 认出一个聊天账号是网关里的谁;没绑定、渠道关着、来自别的机器人都是 nil。
+// ChatUserOf 认出一个聊天账号是网关里的谁;没绑定、渠道关着、来自别的机器人都是 nil。库读不出来是
+// 错误,不当成没绑定。
 //
 // 只回答"是谁",不判断他此刻还能不能批:在职、真人、菜单由调用方逐条查,好告诉对方卡在哪一条。
-func (s *Services) ChatUserOf(ch chat.Channel, botID, accountID string) *model.User {
+func (s *Services) ChatUserOf(ch chat.Channel, botID, accountID string) (*model.User, error) {
 	if botID == "" || botID != s.chatBotID(ch) {
-		return nil
+		return nil, nil
 	}
 	b, err := s.Repo.ChatBindingOfAccount(string(ch), botID, accountID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	u, err := s.Repo.GetUserByID(b.UserID)
-	if err != nil {
-		return nil
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
 	}
-	return u
+	return u, err
 }
 
 // NewChatBindCode 给本人生成一个绑定码。u 是这个请求认出来的用户;mfaCode 只在他启用了 MFA 时要。

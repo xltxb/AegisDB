@@ -43,22 +43,32 @@ func (b DecideBlock) Reason() string {
 //
 // 判断顺序就是要说给人听的顺序:先看这张单还在不在待办里(已处理的谁都动不了),
 // 再看是不是自己发起的(他在链上,说他"不是链成员"是指错方向),最后才看链成员。
+//
+// 审批链读不出来时按不在链上(fail-closed);要分清这两者的用 decideBlock。
 func (s *Services) DecideBlockFor(u *model.User, ap *model.Approval) DecideBlock {
+	block, _ := s.decideBlock(u, ap)
+	return block
+}
+
+// decideBlock 是 DecideBlockFor 再带上「审批链读不出来」:真要动手做决定的地方,不能把库的一次抖动
+// 说成「你不在链上」。出错时的 block 仍是拒绝。
+func (s *Services) decideBlock(u *model.User, ap *model.Approval) (DecideBlock, error) {
 	if u == nil || ap == nil {
-		return BlockNotInChain
+		return BlockNotInChain, nil
 	}
 	if ap.Status != model.StatusPending {
-		return BlockNotPending
+		return BlockNotPending, nil
 	}
 	// 两人控制(R16):发起人不能决定自己的工单,除非管理员显式开了自审批开关
 	// (小团队 / 单人运维)。默认关闭,保住职责分离。
 	if u.ID == ap.InitiatorID && !s.settingBool("approval.allowSelfApprove", false) {
-		return BlockSelf
+		return BlockSelf, nil
 	}
-	if !s.isChainMember(ap.ID, u) {
-		return BlockNotInChain
+	member, err := s.chainMember(ap.ID, u)
+	if err != nil || !member {
+		return BlockNotInChain, err
 	}
-	return BlockNone
+	return BlockNone, nil
 }
 
 // CanDecide is the boolean the console needs on every row.

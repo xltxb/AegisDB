@@ -24,15 +24,16 @@ func (r *Repo) ChatBindingOfUser(userID int64, channel string) (*model.ChatBindi
 // 库里的比较不分大小写(MySQL *_ci、PG citext),而聊天账号标识是平台给的不透明串 —— 这是在认人,
 // 差一个大小写也是另一个人,所以取出来再逐字比一遍。
 func (r *Repo) ChatBindingOfAccount(channel, botID, accountID string) (*model.ChatBinding, error) {
-	var b model.ChatBinding
-	err := r.db.Where("channel = ? AND bot_id = ? AND account_id = ?", channel, botID, accountID).First(&b).Error
+	var bs []model.ChatBinding
+	// 不用 First:查不到时 GORM 会记一行日志,而谁都能拿一个没绑定的账号来点。
+	err := r.db.Where("channel = ? AND bot_id = ? AND account_id = ?", channel, botID, accountID).Limit(1).Find(&bs).Error
 	if err != nil {
 		return nil, err
 	}
-	if b.BotID != botID || b.AccountID != accountID {
+	if len(bs) == 0 || bs[0].BotID != botID || bs[0].AccountID != accountID {
 		return nil, gorm.ErrRecordNotFound
 	}
-	return &b, nil
+	return &bs[0], nil
 }
 
 // ChatCardByTokenHash 按按钮令牌的摘要取卡片;没有返回 gorm.ErrRecordNotFound。
@@ -42,11 +43,15 @@ func (r *Repo) ChatCardByTokenHash(hash string) (*model.ChatCard, error) {
 	if hash == "" {
 		return nil, gorm.ErrRecordNotFound
 	}
-	var c model.ChatCard
-	if err := r.db.Where("token_hash = ?", hash).First(&c).Error; err != nil {
+	var cs []model.ChatCard
+	// 不用 First,理由同 ChatBindingOfAccount。
+	if err := r.db.Where("token_hash = ?", hash).Limit(1).Find(&cs).Error; err != nil {
 		return nil, err
 	}
-	return &c, nil
+	if len(cs) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &cs[0], nil
 }
 
 // 兑换绑定码时可以说清楚的两种失败;其余错误都是系统问题。

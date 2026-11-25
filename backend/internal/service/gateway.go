@@ -690,16 +690,22 @@ func (s *Services) createApprovalWith(u *model.User, conn *model.Connection, sql
 // isChainMember reports whether the user is an approver on the given approval's
 // chain (i.e. one of its step approvers).
 func (s *Services) isChainMember(approvalID int64, u *model.User) bool {
+	member, _ := s.chainMember(approvalID, u)
+	return member
+}
+
+// chainMember 是 isChainMember 再带上「审批链读不出来」的错误。
+func (s *Services) chainMember(approvalID int64, u *model.User) (bool, error) {
 	if u == nil {
-		return false
+		return false, nil
 	}
-	steps, _ := s.Repo.StepsOf(approvalID)
+	steps, err := s.Repo.StepsOf(approvalID)
 	for _, st := range steps {
 		if st.ApproverID == u.ID {
-			return true
+			return true, err
 		}
 	}
-	return false
+	return false, err
 }
 
 // defaultChainSteps returns the fallback approval chain (DBA-owner role members).
@@ -745,13 +751,23 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // DecideApprovalVia 是带渠道的 DecideApproval:站内与聊天卡片走的是同一套规则、同一个决定核心,
 // 区别只在审计里看得出是从哪里点的。reason 只对拒绝有意义,通过时忽略。
 func (s *Services) DecideApprovalVia(actor *model.User, id int64, approve bool, via, reason string) (*dto.ExecResp, error) {
+	// via 会写进库里、决定审计上的操作人,只认已知的几个。
+	switch via {
+	case viaConsole, viaAPI, string(chat.Lark), string(chat.Telegram):
+	default:
+		return nil, ErrBadRequest
+	}
 	ap, err := s.Repo.GetApproval(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
 	// 能不能决定这张单,只有一处判断(DecideBlockFor)—— 它同时喂给待办列表,
 	// 所以按钮亮不亮和点下去放不放行,永远说的是同一件事。
-	switch block := s.DecideBlockFor(actor, ap); block {
+	block, err := s.decideBlock(actor, ap)
+	if err != nil {
+		return nil, err
+	}
+	switch block {
 	case BlockNone:
 	case BlockNotPending:
 		return nil, ErrAlreadyDecided
@@ -813,9 +829,15 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 	// 窗口单只认窗口此刻挂着的那一张:窗口改过(另起了新单)或删了,旧单就作废,
 	// 批准它不能让改过之后的定义生效(2026-10 黑盒,工单 01 第 2、3 条)。顺手把它撤掉,
 	// 别让它继续躺在待办里。
-	if ap.WindowID > 0 && !s.windowTicketCurrent(ap) {
-		s.cancelStaleWindowTicket(nil, ap, apimsg.Text("执行窗口已修改或删除,此单作废"))
-		return nil, ErrAlreadyDecided
+	if ap.WindowID > 0 {
+		current, err := s.windowTicketCurrent(ap)
+		if err != nil {
+			return nil, err // 读不出来不等于旧单,不能就此把它撤掉
+		}
+		if !current {
+			s.cancelStaleWindowTicket(nil, ap, apimsg.Text("执行窗口已修改或删除,此单作废"))
+			return nil, ErrAlreadyDecided
+		}
 	}
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	// 走 applyTargetDatabase,不要裸赋值:Oracle 上 conn.Database 是服务名,直接写

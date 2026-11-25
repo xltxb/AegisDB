@@ -75,6 +75,21 @@ var texts = map[string]map[string]string{
 		"bind.locked":  "绑定码输错次数过多,请 15 分钟后再试。",
 		"bind.off":     "这个审批机器人没有开启,暂时不能绑定。",
 		"bind.failed":  "绑定失败,请稍后再试。",
+
+		// 点击之后的提示。Telegram 的上限是 200 个字符。
+		"click.approved": "已通过",
+		"click.rejected": "已拒绝",
+		"click.handled":  "这张审批单已经处理过了。",
+		"click.invalid":  "卡片已失效,请到网关查看。",
+		"click.unbound":  "这个聊天账号没有绑定网关账号,请先在网关里绑定。",
+		"click.inactive": "你的网关账号不可用,不能审批。",
+		"click.notHuman": "服务账号不能审批。",
+		"click.noMenu":   "你没有「审批」菜单的权限,请联系管理员。",
+		"click.self":     "不能审批自己发起的单子,请审批链上的其他人处理。",
+		"click.notChain": "你不在这张审批单的审批链上。",
+		"click.off":      "这个审批机器人没有开启,请到网关处理。",
+		"click.retry":    "处理失败,请稍后再试。",
+		"click.test":     "测试成功。这是测试卡片,没有审批任何单子。",
 	},
 	"en": {
 		"title.command": "High-risk command awaiting approval",
@@ -145,6 +160,20 @@ var texts = map[string]map[string]string{
 		"bind.locked":  "Too many wrong binding codes. Try again in 15 minutes.",
 		"bind.off":     "This approval bot is turned off. Linking is not available right now.",
 		"bind.failed":  "Linking failed. Please try again later.",
+
+		"click.approved": "Approved",
+		"click.rejected": "Rejected",
+		"click.handled":  "This request has already been handled.",
+		"click.invalid":  "This card is no longer valid. Check the gateway.",
+		"click.unbound":  "This chat account is not linked to a gateway account. Link it in the gateway first.",
+		"click.inactive": "Your gateway account is not active, so you cannot approve.",
+		"click.notHuman": "Service accounts cannot approve.",
+		"click.noMenu":   "You do not have access to the Approvals menu. Contact an administrator.",
+		"click.self":     "You cannot decide your own request. Ask someone else on the approval chain.",
+		"click.notChain": "You are not on the approval chain of this request.",
+		"click.off":      "This approval bot is turned off. Use the gateway instead.",
+		"click.retry":    "Something went wrong. Please try again later.",
+		"click.test":     "Test succeeded. This is a test card; no request was approved.",
 	},
 }
 
