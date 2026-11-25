@@ -7,7 +7,7 @@
 //
 // 提交之后窗口停在待审批,判定层一行都不放行(闸门在后端 ExecWindowsFor 的 status
 // 条件上,不在这一页)。通过之后它才按自己的时间表开合。
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import clsx from 'clsx'
@@ -25,7 +25,7 @@ import { useAuthStore } from '@/stores/auth'
 import { parseDbList } from '@/lib/dbList'
 import { useI18n } from '@/hooks/useI18n'
 import { useRoute } from '@/hooks/useNav'
-import { useMountEffect, useUpdateEffect } from '@/hooks/effects'
+import { useMountEffect } from '@/hooks/effects'
 import { useStateRef } from '@/hooks/useStateRef'
 import type { Connection, ExecWindow, WindowStatements } from '@/types'
 import './ExecWindowsView.scoped.css'
@@ -96,7 +96,7 @@ export default function ExecWindowsView() {
   const [conns, setConns, connsRef] = useStateRef<Connection[]>([])
   const [windows, setWindows, windowsRef] = useStateRef<ExecWindow[]>([])
   const [busy, setBusy] = useState(false)
-  const [winForm, setWinForm, winFormRef] = useStateRef(false)
+  const [winForm, setWinForm] = useState(false)
 
   // 星期缩写:1=周一 … 7=周日,与 ISO-8601 一致,也是 daysToIso 用的那套编号。
   const dayLabels = [1, 2, 3, 4, 5, 6, 7].map((n) => t(`dow${n}`))
@@ -125,6 +125,9 @@ export default function ExecWindowsView() {
   // 所以改成从实例真实的库列表里选。探查失败时不静默留空:那时给回手工输入,并把
   // 失败原因说出来 —— 连不上目标库是一个要人去处理的事实,不是一个空下拉框。
   const [dbOptions, setDbOptions, dbOptionsRef] = useStateRef<string[]>([])
+  /** 实例上真实列出来的库(dbOptions 里还可能有补进去的旧库,见 loadDbOptions)。 */
+  const [dbListed, setDbListed] = useState<string[]>([])
+  const dbSeq = useRef(0)
   const [dbLoading, setDbLoading] = useState(false)
   const [dbErr, setDbErr] = useState('')
   /** 探查完成过一次(用来区分"还没查"和"查完了但一个库都没有")。 */
@@ -141,27 +144,33 @@ export default function ExecWindowsView() {
   }
 
   async function loadDbOptions(keep: string[] = []) {
+    // 请求编号:连着换实例(或关掉再开另一张窗口)时只认最后一次,迟到的响应不能盖掉它
+    const seq = ++dbSeq.current
     const c = selectedConn()
     setDbOptions([])
+    setDbListed([])
     setDbErr('')
     setDbProbed(false)
+    setDbLoading(!!c)
     if (!c) return
-    setDbLoading(true)
+    let listed: string[] = []
+    let err = ''
     try {
       const r = await api.connectionSchema(c.id)
-      if (r.error) setDbErr(r.error)
-      setDbOptions((r.databases || []).map((d) => d.name))
+      err = r.error || ''
+      listed = (r.databases || []).map((d) => d.name)
     } catch (e: any) {
-      setDbErr(e?.message || String(e))
-    } finally {
-      setDbLoading(false)
-      setDbProbed(true)
+      err = e?.message || String(e)
     }
+    if (seq !== dbSeq.current) return
+    setDbErr(err)
+    setDbLoading(false)
+    setDbProbed(true)
+    setDbListed(listed)
     // 编辑一张老窗口时,它的库可能已经不在列表里(改过名、或者现在连不上)。
     // 把它补回选项里,而不是悄悄换成第一个 —— 那会把这次编辑变成一次改库。
-    const missing = keep.filter((k) => !dbOptionsRef.current.includes(k))
-    if (missing.length && dbOptionsRef.current.length) setDbOptions([...missing, ...dbOptionsRef.current])
-    const opts = dbOptionsRef.current
+    const opts = listed.length ? [...keep.filter((k) => !listed.includes(k)), ...listed] : []
+    setDbOptions(opts)
     if (opts.length) {
       // 换了实例:上一台的库在这一台上多半不存在,只留这一台上有的;一个都不剩就先勾第一个
       const left = wfRef.current.databases.filter((d) => opts.includes(d))
@@ -171,7 +180,13 @@ export default function ExecWindowsView() {
     }
   }
   // 换实例就换库列表:上一台实例的库名在这一台上多半不存在。
-  useUpdateEffect(() => { if (winFormRef.current) void loadDbOptions() }, [wf.connLabel])
+  // 只由人换实例触发。从前盯着 connLabel 变化,打开编辑表单填表也算"换实例",于是紧跟着又
+  // 不带 keep 地加载一次,把刚补回来的旧库冲掉(issue #103)。
+  function changeInstance(label: string) {
+    if (label === wfRef.current.connLabel) return
+    patchWf({ connLabel: label })
+    void loadDbOptions()
+  }
 
   /**
    * 目标库对不上这台实例时的警告。
@@ -190,7 +205,7 @@ export default function ExecWindowsView() {
   const dbWarn = (() => {
     if (!winForm || dbLoading || !dbProbed || dbErr) return ''
     if (!dbOptions.length) return t('ewDbNoList')
-    const missing = wf.databases.filter((d) => !dbOptions.includes(d))
+    const missing = wf.databases.filter((d) => !dbListed.includes(d))
     if (missing.length) return t('ewDbNotFound', { db: missing.join(', ') })
     return ''
   })()
@@ -466,7 +481,7 @@ export default function ExecWindowsView() {
                 <div><div className="fl">{t('ewFReason')}</div><input value={wf.reason ?? ''} onChange={(e) => patchWf({ reason: e.target.value })} placeholder={t('ewReasonPh')} /></div>
               </div>
               <div className="frow">
-                <div><div className="fl">{t('ewFInstance')}</div><VSelect value={wf.connLabel} onChange={(v) => patchWf({ connLabel: v })} options={connOptions} searchable data-testid="ew-instance" /></div>
+                <div><div className="fl">{t('ewFInstance')}</div><VSelect value={wf.connLabel} onChange={changeInstance} options={connOptions} searchable data-testid="ew-instance" /></div>
                 <div>
                   <div className="fl">{t('ewFDatabase')}</div>
                   {/* 库名从实例真实的库列表里选:打错一个字的后果不是报错,是窗口

@@ -70,3 +70,65 @@ test('班车申请:勾选多个库一起提交,列表显示全部库', async ({ 
   expect(bodies[0].database).toBe('gaussdb')
   await expect(page.getByTestId('ew-scope').first()).toContainText('gaussdb, prod_c66_b')
 })
+
+// issue #103:编辑一张旧窗口时,它的库已经不在实例的库列表里 —— 打开表单就被悄悄换成第一个库,
+// 直接保存等于改了库。窗口按 (实例, 库) 精确匹配,换错了不会报错,只会开在别的库上。
+const OLD = { id: 5, name: '旧班车', enabled: true, connectionId: 3, database: 'old_db', databases: ['old_db'], kind: 'recurring',
+  timezone: 'Asia/Shanghai', weekdays: '', startMin: 120, endMin: 240, reason: 'r', status: 'approved', apNo: 'AP-5',
+  active: false, expired: false, createdBy: 1 }
+
+test('编辑旧窗口:不在列表里的库保留下来、说清楚,保存的还是它', async ({ page }) => {
+  const bodies: any[] = []
+  let probes = 0
+  await stubCommon(page)
+  await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, menus: { ...ME.menus, execwindow: true } })))
+  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(CONNS)))
+  await page.route('**/api/v1/exec-windows', (r) => r.fulfill(envelope([OLD])))
+  await page.route('**/api/v1/exec-windows/5', (r) => { bodies.push(r.request().postDataJSON()); return r.fulfill(envelope(OLD)) })
+  await page.route('**/api/v1/connections/*/schema*', (r) => {
+    probes++
+    return r.fulfill(envelope({ databases: [{ name: 'a_db' }, { name: 'b_db' }] }))
+  })
+  await page.goto('/#/exec-windows')
+  await page.getByTestId('ew-edit').click()
+  const db = page.getByTestId('ew-database')
+  await expect(db).toBeVisible()
+  await page.waitForTimeout(300)
+  await expect(db.getByTestId('vtag-chip')).toHaveText(['old_db'])
+  await expect(page.locator('.dbwarn')).toContainText('old_db')
+  expect(probes).toBe(1) // 打开一次只探查一次
+
+  await page.locator('.vbtn', { hasText: '提交审批' }).click()
+  await expect.poll(() => bodies.length).toBe(1)
+  expect(bodies[0].databases).toEqual(['old_db'])
+})
+
+test('连着换两次实例:先发后到的库列表不盖掉后选的那台', async ({ page }) => {
+  let release = () => {}
+  const gate = new Promise<void>((res) => { release = res })
+  await stubCommon(page)
+  await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, menus: { ...ME.menus, execwindow: true } })))
+  await page.route('**/api/v1/connections', (r) => r.fulfill(envelope(CONNS)))
+  await page.route('**/api/v1/exec-windows', (r) => r.fulfill(envelope([])))
+  await page.route('**/api/v1/connections/*/schema*', async (r) => {
+    const id = /connections\/(\d+)\//.exec(r.request().url())![1]
+    if (id === '3') await gate // GLI-MYSQL 慢
+    return r.fulfill(envelope({ databases: [{ name: `db_of_${id}` }] }))
+  })
+  await page.goto('/#/exec-windows')
+  await page.getByRole('button', { name: '申请窗口' }).click()
+  const chips = page.getByTestId('ew-database').getByTestId('vtag-chip')
+  await expect(chips).toHaveText(['db_of_1'])
+  const pick = async (name: string) => {
+    await page.getByTestId('ew-instance').locator('.control').click()
+    await page.getByTestId('ew-instance').locator('.opt', { hasText: name }).click()
+  }
+  await pick('GLI-MYSQL')
+  await pick('GLI-ORACLE')
+  await expect(chips).toHaveText(['db_of_4'])
+  const late = page.waitForResponse('**/connections/3/schema*')
+  release()
+  await late
+  await page.waitForTimeout(200)
+  await expect(chips).toHaveText(['db_of_4'])
+})
