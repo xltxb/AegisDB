@@ -122,11 +122,12 @@ SSO **只做认证**:SRD Portal 回答"你是谁"(邮箱),网关照旧用自己�
 ### 账号怎么对上
 
 - 登录时按**邮箱**匹配,不分大小写。网关里已有这个邮箱的账号 → 就是这个人,权限原样保留。
-- 网关里**没有**这个邮箱 → 自动建号,**不分配任何角色**,并直接记为已绑定;能登录但看不到任何菜单,
-  登录页提示"等待管理员分配角色"。建号写审计 `sso.provision`。
+- 网关里**没有**这个邮箱 → **拒绝登录**,不会自动建号(接口码 `40302`),登录页弹窗提示"无权限访问",
+  并记登录失败审计。由管理员在【权限 · 用户】新建或邀请这个邮箱后再登录。
 - 网关里**停用**的账号、**服务账号**:SRD 认也进不来。**受邀**账号:经 SRD 首登即激活。
 - 部门同步自 SRD userinfo 的 `internal_department`(为空时退回 `department`);姓名不覆盖(管理员可能在网关里改过)。
-- 登录这一步不再要网关的 TOTP;**生产操作的步进验证照常**。
+- 登录这一步一般不再要网关的 TOTP;例外是**已绑定 TOTP 的平台管理员**,经 SSO 登录也要输码。
+  **生产操作的步进验证照常**。
 
 ### 存量账号:登录时自动绑定
 
@@ -135,8 +136,8 @@ SSO **只做认证**:SRD Portal 回答"你是谁"(邮箱),网关照旧用自己�
 1. 存量账号的主人**第一次经 SRD 授权登录**、邮箱对上网关账号时,当场绑定,写审计 `sso.bind`。
 2. 绑定后,非管理员**只能经 SSO 登录**,用口令登录会被拒并提示改走 SSO。
    **管理员始终保留口令登录**作应急门。
-3. 还没经 SRD 登录过的账号不受影响,照常用口令;邮箱在两边写法不一致的人,经 SRD 进来得到的是
-   一个新的零权限账号,原账号不受影响,需要管理员核对处理。
+3. 还没经 SRD 登录过的账号不受影响,照常用口令;邮箱在两边写法不一致的人(大小写不算),
+   经 SRD 进来会按"没有这个邮箱"被拒绝,原账号不受影响,需要管理员核对处理。
 4. 用户列表每一行有 `SSO` 标签显示绑定状态,管理员点已绑定的标签可**解绑**(恢复口令登录,写审计
    `sso.unbind`)。解绑后这个人再经 SRD 登录,会重新绑定。
 
@@ -178,8 +179,9 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
 
 - 登录页只显示账号口令表单,不再自动跳 SRD;`POST /auth/sso` 一律拒绝。
 - **已绑定 SSO 的存量账号**立即恢复口令登录(口令没动过,还是原来那个)。
-- **首登时由 SSO 自动开通的账号没有口令**,关掉后登不进来:管理员在【权限 · 用户】点该账号的「管理」,
+- **经邀请开通、一直走 SSO 的账号没有口令**,关掉后登不进来:管理员在【权限 · 用户】点该账号的「管理」,
   给他设一个口令即可(写审计 `admin.password.reset`)。
+- **只有「业务查询」角色的账号**没有口令,也不允许设口令,SSO 关闭期间无法登录。
 - 绑定关系保留。重新打开 SSO 后,已绑定的人又只能走 SSO,不用重新绑定。
 
 ### 已知边界
@@ -196,6 +198,7 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
 | 变量 | 说明 |
 | --- | --- |
 | `AEGISDB_MYSQL_DSN` | 生产 MySQL DSN(覆盖配置文件) |
+| `AEGISDB_POSTGRES_DSN` | PostgreSQL 存储库 DSN,配合 `AEGISDB_DB_DRIVER=postgres` 使用 |
 | `AEGISDB_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位**;未设 `AEGISDB_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
 | `AEGISDB_SECRET_KEY` | 至静加密密钥,保护**连接口令与 TOTP 种子**(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量解密;**一经设定不可更改**(轮换会导致存量口令与 MFA 种子全部无法解密)。长度不足 32 位或字符种类过少时启动会打 WARN —— 只告警不拒绝启动,因为对一套已在跑的部署,拒启动等于锁死;用 `openssl rand -hex 32` 生成 |
 | `AEGISDB_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`) |
@@ -203,8 +206,8 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
 | `AEGISDB_WEBHOOK_SECRET` | 出站审计 Webhook / 飞书签名密钥(可选) |
 | `AEGISDB_SSO_DISABLED` | `1`/`true` 时强制关闭 SSO,所有人回到账号口令登录(覆盖设置页开关,需重启;见第 7 节) |
 | `AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED` | `1`/`true` 时管理后台 IP 白名单一律不生效(覆盖设置页,需重启)。白名单配错、管理员都进不了管理后台时用;本机回环本来就始终放行 |
-| `APP_ENV` / `AEGISDB_ENV` | `prod`→MySQL,`dev`→SQLite |
-| `AEGISDB_DB_DRIVER` | 强制 `mysql` \| `sqlite`(覆盖上面的 env 推断) |
+| `APP_ENV` / `AEGISDB_ENV` | `prod`→MySQL,`dev`→SQLite;其他值(如 `staging`)也回落 SQLite,需显式设 `AEGISDB_DB_DRIVER` |
+| `AEGISDB_DB_DRIVER` | 强制 `mysql` \| `postgres` \| `sqlite`(覆盖上面的 env 推断) |
 | `AEGISDB_ADMIN_EMAIL` / `AEGISDB_ADMIN_PASSWORD` / `AEGISDB_ADMIN_NAME` | `init` 时的管理员凭据 |
 
 > 本地开发仍用零依赖 SQLite:`cd backend && APP_ENV=dev go run ./cmd/server`,前端 `cd frontend && npm run dev`。
