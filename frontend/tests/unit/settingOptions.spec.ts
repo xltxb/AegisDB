@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-import { APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '../../src/lib/settingOptions'
+import { APPROVAL_TIMEOUT_FALLBACK, APPROVAL_TIMEOUT_KEYS, SESSION_TTL_KEYS, labelOf, keyOf, keyForLabel } from '../../src/lib/settingOptions'
 
 // Two "languages". Like the app's i18n, these are keyed by MESSAGE ID, not by the
 // stored value — the indirection under test.
@@ -42,7 +42,7 @@ test('a stored value survives a language switch', () => {
     expect(shown).toBe(zh[MSG[key]])
     // The user switches language; the model still holds the KEY, so reading it
     // back under the new language yields the same value.
-    expect(keyOf(key, APPROVAL_TIMEOUT_KEYS, 'auto-escalate')).toBe(key)
+    expect(keyOf(key, APPROVAL_TIMEOUT_KEYS, APPROVAL_TIMEOUT_FALLBACK)).toBe(key)
     expect(labelOf(key, (id) => en[id])).toBe(en[MSG[key]])
   }
   for (const key of SESSION_TTL_KEYS) {
@@ -52,7 +52,7 @@ test('a stored value survives a language switch', () => {
 })
 
 test('an unrecognised value falls back to the documented default', () => {
-  expect(keyOf('something-else', APPROVAL_TIMEOUT_KEYS, 'auto-escalate')).toBe('auto-escalate')
+  expect(keyOf('something-else', APPROVAL_TIMEOUT_KEYS, APPROVAL_TIMEOUT_FALLBACK)).toBe('keep-waiting')
   expect(keyOf('', SESSION_TTL_KEYS, '8h')).toBe('8h')
 })
 
@@ -66,8 +66,8 @@ test('the option lists cover the values the backend accepts', () => {
 // reverse mapping to store the key again. It resolves against the language in
 // use at that moment, which is the language the label was just rendered in.
 test('a picked label maps back to its key', () => {
-  expect(keyForLabel(zh['autoReject'], APPROVAL_TIMEOUT_KEYS, (id) => zh[id], 'auto-escalate')).toBe('auto-reject')
-  expect(keyForLabel(en['keepWaiting'], APPROVAL_TIMEOUT_KEYS, (id) => en[id], 'auto-escalate')).toBe('keep-waiting')
+  expect(keyForLabel(zh['autoReject'], APPROVAL_TIMEOUT_KEYS, (id) => zh[id], APPROVAL_TIMEOUT_FALLBACK)).toBe('auto-reject')
+  expect(keyForLabel(en['keepWaiting'], APPROVAL_TIMEOUT_KEYS, (id) => en[id], APPROVAL_TIMEOUT_FALLBACK)).toBe('keep-waiting')
   expect(keyForLabel(en['ttl24'], SESSION_TTL_KEYS, (id) => en[id], '8h')).toBe('24h')
   // Unknown text keeps the current default rather than inventing a value.
   expect(keyForLabel('mystery', SESSION_TTL_KEYS, (id) => en[id], '8h')).toBe('8h')

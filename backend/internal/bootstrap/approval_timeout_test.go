@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"aegisdb/internal/model"
 )
 
 type auditResultRow struct {
@@ -176,4 +178,24 @@ func TestApprovalTimeout_DecidedTicketCannotBeEscalated(t *testing.T) {
 	if claimed, _ := app.repo.ClaimEscalation(id); claimed {
 		t.Error("已有结论的单不能再升级")
 	}
+}
+
+// 库里没有 approval.onTimeout 时什么都不做(保持等待)。设置页的兜底与它一致,
+// 改这里要同时改 frontend/src/lib/settingOptions.ts(issue #134)。
+func TestApprovalTimeout_MissingPolicyKeepsWaiting(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	app.setSettings(admin, map[string]any{"approval.timeoutMinutes": 0})
+	if err := app.repo.DB().Where("k = ?", "approval.onTimeout").Delete(&model.Setting{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := app.repo.GetSetting("approval.onTimeout"); v != "" {
+		t.Fatalf("setting still present: %q", v)
+	}
+	ap := app.submitProdHighRisk(admin)
+
+	app.svc.SweepApprovalTimeouts()
+
+	eq(t, app.approvalRow(admin, ap.ApNo).Status, "pending", "单子仍待审批")
+	eq(t, app.countEscalations(admin, ap.ApNo), 0, "不该升级")
 }

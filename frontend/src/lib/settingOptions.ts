@@ -19,6 +19,12 @@ export const SESSION_TTL_KEYS = ['8h', '4h', '24h'] as const
 export type ApprovalTimeoutKey = (typeof APPROVAL_TIMEOUT_KEYS)[number]
 export type SessionTTLKey = (typeof SESSION_TTL_KEYS)[number]
 
+/** What the backend does when `approval.onTimeout` is missing or unrecognised
+ *  (SweepApprovalTimeouts takes no action). The page must show the same: Save
+ *  submits every setting, so any other fallback here would silently store a
+ *  policy nobody picked (#134). Not the seeded default, which is auto-escalate. */
+export const APPROVAL_TIMEOUT_FALLBACK: ApprovalTimeoutKey = 'keep-waiting'
+
 /** i18n message ids, one per key. */
 const MESSAGE_ID: Record<string, string> = {
   'auto-reject': 'autoReject',
