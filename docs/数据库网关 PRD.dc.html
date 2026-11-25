@@ -202,7 +202,7 @@
     <tr><td class="id">FR-RULE-01</td><td>高危字典内置 DROP、TRUNCATE、DELETE、ALTER、RENAME、GRANT、REVOKE 等命令,可新增自定义命令。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--success-text)">已实现</strong></td></tr>
     <tr><td class="id">FR-RULE-02</td><td>每个命令按环境(PROD/STAGING/DEV)分别配置三态:拦截 / 审批 / 放行,可点击循环切换。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：按分层配置；“拦截”实际是转审批（高风险），不是拒绝。</td></tr>
     <tr><td class="id">FR-RULE-03</td><td>规则即时生效:PROD 字典调整后,终端实时拦截与脚本扫描结果同步变化。</td><td><span style="color:var(--danger-text);font:600 11px var(--font-mono)">P0</span></td><td><strong style="color:var(--success-text)">已实现</strong>：所有分层即时生效，判定直接读库。</td></tr>
-    <tr><td class="id">FR-RULE-04</td><td>新建规则支持自定义触发命令(可勾选已有命令并输入任意命令)、适用环境、命中动作与审批链。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：可自定义命令、分层、动作；不能按规则选审批链。“仅告警”与“仅审批”保存结果相同，都会转审批。</td></tr>
+    <tr><td class="id">FR-RULE-04</td><td>新建规则支持自定义触发命令(可勾选已有命令并输入任意命令)、适用环境、命中动作与审批链。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--warning-text)">部分实现</strong>：可自定义命令、分层、动作（拦截+审批 / 仅审批）；不能按规则选审批链。</td></tr>
     <tr><td class="id">FR-RULE-05</td><td>严格模式开关:开启后拦截无 WHERE 的 DELETE / UPDATE。</td><td><span style="color:var(--warning-text);font:600 11px var(--font-mono)">P1</span></td><td><strong style="color:var(--accent-text)">有变更</strong>：全局开关改为按分层开关（ADR 0013）。</td></tr>
   </tbody>
 </table>
@@ -288,7 +288,6 @@
     <tr><td>“升级到负责人”开关</td><td>没有任何逻辑读它；超时“自动升级”也只写审计告警。</td><td>FR-APPR-05、FR-SET-02</td></tr>
     <tr><td>邮件通知</td><td>只有开关，没有发邮件的实现。</td><td>FR-SET-04</td></tr>
     <tr><td>拦截即时通知</td><td>只有开关，没有任何逻辑读它。</td><td>FR-SET-04</td></tr>
-    <tr><td>新建规则的“仅告警”</td><td>保存成“需审批”，与界面文字不符。</td><td>FR-RULE-04</td></tr>
     <tr><td>逐级审批</td><td>一人决定即生效，没有“组长 → 负责人”。</td><td>FR-APPR-05</td></tr>
     <tr><td>组织目录</td><td>没有对接。</td><td>FR-USER-04</td></tr>
     <tr><td>不可逆 / 锁表标签</td><td>没有。</td><td>FR-APPR-02</td></tr>
