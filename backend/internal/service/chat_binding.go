@@ -92,9 +92,6 @@ func (s *Services) ChatBotName(ch chat.Channel) string {
 	return ""
 }
 
-// cardLang 是发到聊天里的文字用的语言(全局设置,默认 zh)。
-func (s *Services) cardLang() string { return s.settingString("chat.cardLang", "zh") }
-
 // ChatBindingView 是本人看到的一个渠道的绑定状态。聊天账号与机器人的标识不出接口。
 type ChatBindingView struct {
 	Channel string     `json:"channel"`

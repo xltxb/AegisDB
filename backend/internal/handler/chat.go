@@ -100,3 +100,31 @@ func (h *Handler) ChatUnbindUser(c *gin.Context) {
 		resp.Fail(c, resp.CodeInternalError, "解绑失败")
 	}
 }
+
+// ChatStatus godoc
+// @Summary 各审批机器人渠道的连接状态(不含任何密钥)
+// @Router  /settings/chat-status [get]
+func (h *Handler) ChatStatus(c *gin.Context) { resp.OK(c, h.Svc.ChatStatus()) }
+
+// ChatTest godoc
+// @Summary 给自己发一张测试卡片(须先绑定)
+// @Router  /settings/chat-test [post]
+func (h *Handler) ChatTest(c *gin.Context) {
+	var req dto.ChatTestReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		resp.Fail(c, resp.CodeBadRequest, "参数错误")
+		return
+	}
+	if !slices.Contains(chat.Channels, req.Channel) {
+		resp.FailErr(c, resp.CodeBadRequest, service.ErrChatUnknown)
+		return
+	}
+	switch err := h.Svc.SendChatTest(c.Request.Context(), middleware.CurrentUser(c), req.Channel); {
+	case err == nil:
+		resp.OK(c, gin.H{"ok": true})
+	case errors.Is(err, service.ErrChatTestTooOften):
+		resp.FailErr(c, resp.CodeTooManyReqs, err)
+	default:
+		resp.FailErr(c, resp.CodeBadRequest, err)
+	}
+}

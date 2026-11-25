@@ -33,6 +33,8 @@ type Services struct {
 	chatCodeFails  *failBook[chatAccount]
 	chatCodeGens   *failBook[int64]
 	chatSweeping   sync.Map // chat.Channel → 正在扫描(chat_cards.go)
+	chatRun        chatRuntime
+	chatTests      *failBook[int64] // 测试卡片的频控(chat_runtime.go)
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
 	JWT        *jwt.Manager
@@ -85,6 +87,7 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		mfaFails:      newFailBook[int64](mfaMaxFails, mfaWindow, mfaLockout),
 		chatCodeFails: newFailBook[chatAccount](chatCodeMaxFails, chatCodeWindow, chatCodeLockout),
 		chatCodeGens:  newFailBook[int64](chatCodeMaxGens, chatCodeWindow, chatCodeLockout),
+		chatTests:     newFailBook[int64](1, 0, chatTestEvery),
 	}
 	// Seed counters from the MAX existing sequence (never reuse a number, even
 	// after rows are deleted); fall back to the demo base on a fresh DB.

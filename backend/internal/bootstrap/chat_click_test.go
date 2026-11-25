@@ -767,7 +767,7 @@ func TestChatClick_English(t *testing.T) {
 // 令牌不进日志;认不出来的点击一行日志都不写(不然谁都能刷),有身份却没资格的记一行。
 func TestChatClick_Logs(t *testing.T) {
 	app, lark, _ := cardApp(t)
-	app.setting("chat.cardLang", `"zh"`) // 没设过的键,GORM 每读一次记一行(全网关如此),不是这里要看的
+	app.repo.DB().Delete(&model.Setting{}, "k LIKE 'chat.%'") // 老库里没有这些键,也不该每点一次记一行
 	_, _, token, _ := app.sentCommand(lark)
 	var buf bytes.Buffer
 	old, oldDB := slog.Default(), app.repo.DB().Logger

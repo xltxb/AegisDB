@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -176,6 +177,31 @@ func secret(key string, v any) (any, error) {
 	return str(key, v)
 }
 
+// trimmedSecret:同 secret,去掉首尾空白。密钥多半是粘贴来的,带上一个换行就怎么都连不上,而存进去的
+// 值谁也看不见。
+func trimmedSecret(key string, v any) (any, error) {
+	nv, err := secret(key, v)
+	if s, ok := nv.(string); ok {
+		return strings.TrimSpace(s), err
+	}
+	return nv, err
+}
+
+// chatAppID:空串或一个应用标识。长度以绑定表里标识列的宽度为限:更长的应用谁也绑不上。
+func chatAppID(key string, v any) (any, error) {
+	sv, err := str(key, v)
+	if err != nil {
+		return nil, err
+	}
+	s := strings.TrimSpace(sv.(string))
+	if !chatAppIDRe.MatchString(s) {
+		return nil, apimsg.Errorf("%s 只能是字母、数字、下划线和短横线,最多 64 个字符", key)
+	}
+	return s, nil
+}
+
+var chatAppIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
+
 // passthrough:由专门的整体校验负责的键(业务查询那一组,见 service.CheckBizQuerySettings)。
 func passthrough(_ string, v any) (any, error) { return v, nil }
 
@@ -264,6 +290,13 @@ var settingSchema = map[string]settingCheck{
 	"notify.larkSecret":  secret,
 	"notify.larkChannel": str,
 	"notify.consoleURL":  httpURL,
+
+	// 聊天审批卡片(启用时的整体校验另见 checkChatSettings)
+	"chat.cardLang":       oneOf("zh", "en"),
+	"chat.lark.enabled":   boolean,
+	"chat.lark.region":    oneOf("feishu", "lark"),
+	"chat.lark.appId":     chatAppID,
+	"chat.lark.appSecret": trimmedSecret,
 
 	// 业务方数据查询:类型与范围由 service.CheckBizQuerySettings 叠到当前值上整体校验
 	service.SettingBizDefaultMaxRows:  passthrough,

@@ -1460,6 +1460,8 @@
     m425988b7: 'Invalid value for {0}',
     // %s 只能是 %s
     m319ea174: '{0} must be one of {1}',
+    // %s 只能是字母、数字、下划线和短横线,最多 64 个字符
+    m0b63f98e: '{0} may contain only letters, digits, underscores and hyphens, up to 64 characters',
     // %s 在 %s 上发起的审批超过时限仍未处理，请跟进
     mf54408da: 'The approval raised by {0} on {1} is overdue and still undecided; please follow up',
     // %s 必须在 %d ~ %d 之间,当前 %d
@@ -1860,6 +1862,8 @@
     ma8cd94cb: 'Your account is now linked to the {0} approval bot, and you can approve directly in chat.\nIf this was not you, remove the link at once under "Approval bots" in the user menu (top right) and contact an administrator.',
     // 你还没有开通网关账号,无权限访问。请联系管理员开通后再登录
     mbfec1947: 'You do not have a gateway account yet, so access is denied. Ask an administrator to open one, then sign in',
+    // 你还没有绑定这个审批机器人,请先在右上角用户菜单的「审批机器人」里绑定
+    m6dc78302: 'You have not linked this approval bot yet. Link it first under "Approval bots" in the user menu (top right)',
     // 使用了 %s 分区,规范要求 RANGE 分区
     m50c94203: '{0} partitioning is used; the standard requires RANGE partitioning',
     // 使用了 SELECT *,建议显式列出所需字段
@@ -2052,6 +2056,10 @@
     ma9f03c30: 'The name can be at most {0} characters',
     // 向 PUBLIC 授权会让所有数据库用户获得该权限
     m6352928d: 'Granting to PUBLIC gives the privilege to every database user',
+    // 启用 Lark 审批机器人必须填写 App ID
+    mb0566601: 'The App ID is required to enable the Lark approval bot',
+    // 启用 Lark 审批机器人必须填写 App Secret
+    mdb4c55c5: 'The App Secret is required to enable the Lark approval bot',
     // 启用 SSO 必须填写%s
     mf395a22c: 'Enabling SSO requires {0}',
     // 命令名不能为空,且不超过 32 个字符
@@ -2174,6 +2182,8 @@
     m08cbac36: 'The password must be at least {0} characters',
     // 密码过于常见,请换一个
     m83d1b69f: 'This password is too common, please choose another',
+    // 密钥无法解密
+    m5d4b86df: 'The secret cannot be decrypted',
     // 对比失败
     m3a7c4883: 'Comparison failed',
     // 对象 %s 未带 schema 限定,应写作 schema.%s
@@ -2542,6 +2552,8 @@
     mdf480bdf: 'One side of a comparison is a subquery (scalar subquery); rewrite it as LEFT JOIN + aggregation',
     // 没有回看执行窗口的权限
     me6a262d1: 'You do not have permission to review execution windows',
+    // 没有填写 App ID 或 App Secret
+    m94d595ab: 'The App ID or App Secret is missing',
     // 没有这个审批机器人渠道
     m1f930af0: 'No such approval bot channel',
     // 没有选定库,无法确定表 %s 的数据量
@@ -2556,6 +2568,10 @@
     m30813e75: 'A flow needs at least one stage',
     // 流程阶段最多 20 个
     m9eeaf2b3: 'A flow can have at most 20 stages',
+    // 测试卡片发得太频繁,请稍后再试
+    m7afbfec7: 'Test cards are being sent too often. Try again later',
+    // 测试卡片发送失败:%s
+    ma6dff19f: 'Failed to send the test card: {0}',
     // 添加失败
     m9d563ebb: 'Add failed',
     // 环境不存在

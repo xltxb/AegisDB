@@ -2592,6 +2592,10 @@ paths:
         defaultMaxRows / maxRowsCap / defaultTimeoutSec / timeoutCapSec / maxGrantDays /
         maxConcurrentPerUser / maxConcurrentPerSource / exportEnabled / maxDailyPerUser
         (每人每天执行 + 导出次数,0 = 不限,上限 100000)。
+
+        聊天审批卡片:`chat.cardLang`(zh / en)、`chat.lark.enabled`、`chat.lark.region`(feishu / lark)、
+        `chat.lark.appId`、`chat.lark.appSecret`(密钥,加密存)。开着时缺 App ID 或 App Secret 整次拒绝;
+        保存后马上重连,不用重启。
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /settings/webhook:
     put:
@@ -2628,6 +2632,32 @@ paths:
     post:
       tags: [settings]
       summary: '[settings · admin] 测试飞书连通性'
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/chat-status:
+    get:
+      tags: [settings]
+      summary: '[settings · admin] 各审批机器人渠道的连接状态'
+      description: |
+        以渠道(lark / telegram)为键,每项:`enabled`(设置里是否开着)、`state`
+        (off / connecting / connected / conflict / error)、`detail`(冲突或出错的原因,可能有
+        `detailRef` 供翻译)、`botName`。不含任何密钥。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /settings/chat-test:
+    post:
+      tags: [settings]
+      summary: '[settings · admin] 给自己发一张测试卡片'
+      description: |
+        发给当前登录人在该渠道上绑定的聊天账号;按钮只回一句提示,不碰任何审批单。渠道没开、机器人没连上、
+        没有绑定、平台报错返回 `40001`;同一人 5 秒内再发返回 `42900`。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string, enum: [lark, telegram] }
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /service-accounts:
     get:

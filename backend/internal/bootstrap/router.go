@@ -399,6 +399,8 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.PUT("/settings/webhook", menu("settings"), admin, h.SaveWebhook)
 		a.POST("/settings/webhook/test", menu("settings"), admin, h.TestWebhook)
 		a.POST("/settings/lark/test", menu("settings"), admin, h.TestLark)
+		a.GET("/settings/chat-status", menu("settings"), admin, h.ChatStatus)
+		a.POST("/settings/chat-test", menu("settings"), admin, h.ChatTest)
 		// 投递记录里带着目标 URL(飞书机器人的 hook URL 本身就是凭据)与响应体,
 		// 读它等于读凭据 —— 与写配置同级,收归管理员(L-13)。
 		a.GET("/settings/webhook/deliveries", menu("settings"), admin, h.WebhookDeliveries)

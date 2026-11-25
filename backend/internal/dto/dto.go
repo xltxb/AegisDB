@@ -4,6 +4,7 @@ package dto
 import (
 	"time"
 
+	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
 )
 
@@ -750,6 +751,22 @@ type ChatBindCodeResp struct {
 	Code      string `json:"code"`
 	ExpiresAt string `json:"expiresAt"` // RFC3339
 	BotName   string `json:"botName"`
+}
+
+// ChatStatus 是一个审批机器人渠道的状态。不含任何密钥。
+//
+// Detail 在出错 / 冲突时说明原因:渠道回的原文,或一句中文(这时 DetailRef 非空,前端按读者的语言重讲)。
+type ChatStatus struct {
+	Enabled   bool           `json:"enabled"`
+	State     chat.State     `json:"state"`
+	Detail    string         `json:"detail"`
+	DetailRef *model.RuleRef `json:"detailRef,omitempty"`
+	BotName   string         `json:"botName"`
+}
+
+// ChatTestReq 发一张测试卡片给自己。
+type ChatTestReq struct {
+	Channel chat.Channel `json:"channel"`
 }
 
 // MFACodeReq carries a 6-digit TOTP code for enable/disable.

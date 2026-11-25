@@ -370,7 +370,7 @@ func (s *Services) sendChatCard(ctx context.Context, ch chat.Channel, t chat.Tra
 		return nil
 	}
 
-	includeSQL := s.settingBool("chat.telegram.includeSql", false)
+	includeSQL := s.chatBool("chat.telegram.includeSql")
 	card := s.buildChatCard(ap, ch, s.cardLang(), row.SourceTruncated, includeSQL)
 	if card.Token, err = newChatToken(); err != nil {
 		slog.Error("生成卡片令牌失败", "err", err)
@@ -482,8 +482,7 @@ func chatCall(ctx context.Context, ch chat.Channel, call func(context.Context) (
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// 不记 panic 的内容:里面可能有带机器人令牌的地址。
-				slog.Error("聊天渠道 panic", "channel", ch, "stack", string(debug.Stack()))
+				logChatPanic(ch)
 				done <- result{err: errChatPanic}
 			}
 		}()
@@ -509,14 +508,15 @@ func chatRetryAfter(n int) time.Duration {
 }
 
 // chatErrText 是渠道错误落库与进日志的样子:一行、没有控制字符、放得进列。渠道自己保证里面没有机密。
-func chatErrText(err error) string {
-	clean := strings.Map(func(r rune) rune {
+func chatErrText(err error) string { return clipColumn(chatOneLine(err.Error()), chatErrWidth) }
+
+func chatOneLine(text string) string {
+	return strings.TrimSpace(strings.Map(func(r rune) rune {
 		if unicode.IsControl(r) || unicode.In(r, unicode.Zl, unicode.Zp) {
 			return ' '
 		}
 		return r
-	}, strings.ToValidUTF8(err.Error(), ""))
-	return clipColumn(strings.TrimSpace(clean), chatErrWidth)
+	}, strings.ToValidUTF8(text, "")))
 }
 
 // newChatToken 随机出一个卡片按钮令牌;库里只存它的摘要。

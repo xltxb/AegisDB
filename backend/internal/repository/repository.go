@@ -2090,6 +2090,19 @@ func (r *Repo) AllSettings() (map[string]string, error) {
 	return out, nil
 }
 
+// SettingsByPrefix 读一组同前缀的设置。键不存在不是错误,也不会让 GORM 记一行日志(GetSetting 会)。
+func (r *Repo) SettingsByPrefix(prefix string) (map[string]string, error) {
+	var rows []model.Setting
+	if err := r.db.Where("k LIKE ?", prefix+"%").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, s := range rows {
+		out[s.K] = s.V
+	}
+	return out, nil
+}
+
 func (r *Repo) SetSetting(k, v string) error {
 	return r.db.Save(&model.Setting{K: k, V: v}).Error
 }
