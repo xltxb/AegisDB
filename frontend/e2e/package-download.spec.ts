@@ -3,7 +3,7 @@ import { envelope, stubCommon, gotoTerminal } from './helpers'
 
 // 对象树上右键下载 Oracle 程序包。钉住:
 //   · 右键一个包 → 「下载程序包 (.pck)」,请求只带这一个名字,文件名取服务端给的
-//   · Ctrl 单击多选后右键 → 「下载所选 N 个」,names 按树上的顺序,拿到一个 zip
+//   · Ctrl / ⌘ 单击多选后右键 → 「下载所选 N 个」,names 按树上的顺序,拿到一个 zip
 //   · 服务端拒绝时说出原话,不落任何文件
 //   · 单击仍然是查看源码(原有行为不变),Esc 关菜单
 
@@ -70,10 +70,11 @@ test.describe('Oracle 程序包 · 右键下载', () => {
     await expect(menu).toHaveCount(0)
   })
 
-  test('Ctrl 多选后右键:一个 zip,names 按树上的顺序', async ({ page }) => {
+  // macOS 上是 ⌘ 单击:系统把 Ctrl+单击当右键,弹出来的是菜单(issue #105)。
+  test('Ctrl / ⌘ 多选后右键:一个 zip,names 按树上的顺序', async ({ page }) => {
     const { bodies, sources } = await openTree(page)
-    await row(page, 'PKG_USERS').click({ modifiers: ['Control'] })
-    await row(page, 'PKG_ORDERS').click({ modifiers: ['Control'] })
+    await row(page, 'PKG_USERS').click({ modifiers: ['ControlOrMeta'] })
+    await row(page, 'PKG_ORDERS').click({ modifiers: ['ControlOrMeta'] })
     expect(sources).toEqual([]) // 多选不打开源码
     await row(page, 'PKG_USERS').click({ button: 'right' })
     await expect(page.getByTestId('pkg-download')).toHaveText(/下载所选 2 个程序包/)

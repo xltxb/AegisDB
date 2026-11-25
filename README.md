@@ -389,14 +389,13 @@ cd frontend && npm run test:e2e
 | 套件 | 规模 | 说明 |
 |---|---|---|
 | 后端 | 462 个文件、1610 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
-| 前端单测 | 55 个文件、411 个用例 | `src/lib` 纯逻辑、词条一致性 |
-| 前端 e2e | 95 个文件、372 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
+| 前端单测 | 55 个文件、408 个用例 | `src/lib` 纯逻辑、词条一致性 |
+| 前端 e2e | 95 个文件、376 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
 
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
 - 需要真实数据库的用例默认跳过，设置 `AEGISDB_TEST_MYSQL`、`AEGISDB_TEST_PG`、
   `AEGISDB_TEST_ORACLE`、`AEGISDB_TEST_STORE_PG`、`AEGISDB_OSC_TEST_DSN` 等变量后启用。
-- **已知不稳定**：`TestBackupStageRefusesDestructiveVerbs` 会偶发失败；
-  `e2e/package-download.spec.ts` 的 Ctrl 多选用例在 macOS 上失败。
+- **已知不稳定**：`TestBackupStageRefusesDestructiveVerbs` 会偶发失败。
 
 ### 开发约定
 
