@@ -12,7 +12,7 @@ package service
 //	  → SRD 在公司父域(bssrvc66.com)写 CS-Token Cookie,跳回网关登录页
 //	  → 登录页 POST /api/v1/auth/sso,浏览器随请求带上 CS-Token
 //	  → 网关服务端解出其中的 JWT,调 SRD 的 GET /api/v1/user/oauth/userinfo(Bearer <jwt>)
-//	  → 拿到 email,按邮箱映射到网关用户(没有就建一个**零权限**的),并记为已绑定
+//	  → 拿到 email,按邮箱映射到网关用户(没有就**拒绝**,不自动建号),并记为已绑定
 //	  → 签发网关自己的会话 JWT —— 之后每个请求都不再回 SRD
 //
 // JWT 由 SRD 校验(userinfo 认不认),网关不持有 SRD 的签名密钥,也不自己验签。

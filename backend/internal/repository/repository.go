@@ -54,8 +54,8 @@ func (r *Repo) DB() *gorm.DB { return r.db }
 // ----------------------------------------------------------------- Users
 
 // GetUserByEmailFold 按邮箱查,不分大小写。SSO 回来的邮箱与网关里存的大小写不一定一致
-// (CreateUser 会转小写,但早期种子与邀请路径不会)—— 大小写不同就当成两个人,结果是给
-// 同一个人再建一个零权限账号,而他原来那个带权限的账号从此登不进来。
+// (CreateUser 会转小写,但早期种子与邀请路径不会)—— 大小写不同就当成两个人,结果是
+// 一个已经开通的人经 SSO 进来时被当成没有账号而拒绝。
 func (r *Repo) GetUserByEmailFold(email string) (*model.User, error) {
 	var u model.User
 	if err := r.db.Where("LOWER(email) = ?", strings.ToLower(strings.TrimSpace(email))).First(&u).Error; err != nil {

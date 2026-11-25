@@ -4,7 +4,7 @@
 #   dev  → SQLite (zero-dependency local run, writes ./aegisdb.db)
 #   prod → MySQL  (see docker-compose.yml / mysql_dsn below)
 # Overridable at startup via APP_ENV (or AEGISDB_ENV): `APP_ENV=prod ./server`
-# flips the whole app to MySQL. AEGISDB_DB_DRIVER=mysql|sqlite forces a driver.
+# flips the whole app to MySQL. AEGISDB_DB_DRIVER=mysql|postgres|sqlite forces a driver.
 env: "dev"
 
 server:

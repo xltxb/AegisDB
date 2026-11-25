@@ -339,7 +339,7 @@
   setAdminIdle: '管理后台空闲超时(分钟)', setAdminIdleD: '停在管理后台无操作满这么久就退回用户后台(不登出,终端不受影响);不会超过上面的空闲锁定时长。', adminLockTitle: '管理后台空闲超时,已锁定当前页', adminLockBody: '这一页有还没保存的修改,内容都还在。重新进入管理后台后回到这里继续编辑。', adminLockResume: '重新进入,继续编辑', adminLockLeave: '放弃修改,回总览', adminIdleBack: '管理后台空闲超时,已退回用户后台;需要时再点「管理后台」进入',
   setAdminIpAllow: '管理后台 IP 白名单', setAdminIpAllowD: '只限制管理后台(管理接口)的来源 IP;用户后台不受影响。列表为空不限制,在服务器本机直接访问(不经反向代理)始终放行。', setAdminIpForcedOff: '部署配置已强制关闭管理后台 IP 白名单(AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED),这里的设置暂不生效。', adminIpBlocked: '当前 IP 不在管理后台白名单内,已退回用户后台', adminIpBlockedStay: '当前 IP 不在管理后台白名单内,无法进入管理后台',
   setIpAllow: 'IP 允许列表', setIpAllowD: '仅允许列表内 IP 访问网关', manage: '管理',
-  setSso: 'SRD 授权登录（公司 SSO）', setSsoD: '只做认证：按邮箱对应网关账号，权限仍由角色决定。网关里没有的邮箱会自动开通一个无角色账号，等待分配',
+  setSso: 'SRD 授权登录（公司 SSO）', setSsoD: '只做认证：按邮箱对应网关账号，权限仍由角色决定。网关里没有的邮箱会被拒绝登录，需管理员先新建或邀请',
   setSsoBase: 'SRD 授权登录地址', setSsoCookie: '登录态 Cookie 名',
   setSsoForcedOff: 'SSO 已被部署配置强制关闭（sso.disabled 或环境变量 AEGISDB_SSO_DISABLED），这里的开关暂不生效，所有人使用账号口令登录。去掉该配置并重启服务后恢复。',
   setSsoBindHint: '存量账号在第一次经 SRD 授权登录、邮箱对上时自动绑定，此后只能走 SSO 登录（管理员除外）。没登录过 SRD 的账号照常用口令。管理员可在【权限 · 用户】点账号上的 SSO 标记解绑。网关域名须在 SRD Cookie 的父域下（如 *.bssrvc66.com）。',
