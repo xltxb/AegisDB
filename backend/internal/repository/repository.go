@@ -442,8 +442,15 @@ func (r *Repo) RoleIDsOfUser(userID int64) ([]int64, error) {
 // they are a member of. All permission resolution (menus, capability matrix,
 // tags, oversight) is computed over this set so multiple roles compose (union).
 func (r *Repo) EffectiveRoleIDs(u *model.User) []int64 {
+	ids, _ := r.EffectiveRoles(u)
+	return ids
+}
+
+// EffectiveRoles 是 EffectiveRoleIDs 再带上「读不出来」:出错时的列表仍是 EffectiveRoleIDs 会给的那一份,
+// 可能缺了成员关系,也可能留着已经不存在的角色。
+func (r *Repo) EffectiveRoles(u *model.User) ([]int64, error) {
 	if u == nil {
-		return nil
+		return nil, nil
 	}
 	seen := map[int64]bool{}
 	out := []int64{}
@@ -451,14 +458,15 @@ func (r *Repo) EffectiveRoleIDs(u *model.User) []int64 {
 		seen[u.RoleID] = true
 		out = append(out, u.RoleID)
 	}
-	ids, _ := r.RoleIDsOfUser(u.ID)
+	ids, merr := r.RoleIDsOfUser(u.ID)
 	for _, id := range ids {
 		if !seen[id] {
 			seen[id] = true
 			out = append(out, id)
 		}
 	}
-	return r.existingRoles(out)
+	out, err := r.existingRoles(out)
+	return out, errors.Join(merr, err)
 }
 
 // existingRoles drops ids that name no role.
@@ -470,16 +478,16 @@ func (r *Repo) EffectiveRoleIDs(u *model.User) []int64 {
 //
 // 查询失败时保留原样:一次数据库抖动不该让所有人瞬间失去全部角色。这个方向是安全
 // 的 —— 保留的是**真实存在过的** id 集合,而不是把未知当成放行。
-func (r *Repo) existingRoles(ids []int64) []int64 {
+func (r *Repo) existingRoles(ids []int64) ([]int64, error) {
 	if len(ids) == 0 {
-		return ids
+		return ids, nil
 	}
 	var found []int64
-	if err := r.db.Model(&model.Role{}).Where("id IN ?", ids).Pluck("id", &found); err != nil && err.Error != nil {
-		return ids
+	if err := r.db.Model(&model.Role{}).Where("id IN ?", ids).Pluck("id", &found).Error; err != nil {
+		return ids, err
 	}
 	if len(found) == len(ids) {
-		return ids // 常态:一个都没少,不必重建切片
+		return ids, nil // 常态:一个都没少,不必重建切片
 	}
 	ok := map[int64]bool{}
 	for _, id := range found {
@@ -492,7 +500,7 @@ func (r *Repo) existingRoles(ids []int64) []int64 {
 		}
 	}
 	slog.Warn("用户持有不存在的角色 id,已从权限计算中剔除", "kept", out, "asked", ids)
-	return out
+	return out, nil
 }
 
 // SetUserRoles replaces a user's role membership set atomically. The first id is
@@ -2108,8 +2116,9 @@ func (r *Repo) SettingsByPrefix(prefix string) (map[string]string, error) {
 // SetSettings 一次写一组设置:要么全写下,要么一项不写。按键排序写,两次保存不会互相等死。
 func (r *Repo) SetSettings(values map[string]string) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
+		in := &Repo{db: tx}
 		for _, k := range slices.Sorted(maps.Keys(values)) {
-			if err := tx.Save(&model.Setting{K: k, V: values[k]}).Error; err != nil {
+			if err := in.SetSetting(k, values[k]); err != nil {
 				return err
 			}
 		}
@@ -2117,8 +2126,12 @@ func (r *Repo) SetSettings(values map[string]string) error {
 	})
 }
 
+// SetSetting 写一个设置,有则改、无则加,一句写成。不用 Save:它先 UPDATE、落空再 INSERT,在 MySQL 上
+// 对不存在的键做 UPDATE 会持间隙锁,两个事务各持一把,随后的 INSERT 就互相等死。
 func (r *Repo) SetSetting(k, v string) error {
-	return r.db.Save(&model.Setting{K: k, V: v}).Error
+	return r.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "k"}}, DoUpdates: clause.AssignmentColumns([]string{"v"}),
+	}).Create(&model.Setting{K: k, V: v}).Error
 }
 
 // Count returns the row count for any model (used to decide seeding).
