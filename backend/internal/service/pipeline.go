@@ -1268,7 +1268,7 @@ func releaseApprovalLabel(rel *model.Release, body string) string {
 // that has since been decided and moves them on.
 //
 // A sweeper rather than a callback from finalizeApproval, because a decision can
-// arrive through several different doors — the console, the 飞书 card and the
+// arrive through several different doors — the console, the open API (release:approve) and the
 // timeout expiry — and a hook on one of them would leave
 // releases hanging when a decision came through another. Polling a row that
 // already records the outcome works no matter who wrote it.

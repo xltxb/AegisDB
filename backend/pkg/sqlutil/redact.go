@@ -108,8 +108,8 @@ var identifiedKeywords = map[string]bool{
 }
 
 // RedactSecrets masks password/secret string literals in a SQL command so the
-// audit log, approval notifications and anything sent to an external approval
-// service never carry credentials in the clear (e.g. CREATE USER … IDENTIFIED BY
+// audit log, approval notifications and anything pushed to Lark or webhooks
+// never carry credentials in the clear (e.g. CREATE USER … IDENTIFIED BY
 // '***'). It only rewrites the value after a known credential keyword, leaving
 // the rest of the statement intact — the reviewer still has to be able to see
 // which account is being created, on which host, with which plugin.

@@ -758,7 +758,8 @@ func (s *Services) DecideApproval(actor *model.User, id int64, approve bool) (*d
 // finalizeApproval is the shared decision core: atomically claim pending →
 // approved/rejected, then (approve) execute the fixed ap.Command on behalf of the
 // initiator + audit + notify, or (reject) record the rejection. It is reused by
-// the in-app decision path (DecideApproval); authorization is the caller's responsibility — this
+// the in-app decision path (DecideApproval) and the open-API release approval
+// (DecideReleaseForClient, open_release_approve.go); authorization is the caller's responsibility — this
 // function assumes the decision is already authorized. operatorName is who acted
 // (shown in the initiator's notification); the audit is attributed to the
 // initiator since the command runs on their behalf.

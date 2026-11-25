@@ -1346,7 +1346,7 @@ func (r *Repo) DecideActiveStep(approvalID int64, status string, actedAt time.Ti
 // 审计里的 operator 却是第 2 步的人 —— 两份记录对不上(2026-10 黑盒,工单 01 第 6 条)。
 //
 // 实际审批人那一步记 status / acted_at;原先 active 的那一步(没人动手)退回 waiting。
-// 审批人不在链上(外部回调只带名字、approverID 为 0)时退回旧行为:记在 active 那一步。
+// 审批人不在链上(或 approverID 为 0)时退回旧行为:记在 active 那一步。
 func (r *Repo) DecideStepBy(approvalID, approverID int64, status string, actedAt time.Time) error {
 	var step model.ApprovalStep
 	err := r.db.Where("approval_id = ? AND approver_id = ?", approvalID, approverID).

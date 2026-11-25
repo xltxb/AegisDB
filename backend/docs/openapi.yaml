@@ -94,7 +94,7 @@ tags:
   - name: pipelines
     description: 发布流程模板与发布单(CI/CD)
   - name: approvals
-    description: 审批单与外部审批回调
+    description: 审批单
   - name: audit
     description: 防篡改审计链
   - name: settings

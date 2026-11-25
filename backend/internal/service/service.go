@@ -325,7 +325,7 @@ func (s *Services) recordAudit(actor *model.User, conn *model.Connection, comman
 }
 
 // recordAuditBy is recordAudit for an action authorised by someone other than
-// the actor — an external approver, or an administrator acting on another
+// the actor — an API credential acting for someone, or an administrator acting on another
 // user's account. See AuditLog.Operator.
 func (s *Services) recordAuditBy(actor *model.User, operator string, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
 	return s.recordAuditFrom("", actor, operator, conn, command, risk, result, apNo, eventType)
@@ -340,7 +340,7 @@ func (s *Services) recordAuditSrc(source string, actor *model.User, conn *model.
 //
 // 绝大多数调用点不必用它:请求进来时 middleware.BindRequestUser 已经按路由给 actor 盖了
 // 来源(model.AuditSourceForRoute)。要用它的是**入口与路由无关**的那几类 —— 后台跑的
-// 导出任务与发布阶段(actor 是从库里新取的,身上没有请求)、审批决定(飞书回调也会走到)、
+// 导出任务与发布阶段(actor 是从库里新取的,身上没有请求)、审批决定(开放接口代批也会走到)、
 // 登录(发生在鉴权中间件之前)。source 为空 = 沿用 actor 身上的。
 func (s *Services) recordAuditFrom(source string, actor *model.User, operator string, conn *model.Connection, command, risk, result, apNo, eventType string) *model.AuditLog {
 	// 同一个 eventType 既写进行里,也交给 webhook —— 一次赋值,两处读同一个变量,
