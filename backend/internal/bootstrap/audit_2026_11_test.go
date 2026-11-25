@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-11 白盒审计的回归用例(HTTP 黑盒)。纯判定层的用例在 internal/gateway 里。
@@ -35,19 +35,19 @@ func connCount(t *testing.T, app *testApp, tok string) int {
 // V-03:新角色全 deny 不收窄能力,但没有标签 = 不限实例;受限用户加入后实例范围不能变大。
 func TestV03_NewRoleDoesNotWidenInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roleID := auditRole(t, app, admin, "仅审批")
 
-	uid := app.userIDByEmail(admin, "chenhao@vela.io")
+	uid := app.userIDByEmail(admin, "chenhao@aegisdb.io")
 	eq(t, app.do(http.MethodPut, "/api/v1/users/"+itoa(uid)+"/tags", admin, map[string]any{"tags": []string{}}).Code, 0, "清用户级标签")
-	before := connCount(t, app, app.login("chenhao@vela.io", "vela123"))
+	before := connCount(t, app, app.login("chenhao@aegisdb.io", "aegisdb123"))
 	roleTags, _, _ := app.repo.TagsForRoles(app.repo.EffectiveRoleIDs(mustUser(t, app, uid)))
 	if len(roleTags) == 0 {
 		t.Skip("种子里 chenhao 不受标签限制,用不了这条用例")
 	}
 
 	eq(t, app.do(http.MethodPost, "/api/v1/roles/"+itoa(roleID)+"/members", admin, map[string]any{"userId": uid}).Code, 0, "加入新角色")
-	after := connCount(t, app, app.login("chenhao@vela.io", "vela123"))
+	after := connCount(t, app, app.login("chenhao@aegisdb.io", "aegisdb123"))
 	eq(t, after, before, "加入新角色后实例数不能变")
 	if _, unrestricted, _ := app.repo.TagsForRoles(app.repo.EffectiveRoleIDs(mustUser(t, app, uid))); unrestricted {
 		t.Fatal("加入新角色后不能变成不限实例")
@@ -66,7 +66,7 @@ func mustUser(t *testing.T, app *testApp, id int64) *model.User {
 // V-03:界面读到的不是占位标签;选了标签后占位消失;清空标签仍是"不限",这是显式操作的原有语义。
 func TestV03_RoleDetailHidesPlaceholder(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roleID := auditRole(t, app, admin, "分析")
 
 	type detail struct {
@@ -96,7 +96,7 @@ func TestV03_RoleDetailHidesPlaceholder(t *testing.T) {
 // V-03:存量无标签自定义角色能被列出来,带标签的和内置角色不在其中。
 func TestV03_CustomRolesWithoutTagsListed(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	withTag := auditRole(t, app, admin, "新角色")
 	bare := auditRole(t, app, admin, "存量角色")
 	if err := app.repo.DB().Where("role_id = ?", bare).Delete(&model.RoleTag{}).Error; err != nil {
@@ -114,10 +114,10 @@ func TestV03_CustomRolesWithoutTagsListed(t *testing.T) {
 // V-06:存量凭据"停用 → 加 admin → 启用"不能带着管理员权限回来。
 func TestV06_ReenableCredentialBoundToAdminRefused(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	adminRole := app.roleIDByCode(admin, "admin")
-	uid := app.userIDByEmail(admin, "chenhao@vela.io")
-	tok := app.issueClient(admin, "存量凭据", "chenhao@vela.io", []string{"release:read"})
+	uid := app.userIDByEmail(admin, "chenhao@aegisdb.io")
+	tok := app.issueClient(admin, "存量凭据", "chenhao@aegisdb.io", []string{"release:read"})
 	cl := app.apiClientByName(admin, "存量凭据")
 	path := "/api/v1/api-clients/" + itoa(cl.ID)
 
@@ -137,8 +137,8 @@ func TestV06_ReenableCredentialBoundToAdminRefused(t *testing.T) {
 // 原有行为:绑真人的存量凭据不追溯,停用后还能启用;已启用的凭据再发一次 enabled=true 不受影响。
 func TestV06_LegacyHumanCredentialCanStillReenable(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	tok := app.issueClient(admin, "存量凭据", "chenhao@vela.io", []string{"release:read"})
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	tok := app.issueClient(admin, "存量凭据", "chenhao@aegisdb.io", []string{"release:read"})
 	cl := app.apiClientByName(admin, "存量凭据")
 	path := "/api/v1/api-clients/" + itoa(cl.ID)
 
@@ -151,7 +151,7 @@ func TestV06_LegacyHumanCredentialCanStillReenable(t *testing.T) {
 // V-07:连接地址做格式校验,新建与编辑都挡。正常地址不受影响。
 func TestV07_ConnectionHostValidated(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	create := func(host, engine string) int {
 		return app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 			"name": "h-" + host, "engine": engine, "host": host, "env": "dev", "policy": "strict",
@@ -159,13 +159,13 @@ func TestV07_ConnectionHostValidated(t *testing.T) {
 		}).Code
 	}
 	for _, bad := range []string{
-		"evil/x?TRACE FILE=/opt/vela-gateway/web/t.html#", "a b", "a/b", "a?b=1", "a#b", "a)/x?allowAllFiles=true#",
+		"evil/x?TRACE FILE=/opt/aegisdb/web/t.html#", "a b", "a/b", "a?b=1", "a#b", "a)/x?allowAllFiles=true#",
 	} {
 		if code := create(bad, "Oracle"); code == 0 {
 			t.Errorf("地址 %q 应被拒", bad)
 		}
 	}
-	for _, good := range []string{"db.prod.vela.io", "10.0.0.8", "10.0.0.8:1521", "db_host-1.internal"} {
+	for _, good := range []string{"db.prod.aegisdb.io", "10.0.0.8", "10.0.0.8:1521", "db_host-1.internal"} {
 		if code := create(good, "Oracle"); code != 0 {
 			t.Errorf("地址 %q 应放行,实际 %d", good, code)
 		}
@@ -175,7 +175,7 @@ func TestV07_ConnectionHostValidated(t *testing.T) {
 // V-07:编辑连接与从库地址同样校验;合法的从库地址不受影响。
 func TestV07_UpdateAndReplicaHostValidated(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	base := map[string]any{"name": "ora", "engine": "Oracle", "host": "10.0.0.8", "env": "dev", "policy": "strict", "username": "u", "password": "p", "database": "svc"}
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, base)
 	eq(t, r.Code, 0, "建连接")

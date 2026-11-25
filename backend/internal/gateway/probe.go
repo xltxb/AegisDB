@@ -25,9 +25,9 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // safeIdent 判断一个标识符能不能安全地拼进探测语句。

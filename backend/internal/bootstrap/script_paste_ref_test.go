@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // A script PASTED into the terminal's script panel (no prior upload) used to
@@ -18,7 +18,7 @@ import (
 // carry a bounded excerpt + file reference, whatever the script's size.
 func TestScriptExecute_PastedScriptTicketIsReferenceNotBody(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
 		map[string]any{"script.savePath": t.TempDir()}).Code, 0, "set script path")

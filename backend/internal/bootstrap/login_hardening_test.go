@@ -18,15 +18,15 @@ func TestLogin_FailureIsAudited(t *testing.T) {
 	app := newTestApp(t)
 
 	// one failed attempt
-	eq(t, app.loginCode("chenhao@vela.io", "wrong-password"), 40100, "failed login rejected")
+	eq(t, app.loginCode("chenhao@aegisdb.io", "wrong-password"), 40100, "failed login rejected")
 
 	// admin can see a rejected 'login failed' audit row for that email
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	var rows []auditCmdRow
 	_ = json.Unmarshal(app.auditItemsRaw(admin, ""), &rows)
 	found := false
 	for _, row := range rows {
-		if strings.Contains(row.Command, "login failed") && row.Result == "rejected" && row.Actor == "chenhao@vela.io" {
+		if strings.Contains(row.Command, "login failed") && row.Result == "rejected" && row.Actor == "chenhao@aegisdb.io" {
 			found = true
 		}
 	}
@@ -41,11 +41,11 @@ func TestLogin_RateLimitedAfterRepeatedFailures(t *testing.T) {
 	app := newTestApp(t)
 	for i := 0; i < 5; i++ {
 		app.do(http.MethodPost, "/api/v1/auth/login", "",
-			map[string]any{"email": "linwei@vela.io", "password": "wrong"})
+			map[string]any{"email": "linwei@aegisdb.io", "password": "wrong"})
 	}
 	// the correct password is now blocked by the limiter
 	r := app.do(http.MethodPost, "/api/v1/auth/login", "",
-		map[string]any{"email": "linwei@vela.io", "password": "vela123"})
+		map[string]any{"email": "linwei@aegisdb.io", "password": "aegisdb123"})
 	if r.Code == 0 {
 		t.Errorf("login should be rate-limited after repeated failures, got code=%d", r.Code)
 	}

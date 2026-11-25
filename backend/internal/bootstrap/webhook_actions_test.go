@@ -22,8 +22,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 func (a *testApp) settingsActions(token string) []string {
@@ -56,7 +56,7 @@ func (a *testApp) webhookEvents(token string) string {
 // 清单由服务端下发,且就是增删改查那一列的取值。
 func TestWebhookActions_ComeFromTheAuditDataActions(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	got := app.settingsActions(token)
 	if len(got) == 0 {
@@ -79,7 +79,7 @@ func TestWebhookActions_ComeFromTheAuditDataActions(t *testing.T) {
 // 存得下读得回;认不出的取值(包括旧的事件类型)被服务端归一掉。
 func TestWebhookActions_RoundTripAndNormalise(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	app.configureWebhook(token, "http://example.invalid/ingest", "s3cr3t", "create,delete,update,read,other", 3)
 	if got := app.webhookEvents(token); got != "create,delete,update,read,other" {
@@ -115,7 +115,7 @@ func TestWebhookActions_DeliversExactlyWhatIsSubscribed(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// **只**订阅"删"。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", 3)
 
@@ -149,7 +149,7 @@ func TestWebhookActions_DeliversExactlyWhatIsSubscribed(t *testing.T) {
 
 	// 一次登录是「非数据」,没订阅,不该推。
 	before := len(got)
-	app.login("linwei@vela.io", "vela123")
+	app.login("linwei@aegisdb.io", "aegisdb123")
 	time.Sleep(1200 * time.Millisecond)
 	mu.Lock()
 	after := len(seen)

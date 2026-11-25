@@ -44,8 +44,8 @@ func postOpenMultipart(t *testing.T, app *testApp, token, path string, fields ma
 
 func TestOpenReviewOversizedFileIsNamedNotSwallowed(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	token := app.issueClient(admin, "CI审查", "zhangwei@vela.io", []string{"review:check"})
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	token := app.issueClient(admin, "CI审查", "zhangwei@aegisdb.io", []string{"review:check"})
 
 	env := postOpenMultipart(t, app, token, "/api/v1/open/sql-review",
 		map[string]string{"dialect": "mysql"}, 15<<20+1024)
@@ -67,11 +67,11 @@ func TestOpenReviewOversizedFileIsNamedNotSwallowed(t *testing.T) {
 // 被静默忽略 —— 一个"看起来被约束了"的约束比没有更糟。
 func TestOpenReleaseMultipartHonorsChangeType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	mpPid := app.createPipeline(admin, "MP类型流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "MP类型平台", "zhangwei@vela.io", nil, mpPid)
+	token := app.issueClientPiped(admin, "MP类型平台", "zhangwei@aegisdb.io", nil, mpPid)
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

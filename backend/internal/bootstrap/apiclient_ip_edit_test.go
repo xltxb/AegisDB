@@ -14,7 +14,7 @@ import (
 
 func TestAPIClientAllowlistEditTakesEffectImmediately(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, id, tok := app.issueSA(admin, "ipedit-bot", "IP-Edit", []string{"owner"}, []string{"release:read"}, 0)
 
 	// 新建时没填白名单 = 不限来源。
@@ -46,7 +46,7 @@ func TestAPIClientAllowlistEditTakesEffectImmediately(t *testing.T) {
 
 func TestAPIClientAllowlistEditAuditsBeforeAndAfter(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	sa := app.createServiceAccount(admin, "ipaudit-bot", []int64{app.roleIDByCode(admin, "owner")}, nil)
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "IP-Audit", "userId": sa.ID, "allowIps": "10.1.0.0/16", "scopes": []string{"release:read"},
@@ -80,7 +80,7 @@ func TestAPIClientAllowlistEditAuditsBeforeAndAfter(t *testing.T) {
 
 func TestAPIClientAllowlistEditValidatesAndDedupes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	sa := app.createServiceAccount(admin, "ipval-bot", []int64{app.roleIDByCode(admin, "owner")}, nil)
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "IP-Val", "userId": sa.ID, "allowIps": "10.1.0.0/16", "scopes": []string{"release:read"},
@@ -116,7 +116,7 @@ func TestAPIClientAllowlistEditValidatesAndDedupes(t *testing.T) {
 
 func TestAPIClientAllowlistEditIsAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	sa := app.createServiceAccount(admin, "ipadm-bot", []int64{app.roleIDByCode(admin, "owner")}, nil)
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "IP-Adm", "userId": sa.ID, "allowIps": "10.1.0.0/16", "scopes": []string{"release:read"},
@@ -124,7 +124,7 @@ func TestAPIClientAllowlistEditIsAdminOnly(t *testing.T) {
 	eq(t, r.Code, 0, "create")
 	id := app.apiClientByName(admin, "IP-Adm").ID
 
-	dba := app.login("chenhao@vela.io", "vela123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123")
 	for _, body := range []map[string]any{{"allowIps": ""}, {"allowIps": "0.0.0.0/0"}} {
 		if r := app.do(http.MethodPut, "/api/v1/api-clients/"+itoa(id), dba, body); r.Code == 0 {
 			t.Fatalf("非管理员不该能改白名单: %v", body)

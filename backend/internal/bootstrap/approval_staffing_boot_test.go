@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/service"
+	"aegisdb/internal/service"
 )
 
 func issuesAt(app *testApp, wherePart string) []service.StaffingIssue {
@@ -59,8 +59,8 @@ func TestStaffingSelfCheck_IsQuietOnAHealthySetup(t *testing.T) {
 // 这正是自检要提前喊住的情况 —— 现有的任何一层校验都不会为此说话。
 func TestStaffingSelfCheck_CatchesTheOnePersonChain(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	zw := app.userIDByEmail(admin, "zhangwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	zw := app.userIDByEmail(admin, "zhangwei@aegisdb.io")
 	app.shrinkOwnerRoleTo(admin, zw)
 
 	found := issuesAt(app, "默认审批链")
@@ -83,8 +83,8 @@ func TestStaffingSelfCheck_CatchesTheOnePersonChain(t *testing.T) {
 // 人很快就会学会无视它。
 func TestStaffingSelfCheck_RespectsTheSelfApproveSetting(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	zw := app.userIDByEmail(admin, "zhangwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	zw := app.userIDByEmail(admin, "zhangwei@aegisdb.io")
 	app.shrinkOwnerRoleTo(admin, zw)
 	if len(issuesAt(app, "默认审批链")) == 0 {
 		t.Fatal("前置条件不成立:此时本应有告警")
@@ -103,11 +103,11 @@ func TestStaffingSelfCheck_RespectsTheSelfApproveSetting(t *testing.T) {
 // 一张都查不到,自检会因此安静地"通过"。
 func TestStaffingSelfCheck_CountsTicketsNobodyCanDecide(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	zw := app.userIDByEmail(admin, "zhangwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	zw := app.userIDByEmail(admin, "zhangwei@aegisdb.io")
 	// 链上只剩张伟,再由张伟本人提一张高危单 —— 一张谁都批不了的单。
 	app.shrinkOwnerRoleTo(admin, zw)
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	app.submitProdHighRisk(owner)
 
 	found := issuesAt(app, "存量工单")

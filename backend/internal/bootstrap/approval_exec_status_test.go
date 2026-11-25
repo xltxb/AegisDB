@@ -30,7 +30,7 @@ type apOutcome struct {
 func (a *testApp) runOwnTicket(initiator string, connID int64, sql string) apOutcome {
 	a.t.Helper()
 	ap := a.interceptedTicket(initiator, connID, sql)
-	approver := a.login("zhangwei@vela.io", "vela123")
+	approver := a.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := a.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil); r.Code != 0 {
 		a.t.Fatalf("审批通过: code=%d msg=%s", r.Code, r.Msg)
 	}
@@ -50,7 +50,7 @@ func (a *testApp) runOwnTicket(initiator string, connID int64, sql string) apOut
 // 目标库拒绝了这条语句 —— 工单要说自己失败了。
 func TestApprovalExec_FailureIsRecordedOnTheTicket(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, prod := app.sameFileConns(admin, "exec-status-fail")
 
 	// 删一张不存在的表:sqlite 会实打实地报错,而且什么也没改动。
@@ -71,7 +71,7 @@ func TestApprovalExec_FailureIsRecordedOnTheTicket(t *testing.T) {
 // 跑成了就是 success —— 不能因为"有结果就算成功"而把两种情况混成一种。
 func TestApprovalExec_SuccessIsRecordedOnTheTicket(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, prod := app.sameFileConns(admin, "exec-status-ok")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_ok (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -93,7 +93,7 @@ func TestApprovalExec_SuccessIsRecordedOnTheTicket(t *testing.T) {
 // 等于让一次执行事故改写一次审批 —— 而按状态筛选、能不能执行,走的都是 status。
 func TestApprovalExec_FailureDoesNotUnapproveTheTicket(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, prod := app.sameFileConns(admin, "exec-status-keep")
 
 	after := app.runOwnTicket(admin, prod, `DROP TABLE t_also_never_existed`)

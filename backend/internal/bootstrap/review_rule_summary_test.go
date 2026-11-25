@@ -68,7 +68,7 @@ func checkSummary(t *testing.T, s reviewSummary, n int) {
 // 「SQL 审查」页的即时审查:返回汇总 + 示例。
 func TestReviewCheckSummarisesPerRule(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do("POST", "/api/v1/sql-review/check", admin, map[string]any{"dialect": "mysql", "sql": manyDeletes(40)})
 	eq(t, r.Code, 0, "check")
 	var out struct {
@@ -83,7 +83,7 @@ func TestReviewCheckSummarisesPerRule(t *testing.T) {
 // 发布流水线的审查阶段:存下来的结果同样是汇总 + 示例,阶段状态照常落库。
 func TestReleaseReviewStageStoresSummary(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 这里测的是审查结果的存法,不是无 WHERE 拦截:dev 自 2026-11-16 起新装即拦无 WHERE,
 	// 30 条 DELETE 会让没有审批阶段的流程直接拒收 —— 先把 dev 的这道闸关掉。
 	app.tierStrict(admin, "dev", false)

@@ -1,6 +1,6 @@
 package bootstrap
 
-// harness_test.go boots the entire DP DB GATEWAY against a throwaway SQLite file
+// harness_test.go boots the entire AegisDB against a throwaway SQLite file
 // with seed data and exposes it through an httptest server. Tests drive the real
 // /api/v1 HTTP seam end-to-end (auth -> middleware -> three-layer engine -> audit),
 // asserting only externally observable behaviour, never internal collaborators.
@@ -15,13 +15,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/handler"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/jwt"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/handler"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/jwt"
 )
 
 // testApp is a running gateway instance bound to an httptest server.
@@ -43,7 +43,7 @@ func newTestApp(t *testing.T, opts ...func(*Config)) *testApp {
 	cfg := &Config{}
 	cfg.Server.Mode = "release"
 	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "vela-test.db")
+	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "aegisdb-test.db")
 	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
 	cfg.JWT.Secret = "test-secret"
@@ -57,13 +57,13 @@ func newTestApp(t *testing.T, opts ...func(*Config)) *testApp {
 		o(cfg)
 	}
 
-	// VELA_TEST_STORE_PG 设了就把存储库换成真 PostgreSQL:每个测试一个库,从迁移+播种好的
+	// AEGISDB_TEST_STORE_PG 设了就把存储库换成真 PostgreSQL:每个测试一个库,从迁移+播种好的
 	// 模板库 CREATE DATABASE … TEMPLATE 出来(PG 原生整库复制,远快于每次重跑迁移)。
 	// 调用方用 opts 自带了存储库(driver 不再是 sqlite)时,用它的,也不替它播种。
 	ownStore := cfg.Database.Driver == "sqlite"
 	pgStore := ""
 	if ownStore {
-		pgStore = os.Getenv("VELA_TEST_STORE_PG")
+		pgStore = os.Getenv("AEGISDB_TEST_STORE_PG")
 	}
 	if pgStore != "" {
 		cfg.Database.Driver = "postgres"

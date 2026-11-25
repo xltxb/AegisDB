@@ -52,7 +52,7 @@ func (a *testApp) readMeta(token string, connID int64) metaTablesResp {
 // 同步之后,表和列都在;同步状态也在。
 func TestMetadata_SyncThenRead(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "meta-sync")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_a (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -91,7 +91,7 @@ func TestMetadata_SyncThenRead(t *testing.T) {
 // 与真表长得一模一样 —— 有人会照着它去写 SQL。
 func TestMetadata_SyncReplacesInsteadOfAccumulating(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "meta-replace")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_gone (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -126,7 +126,7 @@ func hasTable(r metaTablesResp, name string) bool {
 // 检索能按**列名**找 —— 这是缓存换来的能力,实时探查做不到。
 func TestMetadata_SearchByColumnName(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "meta-search")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_search (id INTEGER, id_card_no TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -164,7 +164,7 @@ func TestMetadata_SearchByColumnName(t *testing.T) {
 // 表名和列名本身就是信息 —— "哪个库里有 id_card 这一列"是一个不该白送的答案。
 func TestMetadata_RespectsInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "meta-scope")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_secret (id INTEGER, secret_col TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -177,7 +177,7 @@ func TestMetadata_RespectsInstanceScope(t *testing.T) {
 		t.Fatalf("同步: %s", r.Msg)
 	}
 
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if r := app.syncMeta(ro, dev); r.Code == 0 {
 		t.Error("够不到这台实例的人不该能让网关去连它")
 	}
@@ -201,7 +201,7 @@ func TestMetadata_RespectsInstanceScope(t *testing.T) {
 // 两者在界面上长得一模一样,而只有前者是正常的等待。
 func TestMetadata_NeverSyncedHasNoState(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "meta-nosync")
 
 	got := app.readMeta(admin, dev)

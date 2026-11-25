@@ -3,9 +3,9 @@ package service
 import (
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 // 自助修改密码(黑盒 2026-10 工单 05 第 1 条)的拒绝理由。都包着 ErrBadRequest:

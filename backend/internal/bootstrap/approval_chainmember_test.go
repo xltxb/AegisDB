@@ -10,9 +10,9 @@ import (
 // on the chain (owner members are), so it is blocked; the owner can act.
 func TestApproval_OnlyChainMemberCanDecide(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")     // has approve menu, NOT on the chain
-	owner := app.login("zhangwei@vela.io", "vela123") // on the chain
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")     // has approve menu, NOT on the chain
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // on the chain
 
 	ap := app.submitProdHighRisk(admin) // chain = owner members
 

@@ -3,8 +3,8 @@ package dto
 import (
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/schemadiff"
+	"aegisdb/internal/model"
+	"aegisdb/internal/schemadiff"
 )
 
 // SchemaDiffSide 是对比的一边:哪个实例的哪个库。Database 留空用实例配置的默认库

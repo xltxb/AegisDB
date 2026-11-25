@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // M5(2026-10 安全审计):脚本送审、执行之后,发起人仍能删掉上传的原件 —— 审批单只存摘录与摘要,
@@ -15,7 +15,7 @@ import (
 
 func TestScriptUpload_ReferencedByApprovalCannotBeDeleted(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "保存路径")
 

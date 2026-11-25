@@ -15,8 +15,8 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // oracleUnit 是一条 CREATE 语句建出来的存储程序单元。

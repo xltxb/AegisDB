@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-29:数据查询放开的 SHOW 表结构白名单与 DESC,在真实 MySQL 的只读事务里能跑出结果。

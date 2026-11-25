@@ -8,7 +8,7 @@ import (
 // L-AUTH1(2026-10 安全审计):角色的"可审批"决定谁能签生产变更,改了却不写审计。
 func TestRoleUpdate_CanApproveChangeIsAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	role, _ := app.repo.GetRoleByCode("ro")
 	if role == nil {
 		t.Fatal("没有 ro 角色")

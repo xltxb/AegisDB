@@ -67,7 +67,7 @@ func truncateForMsg(s string) string {
 
 func TestCredentials_NeverReachTheAuditLog(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	for _, sql := range []string{
@@ -94,7 +94,7 @@ func TestCredentials_NeverReachTheAuditLog(t *testing.T) {
 
 func TestCredentials_NeverReachTheApprovalRecord(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	// On prod this is gated, so it becomes an approval ticket rather than running.
@@ -111,7 +111,7 @@ func TestCredentials_NeverReachTheApprovalRecord(t *testing.T) {
 	// stays verbatim so the gateway can execute it after approval — masking has to
 	// happen on the way out, which is exactly the kind of arrangement that gets
 	// forgotten when a second read path is added.
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ar := app.do(http.MethodGet, "/api/v1/approvals", approver, nil)
 	eq(t, ar.Code, 0, "list approvals")
 	mustNotContainSecrets(t, "GET /approvals", ar.Data)
@@ -151,7 +151,7 @@ func TestCredentials_NeverReachTheApprovalRecord(t *testing.T) {
 // the command.
 func TestCredentials_NeverReachABackgroundJob(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec-async", token, map[string]any{

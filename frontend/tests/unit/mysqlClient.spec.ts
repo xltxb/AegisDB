@@ -111,7 +111,7 @@ test('tee 的文件名只留名字本身', () => {
   const now = new Date(2026, 8, 30, 9, 5, 7)
   expect(teeFilename('/tmp/../out.log', now)).toBe('out.log')
   expect(teeFilename('C:\\x\\结果.txt', now)).toBe('结果.txt')
-  expect(teeFilename('', now)).toBe('vela-tee-20260930-090507.log')
+  expect(teeFilename('', now)).toBe('aegisdb-tee-20260930-090507.log')
 })
 
 test('交给 pager 的是 mysql 样式的 ASCII 表格:grep -v "+" 去掉边框,| wc -l 数出表头加数据行', async () => {

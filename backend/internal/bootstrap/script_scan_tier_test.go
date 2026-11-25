@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // scanScript runs the script scanner against one connection.
@@ -40,7 +40,7 @@ type scriptScanResult struct {
 // ExecuteSafeScript → execJudged),那道固定镜头没拦住任何东西,只制造了假警报。
 func TestScriptScan_JudgedByTargetTier(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	dev := app.connIDByEnv(token, "dev")
 
@@ -70,7 +70,7 @@ func TestScriptScan_JudgedByTargetTier(t *testing.T) {
 // 会把每条语句(DROP TABLE 也包括)都报成安全,且没有任何地方会失败。
 func TestScriptScan_RefusesWithoutAResolvableTarget(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/scripts/scan", token, map[string]any{
 		"connectionId": 999999, "content": "DROP TABLE x;", "filename": "t.sql",
@@ -84,7 +84,7 @@ func TestScriptScan_RefusesWithoutAResolvableTarget(t *testing.T) {
 // 是运行时规则而不是编译期常量"。
 func TestScriptScan_FollowsTheTargetTierDictionary(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 
 	const script = "DROP TABLE orders;"
@@ -110,7 +110,7 @@ func TestScriptScan_FollowsTheTargetTierDictionary(t *testing.T) {
 // 依据,所以这里只能拒绝(ED3,与不可读规则层同一立场)。
 func TestScriptScan_RefusesWhenTheTargetTierCannotBeResolved(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 
 	// API 不会让你把实例指到一个不存在的环境上 —— 这正是它守的不变量。直接改库,

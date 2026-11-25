@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
 )
 
 // An approval and an audit row each carry two snapshots: the environment the
@@ -91,7 +91,7 @@ func (a *testApp) hkSetup(token string) int64 {
 // Both snapshots land, and they are genuinely different values.
 func TestDualSnapshot_ApprovalRecordsEnvironmentAndTier(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
 
 	ap := app.approvalSnapshot(admin, app.interceptOn(admin, conn, "DROP TABLE orders;"))
@@ -103,7 +103,7 @@ func TestDualSnapshot_ApprovalRecordsEnvironmentAndTier(t *testing.T) {
 // on. It must not restate what happened before.
 func TestDualSnapshot_RebindingTheEnvironmentDoesNotRewriteHistory(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
 
 	old := app.interceptOn(admin, conn, "DROP TABLE orders;")
@@ -127,7 +127,7 @@ func TestDualSnapshot_RebindingTheEnvironmentDoesNotRewriteHistory(t *testing.T)
 // Moving an instance between environments likewise leaves history alone.
 func TestDualSnapshot_MovingTheInstanceDoesNotRewriteHistory(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
 
 	old := app.interceptOn(admin, conn, "DROP TABLE orders;")
@@ -149,7 +149,7 @@ func TestDualSnapshot_MovingTheInstanceDoesNotRewriteHistory(t *testing.T) {
 // nothing as evidence.
 func TestDualSnapshot_AuditCarriesBothAndIsCoveredByTheChain(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
 	app.interceptOn(admin, conn, "DROP TABLE orders;")
 
@@ -170,7 +170,7 @@ func TestDualSnapshot_AuditCarriesBothAndIsCoveredByTheChain(t *testing.T) {
 // deleted or renamed, so this is the moment a lookup must not blow up.
 func TestDualSnapshot_LegacyRowsWithoutATierStillList(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// A pre-split ticket: no tier, and an environment that no longer exists.
 	if err := app.repo.DB().Create(&model.Approval{
@@ -211,7 +211,7 @@ func TestDualSnapshot_ExternalPayloadCarriesEnvAndTier(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.hkSetup(admin)
 	app.setSettings(admin, map[string]any{
 		"approval.external.enabled":         true,
@@ -245,7 +245,7 @@ func TestDualSnapshot_ExternalPayloadCarriesEnvAndTier(t *testing.T) {
 // than one production environment.)
 func TestDualSnapshot_InstanceLabelsCarryTheEnvironment(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	hk := app.hkSetup(admin)
 
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -265,7 +265,7 @@ func TestDualSnapshot_InstanceLabelsCarryTheEnvironment(t *testing.T) {
 // environment, therefore to no tier, therefore to no rules.
 func TestDualSnapshot_LongEnvironmentCodesRoundTrip(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	code := "prod-hk-settlement-cluster-0917" // 31 chars, the practical maximum
 	eq(t, app.do(http.MethodPost, "/api/v1/environments", admin, map[string]any{

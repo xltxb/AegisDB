@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func metaConn(t *testing.T) *model.Connection {

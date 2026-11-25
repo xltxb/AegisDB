@@ -39,8 +39,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // backfillWebhookActions 把旧的事件类型订阅换成全部增删改查。

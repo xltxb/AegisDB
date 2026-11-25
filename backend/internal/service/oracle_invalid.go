@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // oracleObjectConn 是清点/批量编译共用的前置检查。

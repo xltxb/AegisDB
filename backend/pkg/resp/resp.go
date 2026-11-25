@@ -4,8 +4,8 @@ package resp
 import (
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // Business error codes (see backend doc §10).

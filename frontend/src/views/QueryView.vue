@@ -91,15 +91,15 @@ interface QTab {
   vertical: boolean // 这次结果按 \G 竖排画
   table: string     // 表下拉里最近选的表:「DDL」按钮看它
 }
-// 历史 / 常用:只存 SQL 文本、库和时间,不存结果。历史与草稿同一个存储键(vela_query_tabs_*),
-// 主动登出时一并清掉(见 stores/auth.ts);常用查询单独存(vela_query_saved_*),登出保留。
+// 历史 / 常用:只存 SQL 文本、库和时间,不存结果。历史与草稿同一个存储键(aegisdb_query_tabs_*),
+// 主动登出时一并清掉(见 stores/auth.ts);常用查询单独存(aegisdb_query_saved_*),登出保留。
 interface HistEntry { sql: string; grantId: number; db: string; at: number; ok: boolean; rows?: number; ms?: number }
 const MAX_TABS = 12
 const MAX_HISTORY = 50
 const MAX_SAVED = 30
-const storeKey = computed(() => `vela_query_tabs_${auth.me?.id ?? 0}`)
-// 常用查询单独一个键:它是人主动收藏的,主动登出不该跟着草稿一起清掉(stores/auth 只清 vela_query_tabs_*)。
-const savedKey = computed(() => `vela_query_saved_${auth.me?.id ?? 0}`)
+const storeKey = computed(() => `aegisdb_query_tabs_${auth.me?.id ?? 0}`)
+// 常用查询单独一个键:它是人主动收藏的,主动登出不该跟着草稿一起清掉(stores/auth 只清 aegisdb_query_tabs_*)。
+const savedKey = computed(() => `aegisdb_query_saved_${auth.me?.id ?? 0}`)
 // 历史里每条 SQL 存进浏览器时的上限(字符):历史与草稿同一个键,几条超长 SQL 就能把配额占满,
 // 之后 setItem 一直失败,刷新后草稿丢失(2026-10-26 回归排查)。超出的只截存储,不截当次显示。
 const HIST_SQL_CAP = 20_000
@@ -474,7 +474,7 @@ const clearHistory = () => { history.value = [] }
 
 // ---------------------------------------------------------------- 上下分屏
 
-const SPLIT_KEY = 'vela_query_split'
+const SPLIT_KEY = 'aegisdb_query_split'
 const SPLIT_DEFAULT = 44
 const split = ref(SPLIT_DEFAULT) // 上半部分占的百分比
 try { const v = Number(localStorage.getItem(SPLIT_KEY)); if (v >= 20 && v <= 80) split.value = v } catch { /* 隐私模式 */ }

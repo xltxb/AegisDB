@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 const nestedSQL = "SELECT x FROM (SELECT id_card AS x FROM t_user) s"
@@ -21,7 +21,7 @@ const nestedSQL = "SELECT x FROM (SELECT id_card AS x FROM t_user) s"
 // 审批单文案要说清"仍按脱敏导出"。
 func TestStructuralExport_ReviewedButNeverUnmasked(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	app.addSensitiveColumn(admin, "*", "id_card", "partial")
 
@@ -47,7 +47,7 @@ func TestStructuralExport_ReviewedButNeverUnmasked(t *testing.T) {
 
 	// 批准之后离开 awaiting —— 而 IncludeSensitive 仍然是 false。
 	// 这一条是回退的直接守卫:worker 拿到的就是这一位,它是 false,产出就是脱敏的。
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/approve", approver, nil).Code, 0, "审批通过")
 	after := app.lastExportJob(conn)
 	if after.Status == model.ExportAwaiting {
@@ -62,7 +62,7 @@ func TestStructuralExport_ReviewedButNeverUnmasked(t *testing.T) {
 // 一道逢查询就要审批的闸,两天之内就会被要求关掉。
 func TestStructuralExport_FlatQueryOnSensitiveTableRunsStraightAway(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	app.addSensitiveColumn(admin, "*", "id_card", "partial")
 
@@ -82,7 +82,7 @@ func TestStructuralExport_FlatQueryOnSensitiveTableRunsStraightAway(t *testing.T
 // 结构类任务这一位是 false,但它同样是靠一张单才从 awaiting 走到 pending 的。
 func TestStructuralExport_WorkerRechecksTheTicketEvenWithoutRawFlag(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	app.addSensitiveColumn(admin, "*", "id_card", "partial")
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -102,7 +102,7 @@ func TestStructuralExport_WorkerRechecksTheTicketEvenWithoutRawFlag(t *testing.T
 // 之前每条 WITH 都进审批,而绝大多数 WITH 根本没碰敏感字段。
 func TestStructuralExport_CTEWithoutSensitiveColumnsRunsStraightAway(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	app.addSensitiveColumn(admin, "*", "id_card", "partial")
 

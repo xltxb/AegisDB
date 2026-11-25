@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm/clause"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 管理后台拆分(.scratch/admin-user-split 工单 01):管理类接口一律要平台管理员,**不靠菜单**。
@@ -58,9 +58,9 @@ func TestAdminAPIs_RequirePlatformAdminNotJustAMenu(t *testing.T) {
 	app := newTestApp(t)
 	grantEveryMenu(t, app, "l2")
 	grantEveryMenu(t, app, "audit")
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	auditor := app.login("hujun@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123")
 
 	for _, p := range adminOnlyReads {
 		if r := app.do(http.MethodGet, p, l2, nil); r.Code != 40300 {
@@ -93,7 +93,7 @@ func TestAdminAPIs_RequirePlatformAdminNotJustAMenu(t *testing.T) {
 // 用户后台还要用的读接口保持共享:收紧管理接口不能误伤终端、发布、导出。
 func TestAdminAPIs_SharedReadsStayOpen(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	for _, p := range []string{
 		"/api/v1/connections", "/api/v1/tags", "/api/v1/projects", "/api/v1/env-tiers", "/api/v1/environments",
 		"/api/v1/risk-commands", "/api/v1/sql-review/rules", "/api/v1/sensitive-columns", "/api/v1/pipelines",
@@ -108,9 +108,9 @@ func TestAdminAPIs_SharedReadsStayOpen(t *testing.T) {
 // 会话策略人人可读,时长跟着系统设置走 —— 从前非管理员读不到 /settings,一律按默认 15 分钟锁定。
 func TestSessionPolicy_ReadableByEveryoneAndFollowsSettings(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.idleMinutes": 42, "security.idleLock": true})
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodGet, "/api/v1/auth/session-policy", ro, nil)
 	eq(t, r.Code, 0, "只读用户读会话策略: "+r.Msg)
 	if got := string(r.Data); !containsAll(got, `"idleLock":true`, `"idleMinutes":42`) {
@@ -132,10 +132,10 @@ func containsAll(s string, subs ...string) bool {
 // 链校验也给 DBA 负责人(2026-10-26 回归 18)。
 func TestAudit_DBALeadSeesEveryoneOthersOnlyOwn(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	auditor := app.login("hujun@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123")
 	conn := app.connIDByName(admin, "order-cluster")
 	app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{"connectionId": conn, "sql": "SELECT 1 FROM t"})
 	app.do(http.MethodPost, "/api/v1/terminal/exec", owner, map[string]any{"connectionId": conn, "sql": "SELECT 2 FROM t"})
@@ -178,8 +178,8 @@ func TestAudit_DBALeadSeesEveryoneOthersOnlyOwn(t *testing.T) {
 // 「我的操作记录」(mine=1):能看全部的管理员 / 审计员,在这里也只看到自己的;实例下拉同理。
 func TestAudit_MineOnlyShowsOwnEvenForAdmins(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	conn := app.connIDByName(admin, "order-cluster")
 	app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{"connectionId": conn, "sql": "SELECT 1 FROM t"})
 	app.do(http.MethodPost, "/api/v1/terminal/exec", l2, map[string]any{"connectionId": conn, "sql": "SELECT 2 FROM t"})

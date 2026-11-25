@@ -35,8 +35,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // precheckTimeout 一条语句的校验上限。EXPLAIN 只生成计划,慢通常意味着目标库本身

@@ -10,11 +10,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // inspectionMaxBody 是一份报告请求体的上限(JSON 摘要 + 完整 HTML)。

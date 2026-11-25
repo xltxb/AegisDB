@@ -39,7 +39,7 @@ PostgreSQL 16+,停机一次性搬迁,MySQL 原样保留作回退。审计哈希�
 (改用 `clause.Eq` / `clause.OrderBy` 让 GORM 按方言引用),一处测试直接调 AutoMigrate。
 迁移锁:MySQL 用 `GET_LOCK`,PG 用会话级咨询锁,同样钉在一条专用连接上。
 
-测试:`VELA_TEST_STORE_PG` 设了,整个 bootstrap 套件改跑真 PG(每个测试从迁移+播种好的模板库
+测试:`AEGISDB_TEST_STORE_PG` 设了,整个 bootstrap 套件改跑真 PG(每个测试从迁移+播种好的模板库
 `CREATE DATABASE … TEMPLATE` 复制一份)。
 
 ### 四、搬迁是网关二进制的子命令 `migrate-store`,停机进行
@@ -49,9 +49,9 @@ PostgreSQL 16+,停机一次性搬迁,MySQL 原样保留作回退。审计哈希�
 
 - **时区**:MySQL 的 DATETIME 不带时区,`--tz` 必填。填错时内容摘要两边照样相等(按同一个错时区换算),
   能拦住它的只有审计链,所以源库审计链验不过默认拒绝搬(`--accept-broken-chain` 例外)。
-- **防分叉**:搬完在源 MySQL 里建标记表 `vela_store_moved`。网关在 MySQL 上启动(serve / init / migrate)
+- **防分叉**:搬完在源 MySQL 里建标记表 `aegisdb_store_moved`。网关在 MySQL 上启动(serve / init / migrate)
   见到它就拒绝。起因是升级包会覆盖 `configs/config.yaml`,如果把切换写在那里,下一次升级会悄悄连回旧
-  MySQL 继续接写入。所以切换写在 `vela.env`(`VELA_DB_DRIVER=postgres`),标记是第二道保险。
+  MySQL 继续接写入。所以切换写在 `aegisdb.env`(`AEGISDB_DB_DRIVER=postgres`),标记是第二道保险。
   回退到 MySQL = 有意地删掉这张表。
 
 ### 五、不做的
@@ -63,5 +63,5 @@ PostgreSQL 16+,停机一次性搬迁,MySQL 原样保留作回退。审计哈希�
 ## 后果
 
 - 之后每个改表结构的迁移要写两份(MySQL + PG),漂移测试兜底。
-- 测试多一种跑法:`VELA_TEST_STORE_MYSQL` + `VELA_TEST_STORE_PG` 设了才跑的那些用例(表结构比对、
+- 测试多一种跑法:`AEGISDB_TEST_STORE_MYSQL` + `AEGISDB_TEST_STORE_PG` 设了才跑的那些用例(表结构比对、
   搬迁端到端)平时会跳过,发版前要带上这两个变量跑一遍。

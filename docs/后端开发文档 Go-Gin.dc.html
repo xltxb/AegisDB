@@ -8,12 +8,12 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
 <style>
   body { margin:0; background:#fff; color:var(--text-body); }
   .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
@@ -50,7 +50,7 @@
 
 <div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
   <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
-  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">AegisDB</span>
   <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Backend Engineering</span>
 </div>
 
@@ -187,8 +187,8 @@ migrations/  *.sql
 <h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 审计与 Webhook 外推</h2>
 <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Audit &amp; Webhook</div>
 <p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 8px">审计 <strong>append-only</strong>,每条记录 <code class="inl">hash = SHA256(prev_hash + payload)</code> 形成哈希链,防篡改。Webhook 推送以 <code class="inl">HMAC-SHA256</code> 签名,失败按指数退避重试。</p>
-<pre><code>sig := hmacSHA256(cfg.Secret, body)            <span class="c">// X-Vela-Signature</span>
-req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
+<pre><code>sig := hmacSHA256(cfg.Secret, body)            <span class="c">// X-AegisDB-Signature</span>
+req.Header.Set(<span class="s">"X-AegisDB-Signature"</span>, sig)
 <span class="k">for</span> i := <span class="a">0</span>; i &lt; cfg.RetryMax; i++ {
    <span class="k">if</span> ok := post(cfg.Endpoint, body); ok { <span class="k">break</span> }
    time.Sleep(backoff(i))                       <span class="c">// 2^i 秒</span>
@@ -378,7 +378,7 @@ req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
 <span class="k">func</span> (h *TerminalHandler) RiskCheck(c *gin.Context) { <span class="c">/* ... */</span> }</code></pre>
 <p style="font:600 13px var(--font-mono); color:var(--text-strong); margin:14px 0 4px">docs/swagger.yaml(节选)</p>
 <pre><code><span class="k">openapi</span>: 3.0.3
-<span class="k">info</span>: { <span class="k">title</span>: DP DB GATEWAY API, <span class="k">version</span>: <span class="s">"1.0"</span> }
+<span class="k">info</span>: { <span class="k">title</span>: AegisDB API, <span class="k">version</span>: <span class="s">"1.0"</span> }
 <span class="k">servers</span>: [{ <span class="k">url</span>: /api/v1 }]
 <span class="k">components</span>:
   <span class="k">securitySchemes</span>:
@@ -502,7 +502,7 @@ req.Header.Set(<span class="s">"X-Vela-Signature"</span>, sig)
 </div>
 <p style="font:400 12px/1.5 var(--font-body); color:var(--text-faint); margin:10px 0 0">实线层为同步主链路;虚线框为外部集成。网关无状态,字典/矩阵经 Redis 缓存热生效;审计异步落库不阻塞执行。</p>
 
-<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>DP DB GATEWAY · 后端开发文档 (Go · Gin · MySQL)</span><span style="margin-left:auto">机密 · 内部</span></div>
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>AegisDB · 后端开发文档 (Go · Gin · MySQL)</span><span style="margin-left:auto">机密 · 内部</span></div>
 
 </td></tr></tbody>
 <tfoot><tr><td class="ftr-space"></td></tr></tfoot>

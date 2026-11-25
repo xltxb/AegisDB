@@ -1,0 +1,36 @@
+# systemd unit for AegisDB (single-binary: API + SPA).
+# Prereqs (run once as root):
+#   sudo useradd --system --home /opt/aegisdb --shell /usr/sbin/nologin aegisdb
+#   sudo mkdir -p /opt/aegisdb && sudo tar -xzf aegisdb-*.tar.gz -C /opt/aegisdb
+#   sudo cp /opt/aegisdb/aegisdb.env.example /opt/aegisdb/aegisdb.env  # then edit + fill secrets
+#   sudo chown -R aegisdb:aegisdb /opt/aegisdb && sudo chmod 600 /opt/aegisdb/aegisdb.env
+# Install:
+#   sudo cp /opt/aegisdb/deploy/aegisdb.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now aegisdb
+# Edit the paths / EnvironmentFile location to match your deployment.
+
+[Unit]
+Description=AegisDB Gateway
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegisdb
+Group=aegisdb
+WorkingDirectory=/opt/aegisdb
+# Secrets (AEGISDB_JWT_SECRET, AEGISDB_MYSQL_DSN, ...) live here — chmod 600, not in git.
+# The leading '-' avoids an opaque systemd failure if the file is missing; the
+# server then exits with a clear "missing JWT secret" message instead.
+EnvironmentFile=-/opt/aegisdb/aegisdb.env
+ExecStart=/opt/aegisdb/aegisdb -config configs/config.yaml
+Restart=on-failure
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

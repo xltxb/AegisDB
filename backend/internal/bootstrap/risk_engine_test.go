@@ -10,7 +10,7 @@ import (
 // approval on PROD (dictionary high). Pure verdict, no side effects.
 func TestEnvLayering_SameDropDevAllowsProdIntercepts(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	const sql = "DROP TABLE orders;"
 
 	dev := app.riskCheck(token, app.connIDByEnv(token, "dev"), sql)
@@ -31,7 +31,7 @@ func TestEnvLayering_SameDropDevAllowsProdIntercepts(t *testing.T) {
 // the same statement WITH a WHERE clause stays allowed.
 func TestStrictMode_NoWhereDeleteIntercepted(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	devConn := app.connIDByEnv(token, "dev")
 
 	// Baseline: with DEV's no-WHERE gate switched OFF, a bare DELETE runs there.
@@ -64,7 +64,7 @@ func TestStrictMode_NoWhereDeleteIntercepted(t *testing.T) {
 // embedded high-risk command is still caught by the dictionary scan, though.
 func TestBlankInput_NotInterceptedButStillScanned(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	for _, sql := range []string{"1", "   ", "-- just a comment", "42;"} {
@@ -87,7 +87,7 @@ func TestBlankInput_NotInterceptedButStillScanned(t *testing.T) {
 // restart. Flipping DROP@dev from off to high flips the live verdict.
 func TestRiskDictionary_HotReload(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	devConn := app.connIDByEnv(token, "dev")
 	const sql = "DROP TABLE staging_tmp;"
 

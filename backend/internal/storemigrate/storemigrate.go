@@ -38,9 +38,9 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/migrations"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/migrations"
 )
 
 // Options 是一次搬迁的参数。

@@ -114,7 +114,7 @@ func (a *testApp) sensitiveColumns(token string) []sensitiveRuleView {
 
 func TestSensitive_CRUD(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	v := app.addSensitiveColumn(admin, "t_user", "id_card", "partial")
 	if v.ID == 0 {
@@ -168,8 +168,8 @@ func TestSensitive_CRUD(t *testing.T) {
 // 维护敏感字段是管理动作:配错一条,敏感数据就明文出去了。
 func TestSensitive_MutationsAreAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	dba := app.login("chenhao@vela.io", "vela123") // l2
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123") // l2
 
 	v := app.addSensitiveColumn(admin, "t_user", "id_card", "partial")
 
@@ -196,7 +196,7 @@ func TestSensitive_MutationsAreAdminOnly(t *testing.T) {
 // 这条是整个功能的核心断言:查出来的结果里,明文一个字节都不能有。
 func TestSensitive_ResponseCarriesMaskedDataNotPlaintext(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConn(admin)
 
 	const plaintext = "110101199003071234"
@@ -238,7 +238,7 @@ func TestSensitive_ResponseCarriesMaskedDataNotPlaintext(t *testing.T) {
 // 摆设(那会让人以为已经解除了脱敏,实际没有,或者反过来)。
 func TestSensitive_DisabledRuleStopsMasking(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConn(admin)
 
 	const plaintext = "6222021234567890123"

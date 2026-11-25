@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // BizRefused 是执行层在下发前拒绝(要查过数据字典才知道的那种)。服务层按拒绝处理,不算执行失败。

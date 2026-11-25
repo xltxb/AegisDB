@@ -19,7 +19,7 @@ import (
 
 func TestAudit_SimulatedRunIsNotRecordedAsExecuted(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 没有凭据的实例 = 模拟路径(夹具默认允许模拟,模拟的是开发环境)。
 	conn := app.newOracleConn(admin, "audit-sim")
 
@@ -61,7 +61,7 @@ func TestAudit_SimulatedRunIsNotRecordedAsExecuted(t *testing.T) {
 // 真实执行仍然记成 executed —— 否则上面那条用"永远不记 executed"就能作弊通过。
 func TestAudit_RealRunStillRecordedAsExecuted(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "audit-real") // 真实 SQLite 文件
 
 	if r := app.execSQL(admin, dev, "SELECT 1"); r.Code != 0 {

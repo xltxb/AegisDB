@@ -7,7 +7,7 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The rule tables' `env` column became `tier_code`. AutoMigrate does not rename

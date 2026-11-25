@@ -23,15 +23,15 @@ import (
 // 列表里自己那一行上,点下去的后果是当场把自己踢出控制台。
 func TestUserDisable_AdminCannotDisableThemselves(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	me := app.userIDByEmail(admin, "linwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	me := app.userIDByEmail(admin, "linwei@aegisdb.io")
 
 	r := app.do(http.MethodPatch, "/api/v1/users/"+itoa(me), admin, map[string]any{"status": "disabled"})
 	if r.Code == 0 {
 		t.Fatal("管理员把自己停用了 —— 这一下会当场把自己踢出控制台")
 	}
 	// 拒绝之后账户必须还是好的,不能停在一个半停用的状态里。
-	if app.userStatus(admin, "linwei@vela.io") != "active" {
+	if app.userStatus(admin, "linwei@aegisdb.io") != "active" {
 		t.Error("被拒的停用不该真的落库")
 	}
 }
@@ -39,11 +39,11 @@ func TestUserDisable_AdminCannotDisableThemselves(t *testing.T) {
 // 最后一个管理员不能被停用 —— 停了就再没有人能把任何人启用回来。
 func TestUserDisable_TheLastAdminCannotBeDisabled(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 先造第二个管理员,证明"有两个的时候可以停用其中一个"。
 	adminRole := app.roleIDByCode(admin, "admin")
-	zw := app.userIDByEmail(admin, "zhangwei@vela.io")
+	zw := app.userIDByEmail(admin, "zhangwei@aegisdb.io")
 	eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(zw), admin, map[string]any{
 		"roleIds": []int64{adminRole},
 	}).Code, 0, "把张伟提成管理员")
@@ -54,13 +54,13 @@ func TestUserDisable_TheLastAdminCannotBeDisabled(t *testing.T) {
 	}).Code, 0, "还有别的管理员时,停用是允许的")
 
 	// 现在只剩 linwei 一个管理员了。任何人都不能把他停掉 —— 包括他自己。
-	me := app.userIDByEmail(admin, "linwei@vela.io")
+	me := app.userIDByEmail(admin, "linwei@aegisdb.io")
 	if r := app.do(http.MethodPatch, "/api/v1/users/"+itoa(me), admin, map[string]any{
 		"status": "disabled",
 	}); r.Code == 0 {
 		t.Fatal("最后一个管理员被停用了 —— 从此没有人能启用任何账户,只能去改数据库")
 	}
-	if app.userStatus(admin, "linwei@vela.io") != "active" {
+	if app.userStatus(admin, "linwei@aegisdb.io") != "active" {
 		t.Error("被拒的停用不该真的落库")
 	}
 }

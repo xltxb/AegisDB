@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // relLog 是一段阶段日志。零值可用。

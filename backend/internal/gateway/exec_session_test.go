@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 专用连接:整个执行同一个会话;执行完当场断开;超时取消照样生效。
 
 func testMySQLConn(t *testing.T) (*model.Connection, *sql.DB) {
 	t.Helper()
-	v := os.Getenv("VELA_TEST_MYSQL") // host:port/user/password
+	v := os.Getenv("AEGISDB_TEST_MYSQL") // host:port/user/password
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)
@@ -52,14 +52,14 @@ func TestExecSession_OneSessionThenDisconnected(t *testing.T) {
 	ctx := WithExecSession(context.Background(), sess)
 
 	// 三条语句各走一次 RealRun(与批处理逐条执行一样),会话变量与线程号都得连得上
-	if _, err := RealRun(ctx, conn, "SET @vela_sess = 42", 5*time.Second); err != nil {
+	if _, err := RealRun(ctx, conn, "SET @aegisdb_sess = 42", 5*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	a, err := RealRun(ctx, conn, "SELECT CONNECTION_ID()", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := RealRun(ctx, conn, "SELECT @vela_sess, CONNECTION_ID()", 5*time.Second)
+	b, err := RealRun(ctx, conn, "SELECT @aegisdb_sess, CONNECTION_ID()", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}

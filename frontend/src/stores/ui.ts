@@ -15,10 +15,10 @@ function applyHtmlLang(l: 'zh' | 'en') {
 
 // UI store: language + theme (matches the prototype's lang toggle & dark theme).
 export const useUIStore = defineStore('ui', () => {
-  const lang = ref<'zh' | 'en'>((localStorage.getItem('vela_lang') as 'zh' | 'en') || 'zh')
+  const lang = ref<'zh' | 'en'>((localStorage.getItem('aegisdb_lang') as 'zh' | 'en') || 'zh')
   type Theme = 'dark' | 'light' | 'system'
   // Per-user preference (stored in this browser). Defaults to light.
-  const theme = ref<Theme>((localStorage.getItem('vela_theme') as Theme) || 'light')
+  const theme = ref<Theme>((localStorage.getItem('aegisdb_theme') as Theme) || 'light')
   // 页眉副标题(每个视图自己设),空 = 用路由的 i18n 默认值。
   //
   // 存的是**词条 key + 参数**,不是渲染好的字符串。视图通常在数据加载完那一刻设它,
@@ -79,7 +79,7 @@ export const useUIStore = defineStore('ui', () => {
   function setLang(l: 'zh' | 'en') {
     lang.value = l
     i18n.global.locale.value = l
-    localStorage.setItem('vela_lang', l)
+    localStorage.setItem('aegisdb_lang', l)
     applyHtmlLang(l)
   }
 
@@ -92,7 +92,7 @@ export const useUIStore = defineStore('ui', () => {
 
   function setTheme(t: Theme) {
     theme.value = t
-    localStorage.setItem('vela_theme', t)
+    localStorage.setItem('aegisdb_theme', t)
     applyTheme()
   }
 

@@ -11,7 +11,7 @@ import (
 func TestApproval_InitiatorCannotSelfApprove(t *testing.T) {
 	app := newTestApp(t)
 	// zhangwei is in the owner role → both a chain approver AND able to submit.
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(owner) // zhangwei is the initiator
 
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", owner, nil)
@@ -20,7 +20,7 @@ func TestApproval_InitiatorCannotSelfApprove(t *testing.T) {
 	}
 
 	// a different chain member (lina, owner) can still approve it
-	other := app.login("lina@vela.io", "vela123")
+	other := app.login("lina@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", other, nil).Code, 0,
 		"a non-initiator chain member should be able to approve")
 }
@@ -30,14 +30,14 @@ func TestApproval_InitiatorCannotSelfApprove(t *testing.T) {
 // the real outcome was rejected (R19).
 func TestApproval_DecideAlreadyDecidedIsNotSuccess(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("linwei@vela.io", "vela123") // admin: unrestricted, not in the owner chain
+	initiator := app.login("linwei@aegisdb.io", "aegisdb123") // admin: unrestricted, not in the owner chain
 	ap := app.submitProdHighRisk(initiator)
 
-	first := app.login("zhangwei@vela.io", "vela123") // owner, chain member
+	first := app.login("zhangwei@aegisdb.io", "aegisdb123") // owner, chain member
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", first, nil).Code, 0, "first reject succeeds")
 
 	// a second member approving the already-rejected ticket must fail, not lie
-	second := app.login("lina@vela.io", "vela123")
+	second := app.login("lina@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", second, nil); r.Code == 0 {
 		t.Errorf("approving an already-decided ticket must not report success, got code=%d", r.Code)
 	}

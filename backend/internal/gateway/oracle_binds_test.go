@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // SQL*Plus 绑定变量(sqlplus-compat 06)。

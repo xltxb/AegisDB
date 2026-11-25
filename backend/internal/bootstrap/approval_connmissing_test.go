@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 目标连接被删掉的工单,任何一步都不能报成"已执行" —— 什么都没跑(V2 回归)。
@@ -15,7 +15,7 @@ import (
 // 说清"库没了、没执行",而不是让人对着一条查不到结果的成功发呆。
 func TestApproval_DeletedTargetConnReportedNotExecuted(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("linwei@vela.io", "vela123") // admin: not in the owner chain
+	initiator := app.login("linwei@aegisdb.io", "aegisdb123") // admin: not in the owner chain
 	prod := app.connIDByEnv(initiator, "prod")
 	ap := app.submitProdHighRisk(initiator)
 
@@ -24,7 +24,7 @@ func TestApproval_DeletedTargetConnReportedNotExecuted(t *testing.T) {
 		t.Fatalf("delete connection: %v", err)
 	}
 
-	approver := app.login("zhangwei@vela.io", "vela123") // owner: chain member
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123") // owner: chain member
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil)
 	eq(t, r.Code, 0, "decision is recorded")
 	// 通过这一步既不执行,也不该声称执行过。

@@ -18,9 +18,9 @@ import (
 	"github.com/lib/pq"                // postgres / GaussDB(DWS) — named for NoticeHandler
 	goora "github.com/sijms/go-ora/v2" // oracle (pure Go, no instant client)
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 // dbNameRe restricts a target database/schema name to a safe identifier so it

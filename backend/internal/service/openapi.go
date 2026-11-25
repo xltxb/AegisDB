@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
-	"velagateway/internal/review"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/review"
+	"aegisdb/pkg/crypto"
 )
 
 // 开放接口 —— 外部系统提交 SQL 升级单。
@@ -141,9 +141,9 @@ func serviceAccountEmail(name string) string {
 	slug := strings.Trim(b.String(), "-")
 	sum := fmt.Sprintf("%x", sha256.Sum256([]byte(name)))[:8]
 	if slug == "" {
-		return "svc-" + sum + "@service.vela"
+		return "svc-" + sum + "@service.aegisdb"
 	}
-	return "svc-" + clip(slug, 40) + "-" + sum + "@service.vela"
+	return "svc-" + clip(slug, 40) + "-" + sum + "@service.aegisdb"
 }
 
 // ---------------------------------------------------------------- 凭据管理

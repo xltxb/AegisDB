@@ -14,8 +14,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // cfgApproverRole reads the approve stage's configured role code ("" = default

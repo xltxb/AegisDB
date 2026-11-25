@@ -9,7 +9,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 黑盒 2026-10 工单 05 第 4 条:GET /users 在 65 个用户时要约 2.5 秒。
@@ -19,7 +19,7 @@ import (
 // 次查询。这里钉住的是形状而不是毫秒:用户再多 40 个,这个接口的查询次数不该跟着涨。
 func TestUsersList_QueryCountDoesNotGrowWithUsers(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	var n int64
 	db := app.repo.DB()
@@ -43,7 +43,7 @@ func TestUsersList_QueryCountDoesNotGrowWithUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 40; i++ {
-		u := &model.User{Name: fmt.Sprintf("bulk%02d", i), Email: fmt.Sprintf("bulk%02d@vela.io", i), RoleID: role.ID, Status: "active", Kind: model.UserKindHuman}
+		u := &model.User{Name: fmt.Sprintf("bulk%02d", i), Email: fmt.Sprintf("bulk%02d@aegisdb.io", i), RoleID: role.ID, Status: "active", Kind: model.UserKindHuman}
 		if err := app.repo.CreateUser(u); err != nil {
 			t.Fatal(err)
 		}
@@ -60,7 +60,7 @@ func TestUsersList_QueryCountDoesNotGrowWithUsers(t *testing.T) {
 // 优化不能改变每一行的内容:角色名、角色 id、可否停用(自己 / 最后一位管理员)照旧。
 func TestUsersList_RowsUnchangedByBatching(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	type row struct {
 		ID           int64    `json:"id"`
 		Email        string   `json:"email"`
@@ -87,7 +87,7 @@ func TestUsersList_RowsUnchangedByBatching(t *testing.T) {
 		if want := app.repo.EffectiveRoleIDs(u); fmt.Sprint(want) != fmt.Sprint(x.RoleIDs) {
 			t.Errorf("%s roleIds = %v, want %v", x.Email, x.RoleIDs, want)
 		}
-		if x.Email == "linwei@vela.io" && x.CanDisable {
+		if x.Email == "linwei@aegisdb.io" && x.CanDisable {
 			t.Errorf("the caller must not be able to disable themself")
 		}
 	}

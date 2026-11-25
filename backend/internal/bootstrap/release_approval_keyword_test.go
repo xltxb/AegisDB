@@ -5,7 +5,7 @@ package bootstrap
 //
 // 审批单的 keyword 列宽 32,取的却是"脚本按空白切开的第一段"。脚本以一行分隔线注释
 // 或一句不带空格的中文注释开头时，那一整行就是第一段。SQLite 不查列宽，只有真库
-// (MySQL 严格模式 / PostgreSQL)才炸;设 VELA_TEST_STORE_PG 时本用例跑在 PG 上，修复前失败。
+// (MySQL 严格模式 / PostgreSQL)才炸;设 AEGISDB_TEST_STORE_PG 时本用例跑在 PG 上，修复前失败。
 
 import (
 	"encoding/json"
@@ -16,7 +16,7 @@ import (
 
 func TestReleaseApproval_LeadingLongCommentStillParks(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "长注释开头流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve"},

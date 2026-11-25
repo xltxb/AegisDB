@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 树上点一个 Oracle schema,要真的切过去。

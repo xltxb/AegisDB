@@ -20,7 +20,7 @@ export const failure = (msg: string) => ({
 // 平台管理员。菜单里连发布那一组(pipeline / releases / pipelines)也带上:发布页的
 // 路由闸是 meta.gate = 'pipeline',少了它守卫会静静地把访问重定向到总览。
 export const ME = {
-  id: 1, name: 'Lin Wei', email: 'linwei@vela.io', initials: 'LW',
+  id: 1, name: 'Lin Wei', email: 'linwei@aegisdb.io', initials: 'LW',
   roleId: 1, roleCode: 'admin', roleName: 'Admin', layer: 'core',
   roleIds: [1], roleNames: ['Admin'], roleCodes: ['admin'],
   canApprove: true, canSeeAllReleases: true, mfaEnabled: false,
@@ -47,8 +47,8 @@ export async function stubCommon(page: Page, opts: { tiers?: unknown; envs?: unk
   // 只认接口路径:'**/api/**' 会把 vite 上的源码模块 /src/api/*.ts 一起拦掉,整个应用起不来。
   await page.route((u) => u.pathname.startsWith('/api/'), (r) => r.fulfill({ status: 502, body: 'e2e: unstubbed endpoint' }))
   await page.addInitScript(() => {
-    localStorage.setItem('vela_session', '1.e2e-token')
-    document.cookie = 'vela_csrf=e2e-csrf; path=/'
+    localStorage.setItem('aegisdb_session', '1.e2e-token')
+    document.cookie = 'aegisdb_csrf=e2e-csrf; path=/'
   })
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope(ME)))
   // 系统名称与 LOGO:默认未配置(各 spec 要测品牌时自己再注册一条盖掉它)

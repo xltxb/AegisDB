@@ -15,7 +15,7 @@ import (
 // 绑普通服务账号照常可用。
 func TestAPIClient_CanBindAServiceAccount(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	sa := app.createServiceAccount(admin, "ci-bot", []int64{app.roleIDByCode(admin, "l2")}, nil)
 
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
@@ -27,8 +27,8 @@ func TestAPIClient_CanBindAServiceAccount(t *testing.T) {
 // 新建凭据绑真人(普通成员)被拒:只能绑服务账号。
 func TestAPIClient_CannotBindAHumanMember(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	uid := app.userIDByEmail(admin, "chenhao@vela.io") // 真人,持 l2 角色
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	uid := app.userIDByEmail(admin, "chenhao@aegisdb.io") // 真人,持 l2 角色
 
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "CI 集成", "userId": uid, "scopes": []string{"release:read"},
@@ -42,8 +42,8 @@ func TestAPIClient_CannotBindAHumanMember(t *testing.T) {
 // 不经登录、不经 MFA、只靠一串密钥的身份。
 func TestAPIClient_CannotBindAPlatformAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	adminUID := app.userIDByEmail(admin, "linwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	adminUID := app.userIDByEmail(admin, "linwei@aegisdb.io")
 
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "影子管理员", "userId": adminUID, "scopes": []string{"release:create"},
@@ -56,9 +56,9 @@ func TestAPIClient_CannotBindAPlatformAdmin(t *testing.T) {
 // 换绑走同一道闸。只在创建时挡、改绑时放过去,等于没挡。
 func TestAPIClient_CannotBeRebountToAnAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	sa := app.createServiceAccount(admin, "rebind-src", []int64{app.roleIDByCode(admin, "l2")}, nil)
-	adminUID := app.userIDByEmail(admin, "linwei@vela.io")
+	adminUID := app.userIDByEmail(admin, "linwei@aegisdb.io")
 
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "先合法后换绑", "userId": sa.ID, "scopes": []string{"release:read"},

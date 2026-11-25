@@ -55,7 +55,7 @@ func hasCommand(items []windowStmt, sql string) *windowStmt {
 // 窗口期里跑过的语句都在回看里,而被这扇门放行的那条要认得出来。
 func TestWindowStatements_ListsWhatRanAndMarksWhatTheWindowRelaxed(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const targetDB = "orders_db"
 	const risky = "DROP TABLE orders_2024_q3"        // 本来要审批,窗口放行
@@ -95,7 +95,7 @@ func TestWindowStatements_ListsWhatRanAndMarksWhatTheWindowRelaxed(t *testing.T)
 // 窗口期之外跑的,不算在这扇门头上。
 func TestWindowStatements_ExcludesWhatRanOutsideTheWindow(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const targetDB = "orders_db"
 	const plain = "SELECT id FROM orders LIMIT 1"
@@ -119,7 +119,7 @@ func TestWindowStatements_ExcludesWhatRanOutsideTheWindow(t *testing.T) {
 // 窗口按库开,回看也按库:同一台实例上别的库跑的语句不该串进来。
 func TestWindowStatements_ScopedToTheWindowsDatabase(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const plain = "SELECT id FROM orders LIMIT 1"
 
@@ -141,7 +141,7 @@ func TestWindowStatements_ScopedToTheWindowsDatabase(t *testing.T) {
 // 同一个人在 /audit 上仍然看不见这条命令。两页分道是刻意的,不是漏改。
 func TestWindowStatements_NonOverseerSeesEveryonesCommands(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const targetDB = "orders_db"
 	const risky = "DROP TABLE orders_2024_q3"
@@ -153,7 +153,7 @@ func TestWindowStatements_NonOverseerSeesEveryonesCommands(t *testing.T) {
 
 	// L2:进得了班车菜单,但**不是**监督角色(admin/owner/audit)。放开这一页,要服务
 	// 的正是他 —— 改动之前他打开回看只看得见自己跑的那几条。
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	got := app.windowStatements(l2, id)
 	hit := hasCommand(got.Items, risky)
 	if hit == nil {
@@ -186,7 +186,7 @@ func TestWindowStatements_NonOverseerSeesEveryonesCommands(t *testing.T) {
 // 门槛必须按角色判、不能按菜单键判 —— 这个测试就是钉这一点的。
 func TestWindowStatements_AuditorMayReviewButPlainReadOnlyMayNot(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const targetDB = "orders_db"
 	const risky = "DROP TABLE orders_2024_q3"
@@ -196,12 +196,12 @@ func TestWindowStatements_AuditorMayReviewButPlainReadOnlyMayNot(t *testing.T) {
 		"connectionId": prod, "sql": risky, "reason": "窗口内执行", "database": targetDB,
 	}).Code, 0, "管理员在窗口内执行")
 
-	auditor := app.login("hujun@vela.io", "vela123") // 审计角色:无 execwindow 菜单
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123") // 审计角色:无 execwindow 菜单
 	if hasCommand(app.windowStatements(auditor, id).Items, risky) == nil {
 		t.Fatal("审计员打不开这扇门的回看 —— 查旧账正是他的本职")
 	}
 
-	ro := app.login("zhaolei@vela.io", "vela123") // 只读:无 execwindow,非监督角色
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 只读:无 execwindow,非监督角色
 	eq(t, app.do(http.MethodGet, "/api/v1/exec-windows/"+itoa(id)+"/statements", ro, nil).Code,
 		40300, "只读角色应当被挡在回看之外")
 }

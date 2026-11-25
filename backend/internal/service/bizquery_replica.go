@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 业务方数据查询走从库。

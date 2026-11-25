@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // blockScaffolding are the words that open or close a PL/SQL construct. They sit

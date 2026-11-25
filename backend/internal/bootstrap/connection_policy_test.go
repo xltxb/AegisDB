@@ -11,7 +11,7 @@ import (
 // rejected and non-admins are blocked.
 func TestConnection_AdminSetsGatewayPolicy(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "polconn", "engine": "MySQL 8.0", "host": "10.0.0.1:3306",
@@ -43,7 +43,7 @@ func TestConnection_AdminSetsGatewayPolicy(t *testing.T) {
 	}
 
 	// A non-admin cannot change instance config.
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn.ID), owner, map[string]any{"policy": "strict"}).Code, 40300,
 		"non-admin must be blocked from changing the policy")
 }
@@ -55,7 +55,7 @@ func TestConnection_AdminSetsGatewayPolicy(t *testing.T) {
 // space). Only a registered environment may be stored.
 func TestConnection_RejectsUnknownEnvironment(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	body := func(env string) map[string]any {
 		return map[string]any{

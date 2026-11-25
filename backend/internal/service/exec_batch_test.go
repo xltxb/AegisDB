@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 用临时文件而不是 :memory: —— sqlite 的每次连接都会新开一个内存库,
@@ -172,9 +172,9 @@ func TestExecBatch_PointsOutWritesThatAffectedNoRows(t *testing.T) {
 // 语句逐条下发的是剥掉注释的文本。在真实 MySQL 上用 `/*!99999 … */` 验证"可执行注释原样
 // 送达":标记还在,MySQL 认为版本不够、跳过注释体;标记被剥掉,注释体被执行,引擎不存在报错。
 func TestExecBatch_ExecutableCommentMarkersReachTheServer(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL") // host:port/user/password
+	v := os.Getenv("AEGISDB_TEST_MYSQL") // host:port/user/password
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

@@ -22,7 +22,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // clauseKind 是一个 ALTER 子句的归类。

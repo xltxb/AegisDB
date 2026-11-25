@@ -71,14 +71,14 @@ func has(list []string, v string) bool {
 // widens access live.
 func TestTagAccess_GroupSeesOnlyTaggedDatabases(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	if all := app.listConnNames(admin); len(all) != 5 {
 		t.Fatalf("admin (no tags) should see all 5 connections, got %d: %v", len(all), all)
 	}
 
 	// chenhao is a seeded L2 user (tags: orders,users)
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	seen := app.listConnNames(l2)
 	if has(seen, "analytics-ro") || has(seen, "sandbox-dev") {
 		t.Errorf("L2 must not see analytics-ro/sandbox-dev, got %v", seen)
@@ -107,7 +107,7 @@ func TestTagAccess_GroupSeesOnlyTaggedDatabases(t *testing.T) {
 // Tagging a connection is reflected in the global tag list.
 func TestTagAccess_ConnectionTagsEditable(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	id := app.connIDByName(admin, "sandbox-dev")
 
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(id), admin, map[string]any{

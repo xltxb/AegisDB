@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // apStatusRow mirrors the GET /approvals view fields this suite asserts on.
@@ -75,7 +75,7 @@ func (a *testApp) postLarkCallbackAt(url, bearerSecret string, body any) (apiRes
 // secret embedded in the callback URL (?secret=...); it must be accepted.
 func TestExternalApproval_CallbackSecretViaQueryParam(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 	ap := app.submitProdHighRisk(token)
 
@@ -104,7 +104,7 @@ func (a *testApp) setSettings(token string, kv map[string]any) {
 // same decision core as the in-app path, correlated by ApNo (external_task_id).
 func TestExternalApproval_CallbackApproveAndReject(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 
 	// approve path
@@ -130,7 +130,7 @@ func TestExternalApproval_CallbackApproveAndReject(t *testing.T) {
 // (a repeat on a decided ticket returns its status without re-executing).
 func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 	ap := app.submitProdHighRisk(token)
 
@@ -146,9 +146,9 @@ func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 	eq(t, env.Code, resp.CodeBadRequest, "unknown ticket rejected")
 
 	// approve once, then a repeat callback is idempotent (still approved)
-	app.postLarkCallback("s3cr3t-callback-key", map[string]any{"external_task_id": ap.ApNo, "approved": true, "approver": []string{"x@vela.io"}})
+	app.postLarkCallback("s3cr3t-callback-key", map[string]any{"external_task_id": ap.ApNo, "approved": true, "approver": []string{"x@aegisdb.io"}})
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "first approve")
-	env2, code2 := app.postLarkCallback("s3cr3t-callback-key", map[string]any{"external_task_id": ap.ApNo, "approved": false, "approver": []string{"x@vela.io"}})
+	env2, code2 := app.postLarkCallback("s3cr3t-callback-key", map[string]any{"external_task_id": ap.ApNo, "approved": false, "approver": []string{"x@aegisdb.io"}})
 	eq(t, code2, 200, "repeat callback ok")
 	eq(t, env2.Code, 0, "repeat callback envelope ok")
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "approved", "repeat does not flip a decided ticket")
@@ -158,13 +158,13 @@ func TestExternalApproval_CallbackAuthAndIdempotency(t *testing.T) {
 // off, the gateway blocks it even though审批魔方 doesn't enforce non-initiator.
 func TestExternalApproval_SelfApproveBlocked(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
-	ap := app.submitProdHighRisk(token) // initiator = linwei@vela.io
+	ap := app.submitProdHighRisk(token) // initiator = linwei@aegisdb.io
 
 	app.postLarkCallback("s3cr3t-callback-key", map[string]any{
 		"external_task_id": ap.ApNo, "approved": true,
-		"approver": []string{"linwei@vela.io"}, // self-approval
+		"approver": []string{"linwei@aegisdb.io"}, // self-approval
 	})
 	eq(t, app.approvalRow(token, ap.ApNo).Status, "rejected", "self-approval blocked → rejected")
 }
@@ -198,7 +198,7 @@ func TestExternalApproval_TimeoutCancelsExternalCard(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{
 		"approval.external.enabled":         true,
 		"approval.external.baseURL":         stub.URL,
@@ -255,7 +255,7 @@ func TestExternalApproval_OutboundDispatchStoresTaskID(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{
 		"approval.external.enabled":         true,
 		"approval.external.baseURL":         stub.URL,
@@ -288,7 +288,7 @@ func TestExternalApproval_OutboundDispatchStoresTaskID(t *testing.T) {
 // feature off has to close the door it opened.
 func TestExternalApproval_CallbackRefusedWhenFeatureDisabled(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{
 		"approval.external.enabled":        false,
 		"approval.external.callbackSecret": "s3cr3t-callback-key",
@@ -310,7 +310,7 @@ func TestExternalApproval_CallbackRefusedWhenFeatureDisabled(t *testing.T) {
 // callback naming a different one is not a decision about this ticket.
 func TestExternalApproval_CallbackRejectsMismatchedVendorTask(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 	ap := app.submitProdHighRisk(token)
 
@@ -359,7 +359,7 @@ func TestExternalApproval_CallbackSecretIsNotWrittenToAccessLog(t *testing.T) {
 	t.Cleanup(func() { gin.DefaultWriter = prev })
 
 	app := newTestApp(t) // router captures DefaultWriter at construction
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 	ap := app.submitProdHighRisk(token)
 
@@ -387,7 +387,7 @@ func TestExternalApproval_CallbackSecretIsNotWrittenToAccessLog(t *testing.T) {
 // DROP", with no way to identify who authorised it.
 func TestExternalApproval_AuditIdentifiesTheExternalApprover(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": "s3cr3t-callback-key"})
 	ap := app.submitProdHighRisk(token)
 

@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Oracle 选中的 schema 要带到执行层,而实例的服务名不能被改掉。

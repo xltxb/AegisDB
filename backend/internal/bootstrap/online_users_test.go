@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/presence"
+	"aegisdb/internal/presence"
 )
 
 type onlineResp struct {
@@ -52,8 +52,8 @@ func (a *testApp) userIDOf(token string) int64 {
 
 func TestOnlineUsers_ListsLoggedInAndDropsOnLogout(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	other := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	other := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	otherID := app.userIDOf(other)
 	// 在线记录是进程里共享的一份,同一进程里前面的用例可能刚给同一个用户号写过"最近活跃"、
 	// 节流还没过 —— 先清掉,只看这个用例自己的操作。
@@ -99,11 +99,11 @@ func TestOnlineUsers_ListsLoggedInAndDropsOnLogout(t *testing.T) {
 
 func TestOnlineUsers_AdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "ro-online@vela.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
-	ro := app.login("ro-online@vela.io", "initpass9")
+		"email": "ro-online@aegisdb.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
+	ro := app.login("ro-online@aegisdb.io", "initpass9")
 	if r := app.do(http.MethodGet, "/api/v1/online-users", ro, nil); r.Code != 40300 {
 		t.Errorf("非管理员不能看在线用户,实际 %d", r.Code)
 	}

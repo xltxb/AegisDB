@@ -62,7 +62,7 @@ const (
 
 // scrypt 参数:N=2^15、r=8、p=1,一次约几十毫秒、32MB 内存。盐是固定的用途串:密钥必须
 // 每次启动都派生出同一把,而口令本身就是每套部署一份。
-var scryptSalt = []byte("vela-gateway/at-rest/v2")
+var scryptSalt = []byte("aegisdb/at-rest/v2")
 
 var (
 	kdfMu    sync.Mutex

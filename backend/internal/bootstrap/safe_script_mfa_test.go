@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/totp"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/totp"
 )
 
 // An MFA-enrolled user must be able to run a SAFE PROD script by presenting one
@@ -17,7 +17,7 @@ func TestExecuteSafeScript_MFAUserWithCodeRunsWholeScript(t *testing.T) {
 	app := newTestApp(t)
 	repo := app.svc.Repo
 
-	u, err := repo.GetUserByEmail("linwei@vela.io") // admin: unrestricted, all-allow
+	u, err := repo.GetUserByEmail("linwei@aegisdb.io") // admin: unrestricted, all-allow
 	if err != nil {
 		t.Fatalf("get user: %v", err)
 	}

@@ -36,10 +36,10 @@ import (
 	"context"
 	"log/slog"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // ExecuteApproved runs the command of a ticket that has been approved, on behalf

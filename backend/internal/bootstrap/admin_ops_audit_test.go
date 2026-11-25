@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // auditCommandsLike 直接读审计表里命令含 sub 的行(按写入先后)。
@@ -40,11 +40,11 @@ func (a *testApp) mustAudit(sub, what string) []string {
 // 让它发生的那次配置。
 func TestAdminOps_UserAndRoleChangesAreAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"name": "审计甲", "email": "audit-a@vela.io", "password": "Str0ng-Passw0rd!", "roleIds": []int64{roID},
+		"name": "审计甲", "email": "audit-a@aegisdb.io", "password": "Str0ng-Passw0rd!", "roleIds": []int64{roID},
 	}).Code, 0, "建账户")
 	rows := app.mustAudit("admin.user.create", "建账户")
 	for _, r := range rows {
@@ -54,12 +54,12 @@ func TestAdminOps_UserAndRoleChangesAreAudited(t *testing.T) {
 	}
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{
-		"email": "audit-b@vela.io", "roleId": roID,
+		"email": "audit-b@aegisdb.io", "roleId": roID,
 	}).Code, 0, "邀请")
 	app.mustAudit("admin.user.invite", "邀请")
 
 	// 给甲再加一个角色,再从 ro 里移除 —— 移除要进审计。
-	u, _ := app.repo.GetUserByEmail("audit-a@vela.io")
+	u, _ := app.repo.GetUserByEmail("audit-a@aegisdb.io")
 	devID := app.roleIDByCode(admin, "l2")
 	eq(t, app.do(http.MethodPost, "/api/v1/roles/"+itoa(devID)+"/members", admin, map[string]any{"userId": u.ID}).Code, 0, "加成员")
 	eq(t, app.do(http.MethodDelete, "/api/v1/roles/"+itoa(roID)+"/members/"+itoa(u.ID), admin, nil).Code, 0, "移除成员")
@@ -68,7 +68,7 @@ func TestAdminOps_UserAndRoleChangesAreAudited(t *testing.T) {
 
 func TestAdminOps_ConnectionChangesAreAuditedWithoutPasswords(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "audit-conn", "engine": "MySQL 8.0", "host": "10.9.9.9:3306", "env": "dev", "policy": "strict",
@@ -104,7 +104,7 @@ func TestAdminOps_ConnectionChangesAreAuditedWithoutPasswords(t *testing.T) {
 
 func TestAdminOps_TierEnvRiskPipelineChangesAreAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/env-tiers", admin, map[string]any{
 		"code": "audt", "displayName": "审计分层", "templateCode": "dev",
@@ -158,7 +158,7 @@ func TestAdminOps_TierEnvRiskPipelineChangesAreAudited(t *testing.T) {
 
 func TestAdminOps_SettingsAndWebhookChangesAreAuditedWithoutSecrets(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const secret = "lark-s3cr3t-do-not-log"
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{

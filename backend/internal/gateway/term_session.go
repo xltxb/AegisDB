@@ -31,8 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // MaxTermSessionsPerUser 是一个用户同时能占用的终端连接数上限:防止一直开新标签(或者前端没来得及

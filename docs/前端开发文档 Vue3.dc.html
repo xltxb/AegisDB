@@ -8,12 +8,12 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
 <style>
   body { margin:0; background:#fff; color:var(--text-body); }
   .doc { box-sizing:border-box; max-width:8.5in; margin:0 auto; background:#fff; padding:56px clamp(24px,5vw,0.85in) 96px; font-family:var(--font-body); }
@@ -49,7 +49,7 @@
 
 <div style="display:flex; align-items:center; gap:11px; margin-bottom:30px">
   <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:17px;height:17px;color:#fff"></i></div>
-  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">DP DB GATEWAY</span>
+  <span style="font:700 16px var(--font-display); color:var(--text-strong); letter-spacing:-.01em">AegisDB</span>
   <span style="margin-left:auto; font:600 10.5px var(--font-mono); letter-spacing:.16em; color:var(--text-faint); text-transform:uppercase">Frontend Engineering</span>
 </div>
 
@@ -76,7 +76,7 @@
     <tr><td>终端</td><td>xterm.js</td><td>Web 命令行渲染;WebSocket 流式交互。</td></tr>
     <tr><td>SQL 编辑</td><td>CodeMirror 6 (sql)</td><td>语法高亮、脚本预览。</td></tr>
     <tr><td>国际化</td><td>vue-i18n</td><td>zh / en 双语,与设置联动。</td></tr>
-    <tr><td>UI 基础</td><td>Vela Design Tokens</td><td>沿用设计系统 CSS 变量与深/浅主题;组件按 Vela 视觉自建或封装。</td></tr>
+    <tr><td>UI 基础</td><td>AegisDB Design Tokens</td><td>沿用设计系统 CSS 变量与深/浅主题;组件按 AegisDB 视觉自建或封装。</td></tr>
     <tr><td>工具</td><td>VueUse · dayjs · zod</td><td>组合工具、时间、表单/响应校验。</td></tr>
   </tbody>
 </table>
@@ -226,7 +226,7 @@ http.interceptors.response.use(r =&gt; {
 <!-- 8 -->
 <h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">08</span> 国际化与主题</h2>
 <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">i18n &amp; Theme</div>
-<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>i18n:</strong>vue-i18n 维护 <code class="inl">zh / en</code>,顶栏与设置切换 <code class="inl">locale</code>;数据类内容(实例名、SQL、人名)不翻译。<strong>主题:</strong>沿用 Vela CSS 变量,<code class="inl">&lt;html data-theme="dark"&gt;</code> 切换深/浅,业务样式只用语义 token <code class="inl">var(--surface-card)</code> 等。</p>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>i18n:</strong>vue-i18n 维护 <code class="inl">zh / en</code>,顶栏与设置切换 <code class="inl">locale</code>;数据类内容(实例名、SQL、人名)不翻译。<strong>主题:</strong>沿用 AegisDB CSS 变量,<code class="inl">&lt;html data-theme="dark"&gt;</code> 切换深/浅,业务样式只用语义 token <code class="inl">var(--surface-card)</code> 等。</p>
 
 <!-- 9 -->
 <h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> 终端 WebSocket 协议</h2>
@@ -251,7 +251,7 @@ http.interceptors.response.use(r =&gt; {
   <li><strong>测试:</strong>Vitest 单测核心 store 与风险预检逻辑;Playwright 走通拦截→审批→执行主流程。</li>
 </ul>
 
-<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>DP DB GATEWAY · 前端开发文档 (Vue 3)</span><span style="margin-left:auto">机密 · 内部</span></div>
+<div style="margin-top:44px; padding-top:16px; border-top:1px solid var(--border-subtle); display:flex; align-items:center; gap:8px; font:500 11px var(--font-mono); color:var(--text-faint)"><span>AegisDB · 前端开发文档 (Vue 3)</span><span style="margin-left:auto">机密 · 内部</span></div>
 
 </td></tr></tbody>
 <tfoot><tr><td class="ftr-space"></td></tr></tfoot>

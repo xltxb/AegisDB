@@ -22,7 +22,7 @@ import (
 
 func realBinlog(t *testing.T, _ *sql.DB, schema, table string) *MySQLBinlog {
 	t.Helper()
-	cfg, err := mysql.ParseDSN(os.Getenv("VELA_OSC_TEST_DSN"))
+	cfg, err := mysql.ParseDSN(os.Getenv("AEGISDB_OSC_TEST_DSN"))
 	if err != nil {
 		t.Fatal(err)
 	}

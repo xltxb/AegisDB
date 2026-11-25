@@ -12,11 +12,11 @@ import (
 
 func TestAPIClientScopeEditTakesEffectAndAudits(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, id, tok := app.issueSA(admin, "scope-bot", "Scope-Edit", []string{"owner"}, []string{"release:read"}, 0)
 
 	// 没有 release:approve 时,审批接口在范围这一关就被挡。
-	r := app.openDo(http.MethodPost, "/api/v1/open/releases/REL-1/approval", tok, map[string]any{"approver": "chenhao@vela.io", "action": "approve"})
+	r := app.openDo(http.MethodPost, "/api/v1/open/releases/REL-1/approval", tok, map[string]any{"approver": "chenhao@aegisdb.io", "action": "approve"})
 	eq(t, r.Code, 40300, "缺 release:approve")
 
 	eq(t, app.do(http.MethodPut, "/api/v1/api-clients/"+itoa(id), admin,
@@ -26,7 +26,7 @@ func TestAPIClientScopeEditTakesEffectAndAudits(t *testing.T) {
 	eq(t, got.Enabled, true, "改范围不动启停")
 
 	// 立即生效:范围这一关过了,落到业务判断(单号不存在)。
-	r = app.openDo(http.MethodPost, "/api/v1/open/releases/REL-999999/approval", tok, map[string]any{"approver": "chenhao@vela.io", "action": "approve"})
+	r = app.openDo(http.MethodPost, "/api/v1/open/releases/REL-999999/approval", tok, map[string]any{"approver": "chenhao@aegisdb.io", "action": "approve"})
 	eq(t, r.Code, 40001, "有了范围,拒绝理由变成单号不存在")
 
 	rows := app.mustAudit("admin.apiclient.update", "改范围写审计")
@@ -38,13 +38,13 @@ func TestAPIClientScopeEditTakesEffectAndAudits(t *testing.T) {
 	// 去掉一项同样立即生效。
 	eq(t, app.do(http.MethodPut, "/api/v1/api-clients/"+itoa(id), admin,
 		map[string]any{"scopes": []string{"release:read"}}).Code, 0, "去掉 release:approve")
-	r = app.openDo(http.MethodPost, "/api/v1/open/releases/REL-1/approval", tok, map[string]any{"approver": "chenhao@vela.io", "action": "approve"})
+	r = app.openDo(http.MethodPost, "/api/v1/open/releases/REL-1/approval", tok, map[string]any{"approver": "chenhao@aegisdb.io", "action": "approve"})
 	eq(t, r.Code, 40300, "去掉后立刻没有审批能力")
 }
 
 func TestAPIClientScopeEditRejectsBadInput(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, id, _ := app.issueSA(admin, "scope-bad-bot", "Scope-Bad", []string{"owner"}, []string{"release:read"}, 0)
 
 	r := app.do(http.MethodPut, "/api/v1/api-clients/"+itoa(id), admin, map[string]any{"scopes": []string{}})
@@ -53,7 +53,7 @@ func TestAPIClientScopeEditRejectsBadInput(t *testing.T) {
 	eq(t, r.Code, 40001, "认不出的范围拒绝")
 	eq(t, app.apiClientByName(admin, "Scope-Bad").Scopes, "release:read", "拒绝后原值不变")
 
-	dev := app.login("zhaolei@vela.io", "vela123")
+	dev := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	r = app.do(http.MethodPut, "/api/v1/api-clients/"+itoa(id), dev, map[string]any{"scopes": []string{"release:read", "release:approve"}})
 	if r.Code == 0 {
 		t.Fatal("非管理员不能改凭据范围")

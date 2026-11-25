@@ -3,8 +3,8 @@ package service
 import (
 	"testing"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-26:对象树上 Oracle 不传 database,编译请求的 TargetSchema 为空,窗口按目标 schema

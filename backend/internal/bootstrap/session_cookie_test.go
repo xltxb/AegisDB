@@ -10,8 +10,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
 )
 
 // 2026-11 白盒审计 V-16:控制台的 JWT 从 localStorage 挪进 HttpOnly Cookie,写操作校验 CSRF。
@@ -26,7 +26,7 @@ func webLogin(t *testing.T, app *testApp, email, password string) webSession {
 	b, _ := json.Marshal(map[string]string{"email": email, "password": password})
 	req, _ := http.NewRequest(http.MethodPost, app.srv.URL+"/api/v1/auth/login", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Vela-Client", "web")
+	req.Header.Set("X-AegisDB-Client", "web")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -45,9 +45,9 @@ func webLogin(t *testing.T, app *testApp, email, password string) webSession {
 	s := webSession{marker: out.Data.Session, token: out.Data.Token}
 	for _, c := range res.Cookies() {
 		switch c.Name {
-		case "vela_session":
+		case "aegisdb_session":
 			s.session = c
-		case "vela_csrf":
+		case "aegisdb_csrf":
 			s.csrf = c
 		}
 	}
@@ -79,7 +79,7 @@ func webDo(t *testing.T, app *testApp, s webSession, method, path, csrf string, 
 
 func TestSessionCookie_WebLoginKeepsTokenOutOfScripts(t *testing.T) {
 	app := newTestApp(t)
-	s := webLogin(t, app, "linwei@vela.io", "vela123")
+	s := webLogin(t, app, "linwei@aegisdb.io", "aegisdb123")
 	if s.token != "" {
 		t.Fatal("控制台登录的响应体里不能有令牌")
 	}
@@ -99,10 +99,10 @@ func TestSessionCookie_WebLoginKeepsTokenOutOfScripts(t *testing.T) {
 
 func TestSessionCookie_SecureBehindTLSProxy(t *testing.T) {
 	app := newTestApp(t)
-	b, _ := json.Marshal(map[string]string{"email": "linwei@vela.io", "password": "vela123"})
+	b, _ := json.Marshal(map[string]string{"email": "linwei@aegisdb.io", "password": "aegisdb123"})
 	req, _ := http.NewRequest(http.MethodPost, app.srv.URL+"/api/v1/auth/login", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Vela-Client", "web")
+	req.Header.Set("X-AegisDB-Client", "web")
 	req.Header.Set("X-Forwarded-Proto", "https")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -118,12 +118,12 @@ func TestSessionCookie_SecureBehindTLSProxy(t *testing.T) {
 
 func TestSessionCookie_CSRFRequiredForWrites(t *testing.T) {
 	app := newTestApp(t)
-	s := webLogin(t, app, "linwei@vela.io", "vela123")
+	s := webLogin(t, app, "linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, webDo(t, app, s, http.MethodGet, "/api/v1/auth/me", "", nil).Code, 0, "读不需要 CSRF")
 	eq(t, webDo(t, app, s, http.MethodPost, "/api/v1/auth/password", "", map[string]string{}).Code, resp.CodeForbidden, "写操作没带 CSRF")
 	eq(t, webDo(t, app, s, http.MethodPost, "/api/v1/auth/password", "wrong", map[string]string{}).Code, resp.CodeForbidden, "CSRF 不对")
-	other := webLogin(t, app, "chenhao@vela.io", "vela123")
+	other := webLogin(t, app, "chenhao@aegisdb.io", "aegisdb123")
 	eq(t, webDo(t, app, s, http.MethodPost, "/api/v1/auth/password", other.csrf.Value, map[string]string{}).Code, resp.CodeForbidden, "别的会话的 CSRF")
 	if r := webDo(t, app, s, http.MethodPost, "/api/v1/auth/password", s.csrf.Value, map[string]string{}); r.Code == resp.CodeForbidden {
 		t.Fatalf("带对了 CSRF 不该被这道闸挡:%+v", r)
@@ -132,7 +132,7 @@ func TestSessionCookie_CSRFRequiredForWrites(t *testing.T) {
 
 func TestSessionCookie_LogoutRevokesAndClears(t *testing.T) {
 	app := newTestApp(t)
-	s := webLogin(t, app, "linwei@vela.io", "vela123")
+	s := webLogin(t, app, "linwei@aegisdb.io", "aegisdb123")
 	req, _ := http.NewRequest(http.MethodPost, app.srv.URL+"/api/v1/auth/logout", nil)
 	req.AddCookie(s.session)
 	req.Header.Set("X-CSRF-Token", s.csrf.Value)
@@ -145,7 +145,7 @@ func TestSessionCookie_LogoutRevokesAndClears(t *testing.T) {
 	for _, c := range res.Cookies() {
 		cleared[c.Name] = c.MaxAge < 0
 	}
-	if !cleared["vela_session"] || !cleared["vela_csrf"] {
+	if !cleared["aegisdb_session"] || !cleared["aegisdb_csrf"] {
 		t.Fatalf("登出要清掉两个 Cookie:%v", cleared)
 	}
 	eq(t, webDo(t, app, s, http.MethodGet, "/api/v1/auth/me", "", nil).Code, resp.CodeUnauthorized, "登出后旧 Cookie 失效")
@@ -154,7 +154,7 @@ func TestSessionCookie_LogoutRevokesAndClears(t *testing.T) {
 // 原有行为:没声明 web 的客户端照旧从响应体拿令牌、走 Bearer,不校验 CSRF,也不下发 Cookie。
 func TestSessionCookie_BearerClientsUnchanged(t *testing.T) {
 	app := newTestApp(t)
-	r := app.loginRaw("linwei@vela.io", "vela123")
+	r := app.loginRaw("linwei@aegisdb.io", "aegisdb123")
 	eq(t, r.Code, 0, "登录")
 	var d struct {
 		Token   string `json:"token"`
@@ -173,7 +173,7 @@ func TestSessionCookie_BearerClientsUnchanged(t *testing.T) {
 // 跨站 WebSocket 劫持:浏览器会自动带 Cookie,所以握手要证明读得到 CSRF Cookie。
 func TestSessionCookie_WebSocketNeedsCSRF(t *testing.T) {
 	app := newTestApp(t)
-	s := webLogin(t, app, "linwei@vela.io", "vela123")
+	s := webLogin(t, app, "linwei@aegisdb.io", "aegisdb123")
 	url := "ws" + strings.TrimPrefix(app.srv.URL, "http") + "/api/v1/terminal/ws"
 	dial := func(protos ...string) (*websocket.Conn, *http.Response, error) {
 		d := websocket.Dialer{Subprotocols: protos}
@@ -187,24 +187,24 @@ func TestSessionCookie_WebSocketNeedsCSRF(t *testing.T) {
 	} else if res == nil || res.StatusCode != http.StatusForbidden {
 		t.Fatalf("应 403,实际 %+v %v", res, err)
 	}
-	if c, _, err := dial("vela-csrf", "wrong"); err == nil {
+	if c, _, err := dial("aegisdb-csrf", "wrong"); err == nil {
 		c.Close()
 		t.Fatal("CSRF 不对不能开终端")
 	}
-	c, _, err := dial("vela-csrf", s.csrf.Value)
+	c, _, err := dial("aegisdb-csrf", s.csrf.Value)
 	if err != nil {
 		t.Fatalf("带对 CSRF 应能开终端:%v", err)
 	}
-	if c.Subprotocol() != "vela-csrf" {
-		t.Errorf("握手应选中 vela-csrf,实际 %q", c.Subprotocol())
+	if c.Subprotocol() != "aegisdb-csrf" {
+		t.Errorf("握手应选中 aegisdb-csrf,实际 %q", c.Subprotocol())
 	}
 	c.Close()
 
 	// 原有行为:令牌放子协议的客户端不受影响。
-	tok := app.login("linwei@vela.io", "vela123")
-	c2, _, err := (&websocket.Dialer{Subprotocols: []string{"vela-token", tok}}).Dial(url, nil)
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
+	c2, _, err := (&websocket.Dialer{Subprotocols: []string{"aegisdb-token", tok}}).Dial(url, nil)
 	if err != nil {
-		t.Fatalf("vela-token 子协议照旧可用:%v", err)
+		t.Fatalf("aegisdb-token 子协议照旧可用:%v", err)
 	}
 	c2.Close()
 }
@@ -212,7 +212,7 @@ func TestSessionCookie_WebSocketNeedsCSRF(t *testing.T) {
 // 巡检报告页:带沙箱 CSP、能被同源嵌入;JSON 接口与 SPA 的 CSP 不受影响。
 func TestSessionCookie_InspectionViewHeaders(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 	req, _ := http.NewRequest(http.MethodGet, app.srv.URL+"/api/v1/inspection-reports/999999/view", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
 	res, err := http.DefaultClient.Do(req)

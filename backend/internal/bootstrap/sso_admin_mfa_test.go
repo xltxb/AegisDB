@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/totp"
 )
 
 // M8(2026-10 安全审计):SSO 登录不经过网关 TOTP。平台管理员是 SSO 一旦失守损失最大的账号 ——
@@ -13,10 +13,10 @@ import (
 func TestSSO_AdminWithTOTPMustPresentCode(t *testing.T) {
 	jwt := jwtFor("linwei")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		jwt: {"id": 1, "username": "linwei", "email": "linwei@vela.io", "department": "IT"},
+		jwt: {"id": 1, "username": "linwei", "email": "linwei@aegisdb.io", "department": "IT"},
 	}}
 	app := newSSOApp(t, fake)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(admin)
 
 	r := app.ssoLogin(jwt)
@@ -30,6 +30,6 @@ func TestSSO_AdminWithTOTPMustPresentCode(t *testing.T) {
 
 	// 普通用户(没有 admin 角色)照旧只凭 SSO
 	jwt2 := jwtFor("chenhao")
-	fake.identity[jwt2] = map[string]any{"id": 2, "username": "chenhao", "email": "chenhao@vela.io", "department": "IT"}
+	fake.identity[jwt2] = map[string]any{"id": 2, "username": "chenhao", "email": "chenhao@aegisdb.io", "department": "IT"}
 	ssoToken(t, app.ssoLogin(jwt2))
 }

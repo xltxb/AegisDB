@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/review"
+	"aegisdb/internal/model"
+	"aegisdb/internal/review"
 )
 
 // ----------------------------------------------------- SQL 规范审查规则库

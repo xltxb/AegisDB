@@ -544,7 +544,7 @@ export const api = {
   // 一张审批单的全部操作记录,按时间先后(可见范围与列表相同)
   auditTrail: (apNo: string) => http.get<any, Envelope<AuditRow[]>>(`/audit/approval/${encodeURIComponent(apNo)}`).then(ok),
   // 重算哈希链,回答"这些行被改过吗"。界面这一下只验最近一段(整表校验走命令行的
-  // `vela-gateway verify-audit`)。限监督角色 —— 它扫的是全表。
+  // `aegisdb verify-audit`)。限监督角色 —— 它扫的是全表。
   verifyAudit: () =>
     http.get<any, Envelope<{ report: AuditChainReport; reasonText: string; reasonRef?: RuleRef | null }>>('/audit/verify').then(ok),
   auditExportUrl: (q: AuditQuery) => `${import.meta.env.VITE_API_BASE || '/api/v1'}/audit/export?${auditQS(q)}`,

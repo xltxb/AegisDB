@@ -9,7 +9,7 @@ import (
 // Webhook 保存的响应与 GET 一致:只回 hasSecret,不回明文(工单 02 第 3 条)。
 func TestWebhookSave_DoesNotEchoTheSecret(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const secret = "wh-echo-s3cr3t"
 	r := app.do(http.MethodPut, "/api/v1/settings/webhook", admin, map[string]any{
@@ -30,7 +30,7 @@ func TestWebhookSave_DoesNotEchoTheSecret(t *testing.T) {
 // Webhook 地址只允许 http/https,拒绝 link-local 与云元数据地址;retryMax 上限 10(工单 02 第 4 条)。
 func TestWebhookSave_ValidatesEndpointAndRetry(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	bad := []map[string]any{
 		{"endpoint": "ftp://siem.example.com/hook"},

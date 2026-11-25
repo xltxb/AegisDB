@@ -41,7 +41,7 @@ func TestWebhookDelivery_TestSendIsRecorded(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.configureWebhook(token, stub.URL, "secret", "create,delete,update", 3)
 
 	r := app.do(http.MethodPost, "/api/v1/settings/webhook/test", token, nil)
@@ -72,7 +72,7 @@ func TestWebhookDelivery_AsyncSuccessRecorded(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "secret", "delete", 3)
 
@@ -111,26 +111,26 @@ func TestWebhookDelivery_AsyncSuccessRecorded(t *testing.T) {
 // 对事件中心价值低,"别把登录推过去"正是这条过滤最常被用来做的事 —— 换维之后它仍然表达
 // 得出来(不勾「非数据」),所以这条用例保留,只是换了订阅的那一维。
 //
-// 断言看的是 X-Vela-Event 请求头,那里仍然是**事件类型** —— 类型一路带着走,只是不再决定
+// 断言看的是 X-AegisDB-Event 请求头,那里仍然是**事件类型** —— 类型一路带着走,只是不再决定
 // 推不推。
 func TestWebhookDelivery_ActionFilterExcludesLogin(t *testing.T) {
 	var mu sync.Mutex
 	got := map[string]int{}
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
-		got[r.Header.Get("X-Vela-Event")]++
+		got[r.Header.Get("X-AegisDB-Event")]++
 		mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 只订阅「查」;登录是「非数据」,必须被过滤掉。
 	app.configureWebhook(token, stub.URL, "secret", "read", 3)
 
 	// A fresh login records a 'login' audit → dispatch, which the filter must drop.
-	app.login("linwei@vela.io", "vela123")
+	app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// A low-risk command on a dev connection records an 'exec' audit → must deliver.
 	dev := app.connIDByEnv(token, "dev")
@@ -174,7 +174,7 @@ func TestWebhookDelivery_FailedDeliveryRecordedWithAttempts(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	const retryMax = 2
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", retryMax)

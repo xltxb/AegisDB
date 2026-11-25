@@ -5,8 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 // M4(2026-10 安全审计):Webhook 推送口令明文落库。改为密文入库,读出来(推送时)仍是明文;
@@ -15,7 +15,7 @@ func TestWebhook_SecretStoredEncrypted(t *testing.T) {
 	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
 	defer stub.Close()
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	const secret = "webhook-plain-secret-m4"
 	app.configureWebhook(token, stub.URL, secret, "delete", 1)
 

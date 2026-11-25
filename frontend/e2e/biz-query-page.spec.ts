@@ -104,7 +104,7 @@ const denial = (code: string, args: Record<string, string>, msg: string) => ({ s
   body: JSON.stringify({ code: 40300, msg, data: { reasonRef: { code, args } } }) })
 
 test('被拒:英文界面按 reasonRef 显示英文原因', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await open(page, [G(1, 'orders_db')], () => denial('bizNotSelect', { verb: 'UPDATE' },
     '数据查询只允许 SELECT 查询(含 WITH … SELECT、EXPLAIN),不能执行 UPDATE'))
   await page.getByTestId('q-sql').fill('UPDATE t SET a = 1')
@@ -135,7 +135,7 @@ test('超时:显示为自动取消的警告,不是报错', async ({ page }) => {
 })
 
 test('超时:英文界面按 errorRef 显示英文', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await open(page, [G(1, 'orders_db')], () => envelope({
     columns: [], rows: [], truncated: false, maxRows: 1000, timeoutSec: 30, ms: 30010, timedOut: true,
     error: '查询超过 30 秒,已自动取消', errorRef: { code: 'bizExecTimeout', args: { sec: '30' } },

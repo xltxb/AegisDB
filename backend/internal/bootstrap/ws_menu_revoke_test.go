@@ -13,7 +13,7 @@ import (
 // terminal menu removes access.
 func TestTerminalWS_MenuRevokedMidConnection(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123") // admin: terminal menu + all connections
+	token := app.login("linwei@aegisdb.io", "aegisdb123") // admin: terminal menu + all connections
 	adminRole := app.roleIDByCode(token, "admin")
 	dev := app.connIDByEnv(token, "dev")
 

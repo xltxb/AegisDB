@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-11:带 GORM 标签 default:true 的布尔列,建行时传 false 会被 GORM 换成 true ——
@@ -23,7 +23,7 @@ import (
 // 发布流程、审查规则、Webhook 首次保存都能从界面 / 接口带着 enabled=false 建行。
 //
 // 每条建行入口都建一条停用的,读回来必须是停用的;再建一条启用的,读回来必须是启用的。
-// 存储库覆盖 SQLite,以及设了 VELA_TEST_STORE_MYSQL / VELA_TEST_STORE_PG 时的真库。
+// 存储库覆盖 SQLite,以及设了 AEGISDB_TEST_STORE_MYSQL / AEGISDB_TEST_STORE_PG 时的真库。
 
 var disabledModels = []any{
 	&model.ExecWindow{}, &model.ExecWindowDB{}, &model.WebhookConfig{}, &model.SQLReviewRule{},
@@ -43,7 +43,7 @@ func disabledStores(t *testing.T) map[string]*Repo {
 	}
 	out["sqlite"] = lite
 	name := fmt.Sprintf("vt_disabled_%d", time.Now().UnixNano()%1_000_000)
-	if base := os.Getenv("VELA_TEST_STORE_MYSQL"); base != "" {
+	if base := os.Getenv("AEGISDB_TEST_STORE_MYSQL"); base != "" {
 		admin, err := sql.Open("mysql", base)
 		if err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func disabledStores(t *testing.T) map[string]*Repo {
 		}
 		out["mysql"] = db
 	}
-	if base := os.Getenv("VELA_TEST_STORE_PG"); base != "" {
+	if base := os.Getenv("AEGISDB_TEST_STORE_PG"); base != "" {
 		admin, err := gorm.Open(postgres.Open(base+" dbname=postgres"), gcfg)
 		if err != nil {
 			t.Fatal(err)

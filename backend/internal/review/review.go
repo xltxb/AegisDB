@@ -25,10 +25,10 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // The dialect codes a rule can be scoped to. They are the FAMILIES the review

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/resp"
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/resp"
+	"aegisdb/pkg/totp"
 )
 
 // The PROD step-up asked for a fresh TOTP code on EVERY command. A code changes
@@ -21,7 +21,7 @@ import (
 // change all void it.
 func TestMFA_StepUpIsRememberedPerConnection(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 
@@ -48,7 +48,7 @@ func TestMFA_StepUpIsRememberedPerConnection(t *testing.T) {
 // nothing about reaching a different one.
 func TestMFA_GraceDoesNotCarryToAnotherConnection(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 
 	first := app.connIDByName(token, "order-cluster")
@@ -70,7 +70,7 @@ func TestMFA_GraceDoesNotCarryToAnotherConnection(t *testing.T) {
 // Ending the session voids the grace: the credential that vouched for it is gone.
 func TestMFA_GraceIsVoidedWhenTheSessionEnds(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 
@@ -89,14 +89,14 @@ func TestMFA_GraceIsVoidedWhenTheSessionEnds(t *testing.T) {
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/logout", token, nil).Code, 0, "logout")
 	// 下一个时间步的码:登录同样消费计数器,而计数器只能往前走 —— 比刚才步进用掉的
 	// 那个更早的码会被当成重放拒掉(TestLogin_MFACodeIsSingleUse)。
-	fresh := app.login("linwei@vela.io", "vela123", totp.Code(secret, time.Now().Add(30*time.Second)))
+	fresh := app.login("linwei@aegisdb.io", "aegisdb123", totp.Code(secret, time.Now().Add(30*time.Second)))
 	eq(t, exec(fresh, ""), resp.CodeMFARequired, "a new session must step up again")
 }
 
 // Operators who want the old behaviour can have it: a zero grace asks every time.
 func TestMFA_GraceCanBeDisabled(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"security.mfaGraceMinutes": 0})
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")

@@ -1,6 +1,6 @@
 package gateway
 
-import "velagateway/internal/apimsg"
+import "aegisdb/internal/apimsg"
 
 // 模拟数据的总开关。
 //

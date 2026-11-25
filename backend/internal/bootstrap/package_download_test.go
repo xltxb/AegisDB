@@ -51,7 +51,7 @@ func envelopeOf(r rawResp) apiResp {
 
 func TestPackageDownload_SingleIsRunnablePck(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "pkg-dl-single")
 
 	r := app.downloadPackages(admin, cid, map[string]any{"scope": "APP", "names": []string{"PKG_BILLING"}})
@@ -76,7 +76,7 @@ func TestPackageDownload_SingleIsRunnablePck(t *testing.T) {
 
 func TestPackageDownload_ManyIsOneZip(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "pkg-dl-many")
 
 	// 重复的名字只算一次。
@@ -114,7 +114,7 @@ func TestPackageDownload_ManyIsOneZip(t *testing.T) {
 
 func TestPackageDownload_IsAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "pkg-dl-audit")
 
 	r := app.downloadPackages(admin, cid, map[string]any{"scope": "APP", "names": []string{"PKG_SECRET_SAUCE"}})
@@ -140,7 +140,7 @@ func TestPackageDownload_IsAudited(t *testing.T) {
 
 func TestPackageDownload_Refusals(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "pkg-dl-refuse")
 
 	cases := []struct {
@@ -168,9 +168,9 @@ func TestPackageDownload_Refusals(t *testing.T) {
 
 func TestPackageDownload_OutsiderForbidden(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "pkg-dl-outsider")
-	outsider := app.login("zhaolei@vela.io", "vela123") // 研发只读,标签范围之外
+	outsider := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读,标签范围之外
 
 	e := envelopeOf(app.downloadPackages(outsider, cid, map[string]any{"scope": "APP", "names": []string{"PKG_A"}}))
 	eq(t, e.Code, 40300, "download on an instance outside the user's scope")

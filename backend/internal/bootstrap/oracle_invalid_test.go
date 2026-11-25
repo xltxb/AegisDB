@@ -27,7 +27,7 @@ func (a *testApp) recompile(token string, connID int64, body map[string]any) api
 
 func TestInvalidObjectsRefusesNonOracleEngine(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.invalidObjects(admin, app.mysqlConnID(admin))
 	if r.Code == 0 {
@@ -40,7 +40,7 @@ func TestInvalidObjectsRefusesNonOracleEngine(t *testing.T) {
 
 func TestRecompileRefusesNonOracleEngine(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.recompile(admin, app.mysqlConnID(admin), map[string]any{"scope": "APP"})
 	if r.Code == 0 {
@@ -54,7 +54,7 @@ func TestRecompileRefusesNonOracleEngine(t *testing.T) {
 // 模拟连接(无凭据):必须明说,不能回一份"很干净"的空清单。
 func TestInvalidObjectsOnSimulatedConnectionSaysSoInsteadOfLookingClean(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-invalid-sim")
 
 	r := app.invalidObjects(admin, oracle)
@@ -68,7 +68,7 @@ func TestInvalidObjectsOnSimulatedConnectionSaysSoInsteadOfLookingClean(t *testi
 
 func TestRecompileOnSimulatedConnectionSaysSoInsteadOfPretending(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-recompile-sim")
 
 	r := app.recompile(admin, oracle, map[string]any{"scope": "APP"})
@@ -84,9 +84,9 @@ func TestRecompileOnSimulatedConnectionSaysSoInsteadOfPretending(t *testing.T) {
 // 这一条要单独钉住,因为"批量"最容易变成一条绕过原有约束的新通道。
 func TestRecompileRespectsInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-recompile-scope")
-	outsider := app.login("zhaolei@vela.io", "vela123") // 研发只读,标签范围之外
+	outsider := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读,标签范围之外
 
 	if r := app.recompile(outsider, oracle, map[string]any{"scope": "APP"}); r.Code == 0 {
 		t.Fatal("a user outside the instance's scope must not batch-recompile on it")

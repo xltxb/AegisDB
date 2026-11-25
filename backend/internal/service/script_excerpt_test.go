@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/dto"
+	"aegisdb/internal/dto"
 )
 
 // 审批人读到的摘要要列出**每一条**语句,不只是脚本的前 40 行。

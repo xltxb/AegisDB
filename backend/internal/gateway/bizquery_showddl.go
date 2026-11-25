@@ -21,8 +21,8 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 var bizShowCreateTableRe = regexp.MustCompile(`(?is)^SHOW\s+CREATE\s+TABLE\s+(?P<a>` + bizIdent + `)(?:\s*\.\s*(?P<b>` + bizIdent + `))?$`)

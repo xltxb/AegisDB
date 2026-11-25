@@ -13,14 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 func TestBizQuery_OracleAutonomousRefused_RealOracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	hp := strings.SplitN(p[0], ":", 2)
@@ -43,7 +43,7 @@ func TestBizQuery_OracleAutonomousRefused_RealOracle(t *testing.T) {
 	time.Sleep(3 * time.Second) // 刚建的表在只读事务里一两秒内读不了(ORA-01466)
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa, db: "VZBIZ"}

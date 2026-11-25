@@ -22,8 +22,8 @@ package service
 // 三处读的都是下面这一个函数。
 
 import (
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // isConfirmGate 判断一个阶段是不是**人工闸**(要一个人点「继续」才过的那种)。

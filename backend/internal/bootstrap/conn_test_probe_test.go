@@ -19,7 +19,7 @@ import (
 
 func TestConnectionProbe_UnreachableTargetIsAFailure(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 一台指向本机关闭端口的实例:立刻被拒,不必等满 dial 超时。
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
@@ -49,7 +49,7 @@ func TestConnectionProbe_UnreachableTargetIsAFailure(t *testing.T) {
 // 从前它回的是"已接入网关" —— 把"我们没配凭据"说成了"那台库是好的"。
 func TestConnectionProbe_SimulatedConnectionIsNotSuccess(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "probe-sim") // 无账号密码
 
 	got := app.do(http.MethodPost, "/api/v1/connections/"+itoa(oracle)+"/test", admin, nil)

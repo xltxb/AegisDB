@@ -3,7 +3,7 @@ import { envelope, stubCommon } from './helpers'
 
 // 系统名称与 LOGO 可配置(.scratch/branding):
 //   - 未登录的登录页、登录后的侧栏 / 浏览器标题 / favicon / 设置页「关于」都显示配置的值;
-//   - 没配置时一切照旧(DP DB GATEWAY + 帆船图标 + 原 favicon);
+//   - 没配置时一切照旧(AegisDB + 帆船图标 + 原 favicon);
 //   - 管理员在「系统设置 → 品牌」里改,只发 brand.* 三项,存成了当前页面立刻换掉。
 
 // 1x1 PNG
@@ -28,12 +28,12 @@ test('未登录的登录页:显示配置的名称与 LOGO,浏览器标题和 fav
   await expect.poll(() => favicon(page)).toBe(LOGO)
 })
 
-test('没配置:登录页保持 DP DB GATEWAY、帆船图标、原 favicon', async ({ page }) => {
+test('没配置:登录页保持 AegisDB、帆船图标、原 favicon', async ({ page }) => {
   await stubLoginPage(page, { name: '', nameEn: '', logo: '' })
   await page.goto('/#/login')
-  await expect(page.getByTestId('login-brand-name')).toHaveText('DP DB GATEWAY')
+  await expect(page.getByTestId('login-brand-name')).toHaveText('AegisDB')
   await expect(page.locator('.login .logo [data-testid="brand-logo-default"]')).toBeVisible()
-  await expect(page).toHaveTitle('DP DB GATEWAY')
+  await expect(page).toHaveTitle('AegisDB')
   expect(await favicon(page)).toMatch(/^data:image\/svg\+xml,/)
 })
 
@@ -41,8 +41,8 @@ test('品牌接口拉不到:登录页照常用默认值', async ({ page }) => {
   await page.route((u) => u.pathname.startsWith('/api/'), (r) => r.fulfill({ status: 502, body: 'down' }))
   await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: false, loginUrl: '' })))
   await page.goto('/#/login')
-  await expect(page.getByTestId('login-brand-name')).toHaveText('DP DB GATEWAY')
-  await expect(page).toHaveTitle('DP DB GATEWAY')
+  await expect(page.getByTestId('login-brand-name')).toHaveText('AegisDB')
+  await expect(page).toHaveTitle('AegisDB')
 })
 
 test('登录后:侧栏 LOGO、浏览器标题(含待办数)、英文界面用英文名称', async ({ page }) => {

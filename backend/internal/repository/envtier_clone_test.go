@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func newTierDB(t *testing.T) (*gorm.DB, *Repo) {

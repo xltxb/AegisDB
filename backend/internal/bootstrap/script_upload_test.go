@@ -15,7 +15,7 @@ import (
 func TestScriptUpload_DefaultDirAndPerUser(t *testing.T) {
 	defer os.RemoveAll("uploads") // default dir gets created under the run/test dir
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	// enabled by default, save path defaults to "uploads"

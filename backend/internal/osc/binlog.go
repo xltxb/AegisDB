@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // Position is a point in the binlog. 只比 File 的数字后缀与 Pos,不看 GTID:

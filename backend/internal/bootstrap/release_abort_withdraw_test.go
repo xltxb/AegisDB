@@ -62,8 +62,8 @@ func submitParkedRelease(t *testing.T, app *testApp, admin string, title string)
 // 否则审批人还能"批准"一个已经不存在的变更。
 func TestAbortWithdrawsPendingApproval(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	approver := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	waiting := submitParkedRelease(t, app, admin, "将被终止的发布")
 	ap := stageByType(waiting, "approve")
@@ -92,8 +92,8 @@ func TestAbortWithdrawsPendingApproval(t *testing.T) {
 // 的阶段标 skipped,而不是永远displaying 待执行。
 func TestRejectionSkipsRemainingStages(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	approver := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	waiting := submitParkedRelease(t, app, admin, "将被驳回的发布")
 	ap := stageByType(waiting, "approve")

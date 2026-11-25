@@ -3,7 +3,7 @@ package repository
 import (
 	"strings"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ------------------------------------------------- 敏感字段 (SensitiveColumn)

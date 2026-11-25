@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Exporting a terminal session log reads nothing new — the file is built in the
@@ -25,11 +25,11 @@ func lastAudit(t *testing.T, app *testApp) model.AuditLog {
 
 func TestTranscriptExport_IsAudited(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/transcript-export", token, map[string]any{
-		"connectionId": conn, "filename": "vela-prod-order-cluster-20260807-140215.log",
+		"connectionId": conn, "filename": "aegisdb-prod-order-cluster-20260807-140215.log",
 		"lines": 187, "dropped": 0,
 	})
 	eq(t, r.Code, 0, "record transcript export")
@@ -54,7 +54,7 @@ func TestTranscriptExport_IsAudited(t *testing.T) {
 // A partial transcript must not be recorded as if it were the whole session.
 func TestTranscriptExport_RecordsThatTheFileWasTruncated(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.connIDByEnv(token, "prod")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/transcript-export", token, map[string]any{
@@ -71,7 +71,7 @@ func TestTranscriptExport_RecordsThatTheFileWasTruncated(t *testing.T) {
 // cannot reach.
 func TestTranscriptExport_RefusesAnInstanceTheCallerCannotSee(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// An instance tagged so that only a matching role may see it.
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
@@ -89,7 +89,7 @@ func TestTranscriptExport_RefusesAnInstanceTheCallerCannotSee(t *testing.T) {
 		map[string]any{"tags": "sealed"}).Code, 0, "tag it out of reach")
 
 	// zhaolei holds the read-only role, whose scope does not include "sealed".
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	before := lastAudit(t, app).ID
 	r := app.do(http.MethodPost, "/api/v1/terminal/transcript-export", ro, map[string]any{
 		"connectionId": c.ID, "filename": "x.log", "lines": 3,
@@ -105,7 +105,7 @@ func TestTranscriptExport_RefusesAnInstanceTheCallerCannotSee(t *testing.T) {
 // A missing instance is refused rather than recorded against nothing.
 func TestTranscriptExport_RefusesAnUnknownInstance(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/terminal/transcript-export", token, map[string]any{
 		"connectionId": 999999, "filename": "x.log", "lines": 1,
 	}); r.Code == 0 {

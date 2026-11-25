@@ -18,7 +18,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func sqliteConn(t *testing.T) *model.Connection {

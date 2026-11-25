@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/gateway"
+	"aegisdb/internal/gateway"
 )
 
 // withSimulationOff 在一个用例内关掉模拟,结束后恢复 —— 夹具默认是开的(它模拟开发
@@ -49,7 +49,7 @@ func TestSimulationDefaultsToOff(t *testing.T) {
 // 关掉模拟之后,四条路径逐一确认:给的是拒绝,不是数据。
 func TestProductionServesNoSimulatedData(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 一台没有凭据的实例 —— 生产上"新建了实例但忘了填密码"就是这个状态。
 	conn := app.newOracleConn(admin, "prod-no-sim")
 	withSimulationOff(t)
@@ -119,7 +119,7 @@ func TestProductionServesNoSimulatedData(t *testing.T) {
 // 少了这一条,上面那些用"永远拒绝"就能作弊通过,而演示数据集会在没人发现的情况下死掉。
 func TestDevelopmentStillServesSimulatedData(t *testing.T) {
 	app := newTestApp(t) // 夹具默认打开模拟 = 开发环境
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.newOracleConn(admin, "dev-sim-ok")
 
 	r := app.do(http.MethodGet, "/api/v1/connections/"+itoa(conn)+"/objects?scope=APP", admin, nil)

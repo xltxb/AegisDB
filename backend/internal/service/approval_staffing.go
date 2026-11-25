@@ -22,7 +22,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 自检结论的严重度。分三档而不是一个布尔,是因为它们要人做的事不同:

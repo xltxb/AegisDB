@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // maxBizTables bounds the table dropdown on the data-query page. It lists ONE

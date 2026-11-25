@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // applyTargetDatabase 是所有"这次请求打到哪个库"的唯一入口。

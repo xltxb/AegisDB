@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // L-API3(2026-10 安全审计):SQL 格式导出是 UTF-8,却不声明连接字符集。导入端连接若是 GBK 这类

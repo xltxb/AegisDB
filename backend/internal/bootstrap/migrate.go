@@ -11,9 +11,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
-	"velagateway/migrations"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/migrations"
+	"aegisdb/pkg/sqlutil"
 )
 
 // schemaMigration is the ledger row tracking which SQL migrations have been
@@ -214,7 +214,7 @@ func RunSQLMigrations(db *gorm.DB, srcFS fs.FS) error {
 		defer conn.Close() // returns the pinned connection to the pool
 
 		var got int
-		if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK('vela_schema_migrate', 60)").Scan(&got); err != nil {
+		if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK('aegisdb_schema_migrate', 60)").Scan(&got); err != nil {
 			return fmt.Errorf("acquire migration lock: %w", err)
 		}
 		if got != 1 {
@@ -224,7 +224,7 @@ func RunSQLMigrations(db *gorm.DB, srcFS fs.FS) error {
 		// other than 1 means the lock wasn't held at release — surface it.
 		defer func() {
 			var released int
-			if err := conn.QueryRowContext(ctx, "SELECT RELEASE_LOCK('vela_schema_migrate')").Scan(&released); err != nil {
+			if err := conn.QueryRowContext(ctx, "SELECT RELEASE_LOCK('aegisdb_schema_migrate')").Scan(&released); err != nil {
 				slog.Warn("release migration lock failed", "err", err)
 			} else if released != 1 {
 				slog.Warn("migration lock not held at release (connection may have dropped)", "result", released)
@@ -309,7 +309,7 @@ func splitSQLStatements(sqlText string) []string {
 }
 
 // pgMigrationLockKey 是迁移用的咨询锁键(任意常量,只要全网关一致)。
-const pgMigrationLockKey = 0x76656c61 // "vela"
+const pgMigrationLockKey = 0x61656769 // "aegi"
 
 // pgMigrationLock 在一条钉住的连接上拿 PG 会话级咨询锁,返回释放函数。
 func pgMigrationLock(db *gorm.DB) (func(), error) {

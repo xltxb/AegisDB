@@ -1,6 +1,6 @@
 package gateway
 
-import "velagateway/pkg/sqlutil"
+import "aegisdb/pkg/sqlutil"
 
 // MySQL 的反斜杠转义与网关词法的分歧。
 //

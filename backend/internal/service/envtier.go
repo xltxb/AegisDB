@@ -7,9 +7,9 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // Tier / environment administration.

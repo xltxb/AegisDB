@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The column default (TRUE) reproduces the shipped behaviour on upgrade, but it

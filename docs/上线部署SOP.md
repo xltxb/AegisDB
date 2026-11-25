@@ -1,10 +1,10 @@
-# Vela 数据库网关 · 上线部署 SOP
+# AegisDB 数据库网关 · 上线部署 SOP
 
 > **这份文档给谁**：执行部署与升级的人（DBA / 运维）。
 > **它和 `DEPLOY.md` 的分工**：`DEPLOY.md` 回答"这套东西怎么装起来"，是一次性的安装说明；
 > 本文回答"**每次发版照着做什么**、做完怎么验、出了问题怎么定位"，是可以逐行打勾的作业指导。
 >
-> 生产目录：`/opt/db-gateway` ｜ 反向代理：Nginx（同机，`proxy_pass` 到 `127.0.0.1:8080`）
+> 生产目录：`/opt/aegisdb` ｜ 反向代理：Nginx（同机，`proxy_pass` 到 `127.0.0.1:8080`）
 > ｜ 服务托管：systemd
 
 ---
@@ -14,22 +14,22 @@
 例行升级（**没有新迁移**时）最短路径：
 
 ```bash
-cd /opt/db-gateway
+cd /opt/aegisdb
 cp configs/config.yaml /tmp/config.yaml.bak                     # ① 护住本地改过的配置
-sudo systemctl stop vela-gateway                                # ② 停
-sudo tar -xzf ~/vela-gateway-<版本>-linux-amd64.tar.gz -C /opt/db-gateway   # ③ 解包
+sudo systemctl stop aegisdb                                # ② 停
+sudo tar -xzf ~/aegisdb-<版本>-linux-amd64.tar.gz -C /opt/aegisdb   # ③ 解包
 cp /tmp/config.yaml.bak configs/config.yaml                     # ④ 解包覆盖了配置,还原成线上那份
-set -a; . ./vela.env; set +a                                    # ⑤ 载入环境变量（否则连不上库）
-./vela-gateway migrate                                          # ⑥ 迁移（幂等）
-sudo systemctl start vela-gateway                               # ⑦ 起
-./vela-gateway version && curl -sf localhost:8080/healthz       # ⑧ 验
+set -a; . ./aegisdb.env; set +a                                    # ⑤ 载入环境变量（否则连不上库）
+./aegisdb migrate                                          # ⑥ 迁移（幂等）
+sudo systemctl start aegisdb                               # ⑦ 起
+./aegisdb version && curl -sf localhost:8080/healthz       # ⑧ 验
 ```
 
 **三个最容易踩的坑**，每一个都在下文有完整说明：
 
 | 坑 | 表现 | 出处 |
 |---|---|---|
-| 手工跑子命令没载入 `vela.env` | `dial tcp 127.0.0.1:3306: connection refused` | [§5.2](#52-连不上数据库) |
+| 手工跑子命令没载入 `aegisdb.env` | `dial tcp 127.0.0.1:3306: connection refused` | [§5.2](#52-连不上数据库) |
 | 解包覆盖了 `configs/config.yaml` | 线上改过的配置（数据库、多层代理的 `trusted_proxies` 等）被模板冲掉 | [§5.3](#53-来源-ip-全是-127001) |
 | 先起进程后跑迁移 | 新二进制对着旧表结构跑，报列不存在 | [§3 步骤 6](#步骤-6迁移表结构) |
 
@@ -47,11 +47,11 @@ sudo systemctl start vela-gateway                               # ⑦ 起
 
 | 项 | 要求 | 怎么确认 |
 |---|---|---|
-| 操作账号 | 能 `sudo`，能读写 `/opt/db-gateway` | `sudo -v` |
+| 操作账号 | 能 `sudo`，能读写 `/opt/aegisdb` | `sudo -v` |
 | 数据库 | MySQL 8，库已建、账号可连 | `mysql -h<host> -u<user> -p -e 'select 1'` |
 | 停机窗口 | 例行升级需要 1–3 分钟（含迁移） | 与业务约定 |
 | 备份 | **当天的数据库备份已存在且可用** | 见 [§1.3](#13-备份这一条不能跳) |
-| 安装包 | `vela-gateway-<版本>-linux-amd64.tar.gz` 已传到服务器 | `ls -lh ~/vela-gateway-*.tar.gz` |
+| 安装包 | `aegisdb-<版本>-linux-amd64.tar.gz` 已传到服务器 | `ls -lh ~/aegisdb-*.tar.gz` |
 
 ### 1.3 备份，这一条不能跳
 
@@ -60,8 +60,8 @@ sudo systemctl start vela-gateway                               # ⑦ 起
 
 ```bash
 mysqldump --single-transaction --routines --triggers \
-  -h<host> -u<user> -p vela_gateway > /backup/vela_gateway_$(date +%F_%H%M).sql
-ls -lh /backup/vela_gateway_*.sql | tail -1      # 确认文件非空
+  -h<host> -u<user> -p aegisdb > /backup/aegisdb_$(date +%F_%H%M).sql
+ls -lh /backup/aegisdb_*.sql | tail -1      # 确认文件非空
 ```
 
 ---
@@ -73,47 +73,47 @@ ls -lh /backup/vela_gateway_*.sql | tail -1      # 确认文件非空
 ### 步骤 1：建目录与账号
 
 ```bash
-sudo useradd --system --home /opt/db-gateway --shell /usr/sbin/nologin vela
-sudo mkdir -p /opt/db-gateway
-sudo tar -xzf ~/vela-gateway-<版本>-linux-amd64.tar.gz -C /opt/db-gateway
+sudo useradd --system --home /opt/aegisdb --shell /usr/sbin/nologin aegisdb
+sudo mkdir -p /opt/aegisdb
+sudo tar -xzf ~/aegisdb-<版本>-linux-amd64.tar.gz -C /opt/aegisdb
 ```
 
 ### 步骤 2：准备 MySQL
 
 ```sql
-CREATE DATABASE vela_gateway CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'vela'@'%' IDENTIFIED BY '<强密码>';
-GRANT ALL ON vela_gateway.* TO 'vela'@'%';
+CREATE DATABASE aegisdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'aegisdb'@'%' IDENTIFIED BY '<强密码>';
+GRANT ALL ON aegisdb.* TO 'aegisdb'@'%';
 ```
 
-### 步骤 3：写 `vela.env`
+### 步骤 3：写 `aegisdb.env`
 
 ```bash
-cd /opt/db-gateway
-sudo cp deploy/vela.env.example vela.env
-sudo vi vela.env
-sudo chown vela:vela vela.env && sudo chmod 600 vela.env
+cd /opt/aegisdb
+sudo cp deploy/aegisdb.env.example aegisdb.env
+sudo vi aegisdb.env
+sudo chown aegisdb:aegisdb aegisdb.env && sudo chmod 600 aegisdb.env
 ```
 
 必填三项：
 
 ```bash
 APP_ENV=prod
-VELA_MYSQL_DSN=vela:<密码>@tcp(<mysql主机>:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local
-VELA_JWT_SECRET=<openssl rand -hex 32 的结果>
+AEGISDB_MYSQL_DSN=aegisdb:<密码>@tcp(<mysql主机>:3306)/aegisdb?charset=utf8mb4&parseTime=true&loc=Local
+AEGISDB_JWT_SECRET=<openssl rand -hex 32 的结果>
 ```
 
-> `VELA_JWT_SECRET` **少于 32 位、还是模板里的占位值、或字符种类太少（一个字符重复凑长度那种），
+> `AEGISDB_JWT_SECRET` **少于 32 位、还是模板里的占位值、或字符种类太少（一个字符重复凑长度那种），
 > 服务会拒绝启动** —— 这是有意的，用 `openssl rand -hex 32` 生成就三条都满足。
 >
-> 强烈建议同时设 `VELA_SECRET_KEY`（另一个 32 位随机串）。它是连接口令的静态加密密钥，
+> 强烈建议同时设 `AEGISDB_SECRET_KEY`（另一个 32 位随机串）。它是连接口令的静态加密密钥，
 > 设了之后与 JWT 密钥解耦，日后可以安全轮换 JWT 密钥而不影响存量口令解密。
 > **它一经设定不可更改** —— 改了存量口令就解不开了。所以要么第一天就设，要么永远别设。
 
 ### 步骤 4：改 `configs/config.yaml`
 
 ```bash
-sudo vi /opt/db-gateway/configs/config.yaml
+sudo vi /opt/aegisdb/configs/config.yaml
 ```
 
 `server:` 段必须加上这一行（**包里的模板没有它**）：
@@ -130,30 +130,30 @@ server:
 ### 步骤 5：初始化
 
 ```bash
-cd /opt/db-gateway
-set -a; . ./vela.env; set +a
-./vela-gateway init \
+cd /opt/aegisdb
+set -a; . ./aegisdb.env; set +a
+./aegisdb init \
   --admin-email <你的邮箱> \
   --admin-password '<强口令>' \
   --admin-name '平台管理员'
 ```
 
 口令要求 **≥12 位，且含大小写字母 / 数字 / 符号中的 ≥3 类**。
-也可以改用环境变量 `VELA_ADMIN_PASSWORD` 传，口令就不会留在 shell history 里。
+也可以改用环境变量 `AEGISDB_ADMIN_PASSWORD` 传，口令就不会留在 shell history 里。
 `init` 会先自动跑迁移，然后写入引用数据（角色、菜单、能力矩阵、风险字典、默认设置）
 和**一个**管理员账号 —— 不含任何演示数据。
 
 ### 步骤 6：装 systemd unit
 
 ```bash
-sudo cp /opt/db-gateway/deploy/vela-gateway.service /etc/systemd/system/
-sudo vi /etc/systemd/system/vela-gateway.service     # 把路径全部改成 /opt/db-gateway
+sudo cp /opt/aegisdb/deploy/aegisdb.service /etc/systemd/system/
+sudo vi /etc/systemd/system/aegisdb.service     # 默认路径 /opt/aegisdb，装到别处才需要改
 sudo systemctl daemon-reload
-sudo systemctl enable --now vela-gateway
+sudo systemctl enable --now aegisdb
 ```
 
-> **模板里的路径写的是 `/opt/vela-gateway`，必须改。** 而且
-> `EnvironmentFile=-/opt/.../vela.env` 前面那个 `-` 表示**文件不存在就静默跳过** ——
+> **模板里的路径写的是 `/opt/aegisdb`，装到别处必须改。** 注意
+> `EnvironmentFile=-/opt/.../aegisdb.env` 前面那个 `-` 表示**文件不存在就静默跳过** ——
 > 路径写错时服务照样起得来、一个环境变量都没有，然后回落到配置里的本地默认 DSN：
 > 起得来、连不上，而且不报配置错误。装完务必做 [§6](#六上线后验证清单) 的验证。
 
@@ -190,9 +190,9 @@ location / {
 
 ```bash
 # 包里最高的迁移编号
-tar -tzf ~/vela-gateway-<新版本>-linux-amd64.tar.gz | grep migrations | tail -1
+tar -tzf ~/aegisdb-<新版本>-linux-amd64.tar.gz | grep migrations | tail -1
 # 当前库里已应用到哪一条
-mysql -h<host> -u<user> -p vela_gateway -e "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 3;"
+mysql -h<host> -u<user> -p aegisdb -e "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 3;"
 ```
 
 两边一致 → 这一版**没有新迁移**，`migrate` 那一步只是走个过场（仍然要跑，它是幂等的）。
@@ -205,40 +205,40 @@ mysql -h<host> -u<user> -p vela_gateway -e "SELECT version FROM schema_migration
 ### 步骤 2：备份当前配置
 
 ```bash
-cd /opt/db-gateway
+cd /opt/aegisdb
 cp configs/config.yaml /tmp/config.yaml.bak
-cp vela.env /tmp/vela.env.bak
+cp aegisdb.env /tmp/aegisdb.env.bak
 ```
 
 **解包会覆盖 `configs/config.yaml`** —— 你在里面改过的东西会被模板冲掉。模板自 2026-10 起已自带
 `trusted_proxies: ["127.0.0.1", "::1"]`（同机 Nginx 够用），但多层代理等改动仍要靠这份备份还原。
-`vela.env` 不在包里，不会被覆盖，但一起备份不花钱。
+`aegisdb.env` 不在包里，不会被覆盖，但一起备份不花钱。
 
 ### 步骤 3：停服务
 
 ```bash
-sudo systemctl stop vela-gateway
-sudo systemctl status vela-gateway --no-pager | head -5    # 确认真的停了
+sudo systemctl stop aegisdb
+sudo systemctl status aegisdb --no-pager | head -5    # 确认真的停了
 ```
 
 ### 步骤 4：留一份旧二进制（回滚用）
 
 ```bash
-cp /opt/db-gateway/vela-gateway /tmp/vela-gateway.$(date +%F).bak
+cp /opt/aegisdb/aegisdb /tmp/aegisdb.$(date +%F).bak
 ```
 
 ### 步骤 5：解包
 
 ```bash
-sudo tar -xzf ~/vela-gateway-<新版本>-linux-amd64.tar.gz -C /opt/db-gateway
-sudo chown -R vela:vela /opt/db-gateway
+sudo tar -xzf ~/aegisdb-<新版本>-linux-amd64.tar.gz -C /opt/aegisdb
+sudo chown -R aegisdb:aegisdb /opt/aegisdb
 ```
 
 立刻把线上那份配置还原回去（模板现在本身就带 `trusted_proxies`，不能再靠 grep 它来判断有没有被冲掉）：
 
 ```bash
-sudo cp /tmp/config.yaml.bak /opt/db-gateway/configs/config.yaml
-grep -n trusted_proxies /opt/db-gateway/configs/config.yaml   # 还原之后必须还在
+sudo cp /tmp/config.yaml.bak /opt/aegisdb/configs/config.yaml
+grep -n trusted_proxies /opt/aegisdb/configs/config.yaml   # 还原之后必须还在
 ```
 
 > ⚠️ **发版注意（登录 IP 白名单）**：还原的是**旧备份**时，它可能比模板还老、根本没有 `trusted_proxies`。
@@ -251,9 +251,9 @@ grep -n trusted_proxies /opt/db-gateway/configs/config.yaml   # 还原之后必�
 ### 步骤 6：迁移表结构
 
 ```bash
-cd /opt/db-gateway
-set -a; . ./vela.env; set +a      # ← 这一行不能省，理由见 §5.2
-./vela-gateway migrate
+cd /opt/aegisdb
+set -a; . ./aegisdb.env; set +a      # ← 这一行不能省，理由见 §5.2
+./aegisdb migrate
 ```
 
 期望输出形如：
@@ -269,8 +269,8 @@ set -a; . ./vela.env; set +a      # ← 这一行不能省，理由见 §5.2
 ### 步骤 7：起服务
 
 ```bash
-sudo systemctl start vela-gateway
-sudo systemctl status vela-gateway --no-pager | head -10
+sudo systemctl start aegisdb
+sudo systemctl status aegisdb --no-pager | head -10
 ```
 
 ### 步骤 8：走 [§6 上线后验证清单](#六上线后验证清单)
@@ -283,11 +283,11 @@ sudo systemctl status vela-gateway --no-pager | head -10
 "纯前端"，或者 `git log` 里这几笔只碰了 `frontend/`。
 
 ```bash
-cd /opt/db-gateway
+cd /opt/aegisdb
 cp -r web /tmp/web.bak.$(date +%F)          # 留退路
 sudo rm -rf web/assets                       # 删旧资源：文件名带哈希，不删会越堆越多
-sudo unzip -o ~/vela-web-<版本>.zip -d web/
-sudo chown -R vela:vela web
+sudo unzip -o ~/aegisdb-web-<版本>.zip -d web/
+sudo chown -R aegisdb:aegisdb web
 ```
 
 **不用重启，不用迁移。** `index.html` 是 no-cache 的，用户刷新一次就拿到新版本。
@@ -303,15 +303,15 @@ sudo chown -R vela:vela web
 ### 5.1 服务起不来
 
 ```bash
-sudo journalctl -u vela-gateway -n 50 --no-pager
+sudo journalctl -u aegisdb -n 50 --no-pager
 ```
 
 | 日志关键字 | 原因 | 处理 |
 |---|---|---|
-| `invalid configuration` / JWT 相关 | `VELA_JWT_SECRET` 缺失、是占位值、或不足 32 位 | 补 `vela.env`，`openssl rand -hex 32` |
+| `invalid configuration` / JWT 相关 | `AEGISDB_JWT_SECRET` 缺失、是占位值、或不足 32 位 | 补 `aegisdb.env`，`openssl rand -hex 32` |
 | `trusted_proxies 配置非法` | 写了不是 IP 也不是 CIDR 的值 | 改成 `["127.0.0.1", "::1"]` |
 | `database open failed` | 见 [§5.2](#52-连不上数据库) | |
-| `bind: address already in use` | 旧进程没停干净 | `sudo systemctl stop vela-gateway`，再 `ss -lntp \| grep 8080` |
+| `bind: address already in use` | 旧进程没停干净 | `sudo systemctl stop aegisdb`，再 `ss -lntp \| grep 8080` |
 
 ### 5.2 连不上数据库
 
@@ -322,22 +322,22 @@ sudo journalctl -u vela-gateway -n 50 --no-pager
 
 **看到 `127.0.0.1:3306` 基本可以断定：环境变量没载入。**
 
-真正的 DSN 来自 `VELA_MYSQL_DSN`，而那个变量是 **systemd 通过 `EnvironmentFile=` 注入给
-服务进程**的 —— 你在 shell 里手工跑 `./vela-gateway migrate` 时它并不存在，配置就回落到
+真正的 DSN 来自 `AEGISDB_MYSQL_DSN`，而那个变量是 **systemd 通过 `EnvironmentFile=` 注入给
+服务进程**的 —— 你在 shell 里手工跑 `./aegisdb migrate` 时它并不存在，配置就回落到
 `configs/config.yaml` 里那条本地默认 DSN。
 
 ```bash
-cd /opt/db-gateway
-set -a; . ./vela.env; set +a
-./vela-gateway migrate
+cd /opt/aegisdb
+set -a; . ./aegisdb.env; set +a
+./aegisdb migrate
 ```
 
 确认环境变量确实在：
 
 ```bash
-ls -l /opt/db-gateway/vela.env                  # 存在？权限应为 600
-grep -c VELA_MYSQL_DSN /opt/db-gateway/vela.env # 有这一行？
-grep EnvironmentFile /etc/systemd/system/vela-gateway.service   # systemd 指向哪个文件？
+ls -l /opt/aegisdb/aegisdb.env                  # 存在？权限应为 600
+grep -c AEGISDB_MYSQL_DSN /opt/aegisdb/aegisdb.env # 有这一行？
+grep EnvironmentFile /etc/systemd/system/aegisdb.service   # systemd 指向哪个文件？
 ```
 
 > `verify-audit`、`init` 同理 —— 凡是要连库的子命令，都要先载入。
@@ -355,7 +355,7 @@ grep EnvironmentFile /etc/systemd/system/vela-gateway.service   # systemd 指向
   trusted_proxies: ["127.0.0.1", "::1"]
 ```
 
-然后 `sudo systemctl restart vela-gateway`。
+然后 `sudo systemctl restart aegisdb`。
 
 三件要一起确认：
 
@@ -422,16 +422,16 @@ grep EnvironmentFile /etc/systemd/system/vela-gateway.service   # systemd 指向
 ### 6.1 进程与版本
 
 ```bash
-cd /opt/db-gateway && set -a; . ./vela.env; set +a
-./vela-gateway version                      # 版本号是不是这次要发的那个
+cd /opt/aegisdb && set -a; . ./aegisdb.env; set +a
+./aegisdb version                      # 版本号是不是这次要发的那个
 curl -s localhost:8080/healthz             # 健康检查;auditWriteFailures 应为 0
-sudo systemctl status vela-gateway --no-pager | head -5
+sudo systemctl status aegisdb --no-pager | head -5
 ```
 
 ### 6.2 看一眼启动日志里的「审批人自检」
 
 ```bash
-sudo journalctl -u vela-gateway -n 100 --no-pager | grep -i "审批人自检"
+sudo journalctl -u aegisdb -n 100 --no-pager | grep -i "审批人自检"
 ```
 
 每次启动会检查"这些审批环节到底还有没有人能批"，命中打 WARN（不阻止启动）：
@@ -465,8 +465,8 @@ sudo journalctl -u vela-gateway -n 100 --no-pager | grep -i "审批人自检"
 ### 6.5 审计链基线
 
 ```bash
-cd /opt/db-gateway && set -a; . ./vela.env; set +a
-./vela-gateway verify-audit
+cd /opt/aegisdb && set -a; . ./aegisdb.env; set +a
+./aegisdb verify-audit
 ```
 
 期望：
@@ -506,12 +506,12 @@ cd /opt/db-gateway && set -a; . ./vela.env; set +a
 ### 7.2 无迁移回滚
 
 ```bash
-sudo systemctl stop vela-gateway
-sudo cp /tmp/vela-gateway.<日期>.bak /opt/db-gateway/vela-gateway
-sudo cp /tmp/config.yaml.bak /opt/db-gateway/configs/config.yaml
-sudo chown vela:vela /opt/db-gateway/vela-gateway
-sudo systemctl start vela-gateway
-./vela-gateway version      # 确认是旧版本
+sudo systemctl stop aegisdb
+sudo cp /tmp/aegisdb.<日期>.bak /opt/aegisdb/aegisdb
+sudo cp /tmp/config.yaml.bak /opt/aegisdb/configs/config.yaml
+sudo chown aegisdb:aegisdb /opt/aegisdb/aegisdb
+sudo systemctl start aegisdb
+./aegisdb version      # 确认是旧版本
 ```
 
 前端也要一起退（`web/` 在包里）：`sudo rm -rf web && sudo cp -r /tmp/web.bak.<日期> web`
@@ -521,10 +521,10 @@ sudo systemctl start vela-gateway
 **必须连数据库一起退**，否则旧代码按旧列名查询，而列已经不在了：
 
 ```bash
-sudo systemctl stop vela-gateway
-mysql -h<host> -u<user> -p vela_gateway < /backup/vela_gateway_<时间戳>.sql   # 恢复备份
-sudo cp /tmp/vela-gateway.<日期>.bak /opt/db-gateway/vela-gateway
-sudo systemctl start vela-gateway
+sudo systemctl stop aegisdb
+mysql -h<host> -u<user> -p aegisdb < /backup/aegisdb_<时间戳>.sql   # 恢复备份
+sudo cp /tmp/aegisdb.<日期>.bak /opt/aegisdb/aegisdb
+sudo systemctl start aegisdb
 ```
 
 > **代价是备份时刻之后的所有数据都没了** —— 包括那段时间的审计行。
@@ -536,11 +536,11 @@ sudo systemctl start vela-gateway
 
 | 事项 | 频率 | 命令 / 位置 |
 |---|---|---|
-| 审计链校验 | 每天（建议挂 cron） | `./vela-gateway verify-audit`，**退出码 2 = 链断了**，直接接告警 |
+| 审计链校验 | 每天（建议挂 cron） | `./aegisdb verify-audit`，**退出码 2 = 链断了**，直接接告警 |
 | 审计写入失败数 | 随健康检查（建议 1 分钟） | `curl -s localhost:8080/healthz` 里的 `auditWriteFailures`，**非零即告警**（见下） |
 | 在备份上校验 | 每月 | 把备份恢复到一台临时库，对它跑一次 `verify-audit` —— 拿今天的库和上周的备份各验一次，是这条链最有用的用法 |
 | 数据库备份 | 每天 | `mysqldump`，见 [§1.3](#13-备份这一条不能跳) |
-| 看审批人自检 | 每次重启后 | `journalctl -u vela-gateway \| grep 审批人自检` |
+| 看审批人自检 | 每次重启后 | `journalctl -u aegisdb \| grep 审批人自检` |
 | 导出归档清理 | 自动 | 由网关按【设置 · 网关】的保留天数每小时清理 |
 
 > **`auditWriteFailures` 是什么**：它计的是"动作已经发生、审计行没写成"的次数，平时恒为 0。
@@ -552,7 +552,7 @@ sudo systemctl start vela-gateway
 cron 示例（每天 3 点校验审计链，断了就发邮件）：
 
 ```cron
-0 3 * * * cd /opt/db-gateway && set -a && . ./vela.env && set +a && ./vela-gateway verify-audit || echo "审计链校验失败" | mail -s "[告警] Vela 审计链" ops@corp.io
+0 3 * * * cd /opt/aegisdb && set -a && . ./aegisdb.env && set +a && ./aegisdb verify-audit || echo "审计链校验失败" | mail -s "[告警] AegisDB 审计链" ops@corp.io
 ```
 
 ---
@@ -561,39 +561,39 @@ cron 示例（每天 3 点校验审计链，断了就发邮件）：
 
 | 命令 | 作用 | 退出码 |
 |---|---|---|
-| `./vela-gateway version` | 打印版本 | 0 |
-| `./vela-gateway migrate` | 只应用待执行的迁移（幂等） | 0 / 1 |
-| `./vela-gateway init --admin-email … --admin-password …` | 迁移 + 引用数据 + 建管理员（仅首次） | 0 / 1 |
-| `./vela-gateway verify-audit [-limit N]` | 重算审计哈希链 | 0 完好 / **2 链断了** / 1 出错 |
-| `./vela-gateway migrate-store --from-mysql … --to-postgres … --tz …` | 存储库从 MySQL 一次性搬到 PostgreSQL（停机，见 `上线部署SOP-存储库搬迁到PG.md`） | 0 搬完且核对通过 / 1 未完成 |
-| `./vela-gateway -config configs/config.yaml` | 直接运行服务（systemd 用这个） | — |
+| `./aegisdb version` | 打印版本 | 0 |
+| `./aegisdb migrate` | 只应用待执行的迁移（幂等） | 0 / 1 |
+| `./aegisdb init --admin-email … --admin-password …` | 迁移 + 引用数据 + 建管理员（仅首次） | 0 / 1 |
+| `./aegisdb verify-audit [-limit N]` | 重算审计哈希链 | 0 完好 / **2 链断了** / 1 出错 |
+| `./aegisdb migrate-store --from-mysql … --to-postgres … --tz …` | 存储库从 MySQL 一次性搬到 PostgreSQL（停机，见 `上线部署SOP-存储库搬迁到PG.md`） | 0 搬完且核对通过 / 1 未完成 |
+| `./aegisdb -config configs/config.yaml` | 直接运行服务（systemd 用这个） | — |
 
-**所有要连库的子命令，跑之前都要 `set -a; . ./vela.env; set +a`。**
+**所有要连库的子命令，跑之前都要 `set -a; . ./aegisdb.env; set +a`。**
 
 ## 附录 B：关键环境变量
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
 | `APP_ENV` | ✅ | `prod` → MySQL |
-| `VELA_MYSQL_DSN` | ✅ | 生产 DSN，覆盖配置文件 |
-| `VELA_DB_DRIVER` | 搬到 PG 后 ✅ | 写 `postgres` 即使用 PostgreSQL 存储库（**只认环境变量**，配置文件里的 driver 在 prod 下不生效） |
-| `VELA_POSTGRES_DSN` | 搬到 PG 后 ✅ | PG 存储库 DSN（libpq 键值串或 URL） |
-| `VELA_JWT_SECRET` | ✅ | **≥32 位**，否则拒绝启动 |
-| `VELA_SECRET_KEY` | 建议 | 连接口令静态加密密钥。**一经设定不可更改** |
-| `VELA_TLS_CERT` / `VELA_TLS_KEY` | 可选 | 让网关自己终止 TLS（现网由 Nginx 终止，不需要） |
+| `AEGISDB_MYSQL_DSN` | ✅ | 生产 DSN，覆盖配置文件 |
+| `AEGISDB_DB_DRIVER` | 搬到 PG 后 ✅ | 写 `postgres` 即使用 PostgreSQL 存储库（**只认环境变量**，配置文件里的 driver 在 prod 下不生效） |
+| `AEGISDB_POSTGRES_DSN` | 搬到 PG 后 ✅ | PG 存储库 DSN（libpq 键值串或 URL） |
+| `AEGISDB_JWT_SECRET` | ✅ | **≥32 位**，否则拒绝启动 |
+| `AEGISDB_SECRET_KEY` | 建议 | 连接口令静态加密密钥。**一经设定不可更改** |
+| `AEGISDB_TLS_CERT` / `AEGISDB_TLS_KEY` | 可选 | 让网关自己终止 TLS（现网由 Nginx 终止，不需要） |
 
 完整清单见 `DEPLOY.md` 的「环境变量一览」。
 
 ## 附录 C：目录结构
 
 ```
-/opt/db-gateway/
-├─ vela-gateway          单二进制（API + 前端 + 内嵌迁移）
-├─ vela.env              环境变量（600，**不在包里，解包不会覆盖**）
+/opt/aegisdb/
+├─ aegisdb          单二进制（API + 前端 + 内嵌迁移）
+├─ aegisdb.env              环境变量（600，**不在包里，解包不会覆盖**）
 ├─ configs/config.yaml   配置（**在包里，解包会覆盖** —— 每次升级都要检查 trusted_proxies）
 ├─ web/                  前端静态资源（在包里，纯前端热更只换它）
 ├─ migrations/           迁移 SQL（同样已内嵌进二进制，这里是留档）
-├─ deploy/               systemd unit + env 模板（路径写的是 /opt/vela-gateway，装的时候要改）
+├─ deploy/               systemd unit + env 模板（默认路径 /opt/aegisdb）
 └─ README-DEPLOY.md      包内速查
 ```
 

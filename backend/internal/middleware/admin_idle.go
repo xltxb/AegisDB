@@ -21,8 +21,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/repository"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/resp"
 )
 
 var adminActivity = struct {

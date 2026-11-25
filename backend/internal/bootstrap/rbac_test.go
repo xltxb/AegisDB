@@ -12,7 +12,7 @@ import (
 // settings endpoint while still being allowed on audit.
 func TestRBAC_ReadonlyRoleMenuConvergence(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("zhaolei@vela.io", "vela123") // ro role
+	token := app.login("zhaolei@aegisdb.io", "aegisdb123") // ro role
 
 	r := app.do(http.MethodGet, "/api/v1/auth/me", token, nil)
 	eq(t, r.Code, 0, "auth/me response code")
@@ -55,11 +55,11 @@ func TestRBAC_SettingsMenuIsAdminOnly(t *testing.T) {
 		return me.Menus
 	}
 
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	eq(t, menusOf(admin)["settings"], true, "admin sees settings menu")
 	eq(t, app.do(http.MethodGet, "/api/v1/settings", admin, nil).Code, 0, "admin GET /settings allowed")
 
-	owner := app.login("zhangwei@vela.io", "vela123") // DBA owner (approver, not admin)
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // DBA owner (approver, not admin)
 	eq(t, menusOf(owner)["settings"], false, "owner must not see settings menu")
 	eq(t, app.do(http.MethodGet, "/api/v1/settings", owner, nil).Code, 40300, "owner GET /settings forbidden")
 }

@@ -1,8 +1,8 @@
-# DP DB GATEWAY — PRODUCTION configuration (MySQL).
+# AegisDB — PRODUCTION configuration (MySQL).
 # Initialize once, then run:
-#   VELA_MYSQL_DSN="..." ./vela-gateway init --admin-email you@corp.io --admin-password 'S3cret...'
-#   VELA_MYSQL_DSN="..." VELA_JWT_SECRET="..." ./vela-gateway -config config.yaml
-# Secrets should come from the environment (VELA_MYSQL_DSN / VELA_JWT_SECRET),
+#   AEGISDB_MYSQL_DSN="..." ./aegisdb init --admin-email you@corp.io --admin-password 'S3cret...'
+#   AEGISDB_MYSQL_DSN="..." AEGISDB_JWT_SECRET="..." ./aegisdb -config config.yaml
+# Secrets should come from the environment (AEGISDB_MYSQL_DSN / AEGISDB_JWT_SECRET),
 # not this file.
 
 env: "prod"                 # → MySQL
@@ -18,18 +18,18 @@ server:
   trusted_proxies: ["127.0.0.1", "::1"]
 
 database:
-  # Prefer the VELA_MYSQL_DSN env var; this is only a fallback default.
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
-  # 存储库搬到 PostgreSQL 之后(见 docs/上线部署SOP-存储库搬迁到PG.md):切换写在 vela.env 里 ——
-  #   VELA_DB_DRIVER=postgres
-  #   VELA_POSTGRES_DSN=host=… port=5432 user=… password=… dbname=vela_gateway sslmode=disable
+  # Prefer the AEGISDB_MYSQL_DSN env var; this is only a fallback default.
+  mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb?charset=utf8mb4&parseTime=true&loc=Local"
+  # 存储库搬到 PostgreSQL 之后(见 docs/上线部署SOP-存储库搬迁到PG.md):切换写在 aegisdb.env 里 ——
+  #   AEGISDB_DB_DRIVER=postgres
+  #   AEGISDB_POSTGRES_DSN=host=… port=5432 user=… password=… dbname=aegisdb sslmode=disable
   # **不要**改这个文件来切换:升级包会覆盖它,下一次升级就悄悄连回旧 MySQL。
-  sqlite_path: "vela-gateway.db"
-  auto_migrate: false        # do NOT alter schema on every boot; `vela-gateway init` migrates explicitly
-  seed: false                # NO demo data in production — use `vela-gateway init`
+  sqlite_path: "aegisdb.db"
+  auto_migrate: false        # do NOT alter schema on every boot; `aegisdb init` migrates explicitly
+  seed: false                # NO demo data in production — use `aegisdb init`
 
 jwt:
-  # REQUIRED: set a strong (≥32 char) secret via VELA_JWT_SECRET. The server
+  # REQUIRED: set a strong (≥32 char) secret via AEGISDB_JWT_SECRET. The server
   # refuses to start in prod with an empty/placeholder value.
   secret: ""
   ttl_hours: 8
@@ -40,13 +40,13 @@ gateway:
   strict_mode: true
   exec_timeout_seconds: 30
 
-# SSO 总闸:SSO 平时在【系统设置 · 会话与安全】开关。写 true(或环境变量 VELA_SSO_DISABLED=1)
+# SSO 总闸:SSO 平时在【系统设置 · 会话与安全】开关。写 true(或环境变量 AEGISDB_SSO_DISABLED=1)
 # 则无论设置页怎么存都按关闭处理,所有人回到账号口令登录。进不去设置页时用,改完重启生效。
 sso:
   disabled: false
 
 # 管理后台 IP 白名单总闸:白名单平时在【系统设置 · 会话与安全】配。写 true(或环境变量
-# VELA_ADMIN_IP_ALLOWLIST_DISABLED=1)则白名单一律不生效 —— 配错把管理员全挡在管理后台外面时用,改完重启生效。
+# AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED=1)则白名单一律不生效 —— 配错把管理员全挡在管理后台外面时用,改完重启生效。
 admin_ip:
   allowlist_disabled: false
 
@@ -60,5 +60,5 @@ webhook:
   # Relax the outbound SSRF guard to allow loopback/private/link-local webhook
   # targets (e.g. an on-host or same-VPC receiver). Off by default in prod.
   # Only enable for a TRUSTED internal target — it re-opens SSRF to internal
-  # services and the cloud metadata endpoint. Overridable via VELA_WEBHOOK_ALLOW_PRIVATE.
+  # services and the cloud metadata endpoint. Overridable via AEGISDB_WEBHOOK_ALLOW_PRIVATE.
   allow_private: false

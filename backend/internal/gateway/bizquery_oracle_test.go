@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// testOracle 见 oracle_serveroutput_test.go(VELA_TEST_ORACLE=host:port/user/password/service)。
+// testOracle 见 oracle_serveroutput_test.go(AEGISDB_TEST_ORACLE=host:port/user/password/service)。
 
 // Oracle 不改写行数(11g 不支持 FETCH FIRST),只靠读取时截断。要确认的是:读满 n 行之后关闭
 // 结果集,驱动不会把剩下的行也拉完 —— 否则一条 5000 万行的查询会一直跑到授权时限。

@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The engine string is free text chosen in the console (and importable from a

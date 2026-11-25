@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // A long-running SQL submitted for background execution returns a jobId
@@ -17,7 +17,7 @@ import (
 // 30–60min procedure finish without a request timeout.
 func TestAsyncExec_SubmitPollDone(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec-async", token, map[string]any{
@@ -73,7 +73,7 @@ func TestAsyncExec_SubmitPollDone(t *testing.T) {
 // intercepted for approval (no background job is created) rather than run.
 func TestAsyncExec_HighRiskGoesToApproval(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec-async", token, map[string]any{
@@ -103,7 +103,7 @@ func TestAsyncExec_HighRiskGoesToApproval(t *testing.T) {
 // command and the verdict's own risk.
 func TestAsyncExec_AuditsFullCommandAndRealRisk(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	// Comfortably longer than the old 80-character clip, with a distinctive tail.
@@ -138,7 +138,7 @@ func TestAsyncExec_AuditsFullCommandAndRealRisk(t *testing.T) {
 // background job and it would run.
 func TestAsyncExec_RefusedWhileInstanceIsInMaintenance(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(dev), token,

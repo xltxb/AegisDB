@@ -13,7 +13,7 @@ import (
 // 见 gateway/oracle_create_errors.go;这里用 SQLite 的普通执行错误钉住脚本这一层)。
 func TestScript_StopsAtTheFirstFailingStatement(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.realSQLiteConnIn(admin, "dev", "script-stop")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 

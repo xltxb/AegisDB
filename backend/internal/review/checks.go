@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // checker judges one statement. It returns one message per violation found (a

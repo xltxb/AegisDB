@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // ListProjects returns every project with what it currently owns.

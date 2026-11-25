@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestOSCAlter_ModifyColumnRunsAsOnlineChange(t *testing.T) {
@@ -18,7 +18,7 @@ func TestOSCAlter_ModifyColumnRunsAsOnlineChange(t *testing.T) {
 		t.Fatalf("改列定义 + 加唯一键应生成在线变更工单: %+v", out)
 	}
 	ap := app.approvalByNoFull(admin, out.ApprovalNo)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "执行")
 	done := app.waitApprovalExec(ap.ApNo)

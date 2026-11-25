@@ -3,7 +3,7 @@ package review
 import (
 	"testing"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // 第三批(.scratch/api-msg-i18n):审查发现带 MessageRef,界面按读者语言显示;Message 仍是原来的中文。

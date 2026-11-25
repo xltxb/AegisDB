@@ -4,7 +4,7 @@ package gateway
 //
 // 两层:
 //   - 看守逻辑:不连库,用假的 KILL 记录调用,钉住"该发时发、不该发时不发、还连接前等 KILL 做完"。
-//   - 真实 MySQL:设置了 VELA_TEST_MYSQL(host:port/user/password)才跑。起一条 SLEEP(30),
+//   - 真实 MySQL:设置了 AEGISDB_TEST_MYSQL(host:port/user/password)才跑。起一条 SLEEP(30),
 //     2 秒超时后到 processlist 里确认它已经不在了。没有这个环境变量时跳过 ——
 //     CI 里没有 MySQL,但这一条是这个修复唯一能证明"库端真的停了"的地方,本地要跑一次。
 
@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type fakeKill struct {
@@ -119,12 +119,12 @@ func TestKillStatement(t *testing.T) {
 
 // ---------------------------------------------------------------- 真实 MySQL
 
-// testMySQL 从 VELA_TEST_MYSQL=host:port/user/password 取一台可用的 MySQL。
+// testMySQL 从 AEGISDB_TEST_MYSQL=host:port/user/password 取一台可用的 MySQL。
 func testMySQL(t *testing.T) *model.Connection {
 	t.Helper()
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL=host:port/user/password,跳过真实 MySQL 用例")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL=host:port/user/password,跳过真实 MySQL 用例")
 	}
 	parts := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(parts[0], ":", 2)
@@ -165,7 +165,7 @@ func waitGone(t *testing.T, conn *model.Connection, marker string) {
 
 func TestMySQLTimeoutKillsServerSideQuery(t *testing.T) {
 	conn := testMySQL(t)
-	marker := fmt.Sprintf("/* vela-timeout-%d */", time.Now().UnixNano())
+	marker := fmt.Sprintf("/* aegisdb-timeout-%d */", time.Now().UnixNano())
 	res := (&Executor{}).Run(context.Background(), conn, "SELECT SLEEP(30) "+marker, 2*time.Second)
 	if res.OutputRef == nil || res.OutputRef.Code != model.OutExecTimeout {
 		t.Fatalf("应当报执行超时,实际 %+v / %q", res.OutputRef, res.Output)
@@ -175,7 +175,7 @@ func TestMySQLTimeoutKillsServerSideQuery(t *testing.T) {
 
 func TestMySQLCancelKillsServerSideQuery(t *testing.T) {
 	conn := testMySQL(t)
-	marker := fmt.Sprintf("/* vela-cancel-%d */", time.Now().UnixNano())
+	marker := fmt.Sprintf("/* aegisdb-cancel-%d */", time.Now().UnixNano())
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(1500*time.Millisecond, cancel) // 相当于 1.5 秒后按下 Ctrl+C
 	res := (&Executor{}).Run(ctx, conn, "SELECT SLEEP(30) "+marker, 60*time.Second)
@@ -188,7 +188,7 @@ func TestMySQLCancelKillsServerSideQuery(t *testing.T) {
 // 连接池复用:KILL 之后,同一个池子上的下一条语句照常执行,不会被误杀。
 func TestMySQLNextQueryAfterKillIsUnaffected(t *testing.T) {
 	conn := testMySQL(t)
-	_ = (&Executor{}).Run(context.Background(), conn, "SELECT SLEEP(10) /* vela-prev */", time.Second)
+	_ = (&Executor{}).Run(context.Background(), conn, "SELECT SLEEP(10) /* aegisdb-prev */", time.Second)
 	for i := 0; i < 5; i++ {
 		res := (&Executor{}).Run(context.Background(), conn, "SELECT 1 + 1", 5*time.Second)
 		if res.Err != nil {

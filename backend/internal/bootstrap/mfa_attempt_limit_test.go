@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/resp"
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/resp"
+	"aegisdb/pkg/totp"
 )
 
 // H4(2026-10 安全审计):生产操作的 MFA 步进验证与 /auth/mfa/disable 没有失败次数限制 ——
@@ -23,7 +23,7 @@ func wrongCode(secret string) string {
 
 func TestMFA_StepUpLocksAfterRepeatedFailures(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 	exec := func(code string) int {
@@ -43,7 +43,7 @@ func TestMFA_StepUpLocksAfterRepeatedFailures(t *testing.T) {
 
 func TestMFA_DisableCountsFailuresToo(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	for i := 1; i <= 5; i++ {
 		r := app.do(http.MethodPost, "/api/v1/auth/mfa/disable", token, map[string]any{"code": wrongCode(secret)})
@@ -57,7 +57,7 @@ func TestMFA_DisableCountsFailuresToo(t *testing.T) {
 
 func TestMFA_SuccessResetsTheCounter(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 	exec := func(code string) int {
@@ -73,7 +73,7 @@ func TestMFA_SuccessResetsTheCounter(t *testing.T) {
 // 从前每弹一次框先扣一次额度,5 次就锁 15 分钟。
 func TestMFA_EmptyCodeIsNotAFailure(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 	exec := func(code string) int {
@@ -96,8 +96,8 @@ func TestMFA_EmptyCodeIsNotAFailure(t *testing.T) {
 // 绑上自己的验证器,此后本人反而被挡在外面。有本地口令的账号必须出示当前登录密码。
 func TestMFASetup_RequiresCurrentPassword(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("chenhao@vela.io", "vela123")
+	token := app.login("chenhao@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, nil).Code, 42801, "不带密码:要求出示")
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "wrong-pass"}).Code, 42801, "密码错误")
-	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "vela123"}).Code, 0, "密码正确")
+	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "aegisdb123"}).Code, 0, "密码正确")
 }

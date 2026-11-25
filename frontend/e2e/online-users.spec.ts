@@ -10,13 +10,13 @@ const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString()
 const ONLINE = {
   users: 2, terminals: 2, windowSec: 180,
   sessions: [
-    { userId: 1, name: 'Lin Wei', email: 'linwei@vela.io', dept: 'DBA', initials: 'LW', ip: '10.1.2.3', browser: 'Chrome · Windows',
+    { userId: 1, name: 'Lin Wei', email: 'linwei@aegisdb.io', dept: 'DBA', initials: 'LW', ip: '10.1.2.3', browser: 'Chrome · Windows',
       loginAt: ago(90), lastSeen: ago(0), lastAction: ago(1),
       terminals: [
         { connectionId: 7, instance: 'prod-order-01', openedAt: ago(30), lastExecAt: ago(1), running: true },
         { connectionId: 8, instance: 'uat-order-01', openedAt: ago(20), running: false },
       ] },
-    { userId: 2, name: 'Zhang Wei', email: 'zhangwei@vela.io', dept: '研发', initials: 'ZW', ip: '10.9.9.9', browser: 'Edge · macOS',
+    { userId: 2, name: 'Zhang Wei', email: 'zhangwei@aegisdb.io', dept: '研发', initials: 'ZW', ip: '10.9.9.9', browser: 'Edge · macOS',
       loginAt: ago(300), lastSeen: ago(0), lastAction: ago(45), terminals: [] },
   ],
 }

@@ -13,16 +13,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/resp"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/resp"
+	"aegisdb/pkg/sqlutil"
 )
 
 // encryptedSettingKeys hold high-impact secrets encrypted at rest (a DB dump must
@@ -689,7 +689,7 @@ const todoPreview = 160
 //
 // (够得到菜单、却被路由到一道自己没有菜单的闸上,是一种**配置错误**:那条流水线会永远
 // 停在那儿而没人被通知。这里只做到不谎报;真正的修法在 validateConfirmRole —— 见
-// .scratch/vela-gateway/issues/25。)
+// .scratch/aegisdb/issues/25。)
 func (h *Handler) TodoApprovals(c *gin.Context) {
 	u := middleware.CurrentUser(c)
 	decideRows, execRows, err := h.Repo.TodoCandidates(u.ID, h.Svc.AccessibleConnIDs(u))
@@ -1233,7 +1233,7 @@ func (h *Handler) AuditInstances(c *gin.Context) {
 
 // auditVerifyWindow 是界面按一下时验多少行。
 //
-// 全表校验是给命令行的(`vela-gateway verify-audit`,几十万行慢慢走);界面上那一下要
+// 全表校验是给命令行的(`aegisdb verify-audit`,几十万行慢慢走);界面上那一下要
 // 在几秒内有结果,所以只验最近这一段。这依然是有意义的:每一行的哈希覆盖它自己的内容加
 // 上前一行的哈希,窗口内的任何改动都跑不掉 —— 跑掉的只是更早的行,而返回里如实说了验过
 // 多少、一共多少。

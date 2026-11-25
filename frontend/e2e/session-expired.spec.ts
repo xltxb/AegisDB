@@ -18,5 +18,5 @@ test('任一接口回 40100:清掉会话并回到登录页', async ({ page }) =>
   await page.goto('/#/permissions')
 
   await expect(page).toHaveURL(/#\/login/)
-  expect(await page.evaluate(() => localStorage.getItem('vela_session'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBeNull()
 })

@@ -15,9 +15,9 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // CompileObject recompiles one stored program and reports what Oracle then

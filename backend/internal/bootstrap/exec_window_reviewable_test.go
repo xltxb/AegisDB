@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-26 回归排查 08:拆分后用户后台的窗口列表只剩自己的,回看按钮挂在列表行上,DBA 负责人、L2
@@ -15,10 +15,10 @@ import (
 // scheduled 口径不变。
 func TestExecWindow_ReviewableScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	now := time.Now()
 
@@ -76,7 +76,7 @@ func TestExecWindow_ReviewableScope(t *testing.T) {
 	}
 
 	// L2 够不到那台实例:别人的窗口不再列出(回看那边回"不存在"),自己的照旧
-	l2u := app.userByEmail(admin, "chenhao@vela.io")
+	l2u := app.userByEmail(admin, "chenhao@aegisdb.io")
 	eq(t, app.setUserTags(admin, l2u.ID, []string{"analytics"}).Code, 0, "把 L2 收窄到 analytics")
 	_, ws = app.windowList(l2, "?scope=reviewable")
 	if hasWindow(ws, expired) != nil {

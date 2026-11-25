@@ -13,7 +13,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // ---------------------------------------------------------------- 对象命名

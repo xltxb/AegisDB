@@ -15,7 +15,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // enableMenu 给某个角色打开一个菜单。发布页的路由闸是 menu("pipeline"),而种子里 ro /
@@ -92,17 +92,17 @@ func (a *testApp) adminReleaseWaitingOnOwner(admin, title string) releaseView {
 
 func TestReleaseVisibility_L2AndAboveSeeEveryone(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	rel := app.adminReleaseWaitingOnOwner(admin, "别人提的单")
 
 	app.enableMenuForCode("audit", "pipeline") // 审计员默认没有发布菜单,开了才测得到判断
 	for _, c := range []struct{ who, email string }{
-		{"admin(另一位平台管理员)", "wangmin@vela.io"},
-		{"owner", "lina@vela.io"},
-		{"l2", "chenhao@vela.io"},
-		{"audit", "hujun@vela.io"},
+		{"admin(另一位平台管理员)", "wangmin@aegisdb.io"},
+		{"owner", "lina@aegisdb.io"},
+		{"l2", "chenhao@aegisdb.io"},
+		{"audit", "hujun@aegisdb.io"},
 	} {
-		tok := app.login(c.email, "vela123")
+		tok := app.login(c.email, "aegisdb123")
 		if !app.canSeeAllReleasesFlag(tok) {
 			t.Errorf("%s:/auth/me 的 canSeeAllReleases 应为 true", c.who)
 		}
@@ -115,7 +115,7 @@ func TestReleaseVisibility_L2AndAboveSeeEveryone(t *testing.T) {
 	}
 
 	// scope=mine 仍然只是自己的:能看全部不等于默认塞全部。
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodGet, "/api/v1/releases?scope=mine&pageSize=100", l2, nil)
 	var page struct {
 		Items []releaseView `json:"items"`
@@ -130,15 +130,15 @@ func TestReleaseVisibility_L2AndAboveSeeEveryone(t *testing.T) {
 
 func TestReleaseVisibility_OthersOnlySeeTheirOwn(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	rel := app.adminReleaseWaitingOnOwner(admin, "研发看不到的单")
 
 	// 研发只读:给它发布菜单,证明拦它的是可见性判断,而不是菜单闸。
 	app.enableMenuForCode("ro", "pipeline")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 
 	// 自定义角色(新角色默认全 deny、不可审批)不算 L2 及以上。
-	custom := app.customRoleUser(admin, "发布观察员", "observer@vela.io", false)
+	custom := app.customRoleUser(admin, "发布观察员", "observer@aegisdb.io", false)
 
 	for _, c := range []struct{ who, tok string }{{"ro", ro}, {"自定义角色", custom}} {
 		if app.canSeeAllReleasesFlag(c.tok) {
@@ -155,7 +155,7 @@ func TestReleaseVisibility_OthersOnlySeeTheirOwn(t *testing.T) {
 	// 勾了「可审批」的自定义角色也不算:列表照样只有自己的。它能打开**详情**是另一回事 ——
 	// 没配确认角色的执行闸本来就交给可审批角色(mayConfirmGate),那是 staffsConfirmGate
 	// 的既有例外,不在本次范围内,这里不断言。
-	approver := app.customRoleUser(admin, "发布审批员", "approver@vela.io", true)
+	approver := app.customRoleUser(admin, "发布审批员", "approver@aegisdb.io", true)
 	if app.canSeeAllReleasesFlag(approver) {
 		t.Error("可审批的自定义角色:/auth/me 的 canSeeAllReleases 应为 false")
 	}

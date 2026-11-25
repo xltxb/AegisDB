@@ -22,8 +22,8 @@ func (a *testApp) issueClientPiped(adminToken, name, email string, scopes []stri
 
 func TestOpenAPIRefusesCallerChosenPipeline(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	token := app.issueClient(admin, "想挑流程的平台", "zhangwei@vela.io", nil)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	token := app.issueClient(admin, "想挑流程的平台", "zhangwei@aegisdb.io", nil)
 
 	for _, body := range []map[string]any{
 		{"title": "挑流程1", "instance": "sandbox-dev", "sql": "SELECT 1;", "pipeline": "标准发布流程"},
@@ -42,13 +42,13 @@ func TestOpenAPIRefusesCallerChosenPipeline(t *testing.T) {
 
 func TestOpenAPIUsesCredentialBoundPipeline(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 管理员侧配置:这把凭据的单一律走"外部直通"流程。
 	pid := app.createPipeline(admin, "外部直通", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "绑定流程平台", "zhangwei@vela.io", nil, pid)
+	token := app.issueClientPiped(admin, "绑定流程平台", "zhangwei@aegisdb.io", nil, pid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "走绑定流程", "instance": "sandbox-dev", "sql": "SELECT 1;", "externalRef": "PP-1",
@@ -66,10 +66,10 @@ func TestOpenAPIUsesCredentialBoundPipeline(t *testing.T) {
 
 func TestOpenAPIFallsBackToTierDefaultPipeline(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 凭据没绑流程 → 走目标分层的默认流程(种子里的全局默认「标准发布流程」,
 	// 含审批 —— 外部单在没人配置直通流程前,默认要过人)。
-	token := app.issueClient(admin, "未绑定平台", "zhangwei@vela.io", nil)
+	token := app.issueClient(admin, "未绑定平台", "zhangwei@aegisdb.io", nil)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "走默认流程", "instance": "sandbox-dev", "sql": "SELECT 1;", "externalRef": "PP-2",

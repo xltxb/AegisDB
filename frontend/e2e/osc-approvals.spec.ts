@@ -79,7 +79,7 @@ test('完成后提示保留的旧表需 DBA 手动删;无权的人看不到控�
 })
 
 test('英文界面:前置检查提示按代码翻译', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await open(page, AP, JOB)
   await page.locator('.tr').first().click()
   await expect(page.getByTestId('osc-panel')).toContainText('A long transaction is running')

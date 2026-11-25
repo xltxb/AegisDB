@@ -26,7 +26,7 @@ import (
 func (a *testApp) approvedOn(admin string, conn int64, sql string) int64 {
 	a.t.Helper()
 	ap := a.interceptedTicket(admin, conn, sql)
-	approver := a.login("zhangwei@vela.io", "vela123")
+	approver := a.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := a.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil); r.Code != 0 {
 		a.t.Fatalf("审批通过失败: code=%d msg=%s", r.Code, r.Msg)
 	}
@@ -61,7 +61,7 @@ func (a *testApp) seesApprovalRow(token string, id int64) (seen, canExec bool) {
 // 同事(够得到那台实例、能力允许)可以接手执行,而且命令是真的跑了。
 func TestApprovedCommand_PeerWithAccessMayExecute(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "peer-run") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_run (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -69,7 +69,7 @@ func TestApprovedCommand_PeerWithAccessMayExecute(t *testing.T) {
 	id := app.approvedOn(admin, conn, `DROP TABLE t_peer_run`)
 
 	// zhangwei 是 DBA 负责人(无标签限制),既不是发起人也不是这张单的执行人。
-	peer := app.login("zhangwei@vela.io", "vela123")
+	peer := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	seen, canExec := app.seesApprovalRow(peer, id)
 	if !seen || !canExec {
 		t.Fatalf("同事看不到这张待执行的单,或按钮不会亮(seen=%v canExecute=%v)", seen, canExec)
@@ -96,7 +96,7 @@ func TestApprovedCommand_PeerWithAccessMayExecute(t *testing.T) {
 // 否则这条用例会因为"看不见这台实例"而通过,测的就不是它声称的东西了。
 func TestApprovedCommand_ReadOnlyPeerStillDenied(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "peer-ro")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_ro (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -106,7 +106,7 @@ func TestApprovedCommand_ReadOnlyPeerStillDenied(t *testing.T) {
 
 	id := app.approvedOn(admin, conn, `DROP TABLE t_peer_ro`)
 
-	ro := app.login("zhaolei@vela.io", "vela123") // 研发只读:PROD 上 ddl = deny
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读:PROD 上 ddl = deny
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/execute", ro, nil); r.Code == 0 {
 		t.Fatal("只读角色执行了一张已批准的 DROP —— 能力矩阵没有按执行的人复判")
 	}
@@ -121,7 +121,7 @@ func TestApprovedCommand_ReadOnlyPeerStillDenied(t *testing.T) {
 // 一个本来无权看这台实例的人 —— 工单里带着完整 SQL。
 func TestApprovedCommand_PeerWithoutAccessNeitherSeesNorRuns(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "peer-notag")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_notag (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -132,7 +132,7 @@ func TestApprovedCommand_PeerWithoutAccessNeitherSeesNorRuns(t *testing.T) {
 
 	id := app.approvedOn(admin, conn, `DROP TABLE t_peer_notag`)
 
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/execute", ro, nil); r.Code == 0 {
 		t.Error("够不到这台实例的人执行成功了")
 	}
@@ -150,7 +150,7 @@ func TestApprovedCommand_PeerWithoutAccessNeitherSeesNorRuns(t *testing.T) {
 // 没人能跑了。
 func TestApprovedScript_ReadOnlyPeerStillDenied(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "peer-script")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_script (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -164,10 +164,10 @@ func TestApprovedScript_ReadOnlyPeerStillDenied(t *testing.T) {
 	})
 	eq(t, r.Code, 42200, "DROP 脚本在 prod 上进审批")
 	id := lastApproval(t, app).ID
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", approver, nil).Code, 0, "审批通过")
 
-	ro := app.login("zhaolei@vela.io", "vela123") // 研发只读:PROD 上 ddl = deny
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读:PROD 上 ddl = deny
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/execute", ro, nil); r.Code == 0 {
 		t.Fatal("只读角色执行了一张已批准的 DROP 脚本 —— 脚本单没有按执行的人逐条复判")
 	}

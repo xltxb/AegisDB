@@ -77,7 +77,7 @@ func (a *testApp) consoleReleaseAwaitingL2(admin, title string) releaseView {
 // 主路径:外部系统提的单,同一套外部系统按查到的审批人替他批;流水线接着往下走。
 func TestOpenApproveByChainMember(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "外部审批流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve", "config": `{"approverRole":"l2"}`},
 		{"name": "执行变更", "type": "execute"},
@@ -121,7 +121,7 @@ func TestOpenApproveByChainMember(t *testing.T) {
 	}
 	hasChen := false
 	for _, ap := range stage.Approvers {
-		if ap.Account == "chenhao@vela.io" {
+		if ap.Account == "chenhao@aegisdb.io" {
 			hasChen = true
 		}
 	}
@@ -129,7 +129,7 @@ func TestOpenApproveByChainMember(t *testing.T) {
 		t.Fatalf("l2 member chenhao should be listed with his account, got %+v", stage.Approvers)
 	}
 
-	r, d := app.openDecide(token, created.RelNo, "ChenHao@vela.io", "approve") // 邮箱不分大小写
+	r, d := app.openDecide(token, created.RelNo, "ChenHao@aegisdb.io", "approve") // 邮箱不分大小写
 	eq(t, r.Code, 0, "a chain member approves through the open API")
 	eq(t, d.Status, "approved", "ticket approved")
 	eq(t, d.AlreadyDecided, false, "this call made the decision")
@@ -164,7 +164,7 @@ func TestOpenApproveByChainMember(t *testing.T) {
 		if strings.Contains(row.Command, "open.release.approve") && strings.Contains(row.Command, created.RelNo) {
 			via = true
 			eq(t, row.Operator, "API:oa-system-凭据", "the asking system is named")
-			if !strings.Contains(row.Command, "chenhao@vela.io") {
+			if !strings.Contains(row.Command, "chenhao@aegisdb.io") {
 				t.Errorf("the audit line should name the approver, got %q", row.Command)
 			}
 		}
@@ -177,28 +177,28 @@ func TestOpenApproveByChainMember(t *testing.T) {
 // 凭据不是审批人:点名的人必须在链上;发起人借外部系统也批不了自己的单。
 func TestOpenApproveRefusesWhoCannotDecide(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "oa-refuse", nil, []string{"release:read", "release:approve"}, 0)
 	rel := app.consoleReleaseAwaitingL2(admin, "外部审批拒绝")
 	eq(t, rel.Status, "waiting", "parks on approval")
 
 	// owner(张伟)在全局默认链上,但不在这张单指定的 l2 链上。
-	r, _ := app.openDecide(token, rel.RelNo, "zhangwei@vela.io", "approve")
+	r, _ := app.openDecide(token, rel.RelNo, "zhangwei@aegisdb.io", "approve")
 	eq(t, r.Code, 40300, "someone off the chain cannot approve through the API")
 	// 发起人本人。
-	r, _ = app.openDecide(token, rel.RelNo, "linwei@vela.io", "approve")
+	r, _ = app.openDecide(token, rel.RelNo, "linwei@aegisdb.io", "approve")
 	eq(t, r.Code, 40300, "the initiator cannot approve their own release through the API")
 	// 不存在的账号、非法 action、没写审批人。
-	r, _ = app.openDecide(token, rel.RelNo, "nobody@vela.io", "approve")
+	r, _ = app.openDecide(token, rel.RelNo, "nobody@aegisdb.io", "approve")
 	eq(t, r.Code, 40001, "unknown approver")
-	if !strings.Contains(r.Msg, "nobody@vela.io") {
+	if !strings.Contains(r.Msg, "nobody@aegisdb.io") {
 		t.Errorf("should name the unknown account, got %q", r.Msg)
 	}
-	r, _ = app.openDecide(token, rel.RelNo, "chenhao@vela.io", "yes")
+	r, _ = app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "yes")
 	eq(t, r.Code, 40001, "action must be approve|reject")
 	r, _ = app.openDecide(token, rel.RelNo, "", "approve")
 	eq(t, r.Code, 40001, "approver is required")
-	r, _ = app.openDecide(token, "REL-999999", "chenhao@vela.io", "approve")
+	r, _ = app.openDecide(token, "REL-999999", "chenhao@aegisdb.io", "approve")
 	eq(t, r.Code, 40001, "unknown release")
 
 	// 上面每一次都没有改变这张单。
@@ -209,10 +209,10 @@ func TestOpenApproveRefusesWhoCannotDecide(t *testing.T) {
 // release:approve 必须显式勾选:默认集合没有它。
 func TestOpenApproveNeedsExplicitScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "ci-default", nil, nil, 0) // 没勾 = 默认集合
 	rel := app.consoleReleaseAwaitingL2(admin, "缺范围")
-	r, _ := app.openDecide(token, rel.RelNo, "chenhao@vela.io", "approve")
+	r, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve")
 	if r.Code == 0 {
 		t.Fatal("a credential without release:approve must not decide anything")
 	}
@@ -223,11 +223,11 @@ func TestOpenApproveNeedsExplicitScope(t *testing.T) {
 // 凭据能碰的发布单 = 服务账号实例范围内的。
 func TestOpenApproveRespectsInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 只够得到沙盒;单子在预发实例上。
 	token := app.approverCredential(admin, "oa-sandbox", []string{"sandbox"}, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAwaitingL2(admin, "越界实例")
-	r, _ := app.openDecide(token, rel.RelNo, "chenhao@vela.io", "approve")
+	r, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve")
 	eq(t, r.Code, 40300, "a release outside the service account's instances is off limits")
 	ap := stageByType(app.getRelease(admin, rel.ID), "approve")
 	eq(t, ap.Status, "waiting", "still waiting")
@@ -236,14 +236,14 @@ func TestOpenApproveRespectsInstanceScope(t *testing.T) {
 // 两边都能批,先到先得:控制台先批了,外部再来拿到的是已有结论,不报错也不改。
 func TestOpenApproveFirstDecisionWins(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "oa-race", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAwaitingL2(admin, "先到先得")
 	ap := stageByType(rel, "approve")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ApprovalID)+"/approve", l2, nil).Code, 0, "console approves first")
-	r, d := app.openDecide(token, rel.RelNo, "chenhao@vela.io", "reject")
+	r, d := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "reject")
 	eq(t, r.Code, 0, "a late call is answered, not refused")
 	eq(t, d.AlreadyDecided, true, "reported as already decided")
 	eq(t, d.Status, "approved", "the console's decision stands")
@@ -252,11 +252,11 @@ func TestOpenApproveFirstDecisionWins(t *testing.T) {
 // 驳回:审批单 rejected,发布单停下来。
 func TestOpenRejectStopsRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "oa-reject", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAwaitingL2(admin, "外部驳回")
 
-	r, d := app.openDecide(token, rel.RelNo, "chenhao@vela.io", "reject")
+	r, d := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "reject")
 	eq(t, r.Code, 0, "reject through the API")
 	eq(t, d.Status, "rejected", "ticket rejected")
 	app.svc.ResumeReleaseApprovals()
@@ -269,7 +269,7 @@ func TestOpenRejectStopsRelease(t *testing.T) {
 // 流程里没有审批阶段(或还没走到):说清楚,不是 404 也不是放行。
 func TestOpenApproveWithoutApprovalStage(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "oa-noapprove", nil, []string{"release:approve"}, 0)
 	pid := app.createPipeline(admin, "无审批流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
@@ -282,7 +282,7 @@ func TestOpenApproveWithoutApprovalStage(t *testing.T) {
 	eq(t, r.Code, 0, "submit")
 	var rel releaseView
 	_ = json.Unmarshal(r.Data, &rel)
-	rr, _ := app.openDecide(token, rel.RelNo, "chenhao@vela.io", "approve")
+	rr, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve")
 	eq(t, rr.Code, 40001, "no approval stage to decide")
 	if !strings.Contains(rr.Msg, "审批阶段") {
 		t.Errorf("should say there is no approval stage, got %q", rr.Msg)

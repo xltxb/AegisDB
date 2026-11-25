@@ -9,11 +9,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // Script approvals that reference their uploaded file instead of carrying it.

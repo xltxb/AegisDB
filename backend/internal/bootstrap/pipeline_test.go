@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ---------------------------------------------------------------- helpers
@@ -111,7 +111,7 @@ func stageByType(v releaseView, typ string) *stageView {
 
 func TestSQLReviewLibraryIsSeededAndChecks(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodGet, "/api/v1/sql-review/rules", token, nil)
 	eq(t, r.Code, 0, "rules code")
@@ -180,8 +180,8 @@ func (a *testApp) reviewCheck(token string, connID int64, dialect, sql string) c
 
 func TestSQLReviewRuleEditsAreAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	dba := app.login("chenhao@vela.io", "vela123") // l2: may run the check, may not edit
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123") // l2: may run the check, may not edit
 
 	// A DBA can self-check a change…
 	app.reviewCheck(dba, 0, "mysql", "SELECT 1;")
@@ -265,7 +265,7 @@ func (a *testApp) ruleIDByCode(token, code string) int64 {
 
 func TestReleaseRunsPipelineToSuccess(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	pid := app.createPipeline(token, "测试流程", "", []map[string]any{
@@ -323,7 +323,7 @@ func TestReleaseRunsPipelineToSuccess(t *testing.T) {
 
 func TestReleaseBlockedByReviewError(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	pid := app.createPipeline(token, "严格审查", "", []map[string]any{
@@ -349,8 +349,8 @@ func TestReleaseBlockedByReviewError(t *testing.T) {
 
 func TestReleaseWaitsForApprovalThenExecutes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	approver := app.login("zhangwei@vela.io", "vela123") // DBA 负责人, on the default chain
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123") // DBA 负责人, on the default chain
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "预发布流程", "", []map[string]any{
@@ -392,8 +392,8 @@ func TestReleaseWaitsForApprovalThenExecutes(t *testing.T) {
 
 func TestReleaseRefusedWhenCapabilityDenies(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	dba := app.login("chenhao@vela.io", "vela123") // l2: grant = deny everywhere
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123") // l2: grant = deny everywhere
 	dev := app.connIDByEnv(admin, "dev")
 
 	pid := app.createPipeline(admin, "直接执行", "", []map[string]any{
@@ -410,7 +410,7 @@ func TestReleaseRefusedWhenCapabilityDenies(t *testing.T) {
 
 func TestReleaseRequiresApprovalStageWhenVerdictDemandsOne(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	// No approve stage in the flow, but the change needs one on staging.
@@ -428,7 +428,7 @@ func TestReleaseRequiresApprovalStageWhenVerdictDemandsOne(t *testing.T) {
 
 func TestPipelineTemplatesAreAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	dba := app.login("chenhao@vela.io", "vela123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123")
 
 	// Reading the flows is part of raising a release…
 	r := app.do(http.MethodGet, "/api/v1/pipelines", dba, nil)
@@ -456,7 +456,7 @@ func TestPipelineTemplatesAreAdminOnly(t *testing.T) {
 
 func TestPipelineRejectsUnknownStageType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/pipelines", admin, map[string]any{
 		"name": "坏流程", "enabled": true,
 		"stages": []map[string]any{{"name": "?", "type": "deploy-magic"}},
@@ -470,7 +470,7 @@ func TestPipelineRejectsUnknownStageType(t *testing.T) {
 // 之后连停用、改名都存不下。它原本就是 0 个、这次仍是 0 个时照常保存;新建仍须恰好一个,多于一个永远拒。
 func TestPipeline_LegacyNoExecuteTemplateStaysEditable(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	legacy := &model.Pipeline{Name: "老流程:审批后交 DBA", Enabled: true}
 	if err := app.repo.SavePipeline(legacy, []model.PipelineStage{
 		{Name: "审批", Type: model.StageApprove, OnFailure: model.OnFailureAbort},

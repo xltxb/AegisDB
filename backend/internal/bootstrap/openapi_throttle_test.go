@@ -11,9 +11,9 @@ import (
 // 现在猜错某把 key 的 secret 只有那把 key 成功才清零。
 func TestOpenAPI_OwnCredentialDoesNotResetGuessesAgainstAnother(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	mine := app.issueClient(admin, "攻击者自己的", "zhangwei@vela.io", nil)
-	victim := app.issueClient(admin, "别人的", "zhangwei@vela.io", nil)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	mine := app.issueClient(admin, "攻击者自己的", "zhangwei@aegisdb.io", nil)
+	victim := app.issueClient(admin, "别人的", "zhangwei@aegisdb.io", nil)
 	victimKey := victim[:strings.Index(victim, ".")]
 
 	for i := 0; i < 12; i++ {
@@ -31,8 +31,8 @@ func TestOpenAPI_OwnCredentialDoesNotResetGuessesAgainstAnother(t *testing.T) {
 // key 连续失败,IP 被封后:未知 key 照旧 429(且不再清零),有效凭据照常通过。
 func TestOpenAPI_PerIPBanOnlyBlocksUnknownKeys(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	valid := app.issueClient(admin, "同出口的有效凭据", "zhangwei@vela.io", nil)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	valid := app.issueClient(admin, "同出口的有效凭据", "zhangwei@aegisdb.io", nil)
 
 	for i := 0; i < 12; i++ {
 		app.openDo(http.MethodGet, "/api/v1/open/releases/REL-1", "deletedkey"+itoa(int64(i))+".secret", nil)

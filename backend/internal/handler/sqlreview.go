@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // 数据库规范审查规则库 (SQL review).

@@ -11,7 +11,7 @@ import (
 // 而切级别/开关原样带回的旧参数不校验 —— 库里早先存下的写法不能让人连开关都关不掉。
 func TestReviewRuleParams_CatalogValidateAndLegacyToggle(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodGet, "/api/v1/sql-review/catalog", admin, nil)
 	eq(t, r.Code, 0, "catalog")

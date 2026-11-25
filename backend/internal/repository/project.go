@@ -3,7 +3,7 @@ package repository
 import (
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ----------------------------------------------------------------- 项目 (Project)

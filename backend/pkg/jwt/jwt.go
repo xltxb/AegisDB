@@ -50,7 +50,7 @@ func New(secret string, ttlHours int) *Manager {
 // CSRFToken 是一个会话(jti)的 CSRF 校验值:不用存,收到请求时重新算一遍比较。
 func (m *Manager) CSRFToken(jti string) string {
 	mac := hmac.New(sha256.New, m.secret)
-	mac.Write([]byte("vela:csrf:v1:" + jti))
+	mac.Write([]byte("aegisdb:csrf:v1:" + jti))
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
@@ -87,7 +87,7 @@ func (m *Manager) IssueSession(userID, roleID int64, roleCode, name string, toke
 			ID:        newJTI(),
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			Issuer:    "vela-gateway",
+			Issuer:    "aegisdb",
 		},
 	}
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

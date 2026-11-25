@@ -24,7 +24,7 @@ const ROUTE_ORDER: { key: string; path: string; admin?: boolean; auditor?: boole
 ]
 
 // 主动登出后,本标签页不再自动 SSO 登录(见 logout)。
-export const SSO_SKIP_KEY = 'vela_sso_skip'
+export const SSO_SKIP_KEY = 'aegisdb_sso_skip'
 
 export const useAuthStore = defineStore('auth', () => {
   // 会话标记,不是凭据(lib/session.ts):真正的令牌在 HttpOnly Cookie 里,脚本读不到。
@@ -146,9 +146,9 @@ export const useAuthStore = defineStore('auth', () => {
     if (t) api.logout().catch(() => {})
     // 主动登出 = 人要离开这台电脑:数据查询的 SQL 草稿一并清掉(2026-10 安全审计 L-FE1)。
     // 会话过期被踢回登录页(clearSession)不清 —— 同一个人重新登录还要接着写。
-    // 收藏的常用查询(vela_query_saved_*)不清:那是人主动存下的,不是随手的草稿。
+    // 收藏的常用查询(aegisdb_query_saved_*)不清:那是人主动存下的,不是随手的草稿。
     try {
-      for (const k of Object.keys(localStorage)) if (k.startsWith('vela_query_tabs_')) localStorage.removeItem(k)
+      for (const k of Object.keys(localStorage)) if (k.startsWith('aegisdb_query_tabs_')) localStorage.removeItem(k)
     } catch { /* 隐私模式 */ }
     // 主动登出之后,回到登录页不要自动再用 SSO 登进来 —— SSO 的 Cookie 还在,不拦这一下,
     // "登出"按下去的结果是一眨眼又登录了。只在本标签页内有效:关掉重开就恢复自动登录。

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestBizReadOnlyCheck(t *testing.T) {

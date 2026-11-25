@@ -29,7 +29,7 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // ddlQueryTimeout 比 objectQueryTimeout 宽,因为重建这一路要发十来条字典查询,

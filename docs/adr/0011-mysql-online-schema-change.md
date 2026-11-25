@@ -165,12 +165,12 @@ UNLOCK TABLES
 前置检查是纯函数,不依赖 MySQL,已测透。
 
 **阶段二起必须对着真 MySQL 测** —— 拷贝与重放的交错、cut-over 的锁竞争,拿 sqlite
-或 mock 测出来的绿色是假的。`mysql_test.go` 在设置了 `VELA_OSC_TEST_DSN` 时运行
+或 mock 测出来的绿色是假的。`mysql_test.go` 在设置了 `AEGISDB_OSC_TEST_DSN` 时运行
 (需要 8.0.13+、ROW binlog、建库与复制权限的账号),每个测试建自己的库:
 
 ```
-docker run -d --name vela-mysql-osc -e MYSQL_ROOT_PASSWORD=velaosc -p 127.0.0.1:13307:3306 mysql:8.0
-VELA_OSC_TEST_DSN='root:velaosc@tcp(127.0.0.1:13307)/' go test ./internal/osc/
+docker run -d --name aegisdb-mysql-osc -e MYSQL_ROOT_PASSWORD=aegisdbosc -p 127.0.0.1:13307:3306 mysql:8.0
+AEGISDB_OSC_TEST_DSN='root:aegisdbosc@tcp(127.0.0.1:13307)/' go test ./internal/osc/
 ```
 
 这些测试里 binlog 流是一个假的解码器(写入方提交后记下解码库会给出的行镜像),其余

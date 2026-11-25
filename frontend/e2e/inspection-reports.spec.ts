@@ -24,9 +24,9 @@ const ADMIN = { ...ME, menus: { ...ME.menus, inspection: true } }
 // 在 sandbox="allow-scripts"(没有 allow-same-origin)里,这些都应做不到。
 const EVIL = `<!doctype html><html><body><h1>巡检报告</h1><div id="out">running</div><script>
   var r = [];
-  try { r.push('ls:' + (localStorage.getItem('vela_session') || 'none')) } catch (e) { r.push('ls:blocked') }
+  try { r.push('ls:' + (localStorage.getItem('aegisdb_session') || 'none')) } catch (e) { r.push('ls:blocked') }
   try { parent.document.title = 'HACKED'; r.push('parent:changed') } catch (e) { r.push('parent:blocked') }
-  try { fetch('/api/v1/inspection-hack', { headers: { 'X-Stolen': (function () { try { return localStorage.getItem('vela_session') } catch (e) { return 'none' } })() || 'none' } }).catch(function () {}) } catch (e) {}
+  try { fetch('/api/v1/inspection-hack', { headers: { 'X-Stolen': (function () { try { return localStorage.getItem('aegisdb_session') } catch (e) { return 'none' } })() || 'none' } }).catch(function () {}) } catch (e) {}
   document.getElementById('out').textContent = r.join(' ');
 </script></body></html>`
 

@@ -4,7 +4,7 @@ package dto
 import (
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ---- Auth ----

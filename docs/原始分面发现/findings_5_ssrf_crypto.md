@@ -8,7 +8,7 @@
 低6 hash脱敏无盐SHA256截断可离线还原(手机号/身份证). sensitive.go:236-238
 低7 审计哈希链无密钥/无校验入口/DB层无防篡改,可删改重算. crypto.go:23, service.go:174-234
 低8 Webhook/飞书凭据响应回显+deliveries无admin门禁泄露飞书hook URL. admin.go:820,834,707
-低9 VELA_SECRET_KEY无强度校验+裸SHA256无盐无KDF;larkSecret/webhook.secret明文;Decrypt无前缀按明文放行. config.go:154-190, cipher.go:51
+低9 AEGISDB_SECRET_KEY无强度校验+裸SHA256无盐无KDF;larkSecret/webhook.secret明文;Decrypt无前缀按明文放行. config.go:154-190, cipher.go:51
 低10 非prod整体关SSRF防护(staging云主机可打元数据). main.go:83
 低11 userDirName对..用户名未拦截(仅admin可设). gateway.go:585-591
 信息 ExportJob.Files返回服务器绝对路径. model.go:321

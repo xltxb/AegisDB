@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Ms is a measurement, and the console prints it where an operator reads it as

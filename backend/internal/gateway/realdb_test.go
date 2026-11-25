@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // SQLite target connections must NOT be pooled/cached — a cached handle would

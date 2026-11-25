@@ -20,7 +20,7 @@ func (a *testApp) cancel(token string, id int64) apiResp {
 // 发起人可以撤回自己的待审批工单;撤回之后它不再是待审批,也不能再被批准。
 func TestApprovalCancel_InitiatorWithdrawsOwnPending(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("chenhao@vela.io", "vela123") // DBA L2
+	initiator := app.login("chenhao@aegisdb.io", "aegisdb123") // DBA L2
 	prod := app.connIDByEnv(initiator, "prod")
 
 	apNo := app.interceptOn(initiator, prod, "DROP TABLE t_cancel_mine")
@@ -33,7 +33,7 @@ func TestApprovalCancel_InitiatorWithdrawsOwnPending(t *testing.T) {
 	eq(t, app.approvalRow(initiator, apNo).Status, "cancelled", "撤回后状态")
 
 	// 撤回之后不能再被批准 —— 否则那条命令会在发起人已经放弃之后获得授权。
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", approver, nil).Code == 0 {
 		t.Error("已撤回的工单又被批准了")
 	}
@@ -42,13 +42,13 @@ func TestApprovalCancel_InitiatorWithdrawsOwnPending(t *testing.T) {
 // 审批人不能撤回别人的单 —— 他手里的动作是驳回。
 func TestApprovalCancel_ApproverMustRejectNotCancel(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("chenhao@vela.io", "vela123")
+	initiator := app.login("chenhao@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(initiator, "prod")
 
 	apNo := app.interceptOn(initiator, prod, "DROP TABLE t_cancel_by_approver")
 	id := app.approvalIDByNo(apNo)
 
-	approver := app.login("zhangwei@vela.io", "vela123") // 链上的审批人
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123") // 链上的审批人
 	r := app.cancel(approver, id)
 	if r.Code == 0 {
 		t.Fatal("审批人撤回了别人的工单 —— 他可以用撤回把本该驳回的单悄悄抹掉,记录上看不出有人拒绝过")
@@ -65,13 +65,13 @@ func TestApprovalCancel_ApproverMustRejectNotCancel(t *testing.T) {
 // 批准解锁的是发起人的一次执行,放不放弃这次执行是他的事。
 func TestApprovalCancel_ApprovedButNotYetRun(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("chenhao@vela.io", "vela123")
+	initiator := app.login("chenhao@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(initiator, "prod")
 
 	apNo := app.interceptOn(initiator, prod, "DROP TABLE t_cancel_after_approve")
 	id := app.approvalIDByNo(apNo)
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", approver, nil).Code, 0, "先批准")
 
 	eq(t, app.cancel(initiator, id).Code, 0, "待执行的单子可以撤")
@@ -90,13 +90,13 @@ func TestApprovalCancel_ApprovedButNotYetRun(t *testing.T) {
 // executed_at 之后,撤回必须拿不到。
 func TestApprovalCancel_NotAfterItRan(t *testing.T) {
 	app := newTestApp(t)
-	initiator := app.login("chenhao@vela.io", "vela123")
+	initiator := app.login("chenhao@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(initiator, "prod")
 
 	apNo := app.interceptOn(initiator, prod, "DROP TABLE t_cancel_after_run")
 	id := app.approvalIDByNo(apNo)
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", approver, nil).Code, 0, "先批准")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/execute", initiator, nil).Code, 0, "再执行")
 
@@ -111,7 +111,7 @@ func TestApprovalCancel_NotAfterItRan(t *testing.T) {
 // 撤回一张窗口申请单,那扇门要跟着关上 —— 不能留在 pending 里等一个永远不来的结论。
 func TestApprovalCancel_WindowTicketClosesTheDoor(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	winID, apNo := app.applyWindow(token, prod, "orders_db", "撤回的班车")

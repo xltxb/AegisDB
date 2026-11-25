@@ -45,7 +45,7 @@ func (a *testApp) approvalsByType(token, typ string) apTypedPage {
 // 每一行都带类型,而按类型筛出来的每一行都只属于那一类。
 func TestApprovalTypeFilter_SeparatesCommandTicketsFromReleaseTickets(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 一张普通命令单(终端里被拦下来的那种)。
 	cmd := app.submitProdHighRisk(admin)
@@ -126,7 +126,7 @@ func TestApprovalTypeFilter_SeparatesCommandTicketsFromReleaseTickets(t *testing
 // 拼错的类型要报错,不能静静返回空列表 —— 空列表和"确实没有"长得一样。
 func TestApprovalTypeFilter_RejectsAnUnknownType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodGet, "/api/v1/approvals?scope=all&type=releases", admin, nil)
 	if r.Code == 0 {

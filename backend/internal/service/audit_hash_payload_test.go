@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func sampleAuditRow() *model.AuditLog {

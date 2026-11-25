@@ -35,7 +35,7 @@ func (a *testApp) auditRows(token string) []auditRow {
 // 时候才谈得上 executed。
 func TestScriptExecute_SafeScriptLeavesAuditTrail(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	devConn, _ := app.sameFileConns(token, "script-audit")
 
 	// 两张真表 —— 脚本里的 SELECT 要真能跑通,否则审计记的是 warn 而不是 executed。

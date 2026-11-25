@@ -22,8 +22,8 @@ func (a *testApp) auditActorRows(token string) []auditActorRow {
 // oversight role (admin) sees everyone's.
 func TestIsolation_AuditIsPerUser(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123") // admin → oversight
-	l2 := app.login("chenhao@vela.io", "vela123")   // DBA L2 → own only
+	admin := app.login("linwei@aegisdb.io", "aegisdb123") // admin → oversight
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")   // DBA L2 → own only
 
 	// each runs a command (l2 may access order-cluster via its 'orders' tag)
 	orderCluster := app.connIDByName(admin, "order-cluster")
@@ -57,8 +57,8 @@ func TestIsolation_AuditIsPerUser(t *testing.T) {
 // A user cannot download another user's export file even with the exact path.
 func TestIsolation_ExportDownloadIsPerUser(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 

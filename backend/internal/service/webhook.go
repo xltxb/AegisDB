@@ -17,11 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/sqlutil"
 )
 
 // AllowPrivateWebhookTargets permits loopback/private webhook destinations.
@@ -325,7 +325,7 @@ func platformAction(stored string) string {
 //
 // 而事件类型此前在请求体里**根本没有一个结构化的落点**:resource 一开始填的是它,但审计事件
 // 会把 resource 覆盖成实例名;summary 里那个 [exec] 前缀是给人读的一句话,不是字段;剩下
-// 只有 X-Vela-Event 这个头 —— 而接收端入库的是 body,头不会跟着进去。
+// 只有 X-AegisDB-Event 这个头 —— 而接收端入库的是 body,头不会跟着进去。
 //
 // ## 三个时间各自回答什么
 //
@@ -449,8 +449,8 @@ func (d *Dispatcher) Dispatch(eventType, action, env string, data any) {
 			}
 			// 两个头和 raw_payload 里的两个字段是同一件事,给的是不同的读者:头方便代理、
 			// 网关、日志按事件类型分流,而入库的是 body。
-			req.Header.Set("X-Vela-Event", eventType)
-			req.Header.Set("X-Vela-Pushed-At", pushedAt.Format(platformTimeLayout))
+			req.Header.Set("X-AegisDB-Event", eventType)
+			req.Header.Set("X-AegisDB-Pushed-At", pushedAt.Format(platformTimeLayout))
 			resp, err := d.client.Do(req)
 			if err == nil && resp.StatusCode < 300 {
 				st := resp.Status
@@ -509,7 +509,7 @@ func (d *Dispatcher) Test() (bool, string) {
 		"operator":      "system",
 		"summary":       brand.Text(BrandDefaultUI, false) + " Webhook 连通性测试",
 		"raw_payload": withDispatchMeta(
-			map[string]any{"event": "test", "ping": "dp-db-gateway"}, "test", pushedAt),
+			map[string]any{"event": "test", "ping": "aegisdb"}, "test", pushedAt),
 	}
 	body, _ := json.Marshal(ev)
 	req, err := http.NewRequest(http.MethodPost, cfg.Endpoint, bytes.NewReader(body))
@@ -520,8 +520,8 @@ func (d *Dispatcher) Test() (bool, string) {
 	if cfg.Secret != "" {
 		req.Header.Set("Authorization", "Bearer "+cfg.Secret)
 	}
-	req.Header.Set("X-Vela-Event", "test")
-	req.Header.Set("X-Vela-Pushed-At", pushedAt.Format(platformTimeLayout))
+	req.Header.Set("X-AegisDB-Event", "test")
+	req.Header.Set("X-AegisDB-Pushed-At", pushedAt.Format(platformTimeLayout))
 	start := time.Now()
 	resp, err := d.client.Do(req)
 	if err != nil {
@@ -598,7 +598,7 @@ func (d *Dispatcher) TestLark() (bool, string) {
 	secret, consoleURL := d.setStr("notify.larkSecret"), d.setStr("notify.consoleURL")
 	sample := &model.Approval{
 		ApNo: "AP-TEST", Instance: "order-cluster", Env: "prod", TierCode: "prod", RiskLevel: "high",
-		Initiator: "Vela", Command: "DROP TABLE orders_2024_q3;", Reason: "测试飞书审批卡片推送",
+		Initiator: "AegisDB", Command: "DROP TABLE orders_2024_q3;", Reason: "测试飞书审批卡片推送",
 	}
 	ok, msg := d.postLark(webhook, secret, larkApprovalCard(sample, consoleURL, LoadBrand(d.repo).Text(BrandDefaultLegacy, false)))
 	d.record("lark-test", webhook, ok, msg, 1)

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func (a *testApp) oscRelease(token string, prod int64, stages []map[string]any, sql string) releaseView {
@@ -32,7 +32,7 @@ func (a *testApp) approveReleaseStage(admin string, rel releaseView) releaseView
 	if ap == nil || ap.ApprovalID == 0 {
 		a.t.Fatalf("应停在审批阶段: %+v", w)
 	}
-	approver := a.login("zhangwei@vela.io", "vela123")
+	approver := a.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(a.t, a.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ApprovalID)+"/approve", approver, nil).Code, 0, "审批通过")
 	a.svc.ResumeReleaseApprovals()
 	return a.waitRelease(admin, rel.ID, "waiting", "failed", "success")

@@ -10,7 +10,7 @@ import (
 // bizQuery.applyUrl,没设过时用 SRD 服务中心的申请页;可以改,可以清空(不给链接),非 http(s) 拒绝。
 func TestBizQuery_ApplyURLSetting(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	applyURL := func() string {
 		var d struct {
 			Limits struct {

@@ -24,9 +24,9 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 并发配额(tbl_setting)。

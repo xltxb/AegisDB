@@ -12,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/apimsg/scan"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg/scan"
+	"aegisdb/internal/model"
 )
 
 // 文案表必须与源码一致:新加了一句中文报错却没跑 go generate,英文界面就会漏翻这一句。

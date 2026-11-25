@@ -64,7 +64,7 @@ test.describe('SRD 授权登录', () => {
     await stubSso(page, { sso: 'ok' })
     await page.goto('/#/login')
     await expect(page).toHaveURL(/#\/dashboard/)
-    expect(await page.evaluate(() => localStorage.getItem('vela_session'))).toBe('1.sso-jwt')
+    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBe('1.sso-jwt')
   })
 
   test('没有登录态:只露出按钮,不报错;本地表单默认收起', async ({ page }) => {
@@ -93,14 +93,14 @@ test.describe('SRD 授权登录', () => {
 
   test('刚从 SRD 回来却没有登录态:说出 Cookie 没带过来的原因', async ({ page }) => {
     await stubSso(page, { sso: 'none' })
-    await page.addInitScript(() => sessionStorage.setItem('vela_srd_redirected_at', String(Date.now())))
+    await page.addInitScript(() => sessionStorage.setItem('aegisdb_srd_redirected_at', String(Date.now())))
     await page.goto('/#/login')
     await expect(page.getByTestId('login-error')).toContainText('CS-Token')
   })
 
   test('主动登出后:点按钮去授权时撤掉"别自动登录"', async ({ page }) => {
     const calls = await stubSso(page, { sso: 'none' })
-    await page.addInitScript(() => { if (!sessionStorage.getItem('seen')) { sessionStorage.setItem('vela_sso_skip', '1'); sessionStorage.setItem('seen', '1') } })
+    await page.addInitScript(() => { if (!sessionStorage.getItem('seen')) { sessionStorage.setItem('aegisdb_sso_skip', '1'); sessionStorage.setItem('seen', '1') } })
     await page.goto('/#/login')
     await expect(page.getByTestId('sso-login')).toBeVisible()
     await page.waitForTimeout(300)
@@ -108,7 +108,7 @@ test.describe('SRD 授权登录', () => {
     await page.getByTestId('sso-login').click()
     await expectRedirectToSRD(page)
     await page.goBack()
-    expect(await page.evaluate(() => sessionStorage.getItem('vela_sso_skip'))).toBeNull()
+    expect(await page.evaluate(() => sessionStorage.getItem('aegisdb_sso_skip'))).toBeNull()
   })
 
   test('网关里没开通账号:弹窗拦下,提示无权限访问,不进系统', async ({ page }) => {
@@ -119,7 +119,7 @@ test.describe('SRD 授权登录', () => {
     await expect(dlg).toContainText('无权限访问')
     await expect(dlg).toContainText('开通')
     await expect(page).toHaveURL(/#\/login/)
-    expect(await page.evaluate(() => localStorage.getItem('vela_session'))).toBeNull()
+    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBeNull()
     await page.getByTestId('sso-no-account-ok').click()
     await expect(dlg).toHaveCount(0)
     // 手动再点一次 SSO:还是拦下,不会跳 SRD 来回绕

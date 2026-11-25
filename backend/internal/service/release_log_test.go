@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // log_refs 带着语句回显与驱动报错,和 log 一样要在出口打码(releaseView)—— 只给 log 打码,

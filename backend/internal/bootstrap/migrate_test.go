@@ -62,8 +62,8 @@ CREATE TABLE IF NOT EXISTS t_alpha (id INTEGER PRIMARY KEY);`)},
 
 func TestSplitSQLStatements_SkipsCommentsAndScoping(t *testing.T) {
 	stmts := splitSQLStatements(`-- header comment
-CREATE DATABASE IF NOT EXISTS vela_gateway;
-USE vela_gateway;
+CREATE DATABASE IF NOT EXISTS aegisdb;
+USE aegisdb;
 CREATE TABLE a (id INT);
 CREATE TABLE b (id INT);`)
 	if len(stmts) != 2 {

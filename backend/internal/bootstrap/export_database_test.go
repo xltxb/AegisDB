@@ -13,7 +13,7 @@ import (
 func TestExport_TargetDatabasePersistedOnJob(t *testing.T) {
 	defer os.RemoveAll("export")
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	r := app.do(http.MethodPost, "/api/v1/export", token, map[string]any{

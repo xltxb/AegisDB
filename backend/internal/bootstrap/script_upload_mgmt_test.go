@@ -28,8 +28,8 @@ func (a *testApp) listUploads(token string) []uploadRow {
 // own; nobody can touch another user's uploads.
 func TestScriptUpload_PerUserManagement(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "set path")
 
 	// admin uploads a script

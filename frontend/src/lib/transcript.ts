@@ -189,7 +189,7 @@ export class Transcript {
     // because a lib has no component context to call useI18n() from.
     const tr = i18n.global.t as (k: string, p?: Record<string, unknown>) => string
     const lines: string[] = []
-    // 配置了系统名称就用它;没配置保持原来的抬头(Vela 数据库网关)。
+    // 配置了系统名称就用它;没配置保持原来的抬头(AegisDB 数据库网关)。
     lines.push(`# ${brandNamed() ? tr('tsTitleBrand', { brand: brandText(String(i18n.global.locale.value)) }) : tr('tsTitle')}`)
     lines.push(`# ${tr('tsInstance')}: ${meta.instance}${meta.database ? ` · ${tr('tsDb')}: ${meta.database}` : ''}`)
     if (meta.user) lines.push(`# ${tr('tsUser')}: ${meta.user}`)
@@ -240,7 +240,7 @@ export class Transcript {
     const safe = meta.instance.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'session'
     const d = meta.exportedAt
     const p = (n: number) => String(n).padStart(2, '0')
-    return `vela-${safe}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.log`
+    return `aegisdb-${safe}-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.log`
   }
 }
 

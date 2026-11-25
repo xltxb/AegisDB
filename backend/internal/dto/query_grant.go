@@ -3,7 +3,7 @@ package dto
 import (
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // QuerySourceView 是一个业务查询源(可授权的实例)。

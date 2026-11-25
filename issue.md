@@ -1,4 +1,4 @@
-# Vela 数据库网关 — 代码审查问题清单
+# AegisDB 数据库网关 — 代码审查问题清单
 
 - 首次审查:2026-07-10;最新一轮(第四轮):2026-07-16 ~ 07-17
 - 范围:后端(Go / Gin / GORM)+ 前端(Vue3 / TS)+ 迁移 / 配置 / 部署
@@ -34,7 +34,7 @@
 - H5(token 存 localStorage):维持现设计,但 M1 token 版本吊销已显著降低泄露影响;彻底改 httpOnly Cookie + CSRF 需较大改造,留待评估。
 - H13(手写 DDL 与 AutoMigrate 双轨):H14 已把迁移收敛到显式 `init`(`init` 强制 AutoMigrate,运行态关闭),`0001_init.sql` 同步补齐 `mfa_last_ctr`/`token_version` 列;AutoMigrate 仍为结构权威,彻底以 SQL 为准留待后续。
 - M7(分片全量内存缓冲):M8 行数上限已限制单任务规模、间接压低峰值内存;流式写临时文件的重构留待后续。
-- M11(compose/config 弱默认):新增 `VELA_WEBHOOK_SECRET` env 覆盖通道;compose 明文口令属本地 dev 默认,prod 走 env。
+- M11(compose/config 弱默认):新增 `AEGISDB_WEBHOOK_SECRET` env 覆盖通道;compose 明文口令属本地 dev 默认,prod 走 env。
 
 **暂缓(性能/风格,非正确性/安全阻断)**:L3(每次新建连接)、L8(入队 goroutine)、L9(webhook 重试无 ctx)、L10(本地时区)、L11(collation)。
 
@@ -64,7 +64,7 @@
 ### 修复状态(2026-07-15,低危项一并清理)
 
 **已修复低危项**(后端 `go vet`+全量测试、前端 `build`/`type-check` 通过;新增 `pkg/sqlutil` 单测、`realdb`/`config` 等测试):
-- **build.sh** 第29-30行 `$GO` 加引号(本机裸跑不再挂);**sqlite DSN** 已含 `?` 时用 `&` 追加 pragma(不再丢 busy_timeout/WAL);**audit_log** `prev_hash`/`hash` 模型标签改 `type:char(64)` 与 SQL 一致;**0001 头注释**改为"权威建表源,由 migrate 应用";**docker/systemd/DEPLOY** 补建 vela 用户+解包/opt+chown 步骤、`EnvironmentFile` 加 `-` 前缀。
+- **build.sh** 第29-30行 `$GO` 加引号(本机裸跑不再挂);**sqlite DSN** 已含 `?` 时用 `&` 追加 pragma(不再丢 busy_timeout/WAL);**audit_log** `prev_hash`/`hash` 模型标签改 `type:char(64)` 与 SQL 一致;**0001 头注释**改为"权威建表源,由 migrate 应用";**docker/systemd/DEPLOY** 补建 aegisdb 用户+解包/opt+chown 步骤、`EnvironmentFile` 加 `-` 前缀。
 - **死代码**删除:`can()`(auth.ts)、`buildExportCSV`(export.go)。
 - **L6 闭环**:seed 加 `security.idleMinutes=15`,SettingsView 加编辑入口(空闲锁定时长真正可配)。
 - **L3 连接缓存**:`openConn` 对网络型引擎(mysql/pg/oracle)按 (driver,dsn) 缓存 `*sql.DB`,返回 release 函数;SQLite 不缓存(避免持有文件句柄)。测 `TestOpenConn_SqliteNotCached`。
@@ -97,7 +97,7 @@
 - **dbPoolCache 生命周期**(改口令/删连接后旧 `*sql.DB` 不驱逐)+ **RealQueryEach 大导出占用共享 pool**:纯性能/生命周期,执行器多为模拟、增长受配置变更频率限制,低实际影响,记录。
 - **readRe 把 `EXPLAIN ANALYZE <DML>` 当只读**:风险引擎 `ParseVerb` 已拆 EXPLAIN 前缀正确送审批,仅审计读/写口径失真,不构成执行绕过。
 - **FailStuckExportJobs 多实例误标**:当前单进程部署不触发;横向扩容时才需"按本进程拥有"过滤,记录待未来。
-- **config.prod.yaml fallback DSN 弱口令**:前几轮已知,靠 `VELA_MYSQL_DSN` env 覆盖,文档已提示。
+- **config.prod.yaml fallback DSN 弱口令**:前几轮已知,靠 `AEGISDB_MYSQL_DSN` env 覆盖,文档已提示。
 
 ---
 
@@ -109,7 +109,7 @@
 
 **A1【高】终端单条命令不做语句分割,堆叠语句绕过能力矩阵。** `service/gateway.go:76,83-84`。终端 `Exec` 把整串 SQL 交 `execJudged`,`Evaluate` 只用 `ParseVerb` 取**首动词**定能力维度,尾部靠字典 `matchCommand` 全文兜底。而 seed 字典(`seed.go:110-114`)**不含 `UPDATE/INSERT/CREATE/REPLACE`**、dev 全 off。PG(lib/pq simple 协议允许分号堆叠)上 PROD `SELECT 1; UPDATE accounts SET balance=0` → 首动词 SELECT 判 allow、字典不含 UPDATE → 直接执行,绕过能力矩阵+审批。MySQL `multiStatements=false` 可挡。修复:`Exec` 入口统一 `SplitStatements` 逐条判定取最严,或多语句直接拒绝。
 
-**A2【高】静态加密密钥复用 JWT 签名密钥。** `cmd/server/main.go:73` `crypto.SetSecretKey(cfg.JWT.Secret)`。连接口令 AES-256-GCM 静态加密密钥(C3)派生自 JWT 签名密钥(C4)。①轮换 `VELA_JWT_SECRET`(JWT 泄露后标准应急)→ 所有 `enc:v1:` 连接口令永久不可解密、网关连不上库(V4 把失败回显为占位串,故障隐蔽);②JWT 密钥泄露=既能伪造 admin 令牌又能离线解密整库连接口令。修复:独立 `VELA_SECRET_KEY`(缺省回落 JWT 密钥+启动告警),文档明确轮换流程。
+**A2【高】静态加密密钥复用 JWT 签名密钥。** `cmd/server/main.go:73` `crypto.SetSecretKey(cfg.JWT.Secret)`。连接口令 AES-256-GCM 静态加密密钥(C3)派生自 JWT 签名密钥(C4)。①轮换 `AEGISDB_JWT_SECRET`(JWT 泄露后标准应急)→ 所有 `enc:v1:` 连接口令永久不可解密、网关连不上库(V4 把失败回显为占位串,故障隐蔽);②JWT 密钥泄露=既能伪造 admin 令牌又能离线解密整库连接口令。修复:独立 `AEGISDB_SECRET_KEY`(缺省回落 JWT 密钥+启动告警),文档明确轮换流程。
 
 **A3【高】`StripComments` 拆封 `/*! */` 后内层注释拆词躲字典(R2 修复新面)。** `gateway/risk.go:68-74`。`/*!40000 TR/**/UNCATE TABLE t */` 拆封+删块注释后成 `TR UNCATE`,字典 `\bTRUNCATE\b` 不匹配、`ParseVerb` 首词 `TR`。修复:字典扫描/动词解析前对拆封结果再彻底去注释后再判定。
 
@@ -139,13 +139,13 @@
 
 **已修复 A1–A4(4 高)**,后端 `go vet` + 全量测试通过。新增回归测试:
 - A1 `TestExec_StackedStatementTailIsJudged`(bootstrap)—— PROD `SELECT 1; UPDATE ...` 现被拦截而非直接执行
-- A2 `TestConfig_SecretKeyDecoupledFromJWT`(bootstrap)—— `VELA_SECRET_KEY` 与 JWT 密钥解耦、缺省回落并标记
+- A2 `TestConfig_SecretKeyDecoupledFromJWT`(bootstrap)—— `AEGISDB_SECRET_KEY` 与 JWT 密钥解耦、缺省回落并标记
 - A3 `TestStripComments_InnerCommentDoesNotSwallowVerb`(gateway)—— `/*!40000 /* c */ DROP TABLE y */` 等内层注释不再吞动词
 - A4 `TestAudit_PrevHashUniquePreventsFork`(bootstrap)—— `prev_hash` 唯一约束拒绝分叉写
 
 要点:
 - **A1** `service/gateway.go` `Exec` 入口对整串 `sqlutil.SplitStatements`,多语句时 `strictestVerdict` 逐条 `Evaluate` 取最严(deny>approve>allow),抽出 `applyVerdict` 复用判定分支;单语句路径不变。**验证过真实可利用**:PG simple 协议下首动词 SELECT 曾绕过能力矩阵执行尾部 UPDATE。
-- **A2** 新增 `Config.SecretKey`(yaml `secret_key` + env `VELA_SECRET_KEY`)与 `SecretKeyResolved()`;`main.go` 优先用独立密钥,回落 JWT 密钥时 `slog.Warn`。`deploy/vela.env.example`、`DEPLOY.md` 补充说明与轮换警示。
+- **A2** 新增 `Config.SecretKey`(yaml `secret_key` + env `AEGISDB_SECRET_KEY`)与 `SecretKeyResolved()`;`main.go` 优先用独立密钥,回落 JWT 密钥时 `slog.Warn`。`deploy/aegisdb.env.example`、`DEPLOY.md` 补充说明与轮换警示。
 - **A3** `risk.go` `StripComments` 由正则改**线性扫描器**:执行注释 `/*!ver */` 仅剥标记保留 body、并剥离 body 内嵌普通注释,**不丢非注释文本**。旧非贪婪正则在内层 `*/` 处提前截断 + 块注释清除吞掉真实动词(`/*!40000 /* c */ DROP TABLE y */` 塌成空串判 allow,而 MySQL 真跑 DROP)。删除 `lineCommentRe/blockCommentRe/hashCommentRe/execCommentRe`。
 - **A4** `model.AuditLog.PrevHash` 加 `uniqueIndex:uk_audit_prev`(dev/sqlite 走 AutoMigrate);新增 `migrations/0002_audit_prev_unique.sql`(prod/MySQL `ADD UNIQUE KEY`);`appendAudit` 改**取 tip→算 hash→插入**的重试循环(最多 5 次),冲突即重读链尾重挂,链在多连接/多进程下不再分叉。
 
@@ -193,7 +193,7 @@
 ### 严重
 - **R1 ⚠️ recordAudit 手动 Lock/Unlock 无 defer,一次 panic 即全站审计死锁。** 位置:`service.go:91-114`。`auditMu.Lock()` 与 `Unlock()` 之间的 `LastAuditHash`/`InsertAudit` 若 panic(被 gin Recovery 吞),锁永不释放 → 之后所有 recordAudit(登录/Exec/审批/导出)永久阻塞,进程假活。修复:改 `defer s.auditMu.Unlock()`,Webhook.Dispatch 留锁外。(auditMu 修复引入)
 - **R2 ⚠️ MySQL 可执行注释 `/*! … */` 绕过三层判定直接执行。** 位置:`risk.go` StripComments+matchCommand+Evaluate、`realdb.go` readRe。`/*!32302 DROP TABLE x */`:StripComments 后动词为空→映射 select、字典扫描扫的也是剥注释后的空串→漏,Evaluate 落 allow;readRe 不匹配→走 ExecContext,MySQL 服务端执行版本注释里的 DDL。StripComments 修复把字典兜底也一起绕过了。(StripComments 修复引入)
-- **R3 ⚠️ 设置页保存即清空已配置的飞书签名密钥。** 位置:`admin.go` GetSettings(`all[k]=maskedSecret` 裸串)+`SettingsView.vue:72,90,130`。前端 `JSON.parse('__VELA_SECRET_UNCHANGED__')` 抛错→回落 `''`,保存/测试飞书时回传 `'notify.larkSecret':''`→后端 `''!=maskedSecret`→用空串覆盖真实密钥。M2 打码对走通用 settings map 的密钥起了反作用。(M2 修复引入)
+- **R3 ⚠️ 设置页保存即清空已配置的飞书签名密钥。** 位置:`admin.go` GetSettings(`all[k]=maskedSecret` 裸串)+`SettingsView.vue:72,90,130`。前端 `JSON.parse('__AEGISDB_SECRET_UNCHANGED__')` 抛错→回落 `''`,保存/测试飞书时回传 `'notify.larkSecret':''`→后端 `''!=maskedSecret`→用空串覆盖真实密钥。M2 打码对走通用 settings map 的密钥起了反作用。(M2 修复引入)
 
 ### 高
 - **R4 WS 通道绕过 IP 白名单与 terminal 菜单。** `router.go:48`:`/terminal/ws` 在 `auth+IPAllowlist` 分组外,TerminalWS 也不过 MenuGuard。开白名单后被封 IP 仍可经 WS 执行 SQL;无 terminal 菜单角色持有效 token 亦可。
@@ -202,7 +202,7 @@
 - **R7 ⚠️ failedOpens 把后端重启误判为鉴权失败,踢下线全体终端用户。** `wsTerminal.ts:94-101`:退避 1/2/4s,后端一次 >7s 普通重启即凑满 3 次→onAuthError→logout+跳登录。无法区分连接被拒与 401。(M16 引入)
 - **R8 ⚠️ PatchUser 全字段 Save 回滚 token_version/mfa_last_ctr。** `admin.go:187-198`+`repository.go` UpdateUser(`db.Save`)。改 status/role 时用旧快照全列写回,并发窗口内覆盖刚 bump 的 token 版本、刚消费的 TOTP 计数器→已吊销 JWT 复活、已用 code 可重放。改用 `Updates(map)`。
 - **R9 createApproval 吞错 + maxSeq 吞错回落基数 → 幽灵审批单。** `gateway.go:161`(`_ = CreateApproval`)+`repository.go` maxSeq(`_ =` 吞查询错)。启动时 DB 抖动致计数器回落 2294,ap_no 唯一键此后持续冲突且全被吞→用户看到"已拦截待审批"但队列里永无该单。
-- **R10 config.yaml 自带 dev JWT 密钥绕过 prod 强校验。** `config.yaml:28` `change-me-vela-gateway-dev-secret` 长 33≥32 且不在 weakJWTSecrets 黑名单;头部注释又引导 `APP_ENV=prod` 直接切 prod→用公开密钥签发 token(同源用于连接口令加密)。C4 被自家默认值绕过。
+- **R10 config.yaml 自带 dev JWT 密钥绕过 prod 强校验。** `config.yaml:28` `change-me-aegisdb-dev-secret` 长 33≥32 且不在 weakJWTSecrets 黑名单;头部注释又引导 `APP_ENV=prod` 直接切 prod→用公开密钥签发 token(同源用于连接口令加密)。C4 被自家默认值绕过。
 - **R11 RiskRulesView 建规则会清掉该命令其它环境的等级。** `RiskRulesView.vue:56`+`repository.go` UpsertRiskCommand:发完整 envMap 其余环境为 off,对已存在命令(DROP prod=high)在 staging 建规则会把 prod 拦截清为 off。`alert` 动作也被映射为 off。
 - **R12 EXPLAIN ANALYZE <DML>(PG)判为只读,绕能力矩阵+严格模式。** `risk.go` MapVerbToCapability(`EXPLAIN→select`)、NoWhere(leading verb 非 delete/update→false)。PG 上 `EXPLAIN ANALYZE DELETE …` 真实执行。
 - **R13 ⚠️ 超时自动升级每 60s 重复记审计+发 webhook。** `gateway.go:497` auto-escalate 不改工单状态,种子默认 `approval.onTimeout=auto-escalate`→每个超时单每天刷 1440 条审计/通知,污染哈希链。
@@ -220,8 +220,8 @@
 - **R23 迁移无跨进程锁。** `migrate.go:52-99`:双 migrate 并发后者撞主键 exit 1;未来非幂等语句双重应用。
 - **R24 导出队列纯内存,重启后 pending/running 永久悬挂。** `service.go:57`+`export.go`:`New` 不回灌未完成任务。
 - **R25 导出 zip 口令明文存 export_jobs.password;CSV 表头未过 csvSanitize。** `export.go:119,215`:列别名 `AS "=HYPERLINK(…)"` 可经表头注入公式(M9 只清数据行)。
-- **R26 prod migrate/init 被 JWT 强校验误伤。** 只需 DSN 的迁移任务缺 VELA_JWT_SECRET 就以无关错误失败。
-- **R27 WS token 空串致 new WebSocket 抛错 → 永久假重连。** `wsTerminal.ts:52`:`['vela-token','']` 非法子协议,catch 只重连、不计 failedOpens→onAuthError 永不触发。
+- **R26 prod migrate/init 被 JWT 强校验误伤。** 只需 DSN 的迁移任务缺 AEGISDB_JWT_SECRET 就以无关错误失败。
+- **R27 WS token 空串致 new WebSocket 抛错 → 永久假重连。** `wsTerminal.ts:52`:`['aegisdb-token','']` 非法子协议,catch 只重连、不计 failedOpens→onAuthError 永不触发。
 - **R28 ⚠️ SettingsView 整页保存无 try/catch/toast。** 权限最高的设置页未纳入 M14;开关乐观翻转失败不回滚。(M14 遗漏)
 - **R29 登录无速率限制、不受 IP 白名单、失败不审计。** 白名单开启后仍可任意 IP 撞库。
 
@@ -251,7 +251,7 @@
 
 ### C4. 生产 JWT 密钥有已知默认值且不强制覆盖
 - 位置:`backend/configs/config.prod.yaml:24`、`backend/internal/bootstrap/config.go:63`、`backend/cmd/server/main.go:51`;dev 同样为公开固定值 `config.yaml:28`
-- 问题:`config.prod.yaml` 内置 `CHANGE-ME-set-VELA_JWT_SECRET`,仅当 `VELA_JWT_SECRET` 非空才覆盖;启动无任何"检测到默认密钥则拒绝启动"的护栏。HS256 对称签名。
+- 问题:`config.prod.yaml` 内置 `CHANGE-ME-set-AEGISDB_JWT_SECRET`,仅当 `AEGISDB_JWT_SECRET` 非空才覆盖;启动无任何"检测到默认密钥则拒绝启动"的护栏。HS256 对称签名。
 - 影响:运维忘设环境变量即以已提交到仓库的公开密钥签发令牌,任何人可离线伪造 admin 令牌,彻底越权。
 
 ---
@@ -280,7 +280,7 @@
 
 ### H5. 会话 token 存 localStorage,无 httpOnly / CSRF,XSS 即可窃取
 - 位置:`frontend/src/stores/auth.ts:18,43,56`;`frontend/src/api/http.ts:22-26`
-- 问题:token 明文存 `localStorage.vela_token`,任一 XSS 可 `getItem` 读走外带。当前源码未见 `v-html`,XSS 面较小,但一旦出现即整账户失陷。
+- 问题:token 明文存 `localStorage.aegisdb_token`,任一 XSS 可 `getItem` 读走外带。当前源码未见 `v-html`,XSS 面较小,但一旦出现即整账户失陷。
 - 影响:纯前端长期凭据在 XSS 场景无隔离。建议评估 httpOnly Cookie + CSRF token。
 
 ### H6. 全程无 TLS / HTTPS,凭据与 JWT 明文传输
@@ -384,7 +384,7 @@
 
 ### M11. 弱默认凭据硬编码,且 webhook secret 无 env 覆盖通道
 - 位置:`docker-compose.yml:10-13,26`、`config.yaml:28,39`、`config.prod.yaml:18`、`config.go:60-68`
-- 问题:compose 明文 `MYSQL_ROOT_PASSWORD: velaroot` / `MYSQL_PASSWORD: velapass`(healthcheck 亦带 `-pvelapass`);DSN 回退默认 `vela:velapass`;webhook secret `whsec_dev_change_me_3a9f` 明文提交。`LoadConfig` 只为 DSN/JWT/WEB_DIR 提供 env 覆盖,webhook.secret 无 `VELA_*` 覆盖入口。
+- 问题:compose 明文 `MYSQL_ROOT_PASSWORD: aegisdbroot` / `MYSQL_PASSWORD: aegisdbpass`(healthcheck 亦带 `-paegisdbpass`);DSN 回退默认 `aegisdb:aegisdbpass`;webhook secret `whsec_dev_change_me_3a9f` 明文提交。`LoadConfig` 只为 DSN/JWT/WEB_DIR 提供 env 覆盖,webhook.secret 无 `AEGISDB_*` 覆盖入口。
 - 影响:默认弱凭据可被直接利用;webhook 签名密钥只能明文入库 / 入盘。
 
 ### M12. 平台管理员口令最低长度仅 6 位
@@ -434,7 +434,7 @@
 
 ### L5. 登录页硬编码预填演示账号 / 口令
 - 位置:`frontend/src/views/LoginView.vue:16-17`
-- 问题:`email='linwei@vela.io'`、`password='vela123'` 预填输入框。若构建物流入类生产即明示可用凭据。应以环境变量控制仅 dev 注入。
+- 问题:`email='linwei@aegisdb.io'`、`password='aegisdb123'` 预填输入框。若构建物流入类生产即明示可用凭据。应以环境变量控制仅 dev 注入。
 
 ### L6. 会话 TTL 纯前端展示;idle 锁定固定 15 分钟且与 TTL 脱节
 - 位置:`frontend/src/views/SettingsView.vue:94-95,113,121`;`AppLayout.vue:116`
@@ -597,7 +597,7 @@
 
 ### ER4【高】SQLite 连接的 `database` 参数不过 `dbNameRe`,可指向网关自身数据库
 - 位置:`gateway/realdb.go:47`(`!strings.Contains(e,"sqlite")` 显式豁免校验)、`:52`、`service/gateway.go:74-76`、`async_exec.go:28-30`、`export.go:119-126`(三处都无条件 `conn.Database = database`,`canAccessConn` 只看 tag、与库名无关)
-- 场景:环境里存在任一 engine 含 `sqlite` 的连接(本地/自托管默认形态),用户对它有 tag 访问权 → `POST /terminal/exec` 的 `database` 传网关自身 `vela.db` 路径 → 读/改**网关用户表、连接口令密文、审计链**。SELECT 在任何环境矩阵里都是 allow,判定不拦。第二轮 H7 只给网络引擎补了 `dbNameRe`,sqlite 留了口子;不存在的路径还会被创建。
+- 场景:环境里存在任一 engine 含 `sqlite` 的连接(本地/自托管默认形态),用户对它有 tag 访问权 → `POST /terminal/exec` 的 `database` 传网关自身 `aegisdb.db` 路径 → 读/改**网关用户表、连接口令密文、审计链**。SELECT 在任何环境矩阵里都是 allow,判定不拦。第二轮 H7 只给网络引擎补了 `dbNameRe`,sqlite 留了口子;不存在的路径还会被创建。
 - 修复:`database` 覆盖前做白名单校验(只允许 `ConnectionSchema` 列出的库名);sqlite 连接禁止运行时覆盖 `Database`。
 
 ### ER5【高】`RealRunAsync` 每个异步任务新建连接池且从不关闭,连接/FD 泄漏
@@ -660,7 +660,7 @@
 - 位置:`failExport` 只写作业表;`export.go:226` 成功审计 `clip(sql, 80)`。试探性拖数据不留痕。
 
 ### EX6【中·待验证】`database` 参数对 sqlite 引擎连接零校验(同 ER4 在导出通道的落点)
-- 位置:`realdb.go:47-52`。若环境存在 sqlite 连接,可指向 `../vela.db` 导出网关自身用户表/MFA secret;不存在的路径还会被创建。
+- 位置:`realdb.go:47-52`。若环境存在 sqlite 连接,可指向 `../aegisdb.db` 导出网关自身用户表/MFA secret;不存在的路径还会被创建。
 
 ### EX7【低】`WebhookConfig.Secret` 明文入库;`notify.larkWebhook` 会回显给非管理员
 - 位置:对比 `admin.go:22-25` 只加密了 approval token;`notify.larkWebhook`(URL 内嵌 bot token)不匹配 `isSecretKey` 的子串过滤,被 `GET /settings` 返回给任何持 settings 菜单的用户(`router.go:147` 无 admin 中间件)。
@@ -716,7 +716,7 @@
 - 位置:`middleware.go:78-81`、`terminal.go:472` 只拒 `disabled`,而 `PatchUser`(`admin.go:315-320`)允许置 `invited`。[已实测] 改为 invited 后 `GET /auth/me` 仍 code=0,会话照常可执行命令直到 TTL。当前前端只发 active/disabled,属 API 层面可达。
 
 ### EU8【低】邮箱未归一化:SQLite 下同一邮箱可存在两个账户
-- 位置:`admin.go:401-415`(`Invite` 不 trim 不小写)vs `:364`(`CreateUser` 小写)vs `service.go:182`(`Login` 原样查)。[已实测] 先 invite `Dup@Vela.io` 再 create `dup@vela.io`,两条都 ok,停用/改权限只作用于其中一行。MySQL 默认 CI 排序规则下会被唯一键挡住(环境相关)。
+- 位置:`admin.go:401-415`(`Invite` 不 trim 不小写)vs `:364`(`CreateUser` 小写)vs `service.go:182`(`Login` 原样查)。[已实测] 先 invite `Dup@AegisDB.io` 再 create `dup@aegisdb.io`,两条都 ok,停用/改权限只作用于其中一行。MySQL 默认 CI 排序规则下会被唯一键挡住(环境相关)。
 
 ### EU9【低】`PatchUser` 不校验 `roleId`
 - 位置:`admin.go:322-324` 只有 `RoleIDs` 走 `validateRoleIDs`。`PATCH {"roleId":999999}` 落库 → `BuildMe` 的 `GetRole` 失败 → `/auth/me` 50000,**账号锁死**。若成员行也被删空,`EffectiveRoleIDs` 为空,`risk.go:276-278` 的 `capabilityLevelUnion` 空集返回 `LevelAllow` 是 fail-open(当前被 MenuGuard 与 `canAccessConn` 挡住不可利用,但默认值方向错)。
@@ -743,7 +743,7 @@
 - 为何测试是绿的:`gli_env_test.go` 走 sqlite + `Seed()` 路径,恰好覆盖不到生产的 `migrate` 路径。
 - 修复:新增 `0008_seed_gli_env.sql`(`INSERT...SELECT` 从 staging 克隆 + `ON DUPLICATE KEY UPDATE`),或在 `runMigrate` 后无条件调 `seedGliEnv`(它本身幂等)。
 
-### ED2【高】`APP_ENV=prod` + 仓库自带 `config.yaml` 会把演示管理员 `linwei@vela.io / vela123` 播种进生产 MySQL
+### ED2【高】`APP_ENV=prod` + 仓库自带 `config.yaml` 会把演示管理员 `linwei@aegisdb.io / aegisdb123` 播种进生产 MySQL
 - 位置:`configs/config.yaml:6-7`(注释明确引导 `APP_ENV=prod ./server`)+ `config.yaml:25`(`seed: true`)+ `main.go:65-69` + `seed.go:17-22` → `seedFreshData`(`seed.go:222-233`)
 - 问题:`auto_migrate` 已被 `shouldAutoMigrate` 正确忽略(B6 未回归),但 **seed 没有任何 env 守卫**;`validateAdminPassword`(≥12 位/≥3 类)只作用于 `init` 路径。README 公开了这组凭据 → 生产平台管理员被公开口令接管。
 - 修复:`main.go` 在 `cfg.Env=="prod"` 时拒绝 `Seed()`,并在 `seedFreshData` 入口断言非 prod。
@@ -779,8 +779,8 @@
 ### ED10【中】`FailStuck{Export,Async}Jobs` 无实例归属判定,多副本互杀
 - `repository.go:825-830`/`887-892` 无条件把所有 pending/running 置 failed,`service.go:60,74` 在 `New` 里无条件执行。副本 B 启动会把副本 A 正在跑的 30–60 分钟任务写成 failed,A 跑完再覆写回 done,状态来回翻转。表上没有 owner/heartbeat 列。
 
-### ED11【中】`VELA_SECRET_KEY` 无强度校验(第四轮 A2 解耦修复引入的新面)
-- `config.go:154-190` 只校验 `JWT.Secret`;`config.go:224-229` + `crypto/cipher.go:51-54` 任意非空值直接 SHA-256。设 `VELA_SECRET_KEY=vela` 服务照常启动,**全库被管 DB 连接口令实际由 4 字符口令保护**。
+### ED11【中】`AEGISDB_SECRET_KEY` 无强度校验(第四轮 A2 解耦修复引入的新面)
+- `config.go:154-190` 只校验 `JWT.Secret`;`config.go:224-229` + `crypto/cipher.go:51-54` 任意非空值直接 SHA-256。设 `AEGISDB_SECRET_KEY=aegisdb` 服务照常启动,**全库被管 DB 连接口令实际由 4 字符口令保护**。
 
 ### ED12【中】分页 limit ≤ 0 视为"不限"
 - `repository.go:854-862`/`769-777`/`832-840`/`754-762` 都是 `if limit > 0`;`handler/terminal.go:161` `strconv.Atoi` 出错时 limit=0 且不钳上限。`GET /async-jobs?limit=abc` 一次拉全部任务连同每条完整 MEDIUMTEXT 日志(`0007:14`,单行 16MB),循环请求可 OOM。审计接口做了 500 钳制,这几个漏了。
@@ -1041,7 +1041,7 @@ EF1(错库执行)、EF2(拒绝显示成功)两项会直接误导操作者,优先
 **EA4 — `recordAuditBy` 携带授权人。** `appendAudit` 增加 `operator` 参数,`recordAudit` 保持原签名(内部传空),新增 `recordAuditBy` 给"代他人执行"的场景。`finalizeApproval` 两条终态分支都改用它,把 `operatorName` 落库——**站内与外部审批都记**,不只外部。原先的设计理由(审批人已在 `tbl_approval_step`)在外部审批上线后失效:飞书审批人不是网关用户,既进不了 step 表也进不了哈希链,一条生产 DROP 在链上只显示"发起人执行了它"。
 
 **EU4 — 两个半:账户变更 + 权限变更。**
-- 账户侧:`AdminSetPassword`/`AdminBindMFA`/`AdminResetMFA`/`PatchUser` 增加 `actor` 参数并写审计。审计文本用**稳定可 grep 的键**加目标,如 `admin.password.reset user=chenhao@vela.io`、`admin.user.patch status=disabled user=...`,便于后续按前缀检索。
+- 账户侧:`AdminSetPassword`/`AdminBindMFA`/`AdminResetMFA`/`PatchUser` 增加 `actor` 参数并写审计。审计文本用**稳定可 grep 的键**加目标,如 `admin.password.reset user=chenhao@aegisdb.io`、`admin.user.patch status=disabled user=...`,便于后续按前缀检索。
 - 权限侧:新增 `Services.AuditRoleChange`,由 `SetRoleMenus`/`SetRoleCapabilities`/`SetRoleTags`/`AddRoleMember` 四个 handler 调用,记 `admin.role.capabilities role=ro value={...}`(value 裁到 400 字符)。理由写在注释里:这些授予决定了系统里每一次权限判定,**改它就是提权动作**;否则有人可以放宽角色→操作→再收窄,链上只有操作、没有那次授予。
 - **webhook 暂不投递**:事件词汇表是 `exec/login/intercept/approve` 四种,admin 事件传空 eventType(仅入审计链),等订阅端有对应词汇再接。
 

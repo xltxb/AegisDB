@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/middleware"
+	"aegisdb/internal/middleware"
 )
 
 // auditDetailMax 一条审计里配置值的上限(rune)。配置可能很长(流水线阶段、规则参数),审计要

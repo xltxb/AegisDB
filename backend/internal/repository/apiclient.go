@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm/clause"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ----------------------------------------------------- 开放接口客户端

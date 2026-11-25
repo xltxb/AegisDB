@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 动词是 SELECT,不等于这条语句只读。

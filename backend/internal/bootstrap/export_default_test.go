@@ -13,7 +13,7 @@ import (
 func TestExport_DefaultDirAndPerUser(t *testing.T) {
 	defer os.RemoveAll("export") // default dir gets created under the run/test dir
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	// no export.savePath configured → default "export"

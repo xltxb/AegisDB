@@ -3,8 +3,8 @@ package bootstrap
 // 数据源配了从库:业务方的数据查询(执行、库表下拉、判定用的库名)都由从库提供;从库连不上
 // 时回落主库,结果与审计里注明。真实库用例需要两台 MySQL:
 //
-//	VELA_TEST_MYSQL=host:port/user/password          (主库)
-//	VELA_TEST_MYSQL_REPLICA=host:port/user/password  (从库)
+//	AEGISDB_TEST_MYSQL=host:port/user/password          (主库)
+//	AEGISDB_TEST_MYSQL_REPLICA=host:port/user/password  (从库)
 //
 // 两台库里放**不同的标记数据**,查出来是哪一份,就知道打到了哪一台。
 
@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func mysqlParts(t *testing.T, env string) []string {
@@ -55,13 +55,13 @@ func seedMarker(t *testing.T, p []string, marker string, extra ...string) {
 }
 
 func TestBizQuery_Replica(t *testing.T) {
-	primary := mysqlParts(t, "VELA_TEST_MYSQL")
-	replica := mysqlParts(t, "VELA_TEST_MYSQL_REPLICA")
+	primary := mysqlParts(t, "AEGISDB_TEST_MYSQL")
+	replica := mysqlParts(t, "AEGISDB_TEST_MYSQL_REPLICA")
 	seedMarker(t, primary, "primary", "DROP TABLE IF EXISTS biz_rep.only_on_replica")
 	seedMarker(t, replica, "replica", "CREATE TABLE IF NOT EXISTS biz_rep.only_on_replica (id INT)")
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa, db: "biz_rep"}

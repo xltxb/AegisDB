@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 每一条被拦下的裁决都要带上规则标识,而且标识渲染出来必须和 Rule 字段一字不差。

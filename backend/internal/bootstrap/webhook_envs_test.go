@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func (a *testApp) webhookEnvs(token string) string {
@@ -43,7 +43,7 @@ func (a *testApp) saveWebhookEnvs(token, endpoint string, envs any) {
 
 func TestWebhookEnvs_RoundTripAndNormalise(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	app.saveWebhookEnvs(token, "http://example.invalid/ingest", " prod, nope,prod,dev")
 	if got := app.webhookEnvs(token); got != "prod,dev" {
@@ -80,7 +80,7 @@ func TestWebhookEnvs_DeliversOnlySelectedEnvironments(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.saveWebhookEnvs(token, stub.URL, "dev") // 只推 dev
 	prodConn := app.connIDByEnv(token, "prod")
 	devConn := app.connIDByEnv(token, "dev")
@@ -132,7 +132,7 @@ func TestWebhookEnvs_DeliversOnlySelectedEnvironments(t *testing.T) {
 
 	// 登录没有环境:不受环境约束,订阅了「非数据」就推
 	before := len(got)
-	app.login("linwei@vela.io", "vela123")
+	app.login("linwei@aegisdb.io", "aegisdb123")
 	got = waitFor(func(s []hit) bool { return len(s) > before })
 	if len(got) == before {
 		t.Fatal("没有环境的事件(登录)不该被环境过滤挡掉")
@@ -146,7 +146,7 @@ func TestWebhookEnvs_DeliversOnlySelectedEnvironments(t *testing.T) {
 
 func TestWebhookEnvs_FollowEnvironmentDeletion(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	if err := app.repo.CreateEnvironment(&model.Environment{Code: "hk-prod", DisplayName: "香港生产", TierCode: "prod"}); err != nil {
 		t.Fatal(err)
 	}

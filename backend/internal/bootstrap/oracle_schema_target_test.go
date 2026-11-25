@@ -36,7 +36,7 @@ func (a *testApp) oracleConn(token, env, name, serviceName string) int64 {
 // 被拦下来的工单要记住选中的 schema,不是服务名。
 func TestOracleApproval_RecordsSchemaNotServiceName(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const service = "ORCLPDB1" // 实例配置里的服务名
 	const schema = "G04"       // 树上点中的属主
@@ -71,7 +71,7 @@ func TestOracleApproval_RecordsSchemaNotServiceName(t *testing.T) {
 // 那句话要么是真的,要么就是一句会误导排查的话。
 func TestOracleAudit_RecordsSchemaNotServiceName(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const service = "ORCLPDB2"
 	const schema = "G07"
@@ -111,7 +111,7 @@ func TestOracleAudit_RecordsSchemaNotServiceName(t *testing.T) {
 // 找不回来了 —— 语句会悄悄落在登录用户自己的 schema 上,而没有任何报错。
 func TestOracleAsyncJob_RecordsSchemaNotServiceName(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const service = "ORCLPDB3"
 	const schema = "G09"

@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
 )
 
 // InitDatabase seeds ONLY the reference data (roles, menus, capabilities, risk

@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // tierAutoExecuteGuard marks that dev / uat have been switched on once (migration 0058).

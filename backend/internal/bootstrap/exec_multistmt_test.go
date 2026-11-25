@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // A1: a terminal command may bundle several statements. The capability matrix
@@ -16,7 +16,7 @@ import (
 // every statement and intercepted, not silently executed as a read.
 func TestExec_StackedStatementTailIsJudged(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
@@ -36,7 +36,7 @@ func TestExec_StackedStatementTailIsJudged(t *testing.T) {
 // leading separator, so this executed for real.
 func TestExec_LeadingSeparatorDoesNotDowngradeCapability(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
@@ -59,7 +59,7 @@ func TestExec_LeadingSeparatorDoesNotDowngradeCapability(t *testing.T) {
 // highest risk — and every triggered rule must survive onto the ticket.
 func TestExec_BatchVerdictEscalatesToStrictestStatement(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{
@@ -101,7 +101,7 @@ func TestExec_BatchVerdictEscalatesToStrictestStatement(t *testing.T) {
 // Exec does.
 func TestRiskCheck_BatchTailStatementGoverns(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	got := app.riskCheck(token, prodConn, "SELECT 1; UPDATE orders SET status='x' WHERE id=1")

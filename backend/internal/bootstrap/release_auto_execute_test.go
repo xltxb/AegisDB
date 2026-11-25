@@ -21,7 +21,7 @@ func TestAutoExecute_TierDefaultsAndBackfillRunsOnce(t *testing.T) {
 		}
 	}
 	// 运维把 uat 关掉之后,回填再跑一次(重启)不能把它打开回来
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setTierSwitch(admin, "uat", "autoExecute", false)
 	if err := backfillTierAutoExecute(app.repo.DB()); err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestAutoExecute_TierDefaultsAndBackfillRunsOnce(t *testing.T) {
 
 func TestAutoExecute_NewTierInheritsTemplateUnlessGiven(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	create := func(code, tmpl string, extra map[string]any) {
 		body := map[string]any{"code": code, "displayName": code, "templateCode": tmpl, "strictNoWhere": true}
 		for k, v := range extra {
@@ -60,7 +60,7 @@ func TestAutoExecute_NewTierInheritsTemplateUnlessGiven(t *testing.T) {
 // 生产类分层、以及「适用全部分层」的流程,都不能保存自动执行阶段;后端拒,不靠前端。
 func TestAutoExecute_RejectedOnTiersThatDoNotAllowIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stages := []map[string]any{
 		{"type": "review", "config": `{"failOn":"error"}`},
 		{"type": "auto_execute"},
@@ -100,7 +100,7 @@ func TestAutoExecute_RejectedOnTiersThatDoNotAllowIt(t *testing.T) {
 // 执行变更与自动执行合起来只能有一个:两个会把同一份 SQL 跑两遍。
 func TestAutoExecute_CountsAsTheExecuteStage(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/pipelines", admin, map[string]any{
 		"name": "双执行", "tierCode": "dev", "enabled": true, "stages": []map[string]any{
 			{"type": "execute"}, {"type": "auto_execute"},
@@ -130,7 +130,7 @@ func TestAutoExecute_CountsAsTheExecuteStage(t *testing.T) {
 // 核心场景:dev 上 规范审查 → 自动执行,不点任何按钮就跑完,且逐条入审计。
 func TestAutoExecute_RunsWithoutConfirmationAndAudits(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	pid := app.createPipeline(admin, "fat", "dev", []map[string]any{
 		{"type": "review", "config": `{"failOn":"error"}`},
@@ -182,7 +182,7 @@ func TestAutoExecute_RunsWithoutConfirmationAndAudits(t *testing.T) {
 // 流程保存之后分层把开关关了:走到这一步退回等人工确认,点了才跑。
 func TestAutoExecute_FallsBackToConfirmWhenTierSwitchedOff(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	pid := app.createPipeline(admin, "fat", "dev", []map[string]any{
 		{"type": "auto_execute"},

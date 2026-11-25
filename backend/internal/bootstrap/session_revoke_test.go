@@ -14,9 +14,9 @@ import (
 
 func TestSessionRevoke_StatusRoundTripDoesNotResurrectOldToken(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	old := app.login("zhaolei@vela.io", "vela123")
-	id := app.userIDByEmail(admin, "zhaolei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	old := app.login("zhaolei@aegisdb.io", "aegisdb123")
+	id := app.userIDByEmail(admin, "zhaolei@aegisdb.io")
 
 	for _, st := range []string{"invited", "active"} {
 		eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(id), admin, map[string]any{"status": st}).Code, 0, "改状态 "+st)
@@ -25,14 +25,14 @@ func TestSessionRevoke_StatusRoundTripDoesNotResurrectOldToken(t *testing.T) {
 		t.Fatal("停用再恢复之后,旧 token 仍然有效")
 	}
 	// 重新登录照常可用。
-	eq(t, app.do(http.MethodGet, "/api/v1/auth/me", app.login("zhaolei@vela.io", "vela123"), nil).Code, 0, "重新登录")
+	eq(t, app.do(http.MethodGet, "/api/v1/auth/me", app.login("zhaolei@aegisdb.io", "aegisdb123"), nil).Code, 0, "重新登录")
 }
 
 func TestSessionRevoke_AdminMFAResetEndsSessions(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	old := app.login("zhaolei@vela.io", "vela123")
-	id := app.userIDByEmail(admin, "zhaolei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	old := app.login("zhaolei@aegisdb.io", "aegisdb123")
+	id := app.userIDByEmail(admin, "zhaolei@aegisdb.io")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users/"+itoa(id)+"/mfa/reset", admin, nil).Code, 0, "解绑 MFA")
 	if r := app.do(http.MethodGet, "/api/v1/auth/me", old, nil); r.Code == 0 {

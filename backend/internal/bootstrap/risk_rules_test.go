@@ -30,7 +30,7 @@ func (a *testApp) riskLevel(token, command, tier string) string {
 // (R11 — the UI used to send off-defaults for the untouched envs).
 func TestRiskCommands_PartialUpsertKeepsOtherEnvs(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// seed: DROP is high on prod
 	eq2(t, app.riskLevel(admin, "DROP", "prod"), "high", "seeded prod DROP level")

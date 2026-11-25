@@ -32,8 +32,8 @@ func (v todoView) confirmOn(relNo string) (stage string, found bool) {
 // 人工确认闸:路由到 l2,那么 l2 的人待办里有,发起人(admin)没有。
 func TestConfirmTodo_ShowsTheGateToWhoeverMayPassIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123") // 发起人
-	l2 := app.login("chenhao@vela.io", "vela123")   // 本流程指定的确认角色,既非发起人也非监管角色
+	admin := app.login("linwei@aegisdb.io", "aegisdb123") // 发起人
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")   // 本流程指定的确认角色,既非发起人也非监管角色
 	stg := app.connIDByEnv(admin, "staging")
 
 	baseAdmin, baseL2 := app.todoOf(admin), app.todoOf(l2)
@@ -89,11 +89,11 @@ func TestConfirmTodo_ShowsTheGateToWhoeverMayPassIt(t *testing.T) {
 // 被待办叫来的人,必须打得开那张发布单 —— 点之前点之后都要打得开。
 func TestConfirmTodo_TheStaffedConfirmerCanOpenTheRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 确认人得是一个本来看不到别人发布单的角色,这条例外才测得到:l2 自 2026-10-30 起
 	// 能看全部发布单(canSeeAllReleases),于是换成研发只读,并给它发布菜单。
 	app.enableMenuForCode("ro", "pipeline")
-	ro := app.login("zhaolei@vela.io", "vela123") // 非发起人、看不到全部发布单
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 非发起人、看不到全部发布单
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "待办·可见性", "", []map[string]any{
@@ -144,7 +144,7 @@ func TestConfirmTodo_TheStaffedConfirmerCanOpenTheRelease(t *testing.T) {
 // 两道闸的规则不同,而待办读的是同一处判断,所以两路都要钉。
 func TestConfirmTodo_ExecuteGateWaitsOnTheCreatorByDefault(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "待办·执行闸", "", []map[string]any{
@@ -180,8 +180,8 @@ func TestConfirmTodo_ExecuteGateWaitsOnTheCreatorByDefault(t *testing.T) {
 // 永远停在那儿而没有人被通知。待办做到不谎报为止,真正的修法属于 validateConfirmRole。
 func TestConfirmTodo_SaysNothingToSomeoneWhoCouldNotClickItAnyway(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	auditor := app.login("hujun@vela.io", "vela123") // audit:有人在这个角色里,但没有发布菜单
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123") // audit:有人在这个角色里,但没有发布菜单
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "待办·路由给审计", "", []map[string]any{

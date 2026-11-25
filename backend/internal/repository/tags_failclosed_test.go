@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ED3: "this role has no tag restrictions" and "the tag query failed" must not

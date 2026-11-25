@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type auditGroupPage struct {
@@ -25,14 +25,14 @@ type auditGroupPage struct {
 
 func TestAudit_GroupedByApproval(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, prod := app.sameFileConns(admin, "audit-group")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_grp (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
 
 	ap := app.interceptedTicket(admin, prod, `DROP TABLE t_grp`) // 1. 提交被拦截
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "2. 审批通过")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "3. 发起人执行")
 	app.execSQL(admin, dev, `SELECT 1`) // 与审批单无关的一条
@@ -79,11 +79,11 @@ func TestAudit_GroupedByApproval(t *testing.T) {
 // 别人的审批单既不出现在列表里,也查不到它的操作记录。
 func TestAudit_GroupedRespectsVisibility(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, prod := app.sameFileConns(admin, "audit-group-vis")
 	ap := app.interceptedTicket(admin, prod, `DROP TABLE nothing_here`)
 
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	var page auditGroupPage
 	r := app.do(http.MethodGet, "/api/v1/audit?pageSize=500&group=approval", l2, nil)
 	eq(t, r.Code, 0, "l2 有审计菜单")

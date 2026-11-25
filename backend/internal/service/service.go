@@ -10,14 +10,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/sqlutil"
-	"velagateway/pkg/totp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/sqlutil"
+	"aegisdb/pkg/totp"
 )
 
 // Services is the application service container wired in bootstrap.
@@ -436,7 +436,7 @@ func (s *Services) AuditWriteFailures() int64 { return s.auditFailures.Load() }
 // login paths so response time doesn't reveal whether an active account exists
 // (account-enumeration timing oracle, C2). It's a valid bcrypt hash so the
 // compare does the full work rather than returning early on a malformed hash.
-var dummyPasswordHash, _ = crypto.HashPassword("vela-login-timing-equalizer")
+var dummyPasswordHash, _ = crypto.HashPassword("aegisdb-login-timing-equalizer")
 
 // Login verifies credentials (and, for an MFA-enrolled user, a TOTP code) and
 // issues a JWT.

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Web 命令行每个标签页独占一条连接:同一台实例开两个标签就是两个会话,标签里的语句始终在
@@ -40,18 +40,18 @@ func TestTermSession_EachTabIsItsOwnSessionOnMySQL(t *testing.T) {
 	}
 
 	// 会话变量只在自己的标签里
-	termRun(t, uid, "tab-a", conn, "SET @vela_tab = 'A'")
-	if got := firstCell(t, termRun(t, uid, "tab-a", conn, "SELECT COALESCE(@vela_tab, 'none')")); got != "A" {
+	termRun(t, uid, "tab-a", conn, "SET @aegisdb_tab = 'A'")
+	if got := firstCell(t, termRun(t, uid, "tab-a", conn, "SELECT COALESCE(@aegisdb_tab, 'none')")); got != "A" {
 		t.Errorf("标签 A 的会话变量应还在,实际 %q", got)
 	}
-	if got := firstCell(t, termRun(t, uid, "tab-b", conn, "SELECT COALESCE(@vela_tab, 'none')")); got != "none" {
+	if got := firstCell(t, termRun(t, uid, "tab-b", conn, "SELECT COALESCE(@aegisdb_tab, 'none')")); got != "none" {
 		t.Errorf("会话变量不该漏到标签 B,实际 %q", got)
 	}
 
 	// 切库(USE)不换连接,会话还在
 	other := *base
 	other.Database = "information_schema"
-	if got := firstCell(t, termRun(t, uid, "tab-a", &other, "SELECT CONCAT(DATABASE(), ':', CONNECTION_ID(), ':', COALESCE(@vela_tab, 'none'))")); got != "information_schema:"+a1+":A" {
+	if got := firstCell(t, termRun(t, uid, "tab-a", &other, "SELECT CONCAT(DATABASE(), ':', CONNECTION_ID(), ':', COALESCE(@aegisdb_tab, 'none'))")); got != "information_schema:"+a1+":A" {
 		t.Errorf("切库应在同一条连接上 USE,会话保留;实际 %q", got)
 	}
 	if got := firstCell(t, termRun(t, uid, "tab-a", conn, "SELECT DATABASE()")); got != "mysql" {

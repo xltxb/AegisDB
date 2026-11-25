@@ -11,7 +11,7 @@ import (
 // API (R25).
 func TestExport_PasswordEncryptedAtRest(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	dir := t.TempDir()
@@ -25,7 +25,7 @@ func TestExport_PasswordEncryptedAtRest(t *testing.T) {
 	}
 
 	// read the raw stored row (repo does not decrypt)
-	u, _ := app.svc.Repo.GetUserByEmail("linwei@vela.io")
+	u, _ := app.svc.Repo.GetUserByEmail("linwei@aegisdb.io")
 	rows, _ := app.svc.Repo.ListExportJobs(u.ID, 0)
 	var stored string
 	for _, r := range rows {

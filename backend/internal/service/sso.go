@@ -34,10 +34,10 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/totp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/totp"
 )
 
 // SSO 的四项设置都在【设置 · 会话与安全】里,存 tbl_setting(键 sso.*),运行时生效、免重启。
@@ -77,7 +77,7 @@ type SSOSettings struct {
 // 与 AllowPrivateWebhookTargets 同一个路子:默认关,漏设的后果是"更严",不是"更松"。
 var AllowInsecureSSO bool
 
-// SSOForcedOff 是 SSO 的部署层总闸(config 的 sso.disabled / 环境变量 VELA_SSO_DISABLED)。
+// SSOForcedOff 是 SSO 的部署层总闸(config 的 sso.disabled / 环境变量 AEGISDB_SSO_DISABLED)。
 // 拉下时不管设置页存的是什么,SSO 一律按关闭处理:登录页只有口令表单,SSO 登录接口拒绝,
 // 已绑定的人恢复口令登录。设置页的开关平时就够用;这一道是给"SSO 出了问题、偏偏又进不去
 // 设置页"准备的,改配置、重启即可,不用碰数据库。

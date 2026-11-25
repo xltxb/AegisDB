@@ -17,9 +17,9 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
 )
 
 // latestAuditWhere 取最近一条满足条件的审计行。
@@ -87,7 +87,7 @@ func TestAuditSource_BizQueryExportIsExport(t *testing.T) {
 // 终端发起的数据导出:入队那一行(请求里)与后台执行完那一行(没有请求)都是 export。
 func TestAuditSource_ExportJobBothRows(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	const sql = "SELECT 'src-export'"
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -122,7 +122,7 @@ func TestAuditSource_ExportJobBothRows(t *testing.T) {
 // 上传脚本 / 整脚本执行:script。
 func TestAuditSource_ScriptExecute(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "脚本目录")
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", admin, map[string]any{
@@ -138,7 +138,7 @@ func TestAuditSource_ScriptExecute(t *testing.T) {
 // 审批单:拦截那一行是发起的入口(终端),审批决定与执行审批单是 approval。
 func TestAuditSource_ApprovalFlow(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "src-ap")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_src_ap (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -175,12 +175,12 @@ func TestAuditSource_ApprovalFlow(t *testing.T) {
 // 「API:系统名」由 operator 列说明);发布流水线以外的开放接口调用记 api。
 func TestAuditSource_OpenAPIReleaseIsRelease_ReviewIsAPI(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "来源用例流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"error"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "来源用例", "zhangwei@vela.io", nil, pid)
+	token := app.issueClientPiped(admin, "来源用例", "zhangwei@aegisdb.io", nil, pid)
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "来源用例", "externalRef": "SRC-1", "instance": "sandbox-dev",
 		"sql": "CREATE TABLE tbl_src_probe (\n id BIGINT NOT NULL AUTO_INCREMENT COMMENT 'id',\n" +
@@ -203,7 +203,7 @@ func TestAuditSource_OpenAPIReleaseIsRelease_ReviewIsAPI(t *testing.T) {
 		eq(t, row.Source, model.AuditSourceRelease, "开放接口发布单的行 "+clipStr(row.Command, 40))
 	}
 
-	review := app.issueClient(admin, "来源审查", "zhangwei@vela.io", []string{model.ScopeReviewCheck})
+	review := app.issueClient(admin, "来源审查", "zhangwei@aegisdb.io", []string{model.ScopeReviewCheck})
 	eq(t, app.openDo(http.MethodPost, "/api/v1/open/sql-review", review, map[string]any{
 		"dialect": "mysql", "sql": "CREATE TABLE t (id INT);",
 	}).Code, 0, "开放接口 SQL 审查")
@@ -214,8 +214,8 @@ func TestAuditSource_OpenAPIReleaseIsRelease_ReviewIsAPI(t *testing.T) {
 // 登录(成功与失败)记 auth;管理后台的动作记 admin。
 func TestAuditSource_LoginAndAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	_ = app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "linwei@vela.io", "password": "wrong-pass"})
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	_ = app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "linwei@aegisdb.io", "password": "wrong-pass"})
 
 	var rows []model.AuditLog
 	_ = app.repo.DB().Where("event_type = ? AND entry_source <> ''", model.AuditEventLogin).Find(&rows).Error
@@ -240,7 +240,7 @@ func TestAuditSource_LoginAndAdmin(t *testing.T) {
 // 接口:返回 source,按来源筛(含 unknown 旧行),拼错的取值报错。
 func TestAuditSource_ListFilter(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	const sql = "SELECT 'src-filter'"
 	app.execOK(t, admin, dev, sql)
@@ -286,7 +286,7 @@ func TestAuditSource_ListFilter(t *testing.T) {
 // 空),升级后新写的行接在它们后面按第六代签。整条链要验得过;新行改了来源要破链。
 func TestAuditSource_ChainCoversSourceAndOldRowsStillVerify(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	_, cur := service.AuditGenRange()
 	eq(t, cur, 6, "当前载荷代")

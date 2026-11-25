@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 分层上的两个开关(2026-10-29,迁移 0056):敏感字段脱敏、数据查询导出限制。默认 prod / staging / gli

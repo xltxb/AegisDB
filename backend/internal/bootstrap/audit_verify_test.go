@@ -14,15 +14,15 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
 )
 
 // 干净的链验得过,而且把验过的行数如实说出来。
 func TestVerifyAuditChain_CleanChainPasses(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	for _, sql := range []string{"SELECT 1", "SELECT 2", "SELECT 3"} {
 		eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
@@ -49,7 +49,7 @@ func TestVerifyAuditChain_CleanChainPasses(t *testing.T) {
 // 改掉一行的内容 —— 重算的哈希对不上,而且指名道姓是哪一行。
 func TestVerifyAuditChain_CatchesAnEditedRow(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	const sql = "DELETE FROM orders WHERE id = 1"
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
@@ -82,7 +82,7 @@ func TestVerifyAuditChain_CatchesAnEditedRow(t *testing.T) {
 // 两者要人做的事不同:内容被改要去看那一行到底原来是什么,链断了要去找那一行去哪儿了。
 func TestVerifyAuditChain_CatchesADeletedRow(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	for _, sql := range []string{"SELECT 'a'", "SELECT 'b'", "SELECT 'c'"} {
 		eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
@@ -114,7 +114,7 @@ func TestVerifyAuditChain_CatchesADeletedRow(t *testing.T) {
 // 这一条堵上。
 func TestVerifyAuditChain_CatchesADowngradedRow(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	for _, sql := range []string{"SELECT 'x'", "SELECT 'y'"} {
 		eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
@@ -151,7 +151,7 @@ func TestVerifyAuditChain_CatchesADowngradedRow(t *testing.T) {
 // 只验最近 N 行:一样抓得住窗口内的改动,而且如实说出"只验了这么多"。
 func TestVerifyAuditChain_LimitChecksTheRecentWindow(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	const last = "SELECT 'last'"
 	for _, sql := range []string{"SELECT 'p'", "SELECT 'q'", last} {
@@ -197,13 +197,13 @@ func TestVerifyAuditChain_LimitChecksTheRecentWindow(t *testing.T) {
 // 门槛因此得单独立,不能靠可见性收窄来代劳。
 func TestVerifyAuditChain_EndpointIsForOverseersOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodGet, "/api/v1/audit/verify", admin, nil)
 	eq(t, r.Code, 0, "管理员应当验得动")
 
-	auditor := app.login("hujun@vela.io", "vela123") // 审计角色
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123") // 审计角色
 	eq(t, app.do(http.MethodGet, "/api/v1/audit/verify", auditor, nil).Code, 0, "审计员应当验得动")
 
-	ro := app.login("zhaolei@vela.io", "vela123") // 只读:有 audit 菜单,但不是监督角色
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 只读:有 audit 菜单,但不是监督角色
 	eq(t, app.do(http.MethodGet, "/api/v1/audit/verify", ro, nil).Code, 40300, "只读角色应当被挡住")
 }

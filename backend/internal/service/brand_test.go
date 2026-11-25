@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestBrandText_FallbackOrder(t *testing.T) {
@@ -101,15 +101,15 @@ func TestNormalizeBrandName(t *testing.T) {
 func TestBrand_DefaultsKeepLegacyText(t *testing.T) {
 	s := &Services{}
 	pre := s.sqlExportPreamble(&model.Connection{Engine: "MySQL 8.0"}, &model.ExportJob{}, "SELECT 1", true, time.Now())
-	if !strings.HasPrefix(pre, "-- Vela 数据库网关 · 数据导出(SQL)\n") {
+	if !strings.HasPrefix(pre, "-- AegisDB 数据库网关 · 数据导出(SQL)\n") {
 		t.Errorf("SQL 导出抬头变了:%q", pre[:60])
 	}
 	ev := buildPlatformEvent("audit", map[string]any{}, time.Now(), LoadBrand(nil).Text(BrandDefaultUI, true))
-	if ev["source_system"] != "DP DB GATEWAY" {
+	if ev["source_system"] != "AegisDB" {
 		t.Errorf("Webhook source_system 变了:%v", ev["source_system"])
 	}
 	card := larkApprovalCard(&model.Approval{ApNo: "AP-1"}, "", LoadBrand(nil).Text(BrandDefaultLegacy, false))
-	if !strings.Contains(toJSONForTest(card), "Vela 数据库网关 · AP-1") {
+	if !strings.Contains(toJSONForTest(card), "AegisDB 数据库网关 · AP-1") {
 		t.Error("飞书卡片落款变了")
 	}
 	card = larkApprovalCard(&model.Approval{ApNo: "AP-1"}, "", Brand{Name: "星河"}.Text(BrandDefaultLegacy, false))

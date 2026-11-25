@@ -49,7 +49,7 @@ func (a *testApp) sqliteConnID(token string) int64 {
 // statement outlasting the pong budget therefore severs its own connection.
 func TestTerminalWS_AnswersHeartbeatWhileCommandRuns(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	connID := app.sqliteConnID(token)
 
 	c := app.dialWS(token)

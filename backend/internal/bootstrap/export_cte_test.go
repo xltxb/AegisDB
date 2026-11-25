@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // A multi-line CTE query — the everyday shape of a DWS/PostgreSQL analytical
@@ -15,7 +15,7 @@ import (
 // being refused.
 func TestExport_CTESelectAcceptedMutatingCTERefused(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
 		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")

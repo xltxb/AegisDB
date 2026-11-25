@@ -31,8 +31,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // maxRecompileTargets 一次批量重编译的对象上限。

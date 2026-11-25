@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 管理后台拆分(工单 07):用户后台的执行窗口列表只列自己申请的;所有人的窗口在管理后台
@@ -31,8 +31,8 @@ func hasWindow(ws []model.ExecWindow, id int64) *model.ExecWindow {
 
 func TestExecWindow_ListIsOwnUnlessAdminAsksForAll(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	mine := app.openWindow(l2, prod, "orders_db", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 	theirs := app.openWindow(admin, prod, "orders_db", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
@@ -59,9 +59,9 @@ func TestExecWindow_ListIsOwnUnlessAdminAsksForAll(t *testing.T) {
 
 func TestExecWindow_DisableStopsRelaxingWithoutApproval(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const sql, db = "DROP TABLE orders_2024_q3", "orders_db"
 	id := app.openWindow(l2, prod, db, time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
@@ -86,9 +86,9 @@ func TestExecWindow_DisableStopsRelaxingWithoutApproval(t *testing.T) {
 // 在那台库上干活的人都该知道。只列开着的 —— 还没到时间的、别人的待审批申请,照旧各看各的。
 func TestExecWindow_ActiveScopeShowsEveryonesOpenWindows(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	open := app.openWindow(admin, prod, "orders_db", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 	later := app.openWindow(admin, prod, "orders_db", time.Now().Add(time.Hour), time.Now().Add(2*time.Hour))
@@ -115,9 +115,9 @@ func TestExecWindow_ActiveScopeShowsEveryonesOpenWindows(t *testing.T) {
 // 已经开完的、此刻正开着的(那归 scope=active)都不在这里。
 func TestExecWindow_ScheduledScopeShowsEveryonesApprovedUpcoming(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	now := time.Now()
 	later := app.openWindow(admin, prod, "orders_db", now.Add(time.Hour), now.Add(2*time.Hour))
@@ -155,8 +155,8 @@ func TestExecWindow_ScheduledScopeShowsEveryonesApprovedUpcoming(t *testing.T) {
 // 停用只改 enabled 一列:申请人同时改了窗口(名称、时间),停用不能把它改回旧值(2026-10 审查)。
 func TestExecWindow_DisableTouchesOnlyEnabled(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	id := app.openWindow(l2, prod, "orders_db", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 

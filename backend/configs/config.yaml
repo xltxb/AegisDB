@@ -1,10 +1,10 @@
-# DP DB GATEWAY — backend configuration
+# AegisDB — backend configuration
 
 # Deployment profile: dev | prod
-#   dev  → SQLite (zero-dependency local run, writes ./vela-gateway.db)
+#   dev  → SQLite (zero-dependency local run, writes ./aegisdb.db)
 #   prod → MySQL  (see docker-compose.yml / mysql_dsn below)
-# Overridable at startup via APP_ENV (or VELA_ENV): `APP_ENV=prod ./server`
-# flips the whole app to MySQL. VELA_DB_DRIVER=mysql|sqlite forces a driver.
+# Overridable at startup via APP_ENV (or AEGISDB_ENV): `APP_ENV=prod ./server`
+# flips the whole app to MySQL. AEGISDB_DB_DRIVER=mysql|sqlite forces a driver.
 env: "dev"
 
 server:
@@ -18,14 +18,14 @@ server:
 # not set here directly. Both endpoints stay configured so either profile works.
 database:
   # MySQL DSN (used when env=prod; matches docker-compose.yml credentials)
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local"
+  mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb?charset=utf8mb4&parseTime=true&loc=Local"
   # SQLite file (used when env=dev)
-  sqlite_path: "vela-gateway.db"
+  sqlite_path: "aegisdb.db"
   auto_migrate: true     # GORM AutoMigrate on boot
   seed: true             # insert demo data (mirrors the prototype) when tables are empty
 
 jwt:
-  secret: "change-me-vela-gateway-dev-secret"
+  secret: "change-me-aegisdb-dev-secret"
   ttl_hours: 8
 
 gateway:
@@ -36,13 +36,13 @@ gateway:
   strict_mode: true
   exec_timeout_seconds: 30
 
-# SSO 总闸:SSO 平时在【系统设置 · 会话与安全】开关。写 true(或环境变量 VELA_SSO_DISABLED=1)
+# SSO 总闸:SSO 平时在【系统设置 · 会话与安全】开关。写 true(或环境变量 AEGISDB_SSO_DISABLED=1)
 # 则无论设置页怎么存都按关闭处理,所有人回到账号口令登录。进不去设置页时用,改完重启生效。
 sso:
   disabled: false
 
 # 管理后台 IP 白名单总闸:白名单平时在【系统设置 · 会话与安全】配。写 true(或环境变量
-# VELA_ADMIN_IP_ALLOWLIST_DISABLED=1)则白名单一律不生效 —— 配错把管理员全挡在管理后台外面时用,改完重启生效。
+# AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED=1)则白名单一律不生效 —— 配错把管理员全挡在管理后台外面时用,改完重启生效。
 admin_ip:
   allowlist_disabled: false
 

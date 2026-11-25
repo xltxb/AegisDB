@@ -28,10 +28,10 @@ func inspectionBody(instance, date, level, html string) map[string]any {
 // inspectionSetup:配好保存路径,发一把只有 inspection:write 的凭据。
 func inspectionSetup(t *testing.T) (app *testApp, admin, client, dir string) {
 	app = newTestApp(t)
-	admin = app.login("linwei@vela.io", "vela123")
+	admin = app.login("linwei@aegisdb.io", "aegisdb123")
 	dir = t.TempDir()
 	app.setSettings(admin, map[string]any{"inspection.savePath": dir})
-	client = app.issueClient(admin, "ai-inspector", "zhangwei@vela.io", []string{"inspection:write"})
+	client = app.issueClient(admin, "ai-inspector", "zhangwei@aegisdb.io", []string{"inspection:write"})
 	return
 }
 
@@ -135,7 +135,7 @@ func TestInspectionUpload_RejectsBadRequests(t *testing.T) {
 	eq(t, app.openDo(http.MethodPost, inspectionPath, client, huge).Code, 41300, "超过 20MB")
 
 	// 没有 inspection:write 的凭据
-	other := app.issueClient(admin, "ci", "zhangwei@vela.io", nil)
+	other := app.issueClient(admin, "ci", "zhangwei@aegisdb.io", nil)
 	eq(t, app.openDo(http.MethodPost, inspectionPath, other, inspectionBody("order-cluster", today, "ok", ok)).Code, 40300, "没有上传范围")
 
 	// 保存路径没配

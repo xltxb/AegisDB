@@ -26,9 +26,9 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // ConfirmReleaseForClient 以确认人的名义放行发布单此刻停着的人工确认。

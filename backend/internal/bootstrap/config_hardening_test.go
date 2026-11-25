@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/repository"
+	"aegisdb/internal/repository"
 )
 
 // C5: a prod JWT secret that is long enough and not blacklisted can still be
@@ -38,7 +38,7 @@ func TestValidateForServe_RejectsLowEntropySecret(t *testing.T) {
 // strong secret — otherwise it runs on the public placeholder and anyone with
 // the repo can forge an admin token.
 func TestValidateForServe_NonLocalEnvRequiresStrongSecret(t *testing.T) {
-	placeholder := "change-me-vela-gateway-dev-secret" // the value shipped in configs/config.yaml
+	placeholder := "change-me-aegisdb-dev-secret" // the value shipped in configs/config.yaml
 
 	// A genuine local-dev run (env empty, or dev/local) stays exempt: zero-config
 	// dev must keep working with the placeholder.
@@ -111,7 +111,7 @@ func TestSeed_RefusesToPlantDemoDataInProduction(t *testing.T) {
 	if err := Seed(repo, cfg); err == nil {
 		t.Error("seeding a production database silently succeeded")
 	}
-	if _, err := repo.GetUserByEmail("linwei@vela.io"); err == nil {
+	if _, err := repo.GetUserByEmail("linwei@aegisdb.io"); err == nil {
 		t.Error("the demo administrator was planted in a production database")
 	}
 }
@@ -138,7 +138,7 @@ func TestSeed_RefusesNonLocalEnvs(t *testing.T) {
 			if err := Seed(repo, cfg); err == nil {
 				t.Error("非本地环境种演示数据不应成功")
 			}
-			if _, err := repo.GetUserByEmail("linwei@vela.io"); err == nil {
+			if _, err := repo.GetUserByEmail("linwei@aegisdb.io"); err == nil {
 				t.Error("非本地环境被种入了演示管理员")
 			}
 		})

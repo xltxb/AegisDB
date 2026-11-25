@@ -3,7 +3,7 @@ package gateway
 import (
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // MySQL 系的 `#` 行注释。

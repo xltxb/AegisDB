@@ -23,7 +23,7 @@ func (a *testApp) searchApprovals(token, q string) apListView {
 // 按单号搜得到那一张,而且**不受分页影响** —— 每页只取一条时也要能搜到。
 func TestApprovalSearch_FindsTicketRegardlessOfPage(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	all := app.listApprovals(token, "")
 	if all.Total == 0 {
@@ -54,7 +54,7 @@ func TestApprovalSearch_FindsTicketRegardlessOfPage(t *testing.T) {
 // 换成 _ 或 %。字面量匹配必然一条都搜不到;能搜到就说明它被当成了通配符。
 func TestApprovalSearch_WildcardsAreLiteral(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	all := app.listApprovals(token, "")
 	if all.Total == 0 || all.Items[0].Instance == "" {
@@ -85,7 +85,7 @@ func TestApprovalSearch_WildcardsAreLiteral(t *testing.T) {
 // 搜索不能成为越权的旁路:能搜到的,仍然只是本来就能看到的那些。
 func TestApprovalSearch_StaysInsideVisibility(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	all := app.listApprovals(token, "")
 	// 空搜索词等于不筛;任意搜索词的结果都不该超过可见集合。

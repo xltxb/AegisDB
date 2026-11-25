@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestBizQuery_SensitiveColumns(t *testing.T) {

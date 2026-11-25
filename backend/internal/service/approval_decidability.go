@@ -12,8 +12,8 @@ package service
 // 笼统的拒绝会让人去修错的东西。
 
 import (
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // DecideBlock 说明为什么这个人此刻不能决定这张工单。空字符串 = 可以决定。

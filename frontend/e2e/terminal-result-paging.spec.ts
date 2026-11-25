@@ -15,7 +15,7 @@ const textRows = (page: Page) => page.evaluate(() => {
 
 async function openTerm(page: Page, grid: boolean) {
   const fetched: string[] = []
-  if (grid) await page.addInitScript(() => localStorage.setItem('vela_termgrid', '1'))
+  if (grid) await page.addInitScript(() => localStorage.setItem('aegisdb_termgrid', '1'))
   await stubCommon(page, {
     tiers: [{ code: 'dev', displayName: 'DEV', sortOrder: 0, requireMfa: false, dangerBanner: false, countsInPending: false, scanBaseline: false, connLayer: 'L3', defaultRole: 'dba_l2' }],
     envs: [{ code: 'dev', displayName: 'DEV', tierCode: 'dev', sortOrder: 0 }],

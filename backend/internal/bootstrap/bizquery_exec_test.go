@@ -4,7 +4,7 @@ package bootstrap
 //
 // 用一个真实的 SQLite 实例跑端到端:业务方的查询权只来自授权,只能跑单条只读语句,结果有
 // 行数上限,授权撤销 / 实例取消标记立即生效,审计写明凭的是哪条授权。跨库与超时要真实的
-// MySQL(设置 VELA_TEST_MYSQL 时运行)。
+// MySQL(设置 AEGISDB_TEST_MYSQL 时运行)。
 
 import (
 	"database/sql"
@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type bizResp struct {
@@ -66,7 +66,7 @@ func newBizEnvIn(t *testing.T, maxRows int, env string) *bizEnv {
 	raw.Close()
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa}
@@ -232,9 +232,9 @@ func TestBizQuery_RevokeAndUnmarkTakeEffectImmediately(t *testing.T) {
 // ---------------------------------------------------------------- 真实 MySQL
 
 func TestBizQuery_MySQLCrossDatabaseAndTimeout(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL,跳过真实 MySQL 用例")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL,跳过真实 MySQL 用例")
 	}
 	parts := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(parts[0], ":", 2)
@@ -255,7 +255,7 @@ func TestBizQuery_MySQLCrossDatabaseAndTimeout(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa, db: "biz_orders"}

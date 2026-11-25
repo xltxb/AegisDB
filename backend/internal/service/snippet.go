@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // Terminal snippets: short scripts an operator saves and binds to a hotkey.

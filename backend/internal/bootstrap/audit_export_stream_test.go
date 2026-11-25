@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // M9(2026-10 安全审计):审计 CSV 导出把整表读进内存拼成一个字符串;单独的 \r 不加引号,表格软件
@@ -17,7 +17,7 @@ import (
 
 func TestAuditExport_StreamsAllRowsAndQuotesCarriageReturn(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	base := time.Now().Add(-time.Hour)
 	const n = 2500 // 跨过一批(1000)的边界
 	for i := range n {

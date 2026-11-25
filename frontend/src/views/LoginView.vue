@@ -23,8 +23,8 @@ const { t } = useI18n()
 // Prefill AND advertise the demo credentials only in a dev build — never ship
 // them in a production bundle (L5).
 const isDev = import.meta.env.DEV
-const email = ref(isDev ? 'linwei@vela.io' : '')
-const password = ref(isDev ? 'vela123' : '')
+const email = ref(isDev ? 'linwei@aegisdb.io' : '')
+const password = ref(isDev ? 'aegisdb123' : '')
 const loading = ref(false)
 // Two-step login: once the password is accepted for an MFA-enrolled user, the
 // backend answers CODE_MFA_REQUIRED and we reveal the TOTP field.

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 真实实例的库列表要现查。从前只要缓存里有这台实例就直接回缓存:新库要等同步,没有表的库永远不出现,

@@ -3,7 +3,7 @@ package model_test
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 规范中文串是**存进审批单和审计链**的那句话。把渲染改成由 code 生成之后,这些串

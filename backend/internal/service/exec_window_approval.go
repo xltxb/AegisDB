@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // windowApprovalCommand 是这张单在审批人眼前长什么样。

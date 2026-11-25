@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // strictBackfillGuard marks that the legacy global strict switch has already

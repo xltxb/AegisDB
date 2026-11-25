@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // OpenDecideActions 是 action 认的两个值。不用布尔:漏传的 approved 会被读成 false,

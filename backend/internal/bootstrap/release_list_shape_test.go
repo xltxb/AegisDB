@@ -18,14 +18,14 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 const listShapeSecret = "s3cretpw"
 
 func (a *testApp) seedListShapeFixture() (withStages, noStages, other model.Release) {
 	a.t.Helper()
-	adminID := a.searchUserID("linwei@vela.io")
+	adminID := a.searchUserID("linwei@aegisdb.io")
 	longSQL := "ALTER USER 'x' IDENTIFIED BY '" + listShapeSecret + "';\n" + strings.Repeat("update t set n = n + 1 where id = 1;\n", 30)
 	mk := func(no, title, sql, errText string) model.Release {
 		r := model.Release{RelNo: no, Title: title, SQL: sql, Error: errText, CreatorID: adminID,
@@ -109,7 +109,7 @@ func stageNames(m map[string]any) []string {
 
 func TestReleaseListIsDetailWithoutStageOutput(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	a, b, c := app.seedListShapeFixture()
 
 	raw := app.rawJSON("/api/v1/releases?scope=all&pageSize=100", admin)
@@ -157,7 +157,7 @@ func TestReleaseListIsDetailWithoutStageOutput(t *testing.T) {
 // 详情照旧带完整阶段输出,日志已脱敏。
 func TestReleaseDetailKeepsRedactedStageOutput(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	a, _, _ := app.seedListShapeFixture()
 
 	d := app.getRelease(admin, a.ID)
@@ -185,7 +185,7 @@ func TestReleaseDetailKeepsRedactedStageOutput(t *testing.T) {
 // 分页:第二页的单也带着自己的阶段(批量取阶段只取本页的单,不能错位)。
 func TestReleaseListPagedStagesStayWithTheirRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	a, b, c := app.seedListShapeFixture()
 	want := map[int64][]string{
 		a.ID: {"审查", "审查二", "执行", "通知"},

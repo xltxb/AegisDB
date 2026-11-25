@@ -11,11 +11,11 @@ import (
 
 // MovedMarkerTable 是搬迁成功后留在**源 MySQL** 里的标记表。
 //
-// 网关切到 PG 靠的是 vela.env 里的 VELA_DB_DRIVER=postgres。哪天这一行丢了(换机器、手改、
+// 网关切到 PG 靠的是 aegisdb.env 里的 AEGISDB_DB_DRIVER=postgres。哪天这一行丢了(换机器、手改、
 // 被模板覆盖),网关会悄悄连回 MySQL —— 那是一份停在搬迁时刻的旧数据,而它会照常接受写入,
 // 两边从此分叉。所以搬完在 MySQL 里留个记号,网关在 MySQL 上启动时见到它就拒绝(见
 // bootstrap.RefuseIfStoreMoved)。要真的回退到 MySQL,删掉这张表即可,这是一个有意的动作。
-const MovedMarkerTable = "vela_store_moved"
+const MovedMarkerTable = "aegisdb_store_moved"
 
 func markerExists(ctx context.Context, src *sql.DB) (bool, error) {
 	var n int

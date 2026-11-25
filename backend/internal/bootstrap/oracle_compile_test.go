@@ -56,7 +56,7 @@ func (a *testApp) mysqlConnID(token string) int64 {
 
 func TestCompileRefusesNonOracleEngine(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.compile(admin, app.mysqlConnID(admin), map[string]any{"type": "package", "name": "APP_PKG"})
 	if r.Code == 0 {
@@ -72,7 +72,7 @@ func TestCompileRefusesNonOracleEngine(t *testing.T) {
 // 把注入尝试挡掉,真到了配好凭据的实例上就没人拦了。
 func TestCompileRejectsInjectionInObjectName(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-inject")
 
 	r := app.compile(admin, oracle, map[string]any{
@@ -89,7 +89,7 @@ func TestCompileRejectsInjectionInObjectName(t *testing.T) {
 // 不可编译的对象类型(表)要报错,而不是悄悄什么都不做。
 func TestCompileRefusesUncompilableType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-type")
 
 	r := app.compile(admin, oracle, map[string]any{"type": "table", "name": "TBL_ORDER"})
@@ -105,7 +105,7 @@ func TestCompileRefusesUncompilableType(t *testing.T) {
 // DBA 会以为线上那个 INVALID 的包已经修好了。
 func TestCompileOnSimulatedConnectionSaysSoInsteadOfPretending(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-sim")
 
 	r := app.compile(admin, oracle, map[string]any{"type": "package", "name": "APP_PKG"})
@@ -120,9 +120,9 @@ func TestCompileOnSimulatedConnectionSaysSoInsteadOfPretending(t *testing.T) {
 // 编译是 DDL:菜单权限之外,还要受实例标签范围约束 —— 看不见的实例不能编译。
 func TestCompileRespectsInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	oracle := app.newOracleConn(admin, "ora-scope")
-	outsider := app.login("zhaolei@vela.io", "vela123") // 研发只读,标签范围之外
+	outsider := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读,标签范围之外
 
 	r := app.compile(outsider, oracle, map[string]any{"type": "package", "name": "APP_PKG"})
 	if r.Code == 0 {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 func (a *testApp) userTags(token string, userID int64) []string {
@@ -35,8 +35,8 @@ func (a *testApp) setUserTags(token string, userID int64, tags []string) apiResp
 // the role-derived scope, which is the existing behaviour untouched.
 func TestUserTags_NarrowAUserBelowTheirRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	me := app.userByEmail(admin, "linwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	me := app.userByEmail(admin, "linwei@aegisdb.io")
 
 	// The platform administrator's role carries no tags, so they see everything.
 	before := app.listConnNames(admin)
@@ -69,8 +69,8 @@ func TestUserTags_NarrowAUserBelowTheirRole(t *testing.T) {
 // filtered instance list that still executes would be decoration.
 func TestUserTags_GateExecutionNotJustTheListing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	me := app.userByEmail(admin, "linwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	me := app.userByEmail(admin, "linwei@aegisdb.io")
 	orders := app.connIDByName(admin, "order-cluster")
 
 	eq(t, app.setUserTags(admin, me.ID, []string{"analytics"}).Code, 0, "scope to analytics")
@@ -85,15 +85,15 @@ func TestUserTags_GateExecutionNotJustTheListing(t *testing.T) {
 // feature existed.
 func TestUserTags_AbsentGrantLeavesRoleScopeUntouched(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "zhaolei@vela.io") // role `ro`: analytics + readonly
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "zhaolei@aegisdb.io") // role `ro`: analytics + readonly
 
 	if got := app.userTags(admin, target.ID); len(got) != 0 {
 		t.Fatalf("precondition: no user-level tags expected, got %v", got)
 	}
 	// Their role grants analytics/readonly, so the analytics instance is visible
 	// and the orders one is not — unchanged by this feature.
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	names := app.listConnNames(ro)
 	saw := map[string]bool{}
 	for _, n := range names {
@@ -110,9 +110,9 @@ func TestUserTags_AbsentGrantLeavesRoleScopeUntouched(t *testing.T) {
 // Assigning tags is a privilege change, so it is admin-only and audited.
 func TestUserTags_AdminOnlyAndAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	ro := app.login("zhaolei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
 	if app.setUserTags(ro, target.ID, []string{"orders"}).Code == 0 {
 		t.Error("a non-admin was able to change another user's data-access scope")
@@ -124,7 +124,7 @@ func TestUserTags_AdminOnlyAndAudited(t *testing.T) {
 	}
 	_ = json.Unmarshal(app.auditItemsRaw(admin, ""), &rows)
 	for _, r := range rows {
-		if strings.Contains(r.Command, "admin.user.tags") && strings.Contains(r.Command, "chenhao@vela.io") {
+		if strings.Contains(r.Command, "admin.user.tags") && strings.Contains(r.Command, "chenhao@aegisdb.io") {
 			return
 		}
 	}

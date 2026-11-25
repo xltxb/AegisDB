@@ -13,7 +13,7 @@ import (
 // —— 窗口是大家共用的门,不限申请人。
 func TestExecWindow_DWSRelaxesForEveryone(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "dws-digiplus-prod-b", "engine": "GaussDB(DWS)", "host": "10.9.0.9:8000", "env": "prod", "policy": "strict", "database": "gaussdb",
 	})
@@ -30,7 +30,7 @@ func TestExecWindow_DWSRelaxesForEveryone(t *testing.T) {
 
 	app.openWindow(admin, conn.ID, "gaussdb", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 	eq(t, app.riskCheckIn(admin, conn.ID, sql, "gaussdb").RequiresApproval, false, "窗口内:申请人免审批")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	eq(t, app.riskCheckIn(l2, conn.ID, sql, "gaussdb").RequiresApproval, false, "窗口内:别的用户同样免审批")
 	// 不带库名(终端没选库)时以连接配置的默认库为准
 	eq(t, app.riskCheckIn(l2, conn.ID, sql, "").RequiresApproval, false, "没选库时按连接默认库 gaussdb")
@@ -42,7 +42,7 @@ func TestExecWindow_DWSRelaxesForEveryone(t *testing.T) {
 // 审批单上写清覆盖了哪几个库;回看按全部勾选的库捞语句。
 func TestExecWindow_MultipleDatabases(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "dws-digiplus-prod-b", "engine": "GaussDB(DWS)", "host": "10.9.0.9:8000", "env": "prod", "policy": "strict", "database": "gaussdb",
 	})
@@ -115,7 +115,7 @@ func TestExecWindow_MultipleDatabases(t *testing.T) {
 
 func TestExecWindow_DatabaseListValidation(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	mk := func(dbs []string) apiResp {
 		return app.do(http.MethodPost, "/api/v1/exec-windows", admin, map[string]any{

@@ -11,8 +11,8 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
 )
 
 // No row limit: a result larger than the part threshold is split into multiple
@@ -40,7 +40,7 @@ func TestExport_SplitsIntoParts(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "big-sqlite", "engine": "SQLite", "host": "localhost:0",
 		"env": "dev", "policy": "audit-only", "database": dbfile,

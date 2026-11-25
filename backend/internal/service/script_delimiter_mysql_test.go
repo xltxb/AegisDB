@@ -12,17 +12,17 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 2026-10 生产:Web 命令行 \i 执行带 DELIMITER $$ 的建分区脚本,第 11 条(第一个 CREATE FUNCTION)
 // 报 1064。脚本按 $$ 拆对了,但每条执行时又经过一次批量分句(execCommand),函数体被分号拆碎。
 // 这里在真实 MySQL 上走同一条路:整份脚本拆条,每条交给 execCommand,同一个会话。
 func TestScript_MySQLDelimiterScriptRunsThroughExecCommand(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL") // host:port/user/password
+	v := os.Getenv("AEGISDB_TEST_MYSQL") // host:port/user/password
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

@@ -19,7 +19,7 @@ import (
 	"sort"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type searchPage struct {
@@ -66,7 +66,7 @@ func (a *testApp) searchUserID(email string) int64 {
 // seedSearchFixture 用截图里的真实形状造数据,直接落库:这里测的是列表的筛选,不是流水线。
 func (a *testApp) seedSearchFixture() {
 	a.t.Helper()
-	adminID, roID := a.searchUserID("linwei@vela.io"), a.searchUserID("zhaolei@vela.io")
+	adminID, roID := a.searchUserID("linwei@aegisdb.io"), a.searchUserID("zhaolei@aegisdb.io")
 	for _, r := range []model.Release{
 		{RelNo: "REL-911", Title: "k8s-c66-mkt-mmp-api-office-upgrade-20261105-001-orderID=16436-exec_order=1-FAT-DDL",
 			ExternalRef: "autopub:16436:FAT:292820:1", CreatorID: adminID, Env: "fat", TierCode: "dev", ProjectID: 7},
@@ -90,7 +90,7 @@ func (a *testApp) seedSearchFixture() {
 
 func TestReleaseSearch_ByNumber(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 
 	for _, c := range []struct {
@@ -125,7 +125,7 @@ func TestReleaseSearch_ByNumber(t *testing.T) {
 // 正文可能带口令,不能拿来当搜索的依据(见文件头)。
 func TestReleaseSearch_DoesNotSearchSQLBody(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 	if got := relNosOf(app.searchReleases(admin, map[string]string{"scope": "all", "q": "s3cretpw"})); len(got) != 0 {
 		t.Errorf("按 SQL 正文搜到了 %v —— 这是在猜口令", got)
@@ -134,7 +134,7 @@ func TestReleaseSearch_DoesNotSearchSQLBody(t *testing.T) {
 
 func TestReleaseSearch_FilterComposes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 
 	for _, c := range []struct {
@@ -161,7 +161,7 @@ func TestReleaseSearch_FilterComposes(t *testing.T) {
 // total 必须是筛选后的总数,分页才对;翻页也在筛选结果里翻。
 func TestReleaseSearch_PagingCountsMatchesOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 
 	first := app.searchReleases(admin, map[string]string{"scope": "all", "q": "16428", "pageSize": "1", "page": "1"})
@@ -181,7 +181,7 @@ func TestReleaseSearch_RespectsVisibility(t *testing.T) {
 	app := newTestApp(t)
 	app.seedSearchFixture()
 	app.enableMenuForCode("ro", "pipeline")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 
 	if got := relNosOf(app.searchReleases(ro, map[string]string{"scope": "all", "q": "16436"})); !reflect.DeepEqual(got, []string{"REL-915"}) {
 		t.Errorf("ro 搜 16436 只该见到自己的 REL-915,实际 %v", got)
@@ -206,7 +206,7 @@ func TestReleaseSearch_RespectsVisibility(t *testing.T) {
 // 环境选项来自单子本身,不写死;选中某个环境后选项不收窄,否则选了就换不回别的。
 func TestReleaseSearch_EnvOptions(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 
 	all := []string{"fat", "prod", "uat"}
@@ -230,7 +230,7 @@ func TestReleaseSearch_EnvOptions(t *testing.T) {
 // 不带新参数时行为不变。
 func TestReleaseSearch_NoParamsListsEverything(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.seedSearchFixture()
 	if got := app.searchReleases(admin, map[string]string{"scope": "all"}); got.Total != 6 {
 		t.Errorf("不带筛选应列出全部 6 张,实际 %d", got.Total)

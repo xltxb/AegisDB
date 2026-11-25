@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 真的能连:一个真实存在的 SQLite 文件。

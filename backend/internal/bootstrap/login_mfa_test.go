@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/resp"
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/resp"
+	"aegisdb/pkg/totp"
 )
 
 // An MFA-enrolled account must present a valid TOTP code at login (two-step login);
 // a non-enrolled account still logs in with the password alone (opt-in MFA).
 func TestLogin_MFAEnrolledUserMustProvideCode(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
 	bind := app.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/mfa/bind", admin, nil)
 	eq(t, bind.Code, 0, "bind mfa")
@@ -28,7 +28,7 @@ func TestLogin_MFAEnrolledUserMustProvideCode(t *testing.T) {
 	}
 
 	loginBody := func(code string) map[string]string {
-		m := map[string]string{"email": "chenhao@vela.io", "password": "vela123"}
+		m := map[string]string{"email": "chenhao@aegisdb.io", "password": "aegisdb123"}
 		if code != "" {
 			m["mfaCode"] = code
 		}
@@ -49,7 +49,7 @@ func TestLogin_MFAEnrolledUserMustProvideCode(t *testing.T) {
 	eq(t, ok.Code, 0, "correct MFA code should log in")
 
 	// A non-enrolled account is unaffected (password only).
-	eq(t, app.loginCode("linwei@vela.io", "vela123"), 0, "non-enrolled login unaffected")
+	eq(t, app.loginCode("linwei@aegisdb.io", "aegisdb123"), 0, "non-enrolled login unaffected")
 }
 
 // 登录用过的验证码不能再登一次(M3 的登录这一侧)。
@@ -58,8 +58,8 @@ func TestLogin_MFAEnrolledUserMustProvideCode(t *testing.T) {
 // "口令 + 一次验证码",就能拿它另开会话。
 func TestLogin_MFACodeIsSingleUse(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 	bind := app.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/mfa/bind", admin, nil)
 	eq(t, bind.Code, 0, "bind mfa")
 	var b struct {
@@ -68,7 +68,7 @@ func TestLogin_MFACodeIsSingleUse(t *testing.T) {
 	_ = json.Unmarshal(bind.Data, &b)
 
 	code := totp.Code(b.Secret, time.Now())
-	body := map[string]string{"email": "chenhao@vela.io", "password": "vela123", "mfaCode": code}
+	body := map[string]string{"email": "chenhao@aegisdb.io", "password": "aegisdb123", "mfaCode": code}
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/login", "", body).Code, 0, "第一次登录")
 	if r := app.do(http.MethodPost, "/api/v1/auth/login", "", body); r.Code == 0 {
 		t.Fatal("同一个验证码第二次登录成功了 —— 截到的码可以重放")

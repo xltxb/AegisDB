@@ -22,7 +22,7 @@ async function open(page: Page, init?: () => void) {
   await page.getByTestId('q-sql').waitFor()
 }
 
-const stored = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('vela_query_tabs_9') || 'null'))
+const stored = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('aegisdb_query_tabs_9') || 'null'))
 
 test('连着执行同一条只记一条历史;常用查询存在自己的键里', async ({ page }) => {
   await open(page)
@@ -33,18 +33,18 @@ test('连着执行同一条只记一条历史;常用查询存在自己的键里'
   }
   await page.getByTestId('q-save').click()
   await expect.poll(async () => (await stored(page))?.history?.length).toBe(1)
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('vela_query_saved_9') || '[]').length)).toBe(1)
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aegisdb_query_saved_9') || '[]').length)).toBe(1)
 })
 
 test('老格式的常用查询照样读得出来', async ({ page }) => {
   await open(page, () => {
     if (sessionStorage.getItem('seeded')) return
     sessionStorage.setItem('seeded', '1')
-    localStorage.setItem('vela_query_tabs_9', JSON.stringify({ active: 1, tabs: [{ id: 1, title: 'q', grantId: 1, sql: 'SELECT draft' }],
+    localStorage.setItem('aegisdb_query_tabs_9', JSON.stringify({ active: 1, tabs: [{ id: 1, title: 'q', grantId: 1, sql: 'SELECT draft' }],
       history: [], saved: [{ sql: 'SELECT fav_old', grantId: 1, db: 'orders_db', at: 1 }] }))
   })
   await expect(page.getByTestId('q-sql')).toHaveValue('SELECT draft')
-  await expect.poll(() => page.evaluate(() => localStorage.getItem('vela_query_saved_9') || '')).toContain('fav_old')
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('aegisdb_query_saved_9') || '')).toContain('fav_old')
 })
 
 test('存储配额不够:先丢历史,草稿照样存下', async ({ page }) => {
@@ -52,7 +52,7 @@ test('存储配额不够:先丢历史,草稿照样存下', async ({ page }) => {
     // 模拟配额:单个值超过 3000 字符就写失败
     const orig = Storage.prototype.setItem
     Storage.prototype.setItem = function (k: string, v: string) {
-      if (k.startsWith('vela_query_tabs_') && v.length > 3000) throw new DOMException('quota', 'QuotaExceededError')
+      if (k.startsWith('aegisdb_query_tabs_') && v.length > 3000) throw new DOMException('quota', 'QuotaExceededError')
       return orig.call(this, k, v)
     }
   })
@@ -74,10 +74,10 @@ test('常用查询单条超长:拒收并提示,不截断、不入库;正常长�
   await ed.fill(long)
   await page.getByTestId('q-save').click()
   await expect(page.getByText('太长不能收藏到常用查询')).toBeVisible()
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vela_query_saved_9') || '[]').length)).toBe(0)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aegisdb_query_saved_9') || '[]').length)).toBe(0)
   // 回归:正常长度的照样收进去
   await ed.fill('SELECT 2')
   await page.getByTestId('q-save').click()
   await expect(page.getByText('已保存到常用查询')).toBeVisible()
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('vela_query_saved_9') || '[]').map((h: any) => h.sql))).toEqual(['SELECT 2'])
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aegisdb_query_saved_9') || '[]').map((h: any) => h.sql))).toEqual(['SELECT 2'])
 })

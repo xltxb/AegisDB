@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // revokeAdminOnlyMenus 收回非平台管理员角色上的管理类菜单(model.AdminOnlyMenus)。

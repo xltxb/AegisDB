@@ -3,8 +3,8 @@ package service
 import (
 	"time"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
 )
 
 // 终端标签页独占连接的回收时机(连接本身见 gateway/term_session.go)。

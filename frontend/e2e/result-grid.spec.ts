@@ -10,7 +10,7 @@ const conn = { id: 1, name: 'dws-dev', engine: 'GaussDB (DWS)', env: 'dev', tier
 const longSql = 'SELECT *\n  FROM t\n WHERE x = 1\n'.repeat(120)
 
 async function openTerm(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('vela_termgrid', '1')) // 表格视图打开
+  await page.addInitScript(() => localStorage.setItem('aegisdb_termgrid', '1')) // 表格视图打开
   await stubCommon(page, {
     tiers: [{ code: 'dev', displayName: 'DEV', sortOrder: 0, requireMfa: false, dangerBanner: false, countsInPending: false, scanBaseline: false, connLayer: 'L3', defaultRole: 'dba_l2' }],
     envs: [{ code: 'dev', displayName: 'DEV', tierCode: 'dev', sortOrder: 0 }],

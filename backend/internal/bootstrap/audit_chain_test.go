@@ -45,7 +45,7 @@ func assertLinked(t *testing.T, rows []chainRow) {
 // without breaking earlier links.
 func TestAuditChain_AppendOnlyLinkageHolds(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	seeded := app.auditChain(token)
 	if len(seeded) < 2 {

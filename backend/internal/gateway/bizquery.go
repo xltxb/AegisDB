@@ -29,9 +29,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 带锁 / 写出 / 建表的写法:SELECT … FOR UPDATE、LOCK IN SHARE MODE、SELECT … INTO(OUTFILE、
@@ -351,7 +351,7 @@ func oracleExplainPlan(ctx context.Context, sc *sql.Conn, conn *model.Connection
 			return nil, nil, apimsg.Errorf("切换 schema 到 %s 失败: %w", schema, err)
 		}
 	}
-	id := fmt.Sprintf("VELA%d", time.Now().UnixNano())
+	id := fmt.Sprintf("AEGISDB%d", time.Now().UnixNano())
 	if _, err := tx.ExecContext(ctx, "EXPLAIN PLAN SET STATEMENT_ID = '"+id+"' FOR "+inner); err != nil {
 		_ = tx.Rollback()
 		return nil, nil, err

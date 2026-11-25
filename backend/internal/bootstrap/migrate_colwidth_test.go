@@ -6,7 +6,7 @@ package bootstrap
 // tbl_connection.env 被 0034 对齐排序规则时改回了 VARCHAR(16)(0013 才把它加宽到 32)。
 //
 // 这条测试把两份对齐:在真 MySQL 上跑完全部迁移,模型里声明了长度的每个字符串字段,库里的
-// 列都必须存在、且不比模型窄。设 VELA_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑。
+// 列都必须存在、且不比模型窄。设 AEGISDB_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑。
 
 import (
 	"database/sql"
@@ -19,9 +19,9 @@ import (
 )
 
 func TestMigrations_ColumnWidthsCoverModels_RealMySQL(t *testing.T) {
-	base := os.Getenv("VELA_TEST_STORE_MYSQL")
+	base := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
 	if base == "" {
-		t.Skip("未设置 VELA_TEST_STORE_MYSQL,跳过真实 MySQL 存储库用例")
+		t.Skip("未设置 AEGISDB_TEST_STORE_MYSQL,跳过真实 MySQL 存储库用例")
 	}
 	name := fmt.Sprintf("vt_colwidth_%d", os.Getpid())
 	admin, err := sql.Open("mysql", base)

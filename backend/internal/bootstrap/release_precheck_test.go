@@ -90,7 +90,7 @@ func issuesOfKind(res precheckResult, kind string) []precheckIssue {
 // 一、语法错由目标库判,并且带回它的原话。
 func TestPrecheck_SyntaxErrorCarriesTheDatabaseOwnWords(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-syntax")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -118,7 +118,7 @@ func TestPrecheck_SyntaxErrorCarriesTheDatabaseOwnWords(t *testing.T) {
 // 语法没问题时不许无中生有。上一条证明它会报,这一条证明它不乱报。
 func TestPrecheck_ValidStatementRaisesNoSyntaxIssue(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-clean")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -140,7 +140,7 @@ func TestPrecheck_ValidStatementRaisesNoSyntaxIssue(t *testing.T) {
 // 二、对象不存在要报出来,并且说清是怎么知道的。
 func TestPrecheck_MissingObjectIsReportedWithItsSource(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-object")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -176,7 +176,7 @@ func TestPrecheck_MissingObjectIsReportedWithItsSource(t *testing.T) {
 // 两者要验的是同一件事 —— 第二条语句引用的对象由第一条创建。
 func TestPrecheck_ObjectCreatedEarlierInTheSameBatchIsNotMissing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-batch")
 
 	res := submitForPrecheck(t, app, admin, conn,
@@ -190,7 +190,7 @@ func TestPrecheck_ObjectCreatedEarlierInTheSameBatchIsNotMissing(t *testing.T) {
 // DROP 掉之后再用,才是真的错 —— 上一条不能是靠"对象检查整个没跑"过的。
 func TestPrecheck_ObjectDroppedEarlierInTheSameBatchIsFlagged(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-dropped")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_gone (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -212,7 +212,7 @@ func TestPrecheck_ObjectDroppedEarlierInTheSameBatchIsFlagged(t *testing.T) {
 // 四、没做的检查必须显示成没做。
 func TestPrecheck_UncheckedStatementsSaySoRatherThanLookingClean(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-ddl")
 
 	res := submitForPrecheck(t, app, admin, conn, `CREATE TABLE t_ddl (id INTEGER)`)
@@ -236,7 +236,7 @@ func TestPrecheck_UncheckedStatementsSaySoRatherThanLookingClean(t *testing.T) {
 // 空结果读起来就是"检查过、没问题"。
 func TestPrecheck_SimulatedConnectionSaysNothingWasChecked(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging") // 种子实例,没有连接凭据
 
 	res := submitForPrecheck(t, app, admin, stg, `UPDATE tbl_order SET memo = 'x' WHERE id = 1`)
@@ -256,7 +256,7 @@ func TestPrecheck_SimulatedConnectionSaysNothingWasChecked(t *testing.T) {
 // 一条引用了不存在的表的变更,单子照建,结果随响应带回。
 func TestPrecheck_DoesNotBlockTheRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "precheck-nonblock")
 	pid := app.createPipeline(admin, "不拦单流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
@@ -278,13 +278,13 @@ func TestPrecheck_DoesNotBlockTheRelease(t *testing.T) {
 // 单独钉一条:这正是"返回检查结果"这个需求的主场景。
 func TestPrecheck_OpenAPISubmissionCarriesTheResult(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.realSQLiteConnIn(admin, "dev", "precheck-open")
 	// 流程绑在凭据上 —— 外部请求不指定流程(见 ADR 0006)。
 	pid := app.createPipeline(admin, "开放接口收单流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "CI 平台", "zhangwei@vela.io", nil, pid)
+	token := app.issueClientPiped(admin, "CI 平台", "zhangwei@aegisdb.io", nil, pid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "CI 提单", "instance": "precheck-open",

@@ -23,7 +23,7 @@ func TestLark_ApprovalCardPushedToWebhook(t *testing.T) {
 	defer lark.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// configure the Lark channel
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{

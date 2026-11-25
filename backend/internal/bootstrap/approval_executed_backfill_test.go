@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // oldBehaviourTicket 造一张"旧行为下已经跑过"的工单:结果里是真实的执行输出,
@@ -53,7 +53,7 @@ func TestBackfill_AHistoricalTicketIsMarkedExecuted(t *testing.T) {
 	}
 
 	// 标记之后,发起人再点执行必须被拒。
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil); r.Code == 0 {
 		t.Error("历史工单不该还能执行 —— 那条命令七月份就已经跑过了")
 	}

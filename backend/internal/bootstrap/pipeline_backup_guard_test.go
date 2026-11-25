@@ -16,7 +16,7 @@ import (
 
 func TestBackupStageRefusesDestructiveVerbs(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "危险备份", "", []map[string]any{
@@ -51,7 +51,7 @@ func TestBackupStageRefusesDestructiveVerbs(t *testing.T) {
 // one executed before the refusal.
 func TestBackupStageJudgesEveryStatementBeforeRunningAny(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "夹带备份", "", []map[string]any{
@@ -82,7 +82,7 @@ func TestBackupStageJudgesEveryStatementBeforeRunningAny(t *testing.T) {
 
 func TestBackupStageAllowsCopyingSQL(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "正经备份", "", []map[string]any{

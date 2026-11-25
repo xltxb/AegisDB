@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 发布单列表的阶段批量读取:一条查询、不读日志等大列、按单分组且单内有序。

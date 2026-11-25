@@ -12,7 +12,7 @@ import (
 // admins so high-risk commands aren't created with an empty, un-approvable chain.
 func TestApprovalChain_FallsBackToAdminWhenOwnerEmpty(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// Resolve the owner role id.
 	rr := app.do(http.MethodGet, "/api/v1/roles", token, nil)

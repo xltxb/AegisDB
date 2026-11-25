@@ -6,7 +6,7 @@
 *.out
 # dev 环境的网关存储库是 SQLite(configs/config.yaml 的 sqlite_path)；
 # 从 backend/ 起服务时，相对路径的 SQLite 目标库也会建在这里。
-vela-gateway.db
+aegisdb.db
 /backend/*.db
 *.db-journal
 *.db-wal
@@ -19,8 +19,8 @@ vela-gateway.db
 
 # ---- Packaged build output (build.sh) ----
 /dist/
-/vela-gateway-*.tar.gz
-/vela-web-*.zip
+/aegisdb-*.tar.gz
+/aegisdb-web-*.zip
 
 # ---- Frontend (Node) ----
 /frontend/node_modules/
@@ -36,8 +36,8 @@ vela-gateway.db
 .env
 .env.*
 !.env.example
-# deploy/vela.env.example 的实际副本
-vela.env
+# deploy/aegisdb.env.example 的实际副本
+aegisdb.env
 /backend/configs/config.local.yaml
 
 # ---- Editor / OS ----

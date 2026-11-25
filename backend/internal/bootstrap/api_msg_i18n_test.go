@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 func msgRefOf(t *testing.T, r apiResp) *model.RuleRef {
@@ -29,7 +29,7 @@ func msgRefOf(t *testing.T, r apiResp) *model.RuleRef {
 // 用户报上来的那一句:英文界面提交发布单,类型不符的提示是整句中文。
 func TestAPIMsgReleaseChangeTypeCarriesRef(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "多语言报错流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve"},
@@ -59,7 +59,7 @@ func TestAPIMsgFixedSentencesCarryRef(t *testing.T) {
 		t.Errorf("中间件的拒绝应带 msgRef:msg=%q ref=%s", r.Msg, r.MsgRef)
 	}
 
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r = app.do(http.MethodPost, "/api/v1/releases", admin, "not an object")
 	eq(t, r.Msg, "参数错误", "中文 msg 一字不变")
 	if ref := msgRefOf(t, r); ref == nil || ref.Code != apimsg.Code("参数错误") {
@@ -70,7 +70,7 @@ func TestAPIMsgFixedSentencesCarryRef(t *testing.T) {
 // 成功响应不带 msgRef(msg 是 "ok")。
 func TestAPIMsgOKHasNoRef(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodGet, "/api/v1/releases", admin, nil)
 	eq(t, r.Code, 0, "code")
 	if msgRefOf(t, r) != nil {

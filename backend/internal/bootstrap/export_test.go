@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/crypto"
+	"aegisdb/pkg/crypto"
 )
 
 func urlEscape(s string) string { return url.QueryEscape(s) }
@@ -97,7 +97,7 @@ func (a *testApp) submitExport(token string, conn int64, sql, name string) int64
 // downloads and decrypts back to the original CSV.
 func TestExport_AsyncEncryptAndDownload(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	dir := t.TempDir()
@@ -132,7 +132,7 @@ func TestExport_AsyncEncryptAndDownload(t *testing.T) {
 // Multiple export tasks submitted back-to-back all run (in parallel) and finish.
 func TestExport_ParallelJobsAllComplete(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 

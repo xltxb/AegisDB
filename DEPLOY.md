@@ -1,4 +1,4 @@
-# 部署 Vela 数据库网关(生产 · MySQL)
+# 部署 AegisDB 数据库网关(生产 · MySQL)
 
 ## 1. 打包(前后端一体)
 
@@ -8,46 +8,46 @@ GOOS=linux GOARCH=amd64 ./build.sh            # 交叉编译到 Linux 服务器(
 VERSION=1.0.0 GOOS=linux GOARCH=amd64 ./build.sh   # 显式版本号(否则取 git describe)
 ```
 
-产物在 `dist/`,并额外生成 `vela-gateway-<版本>-<os>-<arch>.tar.gz` 归档:
+产物在 `dist/`,并额外生成 `aegisdb-<版本>-<os>-<arch>.tar.gz` 归档:
 
 ```
 dist/
-  vela-gateway[.exe]    单一后端二进制(内置 API + 前端 UI + 内嵌 SQL 迁移)
+  aegisdb[.exe]    单一后端二进制(内置 API + 前端 UI + 内嵌 SQL 迁移)
   web/                  构建后的前端(后端按 web_dir 提供)
   configs/config.yaml   生产配置(env=prod → MySQL,auto_migrate=false,seed=false)
   migrations/           参考 SQL 迁移(同样已内嵌进二进制)
   deploy/               systemd unit + 环境变量模板
-  vela.env.example      环境变量模板(复制为 vela.env 并填写)
+  aegisdb.env.example      环境变量模板(复制为 aegisdb.env 并填写)
   README-DEPLOY.md      部署速查
 ```
 
-子命令:`vela-gateway version` | `migrate`(仅建/升级表) | `init`(迁移+引用数据+管理员) | `verify-audit`(重算审计哈希链,链断了退出码 2) | 直接运行(服务)。
+子命令:`aegisdb version` | `migrate`(仅建/升级表) | `init`(迁移+引用数据+管理员) | `verify-audit`(重算审计哈希链,链断了退出码 2) | 直接运行(服务)。
 
 ## 2. 准备主机(Linux systemd 部署)
 
 ```bash
-sudo useradd --system --home /opt/vela-gateway --shell /usr/sbin/nologin vela
-sudo mkdir -p /opt/vela-gateway
-sudo tar -xzf vela-gateway-*-linux-amd64.tar.gz -C /opt/vela-gateway
-sudo cp /opt/vela-gateway/vela.env.example /opt/vela-gateway/vela.env   # 填入 VELA_JWT_SECRET / VELA_MYSQL_DSN
-sudo chown -R vela:vela /opt/vela-gateway && sudo chmod 600 /opt/vela-gateway/vela.env
+sudo useradd --system --home /opt/aegisdb --shell /usr/sbin/nologin aegisdb
+sudo mkdir -p /opt/aegisdb
+sudo tar -xzf aegisdb-*-linux-amd64.tar.gz -C /opt/aegisdb
+sudo cp /opt/aegisdb/aegisdb.env.example /opt/aegisdb/aegisdb.env   # 填入 AEGISDB_JWT_SECRET / AEGISDB_MYSQL_DSN
+sudo chown -R aegisdb:aegisdb /opt/aegisdb && sudo chmod 600 /opt/aegisdb/aegisdb.env
 ```
 
-托管见 `deploy/vela-gateway.service`(其头部注释含完整安装步骤)。下面第 3–6 步在 `/opt/vela-gateway` 下执行。
+托管见 `deploy/aegisdb.service`(其头部注释含完整安装步骤)。下面第 3–6 步在 `/opt/aegisdb` 下执行。
 
 ## 3. 准备 MySQL
 
 创建库(字符集 utf8mb4)与账号,例如:
 
 ```sql
-CREATE DATABASE vela_gateway CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'vela'@'%' IDENTIFIED BY '你的密码';
-GRANT ALL ON vela_gateway.* TO 'vela'@'%';
+CREATE DATABASE aegisdb CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'aegisdb'@'%' IDENTIFIED BY '你的密码';
+GRANT ALL ON aegisdb.* TO 'aegisdb'@'%';
 ```
 
-DSN 形如:`vela:密码@tcp(mysql主机:3306)/vela_gateway?charset=utf8mb4&parseTime=true&loc=Local`
+DSN 形如:`aegisdb:密码@tcp(mysql主机:3306)/aegisdb?charset=utf8mb4&parseTime=true&loc=Local`
 
-建议把密钥放进 `vela.env`(由 `vela.env.example` 复制,`chmod 600`),后续命令统一 `set -a; . ./vela.env; set +a` 加载。
+建议把密钥放进 `aegisdb.env`(由 `aegisdb.env.example` 复制,`chmod 600`),后续命令统一 `set -a; . ./aegisdb.env; set +a` 加载。
 
 ## 4. 迁移表结构(幂等)
 
@@ -55,8 +55,8 @@ DSN 形如:`vela:密码@tcp(mysql主机:3306)/vela_gateway?charset=utf8mb4&parse
 
 ```bash
 cd dist
-set -a; . ./vela.env; set +a          # 载入 VELA_MYSQL_DSN 等
-./vela-gateway migrate
+set -a; . ./aegisdb.env; set +a          # 载入 AEGISDB_MYSQL_DSN 等
+./aegisdb migrate
 ```
 
 ## 5. 初始化引用数据 + 管理员(仅首次)
@@ -64,26 +64,26 @@ set -a; . ./vela.env; set +a          # 载入 VELA_MYSQL_DSN 等
 写入引用数据(角色/菜单/能力矩阵/风险字典/默认设置,**无演示数据**)并创建平台管理员(`init` 会先自动跑迁移):
 
 ```bash
-./vela-gateway init \
+./aegisdb init \
   --admin-email you@corp.io \
   --admin-password 'A-Strong-Passw0rd!' \
   --admin-name '平台管理员'
 ```
 
-管理员凭据也可用环境变量 `VELA_ADMIN_EMAIL` / `VELA_ADMIN_PASSWORD` / `VELA_ADMIN_NAME`。
+管理员凭据也可用环境变量 `AEGISDB_ADMIN_EMAIL` / `AEGISDB_ADMIN_PASSWORD` / `AEGISDB_ADMIN_NAME`。
 口令要求 **≥12 位且含大小写字母/数字/符号中的 ≥3 类**。`init` 可重复执行:引用数据只在空库写入;重复执行会重置该管理员密码,不会重复建号。
 
 ## 6. 运行
 
 ```bash
 cd dist
-set -a; . ./vela.env; set +a          # 至少包含 VELA_JWT_SECRET(≥32 位)与 VELA_MYSQL_DSN
-./vela-gateway -config configs/config.yaml     # 同时提供 API 与前端 UI,监听 :8080
+set -a; . ./aegisdb.env; set +a          # 至少包含 AEGISDB_JWT_SECRET(≥32 位)与 AEGISDB_MYSQL_DSN
+./aegisdb -config configs/config.yaml     # 同时提供 API 与前端 UI,监听 :8080
 ```
 
-> 生产环境若 `VELA_JWT_SECRET` 缺失/为占位值/短于 32 位,服务会**拒绝启动**。
-> TLS:前置反向代理终止,或设 `VELA_TLS_CERT`/`VELA_TLS_KEY` 让网关直接跑 HTTPS。
-> 托管:用 `deploy/vela-gateway.service`(systemd)。
+> 生产环境若 `AEGISDB_JWT_SECRET` 缺失/为占位值/短于 32 位,服务会**拒绝启动**。
+> TLS:前置反向代理终止,或设 `AEGISDB_TLS_CERT`/`AEGISDB_TLS_KEY` 让网关直接跑 HTTPS。
+> 托管:用 `deploy/aegisdb.service`(systemd)。
 
 浏览器打开 `https://部署主机`(或反代域名),用上一步创建的管理员登录。
 
@@ -171,7 +171,7 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
      disabled: true
    ```
 
-   或设环境变量 `VELA_SSO_DISABLED=1`,重启服务。无论设置页存的是什么,SSO 一律按关闭处理,
+   或设环境变量 `AEGISDB_SSO_DISABLED=1`,重启服务。无论设置页存的是什么,SSO 一律按关闭处理,
    启动日志打一条 WARN,设置页的 SSO 开关旁提示"已被部署配置强制关闭"。去掉配置、重启即恢复。
 
 关闭后:
@@ -195,16 +195,16 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
 
 | 变量 | 说明 |
 | --- | --- |
-| `VELA_MYSQL_DSN` | 生产 MySQL DSN(覆盖配置文件) |
-| `VELA_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位**;未设 `VELA_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
-| `VELA_SECRET_KEY` | 至静加密密钥,保护**连接口令与 TOTP 种子**(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量解密;**一经设定不可更改**(轮换会导致存量口令与 MFA 种子全部无法解密)。长度不足 32 位或字符种类过少时启动会打 WARN —— 只告警不拒绝启动,因为对一套已在跑的部署,拒启动等于锁死;用 `openssl rand -hex 32` 生成 |
-| `VELA_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`) |
-| `VELA_TLS_CERT` / `VELA_TLS_KEY` | 直接由网关终止 TLS 的证书/私钥(可选) |
-| `VELA_WEBHOOK_SECRET` | 出站审计 Webhook / 飞书签名密钥(可选) |
-| `VELA_SSO_DISABLED` | `1`/`true` 时强制关闭 SSO,所有人回到账号口令登录(覆盖设置页开关,需重启;见第 7 节) |
-| `VELA_ADMIN_IP_ALLOWLIST_DISABLED` | `1`/`true` 时管理后台 IP 白名单一律不生效(覆盖设置页,需重启)。白名单配错、管理员都进不了管理后台时用;本机回环本来就始终放行 |
-| `APP_ENV` / `VELA_ENV` | `prod`→MySQL,`dev`→SQLite |
-| `VELA_DB_DRIVER` | 强制 `mysql` \| `sqlite`(覆盖上面的 env 推断) |
-| `VELA_ADMIN_EMAIL` / `VELA_ADMIN_PASSWORD` / `VELA_ADMIN_NAME` | `init` 时的管理员凭据 |
+| `AEGISDB_MYSQL_DSN` | 生产 MySQL DSN(覆盖配置文件) |
+| `AEGISDB_JWT_SECRET` | JWT 签名密钥,**必填 ≥32 位**;未设 `AEGISDB_SECRET_KEY` 时同时派生连接口令静态加密密钥 |
+| `AEGISDB_SECRET_KEY` | 至静加密密钥,保护**连接口令与 TOTP 种子**(**强烈建议 ≥32 位**)。设置后与 JWT 密钥解耦,可安全轮换 JWT 密钥而不影响存量解密;**一经设定不可更改**(轮换会导致存量口令与 MFA 种子全部无法解密)。长度不足 32 位或字符种类过少时启动会打 WARN —— 只告警不拒绝启动,因为对一套已在跑的部署,拒启动等于锁死;用 `openssl rand -hex 32` 生成 |
+| `AEGISDB_WEB_DIR` | 前端静态目录(默认取配置 `server.web_dir: web`) |
+| `AEGISDB_TLS_CERT` / `AEGISDB_TLS_KEY` | 直接由网关终止 TLS 的证书/私钥(可选) |
+| `AEGISDB_WEBHOOK_SECRET` | 出站审计 Webhook / 飞书签名密钥(可选) |
+| `AEGISDB_SSO_DISABLED` | `1`/`true` 时强制关闭 SSO,所有人回到账号口令登录(覆盖设置页开关,需重启;见第 7 节) |
+| `AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED` | `1`/`true` 时管理后台 IP 白名单一律不生效(覆盖设置页,需重启)。白名单配错、管理员都进不了管理后台时用;本机回环本来就始终放行 |
+| `APP_ENV` / `AEGISDB_ENV` | `prod`→MySQL,`dev`→SQLite |
+| `AEGISDB_DB_DRIVER` | 强制 `mysql` \| `sqlite`(覆盖上面的 env 推断) |
+| `AEGISDB_ADMIN_EMAIL` / `AEGISDB_ADMIN_PASSWORD` / `AEGISDB_ADMIN_NAME` | `init` 时的管理员凭据 |
 
 > 本地开发仍用零依赖 SQLite:`cd backend && APP_ENV=dev go run ./cmd/server`,前端 `cd frontend && npm run dev`。

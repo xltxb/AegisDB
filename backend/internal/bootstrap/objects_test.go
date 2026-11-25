@@ -43,7 +43,7 @@ func TestObjects_RealSqliteTriggerListedAndSourced(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "obj-sqlite", "engine": "SQLite", "host": "localhost:0",
 		"env": "dev", "policy": "audit-only", "database": dbfile,
@@ -98,7 +98,7 @@ func TestObjects_RealSqliteTriggerListedAndSourced(t *testing.T) {
 // its source view says so — consistent with the terminal's synthetic results.
 func TestObjects_SimulatedConnectionServesDemoSet(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	r := app.do(http.MethodGet, fmt.Sprintf("/api/v1/connections/%d/objects", dev), token, nil)
@@ -152,7 +152,7 @@ func TestObjects_SQLiteIgnoresDatabaseParam(t *testing.T) {
 	fileB := mk(filepath.Join(dir, "b.db"), "tbl_in_b")
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "dbparam-sqlite", "engine": "SQLite", "host": "localhost:0",
 		"env": "dev", "policy": "audit-only", "database": fileA,

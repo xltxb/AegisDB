@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // backfillProjectMenu grants the new "project" menu to whoever already holds

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type oscExecOut struct {
@@ -39,7 +39,7 @@ func (a *testApp) termExec(token string, connID int64, sql string) oscExecOut {
 
 func (a *testApp) oscTermSetup() (admin string, prod int64, schema string) {
 	a.t.Helper()
-	admin = a.login("linwei@vela.io", "vela123")
+	admin = a.login("linwei@aegisdb.io", "aegisdb123")
 	prod, _, schema = a.oscTestConns(admin)
 	raw := oscRaw(a.t, schema)
 	var vals []string
@@ -140,7 +140,7 @@ func TestOSCTerminal_ApproveExecuteCompletes(t *testing.T) {
 	admin, prod, schema := app.oscTermSetup()
 	out := app.termExec(admin, prod, "ALTER TABLE big ADD INDEX idx_a (a)")
 	ap := app.approvalByNoFull(admin, out.ApprovalNo)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil)
 	if r.Code != 0 || !strings.Contains(string(r.Data), "在线变更已开始") {
@@ -165,7 +165,7 @@ func TestOSCTerminal_RejectAbortsTheJob(t *testing.T) {
 	admin, prod, _ := app.oscTermSetup()
 	out := app.termExec(admin, prod, "ALTER TABLE big ADD INDEX idx_a (a)")
 	ap := app.approvalByNoFull(admin, out.ApprovalNo)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", approver, map[string]any{"reason": "不行"}).Code, 0, "驳回")
 	if j, _ := app.repo.GetOSCJob(ap.OSCJobID); j.Status != model.OSCAborted {
 		t.Errorf("驳回后任务应作废: %+v", j)
@@ -178,7 +178,7 @@ func TestOSCTerminal_ControlNeedsDDLRights(t *testing.T) {
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.chunkSize": 1}).Code, 0, "一行一块")
 	out := app.termExec(admin, prod, "ALTER TABLE big ADD INDEX idx_a (a)")
 	ap := app.approvalByNoFull(admin, out.ApprovalNo)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "执行")
 	app.waitOSC(ap.OSCJobID, func(j *model.OSCJob) bool { return j.Phase == "copying" })
@@ -197,14 +197,14 @@ func TestOSCTerminal_ControlNeedsDDLRights(t *testing.T) {
 	// 只读角色:没有 DDL 权限,不能中止
 	roID := app.roleIDByCode(admin, "ro")
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "ro-osc@vela.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
-	ro := app.login("ro-osc@vela.io", "initpass9")
+		"email": "ro-osc@aegisdb.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
+	ro := app.login("ro-osc@aegisdb.io", "initpass9")
 	if r := app.do(http.MethodPost, jobURL+"/abort", ro, nil); r.Code == 0 {
 		t.Error("没有 DDL 权限的人不能中止在线变更")
 	}
 	// L2:生产 DDL 要审批(自己不能直接执行)、也没有审批资格,不是发起人 —— 同样不能控制
 	// 别人的迁移(2026-10 安全审计 L-OSC2,从前"不被拒绝"就算有权)
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, jobURL+"/abort", l2, nil); r.Code == 0 {
 		t.Error("DDL 需审批、无审批资格的人不能中止别人的在线变更")
 	}

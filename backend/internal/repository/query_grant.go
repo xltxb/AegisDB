@@ -7,7 +7,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // GetQueryGrantByKey 按 (人, 实例, 库) 取那一条授权;没有返回 gorm.ErrRecordNotFound。

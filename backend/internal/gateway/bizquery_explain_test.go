@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 数据查询里的 EXPLAIN。MySQL / PG 系的 EXPLAIN 在只读事务里本来就能跑;Oracle 的 EXPLAIN PLAN
@@ -65,7 +65,7 @@ func TestOracleBizQuery_ExplainPlan(t *testing.T) {
 		t.Fatalf("应是 DBMS_XPLAN 的输出,实际 %v\n%s", res.Columns, all)
 	}
 	// 回滚之后 PLAN_TABLE 里不留网关写的计划
-	after, err := RealBizQuery(context.Background(), conn, "SELECT COUNT(*) FROM plan_table WHERE statement_id LIKE 'VELA%'", 1, 10*time.Second)
+	after, err := RealBizQuery(context.Background(), conn, "SELECT COUNT(*) FROM plan_table WHERE statement_id LIKE 'AEGISDB%'", 1, 10*time.Second)
 	if err != nil || len(after.Data) != 1 || after.Data[0][0] != "0" {
 		t.Errorf("PLAN_TABLE 里不该留下计划,实际 %v %v", after.Data, err)
 	}

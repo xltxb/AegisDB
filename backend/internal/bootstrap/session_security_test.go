@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/totp"
 )
 
 // TestLogoutRevokesToken verifies that logging out invalidates the token
 // server-side (token-version bump), so a captured token can't be reused (M1).
 func TestLogoutRevokesToken(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// token works before logout
 	eq(t, app.do(http.MethodGet, "/api/v1/connections", token, nil).Code, 0, "pre-logout request ok")
@@ -37,7 +37,7 @@ func TestLogoutRevokesToken(t *testing.T) {
 // already spent is refused.
 func TestMFA_CodeCannotBeReplayed(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	first := app.connIDByName(token, "order-cluster")
 	second := app.connIDByName(token, "user-cluster")
 	secret := app.setupMFA(token)
@@ -63,8 +63,8 @@ func TestMFA_CodeCannotBeReplayed(t *testing.T) {
 // disable — mirroring real usage where enroll and next action span time steps.
 func (a *testApp) setupMFA(token string) string {
 	a.t.Helper()
-	// 测试账号的口令都是 vela123;绑定 MFA 要出示当前登录密码(L-AUTH4)
-	r := a.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "vela123"})
+	// 测试账号的口令都是 aegisdb123;绑定 MFA 要出示当前登录密码(L-AUTH4)
+	r := a.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "aegisdb123"})
 	if r.Code != 0 {
 		a.t.Fatalf("mfa setup: code=%d msg=%s", r.Code, r.Msg)
 	}
@@ -89,7 +89,7 @@ func (a *testApp) setupMFA(token string) string {
 // valid TOTP step-up code is supplied. requireMFA is on in the seeded settings.
 func TestMFA_ProdStepUpRequiredThenPasses(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	// before enrollment, MFA does not gate (keeps existing flows working):
@@ -130,7 +130,7 @@ func TestMFA_ProdStepUpRequiredThenPasses(t *testing.T) {
 // Disabling MFA (with a valid code) lifts the PROD step-up requirement.
 func TestMFA_DisableLiftsRequirement(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 
 	dis := app.do(http.MethodPost, "/api/v1/auth/mfa/disable", token, map[string]string{
@@ -148,12 +148,12 @@ func TestMFA_DisableLiftsRequirement(t *testing.T) {
 // FR Session&Security · Session TTL: the issued token honors security.sessionTTL.
 func TestSessionTTL_FromSetting(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	set := app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"security.sessionTTL": "4h"})
 	eq(t, set.Code, 0, "save sessionTTL")
 
-	exp := app.loginExpiry("linwei@vela.io", "vela123")
+	exp := app.loginExpiry("linwei@aegisdb.io", "aegisdb123")
 	d := time.Until(exp)
 	if d < 3*time.Hour || d > 5*time.Hour {
 		t.Errorf("sessionTTL=4h: token expiry %v from now, want ~4h", d)
@@ -182,7 +182,7 @@ func (a *testApp) loginExpiry(email, pass string) time.Time {
 // is blocked; loopback and listed IPs pass.
 func TestIPAllowlist_BlocksForeignIP(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// enable with a list that excludes 8.8.8.8.
 	set := app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{
@@ -229,19 +229,19 @@ func (a *testApp) getWithIP(path, token, ip string) apiResp {
 // must not disarm a factor that is currently protecting the account.
 func TestMFA_SetupCannotDisarmAnEnabledFactorWithoutProof(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token) // MFA is now enabled
 
-	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "vela123"})
+	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", token, map[string]any{"password": "aegisdb123"})
 	if r.Code == 0 {
 		t.Error("re-enrolment succeeded without proving possession of the current factor")
 	}
 
 	// The factor is still armed: password-only login must not be enough.
-	if tok := app.loginRaw("linwei@vela.io", "vela123"); tok.Code == 0 {
+	if tok := app.loginRaw("linwei@aegisdb.io", "aegisdb123"); tok.Code == 0 {
 		t.Error("password-only login succeeded — MFA was disarmed by the setup call")
 	}
 	// And a valid current code still logs in, i.e. the original secret is intact.
-	ok := app.loginRaw("linwei@vela.io", "vela123", totp.Code(secret, time.Now()))
+	ok := app.loginRaw("linwei@aegisdb.io", "aegisdb123", totp.Code(secret, time.Now()))
 	eq(t, ok.Code, 0, "login with the original factor still works")
 }

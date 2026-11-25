@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/crypto"
+	"aegisdb/pkg/crypto"
 )
 
 // Chinese in an exported CSV opened as mojibake.

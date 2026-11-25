@@ -36,7 +36,7 @@ func (a *testApp) rawPost(path, token, contentType string, body []byte) apiResp 
 
 func TestBodyLimit_UnauthenticatedEndpointsAreSmall(t *testing.T) {
 	app := newTestApp(t)
-	big := []byte(`{"email":"linwei@vela.io","password":"` + strings.Repeat("x", 2<<20) + `"}`)
+	big := []byte(`{"email":"linwei@aegisdb.io","password":"` + strings.Repeat("x", 2<<20) + `"}`)
 	if r := app.rawPost("/api/v1/auth/login", "", "application/json", big); r.Code != 41300 {
 		t.Fatalf("2MB 的登录请求应 41300,实际 %d %s", r.Code, r.Msg)
 	}
@@ -44,14 +44,14 @@ func TestBodyLimit_UnauthenticatedEndpointsAreSmall(t *testing.T) {
 		t.Fatalf("2MB 的回调请求应 41300,实际 %d", r.Code)
 	}
 	// 正常大小照常
-	if tok := app.login("linwei@vela.io", "vela123"); tok == "" {
+	if tok := app.login("linwei@aegisdb.io", "aegisdb123"); tok == "" {
 		t.Fatal("正常登录应成功")
 	}
 }
 
 func TestBodyLimit_LoggedInRoutesKeepRoomForLargeSQL(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	// 3MB 的 SQL 文本(远小于 15MB 的 SQL 上限):不能被全局上限挡掉
 	sql := "SELECT 1 /* " + strings.Repeat("y", 3<<20) + " */"

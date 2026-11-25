@@ -1,8 +1,8 @@
 package dto
 
 import (
-	"velagateway/internal/model"
-	"velagateway/internal/review"
+	"aegisdb/internal/model"
+	"aegisdb/internal/review"
 )
 
 // ---- 数据库规范审查 (SQL review) ----

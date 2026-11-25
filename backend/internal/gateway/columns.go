@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // ErrBadTableName:不像一个表名(含空白、引号、分号、控制字符,或过长)。

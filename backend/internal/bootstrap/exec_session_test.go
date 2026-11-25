@@ -14,7 +14,7 @@ import (
 
 func TestExecBatch_RunsInOneSession(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "one-session")
 
 	r := app.execSQL(admin, dev, "CREATE TEMP TABLE tt (x INTEGER); INSERT INTO tt VALUES (1); INSERT INTO tt VALUES (2)")

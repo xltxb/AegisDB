@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // 业务查询的全局设置(tbl_setting)。

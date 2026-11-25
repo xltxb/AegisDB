@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // column is what the copier and the replayer need to know about one column.

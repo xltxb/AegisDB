@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // RealSchema must introspect a live target's tables. We build a throwaway SQLite

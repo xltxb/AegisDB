@@ -14,8 +14,8 @@ package service
 import (
 	"log/slog"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // raiseSensitiveExportApproval parks the job on an approval ticket.

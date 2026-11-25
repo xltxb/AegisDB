@@ -1,8 +1,8 @@
-/* @ds-bundle: {"format":3,"namespace":"VelaDesignSystem_c1e10b","components":[{"name":"Alert","sourcePath":"components/core/Alert.jsx"},{"name":"Avatar","sourcePath":"components/core/Avatar.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"Spinner","sourcePath":"components/core/Spinner.jsx"},{"name":"Tabs","sourcePath":"components/core/Tabs.jsx"},{"name":"Button","sourcePath":"components/forms/Button.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"}],"sourceHashes":{"components/core/Alert.jsx":"ffd3df73b5c6","components/core/Avatar.jsx":"6287ef4f8124","components/core/Badge.jsx":"c3674e203f1d","components/core/Card.jsx":"b78fc392e7f5","components/core/Spinner.jsx":"abab6afdc90e","components/core/Tabs.jsx":"e213a61ab017","components/forms/Button.jsx":"edbad0b4fb4e","components/forms/Checkbox.jsx":"3c04fe574056","components/forms/Input.jsx":"a3f860da945e","components/forms/Select.jsx":"18eb391b6e8f","components/forms/Switch.jsx":"93f3e6e417fb","ui_kits/mobile/MobileApp.jsx":"5b32468b6ef4","ui_kits/web/App.jsx":"064badedbab2","ui_kits/web/Chrome.jsx":"e825648aafe4","ui_kits/web/DashboardScreen.jsx":"560557b3410a","ui_kits/web/LoginScreen.jsx":"34ddf94431e9","ui_kits/web/ProjectsScreen.jsx":"be5876cc0a6b"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":3,"namespace":"AegisDBDesignSystem_c1e10b","components":[{"name":"Alert","sourcePath":"components/core/Alert.jsx"},{"name":"Avatar","sourcePath":"components/core/Avatar.jsx"},{"name":"Badge","sourcePath":"components/core/Badge.jsx"},{"name":"Card","sourcePath":"components/core/Card.jsx"},{"name":"Spinner","sourcePath":"components/core/Spinner.jsx"},{"name":"Tabs","sourcePath":"components/core/Tabs.jsx"},{"name":"Button","sourcePath":"components/forms/Button.jsx"},{"name":"Checkbox","sourcePath":"components/forms/Checkbox.jsx"},{"name":"Input","sourcePath":"components/forms/Input.jsx"},{"name":"Select","sourcePath":"components/forms/Select.jsx"},{"name":"Switch","sourcePath":"components/forms/Switch.jsx"}],"sourceHashes":{"components/core/Alert.jsx":"ffd3df73b5c6","components/core/Avatar.jsx":"6287ef4f8124","components/core/Badge.jsx":"c3674e203f1d","components/core/Card.jsx":"b78fc392e7f5","components/core/Spinner.jsx":"abab6afdc90e","components/core/Tabs.jsx":"e213a61ab017","components/forms/Button.jsx":"edbad0b4fb4e","components/forms/Checkbox.jsx":"3c04fe574056","components/forms/Input.jsx":"a3f860da945e","components/forms/Select.jsx":"18eb391b6e8f","components/forms/Switch.jsx":"93f3e6e417fb","ui_kits/mobile/MobileApp.jsx":"5b32468b6ef4","ui_kits/web/App.jsx":"064badedbab2","ui_kits/web/Chrome.jsx":"e825648aafe4","ui_kits/web/DashboardScreen.jsx":"560557b3410a","ui_kits/web/LoginScreen.jsx":"34ddf94431e9","ui_kits/web/ProjectsScreen.jsx":"be5876cc0a6b"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
-const __ds_ns = (window.VelaDesignSystem_c1e10b = window.VelaDesignSystem_c1e10b || {});
+const __ds_ns = (window.AegisDBDesignSystem_c1e10b = window.AegisDBDesignSystem_c1e10b || {});
 
 const __ds_scope = {};
 
@@ -12,23 +12,23 @@ const __ds_scope = {};
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-alert{
+.aegisdb-alert{
   display:flex; gap:var(--space-3); padding:var(--space-3) var(--space-4);
   border-radius:var(--radius-md); border:1px solid transparent;
   font-size:var(--text-sm); line-height:var(--leading-snug);
 }
-.vela-alert__icon{ flex:none; margin-top:1px; display:flex; }
-.vela-alert__icon svg{ width:18px; height:18px; }
-.vela-alert__body{ flex:1; min-width:0; }
-.vela-alert__title{ font-weight:var(--weight-semibold); color:var(--text-strong); margin-bottom:2px; }
-.vela-alert--info{ background:var(--accent-subtle); border-color:var(--accent-subtle-border); color:var(--text-body); }
-.vela-alert--info .vela-alert__icon{ color:var(--accent-text); }
-.vela-alert--success{ background:var(--success-subtle); border-color:color-mix(in oklch, var(--success) 30%, transparent); color:var(--text-body); }
-.vela-alert--success .vela-alert__icon{ color:var(--success); }
-.vela-alert--warning{ background:var(--warning-subtle); border-color:color-mix(in oklch, var(--warning) 35%, transparent); color:var(--text-body); }
-.vela-alert--warning .vela-alert__icon{ color:var(--warning-text); }
-.vela-alert--danger{ background:var(--danger-subtle); border-color:color-mix(in oklch, var(--danger) 30%, transparent); color:var(--text-body); }
-.vela-alert--danger .vela-alert__icon{ color:var(--danger); }
+.aegisdb-alert__icon{ flex:none; margin-top:1px; display:flex; }
+.aegisdb-alert__icon svg{ width:18px; height:18px; }
+.aegisdb-alert__body{ flex:1; min-width:0; }
+.aegisdb-alert__title{ font-weight:var(--weight-semibold); color:var(--text-strong); margin-bottom:2px; }
+.aegisdb-alert--info{ background:var(--accent-subtle); border-color:var(--accent-subtle-border); color:var(--text-body); }
+.aegisdb-alert--info .aegisdb-alert__icon{ color:var(--accent-text); }
+.aegisdb-alert--success{ background:var(--success-subtle); border-color:color-mix(in oklch, var(--success) 30%, transparent); color:var(--text-body); }
+.aegisdb-alert--success .aegisdb-alert__icon{ color:var(--success); }
+.aegisdb-alert--warning{ background:var(--warning-subtle); border-color:color-mix(in oklch, var(--warning) 35%, transparent); color:var(--text-body); }
+.aegisdb-alert--warning .aegisdb-alert__icon{ color:var(--warning-text); }
+.aegisdb-alert--danger{ background:var(--danger-subtle); border-color:color-mix(in oklch, var(--danger) 30%, transparent); color:var(--text-body); }
+.aegisdb-alert--danger .aegisdb-alert__icon{ color:var(--danger); }
 `;
 const ICONS = {
   info: /*#__PURE__*/React.createElement("path", {
@@ -45,9 +45,9 @@ const ICONS = {
   })
 };
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-alert-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-alert-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-alert-css";
+  el.id = "aegisdb-alert-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -60,10 +60,10 @@ function Alert({
 }) {
   ensure();
   return /*#__PURE__*/React.createElement("div", _extends({
-    className: ["vela-alert", `vela-alert--${tone}`, className].filter(Boolean).join(" "),
+    className: ["aegisdb-alert", `aegisdb-alert--${tone}`, className].filter(Boolean).join(" "),
     role: "status"
   }, rest), /*#__PURE__*/React.createElement("span", {
-    className: "vela-alert__icon",
+    className: "aegisdb-alert__icon",
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("svg", {
     viewBox: "0 0 24 24",
@@ -73,9 +73,9 @@ function Alert({
     strokeLinecap: "round",
     strokeLinejoin: "round"
   }, ICONS[tone])), /*#__PURE__*/React.createElement("div", {
-    className: "vela-alert__body"
+    className: "aegisdb-alert__body"
   }, title && /*#__PURE__*/React.createElement("div", {
-    className: "vela-alert__title"
+    className: "aegisdb-alert__title"
   }, title), children));
 }
 Object.assign(__ds_scope, { Alert });
@@ -85,31 +85,31 @@ Object.assign(__ds_scope, { Alert });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-avatar{
+.aegisdb-avatar{
   position:relative; display:inline-flex; align-items:center; justify-content:center;
   flex:none; overflow:hidden; background:var(--accent-subtle); color:var(--accent-text);
   font-family:var(--font-body); font-weight:var(--weight-semibold); user-select:none;
   border-radius:var(--radius-full);
 }
-.vela-avatar--square{ border-radius:var(--radius-md); }
-.vela-avatar img{ width:100%; height:100%; object-fit:cover; }
-.vela-avatar--xs{ width:24px; height:24px; font-size:10px; }
-.vela-avatar--sm{ width:32px; height:32px; font-size:12px; }
-.vela-avatar--md{ width:40px; height:40px; font-size:14px; }
-.vela-avatar--lg{ width:56px; height:56px; font-size:20px; }
-.vela-avatar__status{
+.aegisdb-avatar--square{ border-radius:var(--radius-md); }
+.aegisdb-avatar img{ width:100%; height:100%; object-fit:cover; }
+.aegisdb-avatar--xs{ width:24px; height:24px; font-size:10px; }
+.aegisdb-avatar--sm{ width:32px; height:32px; font-size:12px; }
+.aegisdb-avatar--md{ width:40px; height:40px; font-size:14px; }
+.aegisdb-avatar--lg{ width:56px; height:56px; font-size:20px; }
+.aegisdb-avatar__status{
   position:absolute; right:0; bottom:0; width:30%; height:30%; min-width:8px; min-height:8px;
   border-radius:50%; border:2px solid var(--surface-card);
 }
-.vela-avatar__status--online{ background:var(--success); }
-.vela-avatar__status--busy{ background:var(--danger); }
-.vela-avatar__status--away{ background:var(--warning); }
-.vela-avatar__status--offline{ background:var(--slate-400); }
+.aegisdb-avatar__status--online{ background:var(--success); }
+.aegisdb-avatar__status--busy{ background:var(--danger); }
+.aegisdb-avatar__status--away{ background:var(--warning); }
+.aegisdb-avatar__status--offline{ background:var(--slate-400); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-avatar-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-avatar-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-avatar-css";
+  el.id = "aegisdb-avatar-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -129,14 +129,14 @@ function Avatar({
   ...rest
 }) {
   ensure();
-  const cls = ["vela-avatar", `vela-avatar--${size}`, shape === "square" ? "vela-avatar--square" : "", className].filter(Boolean).join(" ");
+  const cls = ["aegisdb-avatar", `aegisdb-avatar--${size}`, shape === "square" ? "aegisdb-avatar--square" : "", className].filter(Boolean).join(" ");
   return /*#__PURE__*/React.createElement("span", _extends({
     className: cls
   }, rest), src ? /*#__PURE__*/React.createElement("img", {
     src: src,
     alt: name
   }) : /*#__PURE__*/React.createElement("span", null, initials(name)), status && /*#__PURE__*/React.createElement("span", {
-    className: `vela-avatar__status vela-avatar__status--${status}`
+    className: `aegisdb-avatar__status aegisdb-avatar__status--${status}`
   }));
 }
 Object.assign(__ds_scope, { Avatar });
@@ -146,29 +146,29 @@ Object.assign(__ds_scope, { Avatar });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-badge{
+.aegisdb-badge{
   display:inline-flex; align-items:center; gap:var(--space-1-5);
   height:22px; padding:0 var(--space-2); border-radius:var(--radius-full);
   font-family:var(--font-body); font-size:var(--text-xs); font-weight:var(--weight-semibold);
   line-height:1; white-space:nowrap; letter-spacing:var(--tracking-normal);
 }
-.vela-badge--solid{ color:#fff; }
-.vela-badge__dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
-.vela-badge--neutral.vela-badge--soft{ background:var(--surface-sunken); color:var(--text-body); }
-.vela-badge--neutral.vela-badge--solid{ background:var(--slate-600); }
-.vela-badge--accent.vela-badge--soft{ background:var(--accent-subtle); color:var(--accent-text); }
-.vela-badge--accent.vela-badge--solid{ background:var(--accent); }
-.vela-badge--success.vela-badge--soft{ background:var(--success-subtle); color:var(--success-text); }
-.vela-badge--success.vela-badge--solid{ background:var(--success); }
-.vela-badge--warning.vela-badge--soft{ background:var(--warning-subtle); color:var(--warning-text); }
-.vela-badge--warning.vela-badge--solid{ background:var(--warning); }
-.vela-badge--danger.vela-badge--soft{ background:var(--danger-subtle); color:var(--danger-text); }
-.vela-badge--danger.vela-badge--solid{ background:var(--danger); }
+.aegisdb-badge--solid{ color:#fff; }
+.aegisdb-badge__dot{ width:6px; height:6px; border-radius:50%; background:currentColor; }
+.aegisdb-badge--neutral.aegisdb-badge--soft{ background:var(--surface-sunken); color:var(--text-body); }
+.aegisdb-badge--neutral.aegisdb-badge--solid{ background:var(--slate-600); }
+.aegisdb-badge--accent.aegisdb-badge--soft{ background:var(--accent-subtle); color:var(--accent-text); }
+.aegisdb-badge--accent.aegisdb-badge--solid{ background:var(--accent); }
+.aegisdb-badge--success.aegisdb-badge--soft{ background:var(--success-subtle); color:var(--success-text); }
+.aegisdb-badge--success.aegisdb-badge--solid{ background:var(--success); }
+.aegisdb-badge--warning.aegisdb-badge--soft{ background:var(--warning-subtle); color:var(--warning-text); }
+.aegisdb-badge--warning.aegisdb-badge--solid{ background:var(--warning); }
+.aegisdb-badge--danger.aegisdb-badge--soft{ background:var(--danger-subtle); color:var(--danger-text); }
+.aegisdb-badge--danger.aegisdb-badge--solid{ background:var(--danger); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-badge-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-badge-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-badge-css";
+  el.id = "aegisdb-badge-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -181,11 +181,11 @@ function Badge({
   ...rest
 }) {
   ensure();
-  const cls = ["vela-badge", `vela-badge--${color}`, `vela-badge--${variant}`, className].filter(Boolean).join(" ");
+  const cls = ["aegisdb-badge", `aegisdb-badge--${color}`, `aegisdb-badge--${variant}`, className].filter(Boolean).join(" ");
   return /*#__PURE__*/React.createElement("span", _extends({
     className: cls
   }, rest), dot && /*#__PURE__*/React.createElement("span", {
-    className: "vela-badge__dot"
+    className: "aegisdb-badge__dot"
   }), children);
 }
 Object.assign(__ds_scope, { Badge });
@@ -195,24 +195,24 @@ Object.assign(__ds_scope, { Badge });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-card{
+.aegisdb-card{
   background:var(--surface-card); border:1px solid var(--border-subtle);
   border-radius:var(--radius-lg); transition:var(--transition-colors), transform var(--dur-base) var(--ease-out);
 }
-.vela-card--pad-sm{ padding:var(--space-4); }
-.vela-card--pad-md{ padding:var(--space-6); }
-.vela-card--pad-lg{ padding:var(--space-8); }
-.vela-card--flat{ box-shadow:none; }
-.vela-card--raised{ box-shadow:var(--shadow-md); }
-.vela-card--glow{ box-shadow:var(--shadow-md); border-color:var(--accent-subtle-border); }
-.vela-card--interactive{ cursor:pointer; }
-.vela-card--interactive:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lg); border-color:var(--border-default); }
-.vela-card--interactive:active{ transform:translateY(0); }
+.aegisdb-card--pad-sm{ padding:var(--space-4); }
+.aegisdb-card--pad-md{ padding:var(--space-6); }
+.aegisdb-card--pad-lg{ padding:var(--space-8); }
+.aegisdb-card--flat{ box-shadow:none; }
+.aegisdb-card--raised{ box-shadow:var(--shadow-md); }
+.aegisdb-card--glow{ box-shadow:var(--shadow-md); border-color:var(--accent-subtle-border); }
+.aegisdb-card--interactive{ cursor:pointer; }
+.aegisdb-card--interactive:hover{ transform:translateY(-2px); box-shadow:var(--shadow-lg); border-color:var(--border-default); }
+.aegisdb-card--interactive:active{ transform:translateY(0); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-card-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-card-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-card-css";
+  el.id = "aegisdb-card-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -227,7 +227,7 @@ function Card({
 }) {
   ensure();
   const Tag = as;
-  const cls = ["vela-card", `vela-card--${elevation}`, `vela-card--pad-${padding}`, interactive ? "vela-card--interactive" : "", className].filter(Boolean).join(" ");
+  const cls = ["aegisdb-card", `aegisdb-card--${elevation}`, `aegisdb-card--pad-${padding}`, interactive ? "aegisdb-card--interactive" : "", className].filter(Boolean).join(" ");
   return /*#__PURE__*/React.createElement(Tag, _extends({
     className: cls
   }, rest), children);
@@ -239,16 +239,16 @@ Object.assign(__ds_scope, { Card });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-spinner{ display:inline-block; border-radius:50%; border-style:solid; border-color:var(--border-default); border-right-color:var(--accent); animation:vela-spin .62s linear infinite; }
-.vela-spinner--sm{ width:16px; height:16px; border-width:2px; }
-.vela-spinner--md{ width:24px; height:24px; border-width:2.5px; }
-.vela-spinner--lg{ width:36px; height:36px; border-width:3px; }
-@keyframes vela-spin{ to{ transform:rotate(360deg); } }
+.aegisdb-spinner{ display:inline-block; border-radius:50%; border-style:solid; border-color:var(--border-default); border-right-color:var(--accent); animation:aegisdb-spin .62s linear infinite; }
+.aegisdb-spinner--sm{ width:16px; height:16px; border-width:2px; }
+.aegisdb-spinner--md{ width:24px; height:24px; border-width:2.5px; }
+.aegisdb-spinner--lg{ width:36px; height:36px; border-width:3px; }
+@keyframes aegisdb-spin{ to{ transform:rotate(360deg); } }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-spinner-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-spinner-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-spinner-css";
+  el.id = "aegisdb-spinner-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -262,7 +262,7 @@ function Spinner({
   return /*#__PURE__*/React.createElement("span", _extends({
     role: "status",
     "aria-label": label,
-    className: ["vela-spinner", `vela-spinner--${size}`, className].filter(Boolean).join(" ")
+    className: ["aegisdb-spinner", `aegisdb-spinner--${size}`, className].filter(Boolean).join(" ")
   }, rest));
 }
 Object.assign(__ds_scope, { Spinner });
@@ -272,28 +272,28 @@ Object.assign(__ds_scope, { Spinner });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-tabs{ display:flex; gap:var(--space-1); padding:var(--space-1); background:var(--surface-sunken); border-radius:var(--radius-md); }
-.vela-tabs--line{ gap:var(--space-5); padding:0; background:none; border-bottom:1px solid var(--border-subtle); border-radius:0; }
-.vela-tab{
+.aegisdb-tabs{ display:flex; gap:var(--space-1); padding:var(--space-1); background:var(--surface-sunken); border-radius:var(--radius-md); }
+.aegisdb-tabs--line{ gap:var(--space-5); padding:0; background:none; border-bottom:1px solid var(--border-subtle); border-radius:0; }
+.aegisdb-tab{
   appearance:none; border:none; background:none; cursor:pointer;
   font-family:var(--font-body); font-size:var(--text-sm); font-weight:var(--weight-medium);
   color:var(--text-muted); padding:var(--space-2) var(--space-3); border-radius:var(--radius-sm);
   transition:var(--transition-colors); white-space:nowrap;
 }
-.vela-tab:hover{ color:var(--text-strong); }
-.vela-tabs--pill .vela-tab[aria-selected="true"]{ background:var(--surface-card); color:var(--text-strong); box-shadow:var(--shadow-xs); }
-.vela-tabs--line .vela-tab{ border-radius:0; padding:var(--space-3) 0; position:relative; }
-.vela-tabs--line .vela-tab[aria-selected="true"]{ color:var(--accent-text); }
-.vela-tabs--line .vela-tab[aria-selected="true"]::after{
+.aegisdb-tab:hover{ color:var(--text-strong); }
+.aegisdb-tabs--pill .aegisdb-tab[aria-selected="true"]{ background:var(--surface-card); color:var(--text-strong); box-shadow:var(--shadow-xs); }
+.aegisdb-tabs--line .aegisdb-tab{ border-radius:0; padding:var(--space-3) 0; position:relative; }
+.aegisdb-tabs--line .aegisdb-tab[aria-selected="true"]{ color:var(--accent-text); }
+.aegisdb-tabs--line .aegisdb-tab[aria-selected="true"]::after{
   content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px;
   background:var(--accent); border-radius:2px;
 }
-.vela-tab:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.aegisdb-tab:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-tabs-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-tabs-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-tabs-css";
+  el.id = "aegisdb-tabs-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -318,14 +318,14 @@ function Tabs({
     onChange && onChange(v);
   };
   return /*#__PURE__*/React.createElement("div", _extends({
-    className: ["vela-tabs", `vela-tabs--${variant}`, className].filter(Boolean).join(" "),
+    className: ["aegisdb-tabs", `aegisdb-tabs--${variant}`, className].filter(Boolean).join(" "),
     role: "tablist"
   }, rest), norm.map(it => /*#__PURE__*/React.createElement("button", {
     key: it.value,
     role: "tab",
     type: "button",
     "aria-selected": active === it.value,
-    className: "vela-tab",
+    className: "aegisdb-tab",
     onClick: () => select(it.value)
   }, it.label)));
 }
@@ -336,7 +336,7 @@ Object.assign(__ds_scope, { Tabs });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-btn{
+.aegisdb-btn{
   --_h: var(--control-md);
   --_px: var(--space-5);
   --_fs: var(--text-sm);
@@ -348,36 +348,36 @@ const CSS = `
   transition:var(--transition-colors), transform var(--dur-fast) var(--ease-out);
   user-select:none; text-decoration:none;
 }
-.vela-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-.vela-btn:active{ transform:translateY(1px) scale(0.99); }
-.vela-btn[disabled],.vela-btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; transform:none; }
-.vela-btn--sm{ --_h:var(--control-sm); --_px:var(--space-3); --_fs:var(--text-xs); }
-.vela-btn--lg{ --_h:var(--control-lg); --_px:var(--space-6); --_fs:var(--text-base); }
-.vela-btn--full{ width:100%; }
+.aegisdb-btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.aegisdb-btn:active{ transform:translateY(1px) scale(0.99); }
+.aegisdb-btn[disabled],.aegisdb-btn[aria-disabled="true"]{ opacity:.5; cursor:not-allowed; transform:none; }
+.aegisdb-btn--sm{ --_h:var(--control-sm); --_px:var(--space-3); --_fs:var(--text-xs); }
+.aegisdb-btn--lg{ --_h:var(--control-lg); --_px:var(--space-6); --_fs:var(--text-base); }
+.aegisdb-btn--full{ width:100%; }
 
-.vela-btn--primary{ background:var(--accent); color:var(--text-on-accent); }
-.vela-btn--primary:hover{ background:var(--accent-hover); box-shadow:var(--glow-sm); }
-.vela-btn--primary:active{ background:var(--accent-pressed); }
+.aegisdb-btn--primary{ background:var(--accent); color:var(--text-on-accent); }
+.aegisdb-btn--primary:hover{ background:var(--accent-hover); box-shadow:var(--glow-sm); }
+.aegisdb-btn--primary:active{ background:var(--accent-pressed); }
 
-.vela-btn--secondary{ background:var(--surface-sunken); color:var(--text-strong); border-color:var(--border-subtle); }
-.vela-btn--secondary:hover{ background:var(--surface-card); border-color:var(--border-default); }
+.aegisdb-btn--secondary{ background:var(--surface-sunken); color:var(--text-strong); border-color:var(--border-subtle); }
+.aegisdb-btn--secondary:hover{ background:var(--surface-card); border-color:var(--border-default); }
 
-.vela-btn--outline{ background:transparent; color:var(--accent-text); border-color:var(--accent-subtle-border); }
-.vela-btn--outline:hover{ background:var(--accent-subtle); }
+.aegisdb-btn--outline{ background:transparent; color:var(--accent-text); border-color:var(--accent-subtle-border); }
+.aegisdb-btn--outline:hover{ background:var(--accent-subtle); }
 
-.vela-btn--ghost{ background:transparent; color:var(--text-body); }
-.vela-btn--ghost:hover{ background:var(--surface-sunken); color:var(--text-strong); }
+.aegisdb-btn--ghost{ background:transparent; color:var(--text-body); }
+.aegisdb-btn--ghost:hover{ background:var(--surface-sunken); color:var(--text-strong); }
 
-.vela-btn--danger{ background:var(--danger); color:#fff; }
-.vela-btn--danger:hover{ filter:brightness(1.06); box-shadow:0 6px 18px color-mix(in oklch, var(--danger) 35%, transparent); }
+.aegisdb-btn--danger{ background:var(--danger); color:#fff; }
+.aegisdb-btn--danger:hover{ filter:brightness(1.06); box-shadow:0 6px 18px color-mix(in oklch, var(--danger) 35%, transparent); }
 
-.vela-btn__spin{ width:1em; height:1em; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:vela-btn-spin .6s linear infinite; }
-@keyframes vela-btn-spin{ to{ transform:rotate(360deg); } }
+.aegisdb-btn__spin{ width:1em; height:1em; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:aegisdb-btn-spin .6s linear infinite; }
+@keyframes aegisdb-btn-spin{ to{ transform:rotate(360deg); } }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-button-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-button-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-button-css";
+  el.id = "aegisdb-button-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -396,7 +396,7 @@ function Button({
 }) {
   ensure();
   const Tag = as;
-  const cls = ["vela-btn", `vela-btn--${variant}`, size !== "md" ? `vela-btn--${size}` : "", fullWidth ? "vela-btn--full" : "", className].filter(Boolean).join(" ");
+  const cls = ["aegisdb-btn", `aegisdb-btn--${variant}`, size !== "md" ? `aegisdb-btn--${size}` : "", fullWidth ? "aegisdb-btn--full" : "", className].filter(Boolean).join(" ");
   const isDisabled = disabled || loading;
   const tagProps = Tag === "button" ? {
     type: rest.type || "button",
@@ -407,7 +407,7 @@ function Button({
   return /*#__PURE__*/React.createElement(Tag, _extends({
     className: cls
   }, tagProps, rest), loading && /*#__PURE__*/React.createElement("span", {
-    className: "vela-btn__spin",
+    className: "aegisdb-btn__spin",
     "aria-hidden": "true"
   }), !loading && iconLeft, children != null && /*#__PURE__*/React.createElement("span", null, children), !loading && iconRight);
 }
@@ -418,24 +418,24 @@ Object.assign(__ds_scope, { Button });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-check{ display:inline-flex; align-items:flex-start; gap:var(--space-2-5, 10px); cursor:pointer; user-select:none; }
-.vela-check--disabled{ opacity:.5; cursor:not-allowed; }
-.vela-check input{ position:absolute; opacity:0; width:0; height:0; }
-.vela-check__box{
+.aegisdb-check{ display:inline-flex; align-items:flex-start; gap:var(--space-2-5, 10px); cursor:pointer; user-select:none; }
+.aegisdb-check--disabled{ opacity:.5; cursor:not-allowed; }
+.aegisdb-check input{ position:absolute; opacity:0; width:0; height:0; }
+.aegisdb-check__box{
   flex:none; width:18px; height:18px; margin-top:1px; border-radius:var(--radius-xs);
   border:1.5px solid var(--border-strong); background:var(--surface-card);
   display:grid; place-items:center; transition:var(--transition-colors);
 }
-.vela-check__box svg{ width:12px; height:12px; stroke:#fff; stroke-width:3; fill:none; opacity:0; transition:opacity var(--dur-fast) var(--ease-out); }
-.vela-check input:checked + .vela-check__box{ background:var(--accent); border-color:var(--accent); }
-.vela-check input:checked + .vela-check__box svg{ opacity:1; }
-.vela-check input:focus-visible + .vela-check__box{ box-shadow:0 0 0 3px var(--focus-ring); }
-.vela-check__label{ font-size:var(--text-sm); color:var(--text-strong); line-height:var(--leading-snug); }
+.aegisdb-check__box svg{ width:12px; height:12px; stroke:#fff; stroke-width:3; fill:none; opacity:0; transition:opacity var(--dur-fast) var(--ease-out); }
+.aegisdb-check input:checked + .aegisdb-check__box{ background:var(--accent); border-color:var(--accent); }
+.aegisdb-check input:checked + .aegisdb-check__box svg{ opacity:1; }
+.aegisdb-check input:focus-visible + .aegisdb-check__box{ box-shadow:0 0 0 3px var(--focus-ring); }
+.aegisdb-check__label{ font-size:var(--text-sm); color:var(--text-strong); line-height:var(--leading-snug); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-check-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-check-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-check-css";
+  el.id = "aegisdb-check-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -451,7 +451,7 @@ function Checkbox({
   ensure();
   const fieldId = id || React.useId();
   return /*#__PURE__*/React.createElement("label", {
-    className: ["vela-check", disabled ? "vela-check--disabled" : ""].filter(Boolean).join(" "),
+    className: ["aegisdb-check", disabled ? "aegisdb-check--disabled" : ""].filter(Boolean).join(" "),
     htmlFor: fieldId
   }, /*#__PURE__*/React.createElement("input", _extends({
     id: fieldId,
@@ -461,14 +461,14 @@ function Checkbox({
     onChange: onChange,
     disabled: disabled
   }, rest)), /*#__PURE__*/React.createElement("span", {
-    className: "vela-check__box",
+    className: "aegisdb-check__box",
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("svg", {
     viewBox: "0 0 24 24"
   }, /*#__PURE__*/React.createElement("polyline", {
     points: "20 6 9 17 4 12"
   }))), label && /*#__PURE__*/React.createElement("span", {
-    className: "vela-check__label"
+    className: "aegisdb-check__label"
   }, label));
 }
 Object.assign(__ds_scope, { Checkbox });
@@ -478,35 +478,35 @@ Object.assign(__ds_scope, { Checkbox });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-field{ display:flex; flex-direction:column; gap:var(--space-2); }
-.vela-field__label{ font-size:var(--text-sm); font-weight:var(--weight-semibold); color:var(--text-strong); }
-.vela-field__label .vela-req{ color:var(--danger); margin-left:2px; }
-.vela-field__wrap{
+.aegisdb-field{ display:flex; flex-direction:column; gap:var(--space-2); }
+.aegisdb-field__label{ font-size:var(--text-sm); font-weight:var(--weight-semibold); color:var(--text-strong); }
+.aegisdb-field__label .aegisdb-req{ color:var(--danger); margin-left:2px; }
+.aegisdb-field__wrap{
   display:flex; align-items:center; gap:var(--space-2);
   height:var(--control-md); padding:0 var(--space-3);
   background:var(--surface-card); border:1px solid var(--border-default);
   border-radius:var(--radius-md); transition:var(--transition-colors);
 }
-.vela-field__wrap:hover{ border-color:var(--border-strong); }
-.vela-field__wrap:focus-within{ border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); }
-.vela-field__wrap--sm{ height:var(--control-sm); }
-.vela-field__wrap--lg{ height:var(--control-lg); }
-.vela-field__wrap--error{ border-color:var(--danger); }
-.vela-field__wrap--error:focus-within{ box-shadow:0 0 0 3px color-mix(in oklch, var(--danger) 30%, transparent); }
-.vela-field__wrap--disabled{ background:var(--surface-sunken); opacity:.6; cursor:not-allowed; }
-.vela-field__input{
+.aegisdb-field__wrap:hover{ border-color:var(--border-strong); }
+.aegisdb-field__wrap:focus-within{ border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); }
+.aegisdb-field__wrap--sm{ height:var(--control-sm); }
+.aegisdb-field__wrap--lg{ height:var(--control-lg); }
+.aegisdb-field__wrap--error{ border-color:var(--danger); }
+.aegisdb-field__wrap--error:focus-within{ box-shadow:0 0 0 3px color-mix(in oklch, var(--danger) 30%, transparent); }
+.aegisdb-field__wrap--disabled{ background:var(--surface-sunken); opacity:.6; cursor:not-allowed; }
+.aegisdb-field__input{
   flex:1; min-width:0; border:none; background:transparent; outline:none;
   font-family:var(--font-body); font-size:var(--text-sm); color:var(--text-strong);
 }
-.vela-field__input::placeholder{ color:var(--text-faint); }
-.vela-field__addon{ display:flex; color:var(--text-muted); flex:none; }
-.vela-field__hint{ font-size:var(--text-xs); color:var(--text-muted); }
-.vela-field__hint--error{ color:var(--danger-text); }
+.aegisdb-field__input::placeholder{ color:var(--text-faint); }
+.aegisdb-field__addon{ display:flex; color:var(--text-muted); flex:none; }
+.aegisdb-field__hint{ font-size:var(--text-xs); color:var(--text-muted); }
+.aegisdb-field__hint--error{ color:var(--danger-text); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-input-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-input-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-input-css";
+  el.id = "aegisdb-input-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -525,27 +525,27 @@ function Input({
 }) {
   ensure();
   const fieldId = id || React.useId();
-  const wrapCls = ["vela-field__wrap", size !== "md" ? `vela-field__wrap--${size}` : "", error ? "vela-field__wrap--error" : "", disabled ? "vela-field__wrap--disabled" : ""].filter(Boolean).join(" ");
+  const wrapCls = ["aegisdb-field__wrap", size !== "md" ? `aegisdb-field__wrap--${size}` : "", error ? "aegisdb-field__wrap--error" : "", disabled ? "aegisdb-field__wrap--disabled" : ""].filter(Boolean).join(" ");
   return /*#__PURE__*/React.createElement("div", {
-    className: ["vela-field", className].filter(Boolean).join(" ")
+    className: ["aegisdb-field", className].filter(Boolean).join(" ")
   }, label && /*#__PURE__*/React.createElement("label", {
-    className: "vela-field__label",
+    className: "aegisdb-field__label",
     htmlFor: fieldId
   }, label, required && /*#__PURE__*/React.createElement("span", {
-    className: "vela-req"
+    className: "aegisdb-req"
   }, "*")), /*#__PURE__*/React.createElement("div", {
     className: wrapCls
   }, iconLeft && /*#__PURE__*/React.createElement("span", {
-    className: "vela-field__addon"
+    className: "aegisdb-field__addon"
   }, iconLeft), /*#__PURE__*/React.createElement("input", _extends({
     id: fieldId,
-    className: "vela-field__input",
+    className: "aegisdb-field__input",
     disabled: disabled,
     "aria-invalid": error ? "true" : undefined
   }, rest)), iconRight && /*#__PURE__*/React.createElement("span", {
-    className: "vela-field__addon"
+    className: "aegisdb-field__addon"
   }, iconRight)), (error || hint) && /*#__PURE__*/React.createElement("span", {
-    className: ["vela-field__hint", error ? "vela-field__hint--error" : ""].filter(Boolean).join(" ")
+    className: ["aegisdb-field__hint", error ? "aegisdb-field__hint--error" : ""].filter(Boolean).join(" ")
   }, error || hint));
 }
 Object.assign(__ds_scope, { Input });
@@ -555,10 +555,10 @@ Object.assign(__ds_scope, { Input });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-select{ display:flex; flex-direction:column; gap:var(--space-2); }
-.vela-select__label{ font-size:var(--text-sm); font-weight:var(--weight-semibold); color:var(--text-strong); }
-.vela-select__wrap{ position:relative; display:flex; align-items:center; }
-.vela-select__el{
+.aegisdb-select{ display:flex; flex-direction:column; gap:var(--space-2); }
+.aegisdb-select__label{ font-size:var(--text-sm); font-weight:var(--weight-semibold); color:var(--text-strong); }
+.aegisdb-select__wrap{ position:relative; display:flex; align-items:center; }
+.aegisdb-select__el{
   appearance:none; width:100%; height:var(--control-md);
   padding:0 var(--space-9, 36px) 0 var(--space-3);
   background:var(--surface-card); color:var(--text-strong);
@@ -566,17 +566,17 @@ const CSS = `
   font-family:var(--font-body); font-size:var(--text-sm); cursor:pointer;
   transition:var(--transition-colors);
 }
-.vela-select__el:hover{ border-color:var(--border-strong); }
-.vela-select__el:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); }
-.vela-select__el:disabled{ background:var(--surface-sunken); opacity:.6; cursor:not-allowed; }
-.vela-select__el--sm{ height:var(--control-sm); font-size:var(--text-xs); }
-.vela-select__el--lg{ height:var(--control-lg); font-size:var(--text-base); }
-.vela-select__chev{ position:absolute; right:var(--space-3); pointer-events:none; color:var(--text-muted); display:flex; }
+.aegisdb-select__el:hover{ border-color:var(--border-strong); }
+.aegisdb-select__el:focus{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); }
+.aegisdb-select__el:disabled{ background:var(--surface-sunken); opacity:.6; cursor:not-allowed; }
+.aegisdb-select__el--sm{ height:var(--control-sm); font-size:var(--text-xs); }
+.aegisdb-select__el--lg{ height:var(--control-lg); font-size:var(--text-base); }
+.aegisdb-select__chev{ position:absolute; right:var(--space-3); pointer-events:none; color:var(--text-muted); display:flex; }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-select-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-select-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-select-css";
+  el.id = "aegisdb-select-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -593,15 +593,15 @@ function Select({
   ensure();
   const fieldId = id || React.useId();
   return /*#__PURE__*/React.createElement("div", {
-    className: ["vela-select", className].filter(Boolean).join(" ")
+    className: ["aegisdb-select", className].filter(Boolean).join(" ")
   }, label && /*#__PURE__*/React.createElement("label", {
-    className: "vela-select__label",
+    className: "aegisdb-select__label",
     htmlFor: fieldId
   }, label), /*#__PURE__*/React.createElement("div", {
-    className: "vela-select__wrap"
+    className: "aegisdb-select__wrap"
   }, /*#__PURE__*/React.createElement("select", _extends({
     id: fieldId,
-    className: ["vela-select__el", size !== "md" ? `vela-select__el--${size}` : ""].filter(Boolean).join(" ")
+    className: ["aegisdb-select__el", size !== "md" ? `aegisdb-select__el--${size}` : ""].filter(Boolean).join(" ")
   }, rest), placeholder && /*#__PURE__*/React.createElement("option", {
     value: "",
     disabled: true
@@ -615,7 +615,7 @@ function Select({
       value: opt.value
     }, opt.label);
   }), children), /*#__PURE__*/React.createElement("span", {
-    className: "vela-select__chev",
+    className: "aegisdb-select__chev",
     "aria-hidden": "true"
   }, /*#__PURE__*/React.createElement("svg", {
     width: "16",
@@ -637,30 +637,30 @@ Object.assign(__ds_scope, { Select });
 try { (() => {
 function _extends() { return _extends = Object.assign ? Object.assign.bind() : function (n) { for (var e = 1; e < arguments.length; e++) { var t = arguments[e]; for (var r in t) ({}).hasOwnProperty.call(t, r) && (n[r] = t[r]); } return n; }, _extends.apply(null, arguments); }
 const CSS = `
-.vela-switch{ display:inline-flex; align-items:center; gap:var(--space-3); cursor:pointer; user-select:none; }
-.vela-switch--disabled{ opacity:.5; cursor:not-allowed; }
-.vela-switch__track{
+.aegisdb-switch{ display:inline-flex; align-items:center; gap:var(--space-3); cursor:pointer; user-select:none; }
+.aegisdb-switch--disabled{ opacity:.5; cursor:not-allowed; }
+.aegisdb-switch__track{
   position:relative; flex:none; width:40px; height:24px; border-radius:var(--radius-full);
   background:var(--border-default); transition:background var(--dur-base) var(--ease-out);
 }
-.vela-switch__track--lg{ width:48px; height:28px; }
-.vela-switch__thumb{
+.aegisdb-switch__track--lg{ width:48px; height:28px; }
+.aegisdb-switch__thumb{
   position:absolute; top:3px; left:3px; width:18px; height:18px; border-radius:50%;
   background:#fff; box-shadow:var(--shadow-sm);
   transition:transform var(--dur-base) var(--ease-spring);
 }
-.vela-switch__track--lg .vela-switch__thumb{ width:22px; height:22px; }
-.vela-switch input{ position:absolute; opacity:0; width:0; height:0; }
-.vela-switch input:checked + .vela-switch__track{ background:var(--accent); }
-.vela-switch input:checked + .vela-switch__track .vela-switch__thumb{ transform:translateX(16px); }
-.vela-switch input:checked + .vela-switch__track--lg .vela-switch__thumb{ transform:translateX(20px); }
-.vela-switch input:focus-visible + .vela-switch__track{ box-shadow:0 0 0 3px var(--focus-ring); }
-.vela-switch__label{ font-size:var(--text-sm); color:var(--text-strong); font-weight:var(--weight-medium); }
+.aegisdb-switch__track--lg .aegisdb-switch__thumb{ width:22px; height:22px; }
+.aegisdb-switch input{ position:absolute; opacity:0; width:0; height:0; }
+.aegisdb-switch input:checked + .aegisdb-switch__track{ background:var(--accent); }
+.aegisdb-switch input:checked + .aegisdb-switch__track .aegisdb-switch__thumb{ transform:translateX(16px); }
+.aegisdb-switch input:checked + .aegisdb-switch__track--lg .aegisdb-switch__thumb{ transform:translateX(20px); }
+.aegisdb-switch input:focus-visible + .aegisdb-switch__track{ box-shadow:0 0 0 3px var(--focus-ring); }
+.aegisdb-switch__label{ font-size:var(--text-sm); color:var(--text-strong); font-weight:var(--weight-medium); }
 `;
 function ensure() {
-  if (typeof document === "undefined" || document.getElementById("vela-switch-css")) return;
+  if (typeof document === "undefined" || document.getElementById("aegisdb-switch-css")) return;
   const el = document.createElement("style");
-  el.id = "vela-switch-css";
+  el.id = "aegisdb-switch-css";
   el.textContent = CSS;
   document.head.appendChild(el);
 }
@@ -677,7 +677,7 @@ function Switch({
   ensure();
   const fieldId = id || React.useId();
   return /*#__PURE__*/React.createElement("label", {
-    className: ["vela-switch", disabled ? "vela-switch--disabled" : ""].filter(Boolean).join(" "),
+    className: ["aegisdb-switch", disabled ? "aegisdb-switch--disabled" : ""].filter(Boolean).join(" "),
     htmlFor: fieldId
   }, /*#__PURE__*/React.createElement("input", _extends({
     id: fieldId,
@@ -688,11 +688,11 @@ function Switch({
     onChange: onChange,
     disabled: disabled
   }, rest)), /*#__PURE__*/React.createElement("span", {
-    className: ["vela-switch__track", size === "lg" ? "vela-switch__track--lg" : ""].filter(Boolean).join(" ")
+    className: ["aegisdb-switch__track", size === "lg" ? "aegisdb-switch__track--lg" : ""].filter(Boolean).join(" ")
   }, /*#__PURE__*/React.createElement("span", {
-    className: "vela-switch__thumb"
+    className: "aegisdb-switch__thumb"
   })), label && /*#__PURE__*/React.createElement("span", {
-    className: "vela-switch__label"
+    className: "aegisdb-switch__label"
   }, label));
 }
 Object.assign(__ds_scope, { Switch });
@@ -700,7 +700,7 @@ Object.assign(__ds_scope, { Switch });
 
 // ui_kits/mobile/MobileApp.jsx
 try { (() => {
-// Vela Mobile — full app (screens + tab bar) in a phone frame
+// AegisDB Mobile — full app (screens + tab bar) in a phone frame
 function MIcon({
   name,
   size = 22,
@@ -751,7 +751,7 @@ function HomeScreen() {
   const {
     Card,
     Badge
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   React.useEffect(relucide);
   const metrics = [{
     l: "请求量",
@@ -902,7 +902,7 @@ function ProjectsScreenM() {
   const {
     Card,
     Badge
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   React.useEffect(relucide);
   const rows = [{
     name: "Atlas Analytics",
@@ -999,7 +999,7 @@ function SettingsScreenM({
     Card,
     Switch,
     Avatar
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   React.useEffect(relucide);
   return /*#__PURE__*/React.createElement("div", {
     style: mb.screen
@@ -1100,12 +1100,12 @@ function MobileApp() {
   const [tab, setTab] = React.useState("home");
   const [theme, setTheme] = React.useState("light");
   React.useEffect(() => {
-    const s = localStorage.getItem("vela-mobile-theme");
+    const s = localStorage.getItem("aegisdb-mobile-theme");
     if (s) setTheme(s);
   }, []);
   const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");
   React.useEffect(() => {
-    localStorage.setItem("vela-mobile-theme", theme);
+    localStorage.setItem("aegisdb-mobile-theme", theme);
     relucide();
   }, [theme, tab]);
   const screen = {
@@ -1280,7 +1280,7 @@ Object.assign(window, {
 
 // ui_kits/web/App.jsx
 try { (() => {
-// Vela Web — App shell + router
+// AegisDB Web — App shell + router
 function MembersScreen() {
   const {
     Card,
@@ -1288,7 +1288,7 @@ function MembersScreen() {
     Badge,
     Button,
     Select
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   useLucide();
   const people = [{
     n: "Lin Wei",
@@ -1397,7 +1397,7 @@ function SettingsScreen({
     Switch,
     Select,
     Button
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   useLucide();
   return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1500,7 +1500,7 @@ function RealtimeScreen() {
   const {
     Card,
     Badge
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   const [n, setN] = React.useState(3912);
   React.useEffect(() => {
     const t = setInterval(() => setN(v => v + Math.round((Math.random() - 0.4) * 40)), 1500);
@@ -1563,12 +1563,12 @@ function App() {
   const [nav, setNav] = React.useState("dashboard");
   const [theme, setTheme] = React.useState("light");
   React.useEffect(() => {
-    const saved = localStorage.getItem("vela-web-theme");
+    const saved = localStorage.getItem("aegisdb-web-theme");
     if (saved) setTheme(saved);
   }, []);
   React.useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("vela-web-theme", theme);
+    localStorage.setItem("aegisdb-web-theme", theme);
     if (window.lucide) window.lucide.createIcons();
   }, [theme]);
   const toggleTheme = () => setTheme(t => t === "dark" ? "light" : "dark");
@@ -1630,7 +1630,7 @@ Object.assign(window, {
 
 // ui_kits/web/Chrome.jsx
 try { (() => {
-// Vela Web UI kit — shared primitives (Icon helper + layout chrome)
+// AegisDB Web UI kit — shared primitives (Icon helper + layout chrome)
 // Icons: Lucide (MIT) loaded from CDN via window.lucide.createIcons().
 
 function Icon({
@@ -1691,13 +1691,13 @@ function Sidebar({
   }, /*#__PURE__*/React.createElement("div", {
     style: sb.brand
   }, /*#__PURE__*/React.createElement("img", {
-    src: "../../assets/vela-mark.svg",
+    src: "../../assets/aegisdb-mark.svg",
     width: "30",
     height: "30",
-    alt: "Vela"
+    alt: "AegisDB"
   }), /*#__PURE__*/React.createElement("span", {
     style: sb.brandName
-  }, "Vela"), /*#__PURE__*/React.createElement("span", {
+  }, "AegisDB"), /*#__PURE__*/React.createElement("span", {
     style: sb.plan
   }, "Pro")), /*#__PURE__*/React.createElement("nav", {
     style: sb.nav
@@ -1972,7 +1972,7 @@ Object.assign(window, {
 
 // ui_kits/web/DashboardScreen.jsx
 try { (() => {
-// Vela Web — Dashboard / Overview
+// AegisDB Web — Dashboard / Overview
 function Sparkline({
   data,
   color = "var(--azure-500)",
@@ -2083,7 +2083,7 @@ function DashboardScreen() {
     Badge,
     Avatar,
     Tabs
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   useLucide();
   const metrics = [{
     label: "API 请求",
@@ -2315,7 +2315,7 @@ Object.assign(window, {
 
 // ui_kits/web/LoginScreen.jsx
 try { (() => {
-// Vela Web — Login screen
+// AegisDB Web — Login screen
 function LoginScreen({
   onLogin
 }) {
@@ -2323,7 +2323,7 @@ function LoginScreen({
     Button,
     Input,
     Checkbox
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   useLucide();
   return /*#__PURE__*/React.createElement("div", {
     style: lg.root
@@ -2332,9 +2332,9 @@ function LoginScreen({
   }, /*#__PURE__*/React.createElement("div", {
     style: lg.brand
   }, /*#__PURE__*/React.createElement("img", {
-    src: "../../assets/vela-logo-dark.svg",
+    src: "../../assets/aegisdb-logo-dark.svg",
     width: "120",
-    alt: "Vela"
+    alt: "AegisDB"
   })), /*#__PURE__*/React.createElement("div", {
     style: lg.hero
   }, /*#__PURE__*/React.createElement("div", {
@@ -2362,7 +2362,7 @@ function LoginScreen({
   }, /*#__PURE__*/React.createElement("div", {
     style: lg.form
   }, /*#__PURE__*/React.createElement("img", {
-    src: "../../assets/vela-mark.svg",
+    src: "../../assets/aegisdb-mark.svg",
     width: "40",
     height: "40",
     alt: "",
@@ -2373,7 +2373,7 @@ function LoginScreen({
     style: lg.title
   }, "\u6B22\u8FCE\u56DE\u6765"), /*#__PURE__*/React.createElement("p", {
     style: lg.sub
-  }, "\u767B\u5F55\u4EE5\u7EE7\u7EED\u4F7F\u7528 Vela \u5DE5\u4F5C\u53F0"), /*#__PURE__*/React.createElement("div", {
+  }, "\u767B\u5F55\u4EE5\u7EE7\u7EED\u4F7F\u7528 AegisDB \u5DE5\u4F5C\u53F0"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       flexDirection: "column",
@@ -2392,7 +2392,7 @@ function LoginScreen({
     label: "\u5BC6\u7801",
     type: "password",
     placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
-    defaultValue: "velarocks",
+    defaultValue: "aegisdbrocks",
     iconLeft: /*#__PURE__*/React.createElement(Icon, {
       name: "lock",
       size: 16
@@ -2526,7 +2526,7 @@ Object.assign(window, {
 
 // ui_kits/web/ProjectsScreen.jsx
 try { (() => {
-// Vela Web — Projects (data table) screen
+// AegisDB Web — Projects (data table) screen
 function ProjectsScreen() {
   const {
     Card,
@@ -2534,7 +2534,7 @@ function ProjectsScreen() {
     Avatar,
     Button,
     Input
-  } = window.VelaDesignSystem_c1e10b;
+  } = window.AegisDBDesignSystem_c1e10b;
   useLucide();
   const rows = [{
     name: "Atlas Analytics",

@@ -14,8 +14,8 @@ import (
 
 func TestReleaseExposesExecutor(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123") // 审批角色,不是发起人
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123") // 审批角色,不是发起人
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "执行人流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute", "config": `{"confirmRole":"l2"}`},

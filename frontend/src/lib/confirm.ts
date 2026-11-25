@@ -2,7 +2,7 @@
 // user confirmation (M15).
 //
 // 2026-10-29:从浏览器原生 confirm 换成样式化的弹窗(ConfirmDialog.vue,挂在 App.vue 根上)。原生框
-// 顶着"db-gateway.xxx.com 显示"、字挤在一起,命令也看不清;换了之后它返回 Promise,调用处一律
+// 顶着"aegisdb.xxx.com 显示"、字挤在一起,命令也看不清;换了之后它返回 Promise,调用处一律
 // `if (!(await confirmAction(msg))) return`。
 import { reactive } from 'vue'
 

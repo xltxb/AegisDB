@@ -7,9 +7,9 @@ package bootstrap
 // 之后两边的迁移各写一份、编号对齐。TestPGSchemaMatchesMySQL 把两边都跑一遍、逐表逐列
 // 比对,任何一边漏写都会在这里红。
 //
-//	VELA_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
-//	VELA_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
-//	VELA_GEN_PG_BASELINE=1   (只在要重新生成基线时设)
+//	AEGISDB_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
+//	AEGISDB_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
+//	AEGISDB_GEN_PG_BASELINE=1   (只在要重新生成基线时设)
 //
 // 映射规则(决定了网关在 PG 上的行为与 MySQL 一致):
 //   - 字符串一律 citext:MySQL 这边全部是 *_ci 排序规则,邮箱登录、搜索的 LIKE、唯一索引
@@ -271,9 +271,9 @@ func migratedMySQLStore(t *testing.T, base, name string) *sql.DB {
 }
 
 func TestGenPGBaseline(t *testing.T) {
-	base := os.Getenv("VELA_TEST_STORE_MYSQL")
-	if base == "" || os.Getenv("VELA_GEN_PG_BASELINE") == "" {
-		t.Skip("重新生成 PG 基线:设 VELA_TEST_STORE_MYSQL 与 VELA_GEN_PG_BASELINE=1")
+	base := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
+	if base == "" || os.Getenv("AEGISDB_GEN_PG_BASELINE") == "" {
+		t.Skip("重新生成 PG 基线:设 AEGISDB_TEST_STORE_MYSQL 与 AEGISDB_GEN_PG_BASELINE=1")
 	}
 	db := migratedMySQLStore(t, base, fmt.Sprintf("vt_pggen_%d", os.Getpid()))
 	ddl := pgBaselineDDL(t, readMySQLStoreSchema(t, db))
@@ -323,10 +323,10 @@ func normDefault(d string) string {
 }
 
 func TestPGSchemaMatchesMySQL(t *testing.T) {
-	my := os.Getenv("VELA_TEST_STORE_MYSQL")
-	pg := os.Getenv("VELA_TEST_STORE_PG")
+	my := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
+	pg := os.Getenv("AEGISDB_TEST_STORE_PG")
 	if my == "" || pg == "" {
-		t.Skip("需要 VELA_TEST_STORE_MYSQL 与 VELA_TEST_STORE_PG")
+		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL 与 AEGISDB_TEST_STORE_PG")
 	}
 	want := readMySQLStoreSchema(t, migratedMySQLStore(t, my, fmt.Sprintf("vt_pgcmp_%d", os.Getpid())))
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/service"
+	"aegisdb/internal/service"
 )
 
 // countFilesUnder walks dir recursively and returns how many regular files exist.
@@ -34,7 +34,7 @@ func TestExport_RowCapConfigurableAndFailureLeavesNoOrphans(t *testing.T) {
 	defer service.SetExportPartSize(100 << 20)
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	dir := t.TempDir()
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{

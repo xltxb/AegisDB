@@ -27,7 +27,7 @@ test('进入管理后台时调 enter;无操作满时长退回用户后台,不登
   await page.clock.fastForward(61_000)
   await expect(page).toHaveURL(/#\/dashboard/)
   await expect(page.getByText('管理后台空闲超时').first()).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('vela_session'))).not.toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).not.toBeNull()
 })
 
 test('在管理后台里有操作:节流报心跳', async ({ page }) => {

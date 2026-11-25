@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/internal/schemadiff"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/internal/schemadiff"
 )
 
 // 读目录的时限与表数上限。导出给 service:读失败的提示里要说出这两个数,不能各写一份。

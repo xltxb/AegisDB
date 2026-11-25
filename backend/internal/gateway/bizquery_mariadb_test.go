@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
-// testMariaDB 连一个真实 MariaDB(VELA_TEST_MARIADB=host:port/user/password),没设就跳过。
+// testMariaDB 连一个真实 MariaDB(AEGISDB_TEST_MARIADB=host:port/user/password),没设就跳过。
 func testMariaDB(t *testing.T) *model.Connection {
 	t.Helper()
-	v := os.Getenv("VELA_TEST_MARIADB")
+	v := os.Getenv("AEGISDB_TEST_MARIADB")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MARIADB=host:port/user/password,跳过真实 MariaDB 用例")
+		t.Skip("未设置 AEGISDB_TEST_MARIADB=host:port/user/password,跳过真实 MariaDB 用例")
 	}
 	parts := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(parts[0], ":", 2)

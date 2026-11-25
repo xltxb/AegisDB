@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 第 1 条:PG 系的系统目录(口令哈希、全库列结构、会话)业务方不该读到。
@@ -244,7 +244,7 @@ func TestMySQLBiz_QuotedFuncAndInfo(t *testing.T) {
 	for _, s := range []string{
 		"SELECT `sleep`(0.01)",
 		"SELECT `SLEEP` (0.01)",
-		"SELECT `get_lock`('vela_bb', 0), `release_lock`('vela_bb')",
+		"SELECT `get_lock`('aegisdb_bb', 0), `release_lock`('aegisdb_bb')",
 		"SELECT DATABASE(), USER(), @@hostname",
 		"SELECT @@datadir, @@basedir",
 	} {

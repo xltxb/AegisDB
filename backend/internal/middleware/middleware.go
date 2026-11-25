@@ -13,15 +13,15 @@ import (
 	"github.com/gin-gonic/gin"
 	jwtlib "github.com/golang-jwt/jwt/v5"
 
-	"velagateway/internal/metrics"
-	"velagateway/internal/model"
-	"velagateway/internal/presence"
-	"velagateway/internal/repository"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/metrics"
+	"aegisdb/internal/model"
+	"aegisdb/internal/presence"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/resp"
 )
 
-const ctxUser = "vela_user"
+const ctxUser = "aegisdb_user"
 
 // CurrentUser returns the authenticated user from the gin context.
 func CurrentUser(c *gin.Context) *model.User {
@@ -310,7 +310,7 @@ func AuditSupervisor(repo *repository.Repo) gin.HandlerFunc {
 }
 
 // auditOwnOnlyKey:AuditListGate 判定这次只能看自己的记录时,在 gin.Context 上设的标记。
-const auditOwnOnlyKey = "vela.auditOwnOnly"
+const auditOwnOnlyKey = "aegisdb.auditOwnOnly"
 
 // AuditListGate 挂在 GET /audit 与 /audit/instances 前(2026-10 审查)。
 //
@@ -444,7 +444,7 @@ func IPAllowlist(repo *repository.Repo) gin.HandlerFunc {
 }
 
 // AdminIPAllowlistForcedOff 是管理后台 IP 白名单的部署层总闸(config admin_ip.allowlist_disabled /
-// 环境变量 VELA_ADMIN_IP_ALLOWLIST_DISABLED),由 main 设置。拉下时白名单一律不生效。
+// 环境变量 AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED),由 main 设置。拉下时白名单一律不生效。
 var AdminIPAllowlistForcedOff bool
 
 // AdminIPAllowed:管理接口的来源 IP 检查(管理后台拆分,工单 08)。只在 AdminOnly / AuditReader 之后、

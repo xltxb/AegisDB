@@ -104,7 +104,7 @@ function onAdminIpBlocked(e: Event) {
   adminNoticeOnce('ip', (e as CustomEvent<string>).detail || t('adminIpBlocked'), 'error')
   if (inAdmin.value) go('/dashboard')
 }
-window.addEventListener('vela:admin-ip-blocked', onAdminIpBlocked)
+window.addEventListener('aegisdb:admin-ip-blocked', onAdminIpBlocked)
 
 // ---- 管理后台的独立空闲超时(工单 09)----
 // 停在管理后台无操作满 adminIdleMinutes(会话策略里读,默认 5)就退回用户后台,不登出 —— 终端标签与
@@ -200,7 +200,7 @@ function onAdminIdle(e: Event) {
   adminNoticeOnce('idle', (e as CustomEvent<string>).detail || t('adminIdleBack'), 'info')
   go('/dashboard')
 }
-window.addEventListener('vela:admin-idle', onAdminIdle)
+window.addEventListener('aegisdb:admin-idle', onAdminIdle)
 const activeKey = computed(() => (route.meta.menuKey as string) || '')
 // Titles are keyed off the MENU key, not the route name. The two differ for
 // several routes (connections→db, approvals→approve, risk-rules→rules,
@@ -408,7 +408,7 @@ function openApprovalsFromTodo() {
   todoOpen.value = false
   router.push('/approvals')
 }
-// 标签页标题带上数量:人切去别的标签页干活时,"(2) DP DB GATEWAY" 是唯一还能看见的提示。
+// 标签页标题带上数量:人切去别的标签页干活时,"(2) AegisDB" 是唯一还能看见的提示。
 // 标题本身由 App.vue 写(品牌名 + 这个数),见 lib/brand.ts。
 watch(() => auth.todoTotal, (n) => { titleCount.value = n }, { immediate: true })
 
@@ -481,8 +481,8 @@ function teardownIdle() {
 }
 
 onUnmounted(() => {
-  window.removeEventListener('vela:admin-ip-blocked', onAdminIpBlocked)
-  window.removeEventListener('vela:admin-idle', onAdminIdle)
+  window.removeEventListener('aegisdb:admin-ip-blocked', onAdminIpBlocked)
+  window.removeEventListener('aegisdb:admin-idle', onAdminIdle)
   ADMIN_EVENTS.forEach((e) => window.removeEventListener(e, kickAdmin, { capture: true }))
   if (adminTimer) clearTimeout(adminTimer)
   if (trailingBeat) clearTimeout(trailingBeat)

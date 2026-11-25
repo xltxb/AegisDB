@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestBizQuery_SameAddressReadOnlyAccount_RealMySQL(t *testing.T) {
-	p := mysqlParts(t, "VELA_TEST_MYSQL")
+	p := mysqlParts(t, "AEGISDB_TEST_MYSQL")
 	raw, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/", p[1], p[2], p[0]))
 	if err != nil {
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestBizQuery_SameAddressReadOnlyAccount_RealMySQL(t *testing.T) {
 	defer raw.Exec("DROP USER IF EXISTS 'vz_ro'@'%'")
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa, db: "biz_ro"}

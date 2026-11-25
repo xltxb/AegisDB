@@ -88,7 +88,7 @@ func frontendSettingsPayload() map[string]any {
 // 设置页实际发出的合法请求一个都不能被新校验误伤(工单 02 第 7 条的回归网)。
 func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPut, "/api/v1/settings", admin, frontendSettingsPayload())
 	eq(t, r.Code, 0, "默认值整包保存:"+r.Msg)
@@ -96,7 +96,7 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 	// 填满了的样子:路径、地址、白名单都有值。
 	p := frontendSettingsPayload()
 	p["script.savePath"] = t.TempDir()
-	p["inspection.savePath"] = "/var/vela/inspection"
+	p["inspection.savePath"] = "/var/aegisdb/inspection"
 	p["export.savePath"] = t.TempDir()
 	p["notify.larkWebhook"] = "https://open.feishu.cn/open-apis/bot/v2/hook/abc"
 	p["notify.larkSecret"] = "lark-secret"
@@ -123,7 +123,7 @@ func TestSettings_FrontendPayloadIsAccepted(t *testing.T) {
 // 逐键校验:非法值整次拒绝、不落库;未知键拒绝(工单 02 第 7 条)。
 func TestSettings_InvalidValuesAreRefusedAndNothingIsStored(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 先存一个合法值:与存量值相同的键不再校验(见 LegacyInvalidStoredValue),下面每个非法值都得是真改
 	_ = app.repo.SetSetting("gateway.execTimeout", "30")
 
@@ -149,7 +149,7 @@ func TestSettings_InvalidValuesAreRefusedAndNothingIsStored(t *testing.T) {
 		{"notify.larkWebhook 非 http", map[string]any{"notify.larkWebhook": "ftp://x.example.com/hook"}},
 		{"notify.larkWebhook javascript", map[string]any{"notify.larkWebhook": "javascript:alert(1)"}},
 		{"inspection.savePath 相对路径", map[string]any{"inspection.savePath": "reports/inspection"}},
-		{"inspection.savePath 含 ..", map[string]any{"inspection.savePath": "/var/vela/../etc"}},
+		{"inspection.savePath 含 ..", map[string]any{"inspection.savePath": "/var/aegisdb/../etc"}},
 		{"script.savePath 含 ..", map[string]any{"script.savePath": "/data/../../etc"}},
 		{"sso.baseUrl 非 http", map[string]any{"sso.baseUrl": "gopher://srd.example.com"}},
 		{"布尔键给字符串", map[string]any{"security.idleLock": "yes"}},
@@ -174,7 +174,7 @@ func TestSettings_InvalidValuesAreRefusedAndNothingIsStored(t *testing.T) {
 // 已设置的密钥类设置可以清除:显式 null 清除,"" 仍表示不改(工单 02 第 8 条)。
 func TestSettings_SecretCanBeClearedWithNull(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	secretSet := func(key string) bool {
 		t.Helper()
@@ -217,7 +217,7 @@ func TestSettings_SecretCanBeClearedWithNull(t *testing.T) {
 // 与存量值一字不差的键不再校验;真改成非法值照旧拒。
 func TestSettings_LegacyInvalidStoredValueDoesNotBlockOtherSaves(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 规则收紧前存下的值:相对路径、没写 http 前缀的地址
 	_ = app.repo.SetSetting("inspection.savePath", `"reports/inspection"`)
 	_ = app.repo.SetSetting("notify.consoleURL", `"gw.corp.io"`)

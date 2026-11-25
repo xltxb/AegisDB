@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Oracle 建存储程序编译失败也返回成功 —— 网关要回读 all_errors,把它报成失败(2026-10 生产:

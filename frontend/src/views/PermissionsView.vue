@@ -761,7 +761,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
       <div class="imodal">
         <div class="ihead"><div class="iic"><MailPlus :size="19" color="var(--accent-text)" /></div><div><div class="it">{{ $t('ivTitle') }}</div><div class="is">{{ $t('ivSub') }}</div></div><X :size="18" class="ix" @click="inviteForm = false" /></div>
         <div class="ibody">
-          <div><div class="fl">{{ $t('ivEmail') }}</div><input v-model="inviteEmail" placeholder="name@vela.io" type="email" /></div>
+          <div><div class="fl">{{ $t('ivEmail') }}</div><input v-model="inviteEmail" placeholder="name@aegisdb.io" type="email" /></div>
           <div><div class="fl">{{ $t('ivRole') }}</div><VSelect v-model="inviteRoleName" :options="roles.map((r) => roleName(r.name))" /></div>
           <div class="inote"><ShieldCheck :size="15" color="#2dcde6" /><div>{{ $t('ivNote') }}</div></div>
         </div>
@@ -775,7 +775,7 @@ const memberIds = computed(() => new Set(detail.value?.memberIds || []))
       <div class="imodal">
         <div class="ihead"><div class="iic"><UserPlus :size="19" color="var(--accent-text)" /></div><div><div class="it">{{ $t('cuTitle') }}</div><div class="is">{{ $t('cuSub') }}</div></div><X :size="18" class="ix" @click="createForm = false" /></div>
         <div class="ibody">
-          <div><div class="fl">{{ $t('ivEmail') }}</div><input v-model="createEmail" placeholder="name@vela.io" type="email" /></div>
+          <div><div class="fl">{{ $t('ivEmail') }}</div><input v-model="createEmail" placeholder="name@aegisdb.io" type="email" /></div>
           <div><div class="fl">{{ $t('cuName') }}</div><input v-model="createName" :placeholder="$t('cuNamePh')" type="text" /></div>
           <div><div class="fl">{{ $t('cuPw') }}</div><input v-model="createPw" :placeholder="$t('cuPwPh')" type="password" /></div>
           <div>

@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ----------------------------------------------------- 发布流程模板 (Pipeline)

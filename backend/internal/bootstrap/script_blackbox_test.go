@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // uploadMultipart 走 multipart 通道上传一个文件。
@@ -40,7 +40,7 @@ func (a *testApp) uploadMultipart(token, filename string, body []byte) apiResp {
 
 func TestScriptUpload_JSONAndMultipartShareValidation(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(token, map[string]any{"script.savePath": t.TempDir()})
 
 	for _, name := range []string{"evil.exe", "shell.php", "noext", "a.sql.exe", ".bashrc"} {
@@ -76,8 +76,8 @@ func TestScriptUpload_JSONAndMultipartShareValidation(t *testing.T) {
 // /scripts/scan 与 execute、terminal 同口径校验实例访问范围。
 func TestScriptScan_ChecksInstanceScope(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	me := app.userByEmail(admin, "linwei@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	me := app.userByEmail(admin, "linwei@aegisdb.io")
 	orders := app.connIDByName(admin, "order-cluster")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 
@@ -96,7 +96,7 @@ func TestScriptScan_ChecksInstanceScope(t *testing.T) {
 // 响应只回文件名,不回服务器绝对路径。
 func TestScript_ResponsesDoNotEchoServerPath(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"script.savePath": dir})
 	dev := app.connIDByEnv(token, "dev")

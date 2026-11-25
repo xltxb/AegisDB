@@ -11,14 +11,14 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
 )
 
 // seedTestFixtures loads the demo dataset the tests expect. The admin account
-// (Lin Wei / linwei@vela.io) already exists from the product seed; this adds the
+// (Lin Wei / linwei@aegisdb.io) already exists from the product seed; this adds the
 // remaining users, connections, approvals, audit chain and schema tree.
 func seedTestFixtures(t *testing.T, repo *repository.Repo) {
 	t.Helper()
@@ -33,12 +33,12 @@ func seedTestFixtures(t *testing.T, repo *repository.Repo) {
 		roleID[r.Code] = r.ID
 	}
 
-	pw, _ := crypto.HashPassword("vela123")
+	pw, _ := crypto.HashPassword("aegisdb123")
 
 	// Lin Wei is seeded by the product; reuse its id for approvals/audit below.
 	userID := map[string]int64{}
 	var admin model.User
-	if err := db.Where("email = ?", "linwei@vela.io").First(&admin).Error; err != nil {
+	if err := db.Where("email = ?", "linwei@aegisdb.io").First(&admin).Error; err != nil {
 		t.Fatalf("fixtures: admin not seeded: %v", err)
 	}
 	userID["Lin Wei"] = admin.ID
@@ -46,15 +46,15 @@ func seedTestFixtures(t *testing.T, repo *repository.Repo) {
 	// ---- Users (Lin Wei already exists) ----
 	type seedUser struct{ name, ini, dept, email, role, last, status string }
 	sus := []seedUser{
-		{"Chen Hao", "CH", "DBA 组", "chenhao@vela.io", "l2", "14 分钟前", "active"},
-		{"Wang Min", "WM", "平台工程", "wangmin@vela.io", "admin", "1 小时前", "active"},
-		{"Zhang Wei", "ZW", "DBA 组", "zhangwei@vela.io", "owner", "刚刚", "active"},
-		{"Li Na", "LN", "DBA 组", "lina@vela.io", "owner", "3 小时前", "active"},
-		{"Sun Qi", "SQ", "数据平台", "sunqi@vela.io", "l2", "昨天", "active"},
-		{"Zhao Lei", "ZL", "研发一部", "zhaolei@vela.io", "ro", "2 天前", "active"},
-		{"Qian Yi", "QY", "研发二部", "qianyi@vela.io", "ro", "30 天前", "disabled"},
-		{"Hu Jun", "HJ", "安全合规", "hujun@vela.io", "audit", "5 小时前", "active"},
-		{"Audit Bot", "AB", "安全合规", "auditbot@vela.io", "audit", "实时", "active"},
+		{"Chen Hao", "CH", "DBA 组", "chenhao@aegisdb.io", "l2", "14 分钟前", "active"},
+		{"Wang Min", "WM", "平台工程", "wangmin@aegisdb.io", "admin", "1 小时前", "active"},
+		{"Zhang Wei", "ZW", "DBA 组", "zhangwei@aegisdb.io", "owner", "刚刚", "active"},
+		{"Li Na", "LN", "DBA 组", "lina@aegisdb.io", "owner", "3 小时前", "active"},
+		{"Sun Qi", "SQ", "数据平台", "sunqi@aegisdb.io", "l2", "昨天", "active"},
+		{"Zhao Lei", "ZL", "研发一部", "zhaolei@aegisdb.io", "ro", "2 天前", "active"},
+		{"Qian Yi", "QY", "研发二部", "qianyi@aegisdb.io", "ro", "30 天前", "disabled"},
+		{"Hu Jun", "HJ", "安全合规", "hujun@aegisdb.io", "audit", "5 小时前", "active"},
+		{"Audit Bot", "AB", "安全合规", "auditbot@aegisdb.io", "audit", "实时", "active"},
 	}
 	for _, s := range sus {
 		u := model.User{Name: s.name, Initials: s.ini, Dept: s.dept, Email: s.email,

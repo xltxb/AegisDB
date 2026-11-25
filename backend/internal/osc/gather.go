@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // Gather collects the Facts for schema.table from a live MySQL. 采集与判断分开:

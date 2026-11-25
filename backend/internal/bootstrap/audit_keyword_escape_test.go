@@ -26,7 +26,7 @@ func (a *testApp) auditTotal(token, q string) int64 {
 
 func TestAuditKeyword_UnderscoreAndPercentAreLiteral(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 登录本身就写了一行审计,操作人是 Lin Wei —— 按名字能搜到
 	if n := app.auditTotal(admin, "Lin"); n == 0 {
@@ -51,12 +51,12 @@ func TestAuditKeyword_UnderscoreAndPercentAreLiteral(t *testing.T) {
 // 邮箱才是。姓名里没有 "linwei" 这个串,能搜到就只能是邮箱匹配上了。
 func TestAuditKeyword_MatchesActorEmail(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	if n := app.auditTotal(admin, "linwei"); n == 0 {
 		t.Fatal("按邮箱前缀 linwei 应能搜到 Lin Wei 的登录记录")
 	}
-	if n := app.auditTotal(admin, "linwei@vela.io"); n == 0 {
+	if n := app.auditTotal(admin, "linwei@aegisdb.io"); n == 0 {
 		t.Fatal("按完整邮箱应能搜到")
 	}
 	if n := app.auditTotal(admin, "nobody@nowhere.invalid"); n != 0 {

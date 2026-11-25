@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func dictEngine() *RiskEngine {

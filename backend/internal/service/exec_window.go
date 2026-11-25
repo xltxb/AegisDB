@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 执行窗口(「班车」)的判定。

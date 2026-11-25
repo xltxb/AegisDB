@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // fakeSRD 按 JWT 回用户信息。它记下收到的 Authorization,好断言用的是 Bearer。
@@ -150,7 +150,7 @@ func auditCount(app *testApp, where string, args ...any) int64 {
 func TestSSO_ExistingUserByEmail(t *testing.T) {
 	jwt := jwtFor("linwei")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		jwt: {"id": 1, "username": "linwei", "email": "LinWei@Vela.IO", "department": "IT", "internal_department": "DBA"},
+		jwt: {"id": 1, "username": "linwei", "email": "LinWei@AegisDB.IO", "department": "IT", "internal_department": "DBA"},
 	}}
 	app := newSSOApp(t, fake)
 
@@ -162,13 +162,13 @@ func TestSSO_ExistingUserByEmail(t *testing.T) {
 		Menus map[string]bool `json:"menus"`
 	}
 	_ = json.Unmarshal(r.Data, &me)
-	eq(t, me.Email, "linwei@vela.io", "映射到原账号(大小写不同也算同一个人)")
+	eq(t, me.Email, "linwei@aegisdb.io", "映射到原账号(大小写不同也算同一个人)")
 	if !me.Menus["terminal"] {
 		t.Error("原账号的权限应当原样带过来")
 	}
 	eq(t, fake.lastAuth(), "Bearer "+jwt, "userinfo 用 Bearer <jwt>")
 
-	u, _ := app.repo.GetUserByEmailFold("linwei@vela.io")
+	u, _ := app.repo.GetUserByEmailFold("linwei@aegisdb.io")
 	eq(t, u.Dept, "DBA", "部门同步自 SRD 的 internal_department")
 	if auditCount(app, "command = ? AND actor_id = ?", "login via sso", u.ID) == 0 {
 		t.Error("SSO 登录应写一条 'login via sso' 审计")
@@ -214,7 +214,7 @@ func TestSSO_NoGatewayAccountIsRefused(t *testing.T) {
 	}
 
 	// 管理员在后台开通之后,同一个人就能经 SSO 进来。
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
 		"name": "newbie", "email": "newbie@corp.io", "password": "Init-Pass-123", "roleIds": []int64{2},
 	}).Code, 0, "管理员开通账号")
@@ -225,30 +225,30 @@ func TestSSO_NoGatewayAccountIsRefused(t *testing.T) {
 func TestSSO_AccountStatusRules(t *testing.T) {
 	jd, ji, js := jwtFor("disabled"), jwtFor("invited"), jwtFor("service")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		jd: {"email": "qianyi@vela.io"},
-		ji: {"email": "invitee@vela.io"},
-		js: {"email": "bot@vela.io"},
+		jd: {"email": "qianyi@aegisdb.io"},
+		ji: {"email": "invitee@aegisdb.io"},
+		js: {"email": "bot@aegisdb.io"},
 	}}
 	app := newSSOApp(t, fake)
 
-	q, _ := app.repo.GetUserByEmailFold("qianyi@vela.io")
+	q, _ := app.repo.GetUserByEmailFold("qianyi@aegisdb.io")
 	if q == nil || q.Status != "disabled" {
 		t.Fatalf("前提不成立:夹具里 qianyi 应是停用账号")
 	}
 	if r := app.ssoLogin(jd); r.Code == 0 {
 		t.Error("网关里停用的账号不该能经 SSO 登录")
 	}
-	if err := app.repo.CreateUser(&model.User{Name: "bot", Email: "bot@vela.io", Status: "active", Kind: model.UserKindService}); err != nil {
+	if err := app.repo.CreateUser(&model.User{Name: "bot", Email: "bot@aegisdb.io", Status: "active", Kind: model.UserKindService}); err != nil {
 		t.Fatalf("造服务账号: %v", err)
 	}
 	if r := app.ssoLogin(js); r.Code == 0 {
 		t.Error("服务账号的门只有开放接口凭据,SSO 不是它的门")
 	}
-	if err := app.repo.CreateUser(&model.User{Name: "invitee", Email: "invitee@vela.io", Status: "invited", Kind: model.UserKindHuman}); err != nil {
+	if err := app.repo.CreateUser(&model.User{Name: "invitee", Email: "invitee@aegisdb.io", Status: "invited", Kind: model.UserKindHuman}); err != nil {
 		t.Fatalf("造受邀账号: %v", err)
 	}
 	ssoToken(t, app.ssoLogin(ji))
-	inv, _ := app.repo.GetUserByEmailFold("invitee@vela.io")
+	inv, _ := app.repo.GetUserByEmailFold("invitee@aegisdb.io")
 	eq(t, inv.Status, "active", "受邀账号经 SSO 首登后激活")
 }
 
@@ -284,7 +284,7 @@ func TestSSO_FailureModesAreDistinct(t *testing.T) {
 // 裸 JWT 也认:SRD 的"自定义 base64"若本就是不做编码,网关不该因此拒绝。
 func TestSSO_AcceptsBareJWTCookie(t *testing.T) {
 	jwt := jwtFor("linwei")
-	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@vela.io"}}})
+	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@aegisdb.io"}}})
 	ssoToken(t, app.withSSOCookie(http.MethodPost, "/api/v1/auth/sso", jwt, "", nil))
 }
 
@@ -300,7 +300,7 @@ func TestSSO_CookieWithPlusSign(t *testing.T) {
 	if !strings.Contains(cookie, "+") {
 		t.Fatalf("没造出带 + 的 Cookie: %s", cookie)
 	}
-	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@vela.io"}}})
+	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@aegisdb.io"}}})
 	ssoToken(t, app.withSSOCookie(http.MethodPost, "/api/v1/auth/sso", cookie, "", nil))
 }
 
@@ -311,19 +311,19 @@ func TestSSO_CookieWithPlusSign(t *testing.T) {
 func TestSSO_BindOnFirstLoginTightensLocalLogin(t *testing.T) {
 	jwt := jwtFor("chenhao")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		jwt:              {"username": "chenhao", "email": "ChenHao@vela.io"},
-		jwtFor("linwei"): {"username": "linwei", "email": "linwei@vela.io"},
+		jwt:              {"username": "chenhao", "email": "ChenHao@aegisdb.io"},
+		jwtFor("linwei"): {"username": "linwei", "email": "linwei@aegisdb.io"},
 	}}
 	app := newSSOApp(t, fake)
-	ch, _ := app.repo.GetUserByEmailFold("chenhao@vela.io")
+	ch, _ := app.repo.GetUserByEmailFold("chenhao@aegisdb.io")
 	if ch == nil || app.svc.IsAdmin(ch) || ch.SSOBound {
 		t.Fatalf("前提不成立:夹具里 chenhao 应是未绑定的非管理员")
 	}
 	// 还没经 SRD 登录过:启用了 SSO 也照常口令登录
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 
 	ssoToken(t, app.ssoLogin(jwt))
-	ch, _ = app.repo.GetUserByEmailFold("chenhao@vela.io")
+	ch, _ = app.repo.GetUserByEmailFold("chenhao@aegisdb.io")
 	eq(t, ch.SSOBound, true, "邮箱对上,当场绑定")
 	eq(t, ch.SSOUserName, "chenhao", "记下 SRD 里的用户名")
 	if ch.SSOBoundAt == nil {
@@ -337,31 +337,31 @@ func TestSSO_BindOnFirstLoginTightensLocalLogin(t *testing.T) {
 		t.Error("已绑定的人再次登录不该重复写绑定审计")
 	}
 
-	r := app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "chenhao@vela.io", "password": "vela123"})
+	r := app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "chenhao@aegisdb.io", "password": "aegisdb123"})
 	if r.Code == 0 {
 		t.Fatal("已绑定 SSO 的非管理员不该能用口令登录")
 	}
 	if !strings.Contains(r.Msg, "SSO") {
 		t.Errorf("拒绝要说清去哪儿登录,实际 %q", r.Msg)
 	}
-	wrong := app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "chenhao@vela.io", "password": "nope"})
+	wrong := app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{"email": "chenhao@aegisdb.io", "password": "nope"})
 	if strings.Contains(wrong.Msg, "SSO") {
 		t.Error("口令错时不该泄露'这个账号绑了 SSO'")
 	}
 
 	// 管理员经 SRD 登录后同样绑定,但口令仍可用 —— SRD 宕机时的应急门
 	ssoToken(t, app.ssoLogin(jwtFor("linwei")))
-	adm, _ := app.repo.GetUserByEmailFold("linwei@vela.io")
+	adm, _ := app.repo.GetUserByEmailFold("linwei@aegisdb.io")
 	eq(t, adm.SSOBound, true, "管理员同样绑定")
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 解绑:恢复口令登录,并留审计
 	eq(t, app.do(http.MethodPost, "/api/v1/users/"+itoa(ch.ID)+"/sso-unbind", admin, nil).Code, 0, "解绑")
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 	if auditCount(app, "command LIKE ?", "sso.unbind %") == 0 {
 		t.Error("解绑应写审计")
 	}
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/users/"+itoa(ch.ID)+"/sso-unbind", ro, nil); r.Code == 0 {
 		t.Error("非管理员不该能解绑")
 	}
@@ -369,7 +369,7 @@ func TestSSO_BindOnFirstLoginTightensLocalLogin(t *testing.T) {
 	// SSO 关掉之后绑定不再生效,所有人回到口令
 	ssoToken(t, app.ssoLogin(jwt))
 	_ = app.repo.SetSetting("sso.enabled", "false")
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 }
 
 // ----------------------------------------------------------------- 设置
@@ -388,16 +388,16 @@ func TestSSO_DisabledChangesNothing(t *testing.T) {
 	if r := app.ssoLogin(jwtFor("x")); r.Code == 0 {
 		t.Error("未启用时 SSO 登录不该成功")
 	}
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 }
 
 // SSO 开关在【设置 · 会话与安全】里:通过设置接口保存,即改即生效,保存时整体校验并留审计。
 func TestSSO_ConfiguredViaSettings(t *testing.T) {
 	jwt := jwtFor("linwei")
-	srd := httptest.NewServer((&fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@vela.io"}}}).handler())
+	srd := httptest.NewServer((&fakeSRD{identity: map[string]map[string]any{jwt: {"email": "linwei@aegisdb.io"}}}).handler())
 	t.Cleanup(srd.Close)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 开着但没填地址:拒绝,而且一项都不存
 	r := app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"sso.enabled": true, "sso.cookieName": "tk"})
@@ -425,7 +425,7 @@ func TestSSO_ConfiguredViaSettings(t *testing.T) {
 	if auditCount(app, "command LIKE ?", "settings.sso %") == 0 {
 		t.Error("修改 SSO 设置应写审计")
 	}
-	ro := app.login("chenhao@vela.io", "vela123")
+	ro := app.login("chenhao@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPut, "/api/v1/settings", ro, map[string]any{"sso.enabled": false}); r.Code == 0 {
 		t.Error("非管理员不该能改 SSO 设置")
 	}
@@ -434,7 +434,7 @@ func TestSSO_ConfiguredViaSettings(t *testing.T) {
 // 部署环境下 SRD 地址必须是 https:保存时就挡住。
 func TestSSO_SettingsRequireHTTPSOutsideDev(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	orig := service.AllowInsecureSSO
 	service.AllowInsecureSSO = false
 	t.Cleanup(func() { service.AllowInsecureSSO = orig })
@@ -450,9 +450,9 @@ func TestSSO_EnabledWithoutURLIsTreatedAsOff(t *testing.T) {
 	app := newTestApp(t)
 	_ = app.repo.SetSetting("sso.enabled", "true")
 	_ = app.repo.SetSetting("sso.baseUrl", `""`)
-	ch, _ := app.repo.GetUserByEmailFold("chenhao@vela.io")
+	ch, _ := app.repo.GetUserByEmailFold("chenhao@aegisdb.io")
 	_ = app.repo.UpdateUserFields(ch.ID, map[string]any{"sso_bound": true})
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 }
 
 
@@ -462,16 +462,16 @@ func TestSSO_EnabledWithoutURLIsTreatedAsOff(t *testing.T) {
 func TestSSO_TurnOffFallsBackToLocalLogin(t *testing.T) {
 	jwtCh := jwtFor("chenhao")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		jwtCh: {"username": "chenhao", "email": "chenhao@vela.io"},
+		jwtCh: {"username": "chenhao", "email": "chenhao@aegisdb.io"},
 	}}
 	app := newSSOApp(t, fake)
 	ssoToken(t, app.ssoLogin(jwtCh)) // 存量账号,当场绑定
-	if r := app.loginRaw("chenhao@vela.io", "vela123"); r.Code == 0 {
+	if r := app.loginRaw("chenhao@aegisdb.io", "aegisdb123"); r.Code == 0 {
 		t.Fatal("前提不成立:SSO 开着时已绑定的人不该能用口令登录")
 	}
 
 	// 管理员照常用口令进来,在设置页关掉 SSO
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"sso.enabled": false}).Code, 0, "关闭 SSO")
 
 	var cfg struct {
@@ -484,21 +484,21 @@ func TestSSO_TurnOffFallsBackToLocalLogin(t *testing.T) {
 	if r := app.ssoLogin(jwtCh); r.Code == 0 {
 		t.Error("关掉后 SSO 登录接口不该再放人进来")
 	}
-	app.login("chenhao@vela.io", "vela123") // 已绑定的人立即恢复口令登录
+	app.login("chenhao@aegisdb.io", "aegisdb123") // 已绑定的人立即恢复口令登录
 
 	// 再打开:绑定关系还在,已绑定的人重新只能走 SSO
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"sso.enabled": true}).Code, 0, "重新打开 SSO")
-	if r := app.loginRaw("chenhao@vela.io", "vela123"); r.Code == 0 {
+	if r := app.loginRaw("chenhao@aegisdb.io", "aegisdb123"); r.Code == 0 {
 		t.Error("重新打开后,已绑定的人又该只能走 SSO")
 	}
 	ssoToken(t, app.ssoLogin(jwtCh))
 }
 
-// 部署层总闸(sso.disabled / VELA_SSO_DISABLED):设置表里开着也按关闭处理 ——
+// 部署层总闸(sso.disabled / AEGISDB_SSO_DISABLED):设置表里开着也按关闭处理 ——
 // 给"SSO 出问题、偏偏又进不去设置页"的时候用。
 func TestSSO_ForcedOffByDeployConfig(t *testing.T) {
 	jwt := jwtFor("chenhao")
-	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "chenhao@vela.io"}}})
+	app := newSSOApp(t, &fakeSRD{identity: map[string]map[string]any{jwt: {"email": "chenhao@aegisdb.io"}}})
 	ssoToken(t, app.ssoLogin(jwt)) // 绑定
 
 	service.SSOForcedOff = true
@@ -515,7 +515,7 @@ func TestSSO_ForcedOffByDeployConfig(t *testing.T) {
 	if r := app.ssoLogin(jwt); r.Code == 0 {
 		t.Error("总闸拉下时 SSO 登录不该成功")
 	}
-	app.login("chenhao@vela.io", "vela123")
+	app.login("chenhao@aegisdb.io", "aegisdb123")
 }
 
 func TestLoadConfig_SSODisabledFromEnv(t *testing.T) {
@@ -530,15 +530,15 @@ func TestLoadConfig_SSODisabledFromEnv(t *testing.T) {
 	if cfg.SSO.Disabled {
 		t.Fatal("默认不拉总闸")
 	}
-	t.Setenv("VELA_SSO_DISABLED", "1")
+	t.Setenv("AEGISDB_SSO_DISABLED", "1")
 	cfg, _ = LoadConfig(path)
 	if !cfg.SSO.Disabled {
-		t.Error("VELA_SSO_DISABLED=1 应拉下总闸")
+		t.Error("AEGISDB_SSO_DISABLED=1 应拉下总闸")
 	}
 	if err := os.WriteFile(path, []byte("sso:\n  disabled: true\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("VELA_SSO_DISABLED", "")
+	t.Setenv("AEGISDB_SSO_DISABLED", "")
 	cfg, _ = LoadConfig(path)
 	if !cfg.SSO.Disabled {
 		t.Error("配置文件 sso.disabled: true 应拉下总闸")

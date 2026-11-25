@@ -117,7 +117,7 @@ export interface Me {
 export interface SsoConfig {
   enabled: boolean
   loginUrl: string
-  /** 部署配置(sso.disabled / VELA_SSO_DISABLED)强制关闭了 SSO:设置页的开关暂不生效 */
+  /** 部署配置(sso.disabled / AEGISDB_SSO_DISABLED)强制关闭了 SSO:设置页的开关暂不生效 */
   forcedOff?: boolean
 }
 

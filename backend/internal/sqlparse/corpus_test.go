@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/sqlparse"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/sqlparse"
 )
 
 // 语料库文件的格式:每条语句前一行 `-- @case <名字>`,其余都是语句原文(可以多行)。
@@ -136,7 +136,7 @@ func runCorpus(t *testing.T) []dialectReport {
 	return reports
 }
 
-// 语料库本身要能跑通;想看明细就设 VELA_SQLPARSE_REPORT=<文件> 重新生成报告。
+// 语料库本身要能跑通;想看明细就设 AEGISDB_SQLPARSE_REPORT=<文件> 重新生成报告。
 func TestCorpusReport(t *testing.T) {
 	reports := runCorpus(t)
 	for _, r := range reports {
@@ -145,13 +145,13 @@ func TestCorpusReport(t *testing.T) {
 		}
 		t.Logf("%s: 用例 %d,语句 %d,解析成功 %d,差异 %d", r.dialect, r.cases, r.stmts, r.ok, len(r.diffs))
 	}
-	path := os.Getenv("VELA_SQLPARSE_REPORT")
+	path := os.Getenv("AEGISDB_SQLPARSE_REPORT")
 	if path == "" {
 		return
 	}
 	var b strings.Builder
 	b.WriteString("# 解析器语料库差异报告\n\n自动生成,勿手改。重新生成:\n\n")
-	b.WriteString("    VELA_SQLPARSE_REPORT=<文件> go test ./internal/sqlparse -run TestCorpusReport\n\n")
+	b.WriteString("    AEGISDB_SQLPARSE_REPORT=<文件> go test ./internal/sqlparse -run TestCorpusReport\n\n")
 	b.WriteString("收集来的用例没有分引擎,也含故意写坏的片段,所以总通过率偏低;手写样例的通过率更接近真实语句。\n\n")
 	b.WriteString("| 方言 | 用例 | 语句 | 解析成功 | 总通过率 | 手写样例通过 | 差异 |\n|---|---|---|---|---|---|---|\n")
 	for _, r := range reports {
@@ -252,10 +252,10 @@ func TestSplitBeforeParseSeesMariaDBCommentBody(t *testing.T) {
 
 // 收集现有测试里的 SQL,写进 testdata。只在要刷新语料时手动跑:
 //
-//	VELA_SQLPARSE_HARVEST=1 go test ./internal/sqlparse -run TestHarvestCorpus
+//	AEGISDB_SQLPARSE_HARVEST=1 go test ./internal/sqlparse -run TestHarvestCorpus
 func TestHarvestCorpus(t *testing.T) {
-	if os.Getenv("VELA_SQLPARSE_HARVEST") == "" {
-		t.Skip("设 VELA_SQLPARSE_HARVEST=1 才刷新语料")
+	if os.Getenv("AEGISDB_SQLPARSE_HARVEST") == "" {
+		t.Skip("设 AEGISDB_SQLPARSE_HARVEST=1 才刷新语料")
 	}
 	sqlLike := regexp.MustCompile(`(?is)^\s*(/\*.*?\*/\s*|--[^\n]*\n\s*|#[^\n]*\n\s*)*\(?\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|MERGE|CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|SHOW|DESC|DESCRIBE|EXPLAIN|WITH|CALL|SET|USE|BEGIN|DECLARE|LOAD|HANDLER|DO)\s`)
 	skipFile := regexp.MustCompile(`(?i)mongo|dws|postgres|_pg|sqlite`)

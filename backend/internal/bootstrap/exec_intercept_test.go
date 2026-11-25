@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // Tracer bullet: a high-risk command on a PROD instance must be intercepted by
@@ -15,7 +15,7 @@ import (
 // engine (capability matrix + risk dictionary) -> approval creation.
 func TestExec_ProdHighRiskCommandIsIntercepted(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{

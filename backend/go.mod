@@ -1,4 +1,4 @@
-module velagateway
+module aegisdb
 
 go 1.23.0
 

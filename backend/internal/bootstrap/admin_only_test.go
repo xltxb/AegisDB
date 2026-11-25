@@ -10,8 +10,8 @@ import (
 // perms menu, so it can neither view nor mutate roles/users. Admin can.
 func TestAdminOnly_OwnerCannotEditPermissions(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("zhangwei@vela.io", "vela123") // DBA 负责人 (owner)
-	admin := app.login("linwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // DBA 负责人 (owner)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// role ids via admin (owner can no longer even list roles)
 	rr := app.do(http.MethodGet, "/api/v1/roles", admin, nil)

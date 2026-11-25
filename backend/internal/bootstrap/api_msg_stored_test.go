@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 type notifRefItem struct {
@@ -51,8 +51,8 @@ func (a *testApp) notificationRefs(token string) []notifRefItem {
 // 驳回通知:标题、正文都还是原来的中文,同时带上 ref。
 func TestStoredRef_NotificationCarriesRefs(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(token)
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", owner, nil).Code, 0, "reject")
 
@@ -79,8 +79,8 @@ func TestStoredRef_NotificationCarriesRefs(t *testing.T) {
 // 0060 之前写入的老通知:没有 body_ref。固定标题照样能翻译,带参数的正文没有 ref(界面显示中文原句)。
 func TestStoredRef_OldNotificationFallsBack(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	u, err := app.repo.GetUserByEmail("linwei@vela.io")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	u, err := app.repo.GetUserByEmail("linwei@aegisdb.io")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestStoredRef_OldNotificationFallsBack(t *testing.T) {
 // 任务错误:固定句的老行读出时补 ref;带参数的写入时存 ref。
 func TestStoredRef_JobErrors(t *testing.T) {
 	app := newTestApp(t)
-	u, _ := app.repo.GetUserByEmail("linwei@vela.io")
+	u, _ := app.repo.GetUserByEmail("linwei@aegisdb.io")
 
 	ej := &model.ExportJob{UserID: u.ID, Status: model.ExportFailed, Error: "导出队列已满,请稍后重试"}
 	if err := app.repo.CreateExportJob(ej); err != nil {
@@ -138,7 +138,7 @@ func TestStoredRef_JobErrors(t *testing.T) {
 // 收尾批(迁移 0061):异步执行日志里网关自己写的行带身份,NOTICE 等数据库原话不在其中。
 func TestStoredRef_AsyncLogLines(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec-async", token, map[string]any{
 		"connectionId": dev, "sql": "SELECT run_long_proc()", "reason": "nightly job",

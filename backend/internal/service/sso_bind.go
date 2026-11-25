@@ -12,7 +12,7 @@ package service
 // 又会重新绑定。
 
 import (
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // SSOUnbind 解除一个账号的 SSO 绑定:它重新可以用口令登录。

@@ -13,8 +13,8 @@ test('绑定 MFA:先输当前登录密码,通过后才显示密钥', async ({ pa
     const body = r.request().postDataJSON() ?? {}
     bodies.push(body)
     if (!body.password) return r.fulfill(fail(42801, '请输入当前登录密码'))
-    if (body.password !== 'vela123') return r.fulfill(fail(42801, '当前登录密码错误'))
-    return r.fulfill(envelope({ secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/Vela:linwei?secret=JBSWY3DPEHPK3PXP' }))
+    if (body.password !== 'aegisdb123') return r.fulfill(fail(42801, '当前登录密码错误'))
+    return r.fulfill(envelope({ secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/AegisDB:linwei?secret=JBSWY3DPEHPK3PXP' }))
   })
   await page.goto('/#/dashboard')
   await page.locator('.avatar').click()
@@ -28,8 +28,8 @@ test('绑定 MFA:先输当前登录密码,通过后才显示密钥', async ({ pa
   await expect(page.locator('.mfa-overlay .err')).toContainText('当前登录密码错误')
   await expect(page.locator('.kv')).toHaveCount(0)
 
-  await pw.fill('vela123')
+  await pw.fill('aegisdb123')
   await page.getByTestId('mfa-pw-next').click()
   await expect(page.locator('.kv')).toHaveText('JBSWY3DPEHPK3PXP')
-  expect(bodies.at(-1)).toEqual({ password: 'vela123' })
+  expect(bodies.at(-1)).toEqual({ password: 'aegisdb123' })
 })

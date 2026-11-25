@@ -90,7 +90,7 @@ const ipModalOpen = ref(false)
 const adminIpEnabled = ref(false)
 const adminIpList = ref('')
 const adminIpModalOpen = ref(false)
-// 部署配置拉了总闸(VELA_ADMIN_IP_ALLOWLIST_DISABLED):这里存什么都不生效
+// 部署配置拉了总闸(AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED):这里存什么都不生效
 const adminIpForcedOff = ref(false)
 // 两个白名单都是**先存、存成了再改界面**。从前反过来:先把徽标改成「已启用」、关掉弹窗,再去存,
 // 存失败也不报 —— 页面说白名单开着,其实一条都没生效(2026-10 审查)。失败时弹窗留着,改动不丢。

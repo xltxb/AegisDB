@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/presence"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/presence"
+	"aegisdb/pkg/resp"
 )
 
 type onlineTerm struct {

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
-	"velagateway/internal/review"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/review"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 数据库规范审查 — the rule library and the checker that runs it.

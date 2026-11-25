@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // MFA 验证码失败次数限制(2026-10 安全审计 H4)。

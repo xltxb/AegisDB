@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/schemadiff"
+	"aegisdb/internal/model"
+	"aegisdb/internal/schemadiff"
 )
 
 // 表结构快照:每个引擎建同样形状的一张表(主键、唯一索引、普通索引、注释、默认值、可空),
@@ -88,9 +88,9 @@ func TestSchemaSnapshot_SQLite(t *testing.T) {
 }
 
 func TestSchemaSnapshot_MySQL(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)
@@ -218,9 +218,9 @@ func TestSchemaSnapshot_Oracle(t *testing.T) {
 }
 
 func TestSchemaSnapshot_Postgres(t *testing.T) {
-	v := os.Getenv("VELA_TEST_PG") // host:port/user/password
+	v := os.Getenv("AEGISDB_TEST_PG") // host:port/user/password
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_PG")
+		t.Skip("未设置 AEGISDB_TEST_PG")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)
@@ -292,11 +292,11 @@ func TestSchemaSnapshot_Postgres(t *testing.T) {
 }
 
 // 两台真实 MySQL 上执行同一段建表语句:对比必须一致(没有假差异);改一列、加一个索引后,
-// 恰好报出这两处。VELA_TEST_MYSQL 与 VELA_TEST_MYSQL_REPLICA 各一台。
+// 恰好报出这两处。AEGISDB_TEST_MYSQL 与 AEGISDB_TEST_MYSQL_REPLICA 各一台。
 func TestSchemaSnapshot_MySQLTwoInstancesDiff(t *testing.T) {
-	envs := []string{os.Getenv("VELA_TEST_MYSQL"), os.Getenv("VELA_TEST_MYSQL_REPLICA")}
+	envs := []string{os.Getenv("AEGISDB_TEST_MYSQL"), os.Getenv("AEGISDB_TEST_MYSQL_REPLICA")}
 	if envs[0] == "" || envs[1] == "" {
-		t.Skip("需要 VELA_TEST_MYSQL 与 VELA_TEST_MYSQL_REPLICA 两台 MySQL")
+		t.Skip("需要 AEGISDB_TEST_MYSQL 与 AEGISDB_TEST_MYSQL_REPLICA 两台 MySQL")
 	}
 	ddl := []string{
 		"DROP DATABASE IF EXISTS snap_diff", "CREATE DATABASE snap_diff",
@@ -350,9 +350,9 @@ func TestSchemaSnapshot_MySQLTwoInstancesDiff(t *testing.T) {
 // 按 schema 对比 app 与 app_uat:两边建同样的表(自增列、本 schema 的枚举类型)。不在 search_path 上
 // 的对象,PG 会给默认值 / 类型带 schema 前缀 —— 那样每个自增列、枚举列都会报假差异。必须完全一致。
 func TestSchemaSnapshot_PostgresSchemaPairHasNoPrefixNoise(t *testing.T) {
-	v := os.Getenv("VELA_TEST_PG")
+	v := os.Getenv("AEGISDB_TEST_PG")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_PG")
+		t.Skip("未设置 AEGISDB_TEST_PG")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)
@@ -468,9 +468,9 @@ func TestDiffDatabaseNames(t *testing.T) {
 		}
 	})
 	t.Run("mysql", func(t *testing.T) {
-		v := os.Getenv("VELA_TEST_MYSQL")
+		v := os.Getenv("AEGISDB_TEST_MYSQL")
 		if v == "" {
-			t.Skip("未设置 VELA_TEST_MYSQL")
+			t.Skip("未设置 AEGISDB_TEST_MYSQL")
 		}
 		p := strings.SplitN(v, "/", 3)
 		hp := strings.SplitN(p[0], ":", 2)
@@ -489,9 +489,9 @@ func TestDiffDatabaseNames(t *testing.T) {
 			"dbpick_test", "mysql", "information_schema", "performance_schema", "sys")
 	})
 	t.Run("postgres", func(t *testing.T) {
-		v := os.Getenv("VELA_TEST_PG")
+		v := os.Getenv("AEGISDB_TEST_PG")
 		if v == "" {
-			t.Skip("未设置 VELA_TEST_PG")
+			t.Skip("未设置 AEGISDB_TEST_PG")
 		}
 		p := strings.SplitN(v, "/", 3)
 		hp := strings.SplitN(p[0], ":", 2)
@@ -508,9 +508,9 @@ func TestDiffDatabaseNames(t *testing.T) {
 
 // schema 下拉:PG 连到指定的库,列出用户 schema(与读快照同一口径),不列系统 schema。
 func TestDiffSchemaNames_Postgres(t *testing.T) {
-	v := os.Getenv("VELA_TEST_PG")
+	v := os.Getenv("AEGISDB_TEST_PG")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_PG")
+		t.Skip("未设置 AEGISDB_TEST_PG")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

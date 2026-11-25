@@ -22,7 +22,7 @@ package gateway
 import (
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 四类,加一个"不是对数据的操作"。取值直接对应事件中心 action 枚举里的四个

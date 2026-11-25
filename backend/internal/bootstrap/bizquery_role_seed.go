@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ensureBizQueryRole 建立(或补齐)内置的「业务查询」角色。

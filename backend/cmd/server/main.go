@@ -1,4 +1,4 @@
-// Command server boots the DP DB GATEWAY backend.
+// Command server boots the AegisDB backend.
 package main
 
 import (
@@ -9,16 +9,16 @@ import (
 	"os"
 	"time"
 
-	"velagateway/internal/bootstrap"
-	"velagateway/internal/gateway"
-	"velagateway/internal/handler"
-	"velagateway/internal/repository"
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/internal/storemigrate"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/logger"
+	"aegisdb/internal/bootstrap"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/handler"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/internal/storemigrate"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/logger"
 )
 
 // version is stamped at build time via -ldflags "-X main.version=...".
@@ -45,7 +45,7 @@ func main() {
 			runMigrateStore(os.Args[2:])
 			return
 		case "version", "-v", "--version":
-			fmt.Printf("vela-gateway %s\n", version)
+			fmt.Printf("aegisdb %s\n", version)
 			return
 		}
 	}
@@ -84,19 +84,19 @@ func main() {
 	}
 
 	// Initialize the at-rest secret key (encrypts stored DB-connection passwords)
-	// before any connection is created/opened. Prefer a dedicated VELA_SECRET_KEY;
-	// falling back to the JWT secret couples the two, so rotating VELA_JWT_SECRET
+	// before any connection is created/opened. Prefer a dedicated AEGISDB_SECRET_KEY;
+	// falling back to the JWT secret couples the two, so rotating AEGISDB_JWT_SECRET
 	// would make every stored ciphertext undecryptable (A2).
 	secretKey, fellBack := cfg.SecretKeyResolved()
 	if fellBack {
-		slog.Warn("VELA_SECRET_KEY 未设置，回落使用 JWT 密钥派生连接口令加密密钥；轮换 VELA_JWT_SECRET 将导致已存储的连接口令无法解密。建议设置独立的 VELA_SECRET_KEY。")
+		slog.Warn("AEGISDB_SECRET_KEY 未设置，回落使用 JWT 密钥派生连接口令加密密钥；轮换 AEGISDB_JWT_SECRET 将导致已存储的连接口令无法解密。建议设置独立的 AEGISDB_SECRET_KEY。")
 	}
 	// 强度只告警、不拒启动(L-14):这把密钥一旦换掉,所有存量密文就再也解不开了 ——
 	// 对一套已经在跑的部署,拒绝启动等于把它锁死。所以这里只负责让弱密钥**看得见**,
 	// 换不换、什么时候换,是运维带着数据迁移计划去做的事。
 	if !cfg.IsLocalDev() {
 		if n := len(secretKey); n < 32 {
-			slog.Warn("连接口令加密密钥过短，建议用 `openssl rand -hex 32` 生成后设入 VELA_SECRET_KEY（更换密钥需同时重置已存储的连接口令）", "len", n)
+			slog.Warn("连接口令加密密钥过短，建议用 `openssl rand -hex 32` 生成后设入 AEGISDB_SECRET_KEY（更换密钥需同时重置已存储的连接口令）", "len", n)
 		} else if distinct(secretKey) < 8 {
 			slog.Warn("连接口令加密密钥字符种类过少（疑似弱密钥），建议用 `openssl rand -hex 32` 重新生成（更换密钥需同时重置已存储的连接口令）")
 		}
@@ -104,10 +104,10 @@ func main() {
 	crypto.SetSecretKey(secretKey)
 	// 脱敏哈希的盐与静态加密密钥同源但不同用途,所以额外派生一层,避免把加密密钥
 	// 的任何一段直接带进对外可见的打码值里(L-11)。
-	gateway.SetMaskSalt(crypto.DeriveSalt(secretKey, "vela:mask:v1"))
+	gateway.SetMaskSalt(crypto.DeriveSalt(secretKey, "aegisdb:mask:v1"))
 	// The webhook SSRF guard blocks private/loopback targets. Only a genuine
 	// LOCAL dev run relaxes it by default (on-host receivers); every deployment
-	// keeps it on unless webhook.allow_private (or VELA_WEBHOOK_ALLOW_PRIVATE)
+	// keeps it on unless webhook.allow_private (or AEGISDB_WEBHOOK_ALLOW_PRIVATE)
 	// explicitly opts in for a trusted internal target.
 	//
 	// 原先的条件是 `cfg.Env != "prod"` —— staging / uat 也跟着整个关掉了防护,而那些
@@ -119,7 +119,7 @@ func main() {
 	service.SSOForcedOff = cfg.SSO.Disabled
 	middleware.AdminIPAllowlistForcedOff = cfg.AdminIP.AllowlistDisabled
 	if cfg.SSO.Disabled {
-		slog.Warn("SSO 已被部署配置强制关闭(sso.disabled / VELA_SSO_DISABLED):设置页的 SSO 开关不生效,所有人使用账号口令登录")
+		slog.Warn("SSO 已被部署配置强制关闭(sso.disabled / AEGISDB_SSO_DISABLED):设置页的 SSO 开关不生效,所有人使用账号口令登录")
 	}
 	if !cfg.IsLocalDev() && cfg.Webhook.AllowPrivate {
 		slog.Warn("webhook.allow_private 已开启：出站 Webhook/飞书 SSRF 防护对内网/环回地址放行，请确认目标网络可信")
@@ -212,7 +212,7 @@ func main() {
 	}()
 
 	tls := cfg.Server.TLSCert != "" && cfg.Server.TLSKey != ""
-	slog.Info("DP DB GATEWAY listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
+	slog.Info("AegisDB listening", "version", version, "addr", cfg.Server.Addr, "env", cfg.Env, "driver", cfg.Database.Driver, "tls", tls)
 	if cfg.Env == "prod" && !tls {
 		slog.Warn("生产环境未启用 TLS:请配置 server.tls_cert/tls_key,或在前置反向代理终止 TLS,避免凭据 / JWT 明文传输")
 	}
@@ -231,13 +231,13 @@ func main() {
 }
 
 // runInit handles `server init [flags]`: migrate schema + seed reference data +
-// create the platform admin. Credentials come from flags or VELA_ADMIN_* env.
+// create the platform admin. Credentials come from flags or AEGISDB_ADMIN_* env.
 func runInit(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	cfgPath := fs.String("config", "configs/config.yaml", "path to config file")
-	email := fs.String("admin-email", os.Getenv("VELA_ADMIN_EMAIL"), "platform admin email")
-	password := fs.String("admin-password", os.Getenv("VELA_ADMIN_PASSWORD"), "platform admin password (>= 12 chars, >= 3 character classes)")
-	name := fs.String("admin-name", os.Getenv("VELA_ADMIN_NAME"), "platform admin display name (optional)")
+	email := fs.String("admin-email", os.Getenv("AEGISDB_ADMIN_EMAIL"), "platform admin email")
+	password := fs.String("admin-password", os.Getenv("AEGISDB_ADMIN_PASSWORD"), "platform admin password (>= 12 chars, >= 3 character classes)")
+	name := fs.String("admin-name", os.Getenv("AEGISDB_ADMIN_NAME"), "platform admin display name (optional)")
 	_ = fs.Parse(args)
 	logger.Setup("release")
 
@@ -386,8 +386,8 @@ func runEvery(tick time.Duration, enabled func() bool, interval func() time.Dura
 // --estimate 只读源库、不碰目标。
 func runMigrateStore(args []string) {
 	fs := flag.NewFlagSet("migrate-store", flag.ExitOnError)
-	from := fs.String("from-mysql", "", "源 MySQL 存储库 DSN,如 user:pw@tcp(host:3306)/vela_gateway(可用环境变量 VELA_MIGRATE_FROM_MYSQL)")
-	to := fs.String("to-postgres", "", "目标 PostgreSQL 库 DSN,如 'host=… port=5432 user=… password=… dbname=vela_gateway sslmode=disable'(可用 VELA_MIGRATE_TO_POSTGRES)")
+	from := fs.String("from-mysql", "", "源 MySQL 存储库 DSN,如 user:pw@tcp(host:3306)/aegisdb(可用环境变量 AEGISDB_MIGRATE_FROM_MYSQL)")
+	to := fs.String("to-postgres", "", "目标 PostgreSQL 库 DSN,如 'host=… port=5432 user=… password=… dbname=aegisdb sslmode=disable'(可用 AEGISDB_MIGRATE_TO_POSTGRES)")
 	tz := fs.String("tz", "", "写下这些数据的网关所在时区,如 Asia/Shanghai(必填:MySQL 的时间不带时区)")
 	workers := fs.Int("workers", 4, "同时拷贝的表数")
 	reset := fs.Bool("reset", false, "目标库里有上次没搬完的存储库表时,先清空再搬")
@@ -397,13 +397,13 @@ func runMigrateStore(args []string) {
 	logger.Setup("release")
 
 	if *from == "" {
-		*from = os.Getenv("VELA_MIGRATE_FROM_MYSQL")
+		*from = os.Getenv("AEGISDB_MIGRATE_FROM_MYSQL")
 	}
 	if *to == "" {
-		*to = os.Getenv("VELA_MIGRATE_TO_POSTGRES")
+		*to = os.Getenv("AEGISDB_MIGRATE_TO_POSTGRES")
 	}
 	if *from == "" || *tz == "" || (*to == "" && !*estimate) {
-		fmt.Fprintln(os.Stderr, "用法: vela-gateway migrate-store --from-mysql <DSN> --to-postgres <DSN> --tz Asia/Shanghai [--workers 4] [--reset] [--estimate] [--accept-broken-chain]")
+		fmt.Fprintln(os.Stderr, "用法: aegisdb migrate-store --from-mysql <DSN> --to-postgres <DSN> --tz Asia/Shanghai [--workers 4] [--reset] [--estimate] [--accept-broken-chain]")
 		os.Exit(1)
 	}
 	loc, err := time.LoadLocation(*tz)

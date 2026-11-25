@@ -46,7 +46,7 @@ test.describe('自助修改密码', () => {
     await expect(modal).toBeVisible()
 
     // 前端先挡掉两次不一致,不发请求
-    await page.getByTestId('pw-old').fill('vela123')
+    await page.getByTestId('pw-old').fill('aegisdb123')
     await page.getByTestId('pw-new').fill('newpass99')
     await page.getByTestId('pw-confirm').fill('newpass98')
     await page.getByTestId('pw-submit').click()
@@ -56,8 +56,8 @@ test.describe('自助修改密码', () => {
     await page.getByTestId('pw-confirm').fill('newpass99')
     await page.getByTestId('pw-submit').click()
     await expect(modal).toHaveCount(0)
-    expect(bodies).toEqual([{ oldPassword: 'vela123', newPassword: 'newpass99' }])
-    expect(await page.evaluate(() => localStorage.getItem('vela_session'))).toBe('1.fresh-token')
+    expect(bodies).toEqual([{ oldPassword: 'aegisdb123', newPassword: 'newpass99' }])
+    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBe('1.fresh-token')
     await expect(page.getByText('密码已修改,其它设备上的登录已失效')).toBeVisible()
   })
 
@@ -73,7 +73,7 @@ test.describe('自助修改密码', () => {
     await page.getByTestId('pw-submit').click()
     await expect(page.getByTestId('pw-err')).toHaveText('原密码错误')
     await expect(page.getByTestId('password-modal')).toBeVisible()
-    expect(await page.evaluate(() => localStorage.getItem('vela_session'))).toBe('1.e2e-token')
+    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBe('1.e2e-token')
   })
 })
 
@@ -97,8 +97,8 @@ test('用户与权限:用户列表没到之前不报「0 用户」', async ({ pa
   const gate = new Promise<void>((res) => { release = res })
   await page.route('**/api/v1/users', async (r) => {
     await gate
-    return r.fulfill(envelope([{ id: 1, name: 'Lin Wei', email: 'linwei@vela.io', initials: 'LW', dept: '', roles: ['平台管理员'], roleIds: [1], primaryRoleId: 1, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '', ssoBound: false, canDisable: false, disableBlock: '' },
-      { id: 2, name: 'Chen Hao', email: 'chenhao@vela.io', initials: 'CH', dept: '', roles: [], roleIds: [], primaryRoleId: 0, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '', ssoBound: false, canDisable: true, disableBlock: '' }]))
+    return r.fulfill(envelope([{ id: 1, name: 'Lin Wei', email: 'linwei@aegisdb.io', initials: 'LW', dept: '', roles: ['平台管理员'], roleIds: [1], primaryRoleId: 1, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '', ssoBound: false, canDisable: false, disableBlock: '' },
+      { id: 2, name: 'Chen Hao', email: 'chenhao@aegisdb.io', initials: 'CH', dept: '', roles: [], roleIds: [], primaryRoleId: 0, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '', ssoBound: false, canDisable: true, disableBlock: '' }]))
   })
   await page.goto('/#/admin/permissions')
   await expect(page.locator('.tb-sub')).toHaveText('加载中…')
@@ -110,7 +110,7 @@ test('用户与权限:用户列表没到之前不报「0 用户」', async ({ pa
 
 // ---- 5. 英文下分层表格列头不重叠 ----
 test('分层与环境(英文):开关列头可换行,彼此不重叠', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await shell(page)
   await page.goto('/#/admin/env-tiers')
   const spans = page.getByTestId('tier-th').locator('> span')
@@ -137,7 +137,7 @@ test('审批页:副标题不以「·」开头', async ({ page }) => {
 })
 
 test('审批列表(英文):单号不折行,「All statuses」不被截断', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await shell(page)
   await page.route((u) => u.pathname.endsWith('/api/v1/approvals'), (r) => r.fulfill(envelope({ items: [apRow()], total: 1, pending: 1, page: 1, pageSize: 20 })))
   await page.goto('/#/approvals')

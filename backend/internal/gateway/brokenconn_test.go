@@ -15,7 +15,7 @@ import (
 
 	mysqldrv "github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10 生产:TiDB 实例在终端实例树里展开报「无法连接目标数据库…: invalid connection」。

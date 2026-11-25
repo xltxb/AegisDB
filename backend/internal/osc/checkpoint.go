@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // Checkpoint 是一次迁移可以续跑的最小状态(.scratch/osc-product 工单 07)。

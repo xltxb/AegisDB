@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/gateway"
+	"aegisdb/internal/gateway"
 )
 
 // Web 命令行:同一台实例开两个标签,是两条数据库连接;同一个标签里的语句始终在同一条上
@@ -14,9 +14,9 @@ import (
 // 接口、登出。用 SQLite 的临时表当"会话"的探针 —— 临时表只在建它的那条连接上可见。
 func TestTerminal_EachTabGetsItsOwnConnection(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.realSQLiteConnIn(admin, "dev", "tab-conn")
-	uid := app.userIDByEmail(admin, "linwei@vela.io")
+	uid := app.userIDByEmail(admin, "linwei@aegisdb.io")
 	t.Cleanup(func() {
 		gateway.CloseTermSessionsOf(uid)
 		time.Sleep(300 * time.Millisecond) // 后台关连接,让 TempDir 能删掉 SQLite 文件

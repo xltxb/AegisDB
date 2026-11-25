@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 管理后台拆分(工单 03):管理类菜单(实例、规则、分层、权限、系统设置)只给平台管理员角色。
@@ -58,7 +58,7 @@ func TestRevokeAdminOnlyMenus_FromNonAdminRoles(t *testing.T) {
 // 权限页 / 接口:不能把管理类菜单勾给非管理员角色;关掉照常允许;管理员角色照常可改。
 func TestSetRoleMenus_RefusesAdminOnlyMenusForOtherRoles(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	l2, admin := roleIDByCode(t, app, "l2"), roleIDByCode(t, app, "admin")
 
 	r := app.do(http.MethodPut, "/api/v1/roles/"+itoa(l2)+"/menus", token, map[string]any{"menus": map[string]bool{"terminal": true, "perms": true, "settings": true}})

@@ -52,8 +52,8 @@ func (a *testApp) auditByAction(token, action string) auditPageAction {
 // 结论真的写进了行里,而且登录那一行**不是"查"**。
 func TestAuditDataAction_IsRecordedAndLoginIsNotARead(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123") // 这一下是一条 login
-	app.submitProdHighRisk(admin)                   // DROP TABLE orders;
+	admin := app.login("linwei@aegisdb.io", "aegisdb123") // 这一下是一条 login
+	app.submitProdHighRisk(admin)                         // DROP TABLE orders;
 
 	all := app.auditByAction(admin, "")
 	var login, drop *auditRowAction
@@ -85,7 +85,7 @@ func TestAuditDataAction_IsRecordedAndLoginIsNotARead(t *testing.T) {
 // 按增删改查筛得动;拼错的取值报错,不是回空列表。
 func TestAuditDataAction_FiltersAndRefusesAnUnknownValue(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.submitProdHighRisk(admin)
 
 	all := app.auditByAction(admin, "")
@@ -115,7 +115,7 @@ func TestAuditDataAction_FiltersAndRefusesAnUnknownValue(t *testing.T) {
 // 两个维度**互不干扰**:同时筛才是交集,而不是谁盖掉谁。
 func TestAuditDataAction_CombinesWithTheEventTypeFilter(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.submitProdHighRisk(admin)
 
 	r := app.do(http.MethodGet, "/api/v1/audit?page=1&pageSize=200&event=intercept&action=delete", admin, nil)
@@ -143,7 +143,7 @@ func TestAuditDataAction_CombinesWithTheEventTypeFilter(t *testing.T) {
 // 导出的 CSV 带这一列。
 func TestAuditDataAction_ShowsUpInTheCSVExport(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.submitProdHighRisk(admin)
 
 	csv := string(app.raw(http.MethodGet, "/api/v1/audit/export?action=delete", admin))
@@ -182,7 +182,7 @@ func TestAuditDataAction_WebhookSendsTheStoredConclusion(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", 3)
 

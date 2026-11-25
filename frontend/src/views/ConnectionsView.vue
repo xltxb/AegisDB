@@ -207,8 +207,8 @@ const allCollapsed = computed(() => envGroups.value.length > 0 && envGroups.valu
 
 // 密度。紧凑模式压到 40px 行高并收起副标题与标签行 —— 1080p 首屏能一眼看到 20 台
 // 以上;要看标签和归属时切回舒适模式。按浏览器记住。
-const dense = ref(localStorage.getItem('vela_conn_dense') === '1')
-function setDense(v: boolean) { dense.value = v; localStorage.setItem('vela_conn_dense', v ? '1' : '0') }
+const dense = ref(localStorage.getItem('aegisdb_conn_dense') === '1')
+function setDense(v: boolean) { dense.value = v; localStorage.setItem('aegisdb_conn_dense', v ? '1' : '0') }
 
 // 每组的渲染预算。展开一个 28 台的生产组时先出 25 行,其余由人点一下再出 ——
 // 这一页每行都带着标签、下拉框和可展开的库面板,一次性铺开的不是 88 行文本,

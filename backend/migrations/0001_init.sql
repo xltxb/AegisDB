@@ -1,12 +1,12 @@
--- DP DB GATEWAY — canonical schema (MySQL 8 / InnoDB / utf8mb4).
+-- AegisDB — canonical schema (MySQL 8 / InnoDB / utf8mb4).
 -- Naming: tbl_ prefix, pk_ primary keys, idx_ indexes. No physical FKs —
 -- relational integrity is maintained at the application layer (backend doc §9).
--- This is the AUTHORITATIVE production schema, applied via `vela-gateway migrate`
+-- This is the AUTHORITATIVE production schema, applied via `aegisdb migrate`
 -- and tracked in schema_migrations (see internal/bootstrap/migrate.go). GORM
 -- AutoMigrate is used only for the SQLite dev/test path, not production.
 
-CREATE DATABASE IF NOT EXISTS vela_gateway DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-USE vela_gateway;
+CREATE DATABASE IF NOT EXISTS aegisdb DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+USE aegisdb;
 
 CREATE TABLE IF NOT EXISTS tbl_role (
   id                BIGINT       NOT NULL AUTO_INCREMENT,

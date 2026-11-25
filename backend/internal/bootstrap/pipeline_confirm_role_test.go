@@ -20,9 +20,9 @@ import (
 // 人工确认:配了角色就以角色为准,有审批权但不在角色里的人也不能点。
 func TestManualGateRespectsConfiguredRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123") // 有审批权,但不是 l2
-	l2 := app.login("chenhao@vela.io", "vela123")     // 本流程指定的确认角色
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // 有审批权,但不是 l2
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")     // 本流程指定的确认角色
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "指定确认角色", "", []map[string]any{
@@ -57,8 +57,8 @@ func TestManualGateRespectsConfiguredRole(t *testing.T) {
 // 这个决定收走(比如变更窗口由 DBA 负责人统一把关),所以配置优先。
 func TestExecuteGateRespectsConfiguredRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123") // 发起人,且是 admin
-	owner := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123") // 发起人,且是 admin
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "指定执行确认角色", "", []map[string]any{
@@ -91,7 +91,7 @@ func TestExecuteGateRespectsConfiguredRole(t *testing.T) {
 // 角色里没有能点的人时,阶段要失败而不是永远停着 —— 与审批节点同一条原则。
 func TestGateWithUnstaffedRoleFailsInsteadOfHanging(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	// 清空 audit,只放一个服务账号 —— 它登录不了控制台,点不了任何东西。
@@ -125,7 +125,7 @@ func TestGateWithUnstaffedRoleFailsInsteadOfHanging(t *testing.T) {
 // 保存流程时就拦住不存在的确认角色。
 func TestConfirmRoleValidatedAtSaveTime(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	for _, st := range []map[string]any{
 		{"name": "人工确认", "type": "manual", "config": `{"confirmRole":"nope"}`},

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 type openStage struct {
@@ -147,7 +147,7 @@ func (a *testApp) openRelease(token, relNo string) openRelease {
 
 func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// The credential acts as a DBA-lead service account — the same rights that
 	// account has in the console, no more.
 	// 流程由网关侧绑定在凭据上 —— 外部请求不再指定(也不允许指定)。
@@ -155,7 +155,7 @@ func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"error"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "DevOps 平台", "zhangwei@vela.io", nil, pid)
+	token := app.issueClientPiped(admin, "DevOps 平台", "zhangwei@aegisdb.io", nil, pid)
 
 	// Addressed by NAME: an external caller knows "sandbox-dev", not a row id.
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
@@ -195,10 +195,10 @@ func TestOpenAPICreatesReleaseByInstanceName(t *testing.T) {
 
 func TestOpenAPIRetryIsIdempotent(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 流程必须恰好一个执行阶段(工单 02 第 12 条)
 	idemPid := app.createPipeline(admin, "幂等流程", "", []map[string]any{{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`}, {"name": "执行变更", "type": "execute"}})
-	token := app.issueClientPiped(admin, "CI", "zhangwei@vela.io", nil, idemPid)
+	token := app.issueClientPiped(admin, "CI", "zhangwei@aegisdb.io", nil, idemPid)
 
 	body := map[string]any{
 		"title": "幂等", "externalRef": "BUILD-77", "instance": "sandbox-dev",
@@ -219,12 +219,12 @@ func TestOpenAPIRetryIsIdempotent(t *testing.T) {
 
 func TestOpenAPIAcceptsScriptUpload(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	scriptPid := app.createPipeline(admin, "脚本流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"none"}`},
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "发布平台", "zhangwei@vela.io", nil, scriptPid)
+	token := app.issueClientPiped(admin, "发布平台", "zhangwei@aegisdb.io", nil, scriptPid)
 
 	script := "-- upgrade\nCREATE TABLE tbl_from_file (id BIGINT NOT NULL COMMENT 'id', PRIMARY KEY(id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='f';\n"
 	var buf bytes.Buffer
@@ -260,8 +260,8 @@ func TestOpenAPIAcceptsScriptUpload(t *testing.T) {
 
 func TestOpenAPIScopesAndCredentialFailures(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	readOnly := app.issueClient(admin, "看板", "chenhao@vela.io", []string{"release:read"})
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	readOnly := app.issueClient(admin, "看板", "chenhao@aegisdb.io", []string{"release:read"})
 
 	// A read-only credential may not raise a change.
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", readOnly, map[string]any{
@@ -280,7 +280,7 @@ func TestOpenAPIScopesAndCredentialFailures(t *testing.T) {
 	}
 
 	// A disabled credential stops working immediately.
-	full := app.issueClient(admin, "待停用", "chenhao@vela.io", nil)
+	full := app.issueClient(admin, "待停用", "chenhao@aegisdb.io", nil)
 	clients := app.do(http.MethodGet, "/api/v1/api-clients", admin, nil)
 	var list []struct {
 		ID   int64  `json:"id"`
@@ -306,10 +306,10 @@ func TestOpenAPIScopesAndCredentialFailures(t *testing.T) {
 
 func TestOpenAPIInheritsServiceAccountPermissions(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// Bound to a read-only RESEARCH account: it may look, not change.
 	execPid := app.createPipeline(admin, "只执行", "", []map[string]any{{"name": "执行变更", "type": "execute"}})
-	token := app.issueClientPiped(admin, "研发流水线", "zhaolei@vela.io", nil, execPid)
+	token := app.issueClientPiped(admin, "研发流水线", "zhaolei@aegisdb.io", nil, execPid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "越权 DDL", "instance": "sandbox-dev",
@@ -328,7 +328,7 @@ func TestOpenAPIInheritsServiceAccountPermissions(t *testing.T) {
 
 func TestAPIClientManagementIsAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	dba := app.login("chenhao@vela.io", "vela123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123")
 	// The DBA holds no settings menu, so even the listing is out of reach.
 	r := app.do(http.MethodGet, "/api/v1/api-clients", dba, nil)
 	if r.Code == 0 {
@@ -342,8 +342,8 @@ func TestAPIClientManagementIsAdminOnly(t *testing.T) {
 
 func TestOpenAPIDiscoveryEndpoints(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	token := app.issueClient(admin, "集成方", "chenhao@vela.io", nil)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	token := app.issueClient(admin, "集成方", "chenhao@aegisdb.io", nil)
 
 	r := app.openDo(http.MethodGet, "/api/v1/open/instances", token, nil)
 	eq(t, r.Code, 0, "instances")

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestParseVerb_ExplainSynonymsAndFormats(t *testing.T) {

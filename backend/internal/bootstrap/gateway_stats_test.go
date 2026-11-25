@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // The gateway status pill uses real measured request latency, not a hard-coded
@@ -13,7 +13,7 @@ import (
 // by actual samples.
 func TestGatewayStats_RealLatency(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	for i := 0; i < 6; i++ {
 		app.do(http.MethodGet, "/api/v1/connections", token, nil)
@@ -55,7 +55,7 @@ func gatewayIntercepts(app *testApp, token string) int64 {
 // number: intercepting a PROD high-risk command increases the reported count.
 func TestGatewayStats_ReportsRealProdInterceptions(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	before := gatewayIntercepts(app, token)

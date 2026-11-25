@@ -3,7 +3,7 @@ package service
 import (
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // 口令规则 —— 建号(CreateUser)、管理员重置(AdminSetPassword)、本人修改(ChangeOwnPassword)

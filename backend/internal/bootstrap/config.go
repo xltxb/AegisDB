@@ -18,17 +18,17 @@ var weakJWTSecrets = map[string]bool{
 	"change-me":                        true,
 	"changeme":                         true,
 	"dev-secret":                       true,
-	"vela-dev-secret":                  true,
-	"vela-gateway-secret":              true,
 	"secret":                           true,
-	"change-me-vela-gateway-dev-secret": true, // the value shipped in configs/config.yaml (public → compromised)
-	"CHANGE-ME-set-VELA_JWT_SECRET":    true, // former config.prod.yaml placeholder
+	"aegisdb-dev-secret":               true,
+	"aegisdb-secret":                   true,
+	"change-me-aegisdb-dev-secret":     true, // the value shipped in configs/config.yaml (public → compromised)
+	"CHANGE-ME-set-AEGISDB_JWT_SECRET": true, // former config.prod.yaml placeholder
 }
 
 // Config is the full backend configuration loaded from configs/config.yaml.
 type Config struct {
 	// Env is the deployment profile: "dev" (local, SQLite) or "prod" (MySQL).
-	// Resolved from APP_ENV/VELA_ENV env vars, falling back to this yaml field
+	// Resolved from APP_ENV/AEGISDB_ENV env vars, falling back to this yaml field
 	// then "dev". It drives the default database driver — see LoadConfig.
 	Env string `yaml:"env"`
 	// EnvRaw is the env name the operator actually asked for, BEFORE it was
@@ -70,7 +70,7 @@ type Config struct {
 		TTLHours int    `yaml:"ttl_hours"`
 	} `yaml:"jwt"`
 	// SecretKey is the passphrase for at-rest encryption of stored DB-connection
-	// passwords. Resolved from VELA_SECRET_KEY; when empty it falls back to the
+	// passwords. Resolved from AEGISDB_SECRET_KEY; when empty it falls back to the
 	// JWT secret. Keeping it separate lets the JWT signing secret be rotated
 	// without making previously encrypted ciphertext undecryptable (A2).
 	SecretKey string `yaml:"secret_key"`
@@ -88,19 +88,19 @@ type Config struct {
 		// AllowPrivate relaxes the outbound SSRF guard so webhook/Lark targets may
 		// resolve to loopback/private/link-local addresses. Dev allows this by
 		// default; prod keeps it off unless explicitly enabled here (or via
-		// VELA_WEBHOOK_ALLOW_PRIVATE) — e.g. to reach an on-host/internal receiver.
+		// AEGISDB_WEBHOOK_ALLOW_PRIVATE) — e.g. to reach an on-host/internal receiver.
 		// Only enable it when the target network is trusted: it re-opens SSRF to
 		// internal services and the cloud metadata endpoint.
 		AllowPrivate bool `yaml:"allow_private"`
 	} `yaml:"webhook"`
 	// SSO 的部署层总闸。平时 SSO 在【设置 · 会话与安全】里开关;这里写 true(或环境变量
-	// VELA_SSO_DISABLED=1)则无论设置页怎么存都按关闭处理,所有人回到账号口令登录。
+	// AEGISDB_SSO_DISABLED=1)则无论设置页怎么存都按关闭处理,所有人回到账号口令登录。
 	// 给"SSO 出了问题、又进不去设置页"的时候用,改完重启生效。
 	SSO struct {
 		Disabled bool `yaml:"disabled"`
 	} `yaml:"sso"`
 	// 管理后台 IP 白名单的部署层总闸(管理后台拆分,工单 08)。白名单在【设置】里配;这里写 true
-	// (或环境变量 VELA_ADMIN_IP_ALLOWLIST_DISABLED=1)则无论设置怎么存都不生效 —— 给"白名单配错、
+	// (或环境变量 AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED=1)则无论设置怎么存都不生效 —— 给"白名单配错、
 	// 管理员全被挡在管理后台外面、又改不了设置"的时候用,改完重启生效。
 	AdminIP struct {
 		AllowlistDisabled bool `yaml:"allowlist_disabled"`
@@ -118,49 +118,49 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	// Environment overrides (handy for docker / CI).
-	if v := os.Getenv("VELA_MYSQL_DSN"); v != "" {
+	if v := os.Getenv("AEGISDB_MYSQL_DSN"); v != "" {
 		cfg.Database.MySQLDSN = v
 	}
-	if v := os.Getenv("VELA_POSTGRES_DSN"); v != "" {
+	if v := os.Getenv("AEGISDB_POSTGRES_DSN"); v != "" {
 		cfg.Database.PostgresDSN = v
 	}
-	if v := os.Getenv("VELA_JWT_SECRET"); v != "" {
+	if v := os.Getenv("AEGISDB_JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
-	if v := os.Getenv("VELA_WEB_DIR"); v != "" {
+	if v := os.Getenv("AEGISDB_WEB_DIR"); v != "" {
 		cfg.Server.WebDir = v
 	}
-	if v := os.Getenv("VELA_TLS_CERT"); v != "" {
+	if v := os.Getenv("AEGISDB_TLS_CERT"); v != "" {
 		cfg.Server.TLSCert = v
 	}
-	if v := os.Getenv("VELA_TLS_KEY"); v != "" {
+	if v := os.Getenv("AEGISDB_TLS_KEY"); v != "" {
 		cfg.Server.TLSKey = v
 	}
-	if v := os.Getenv("VELA_WEBHOOK_SECRET"); v != "" { // M11: allow secret via env, not just file
+	if v := os.Getenv("AEGISDB_WEBHOOK_SECRET"); v != "" { // M11: allow secret via env, not just file
 		cfg.Webhook.Secret = v
 	}
-	if v := os.Getenv("VELA_SECRET_KEY"); v != "" { // A2: dedicated at-rest encryption key
+	if v := os.Getenv("AEGISDB_SECRET_KEY"); v != "" { // A2: dedicated at-rest encryption key
 		cfg.SecretKey = v
 	}
-	if v := os.Getenv("VELA_WEBHOOK_ALLOW_PRIVATE"); v != "" { // relax SSRF guard for internal receivers
+	if v := os.Getenv("AEGISDB_WEBHOOK_ALLOW_PRIVATE"); v != "" { // relax SSRF guard for internal receivers
 		cfg.Webhook.AllowPrivate = isTruthy(v)
 	}
-	if v := os.Getenv("VELA_SSO_DISABLED"); v != "" { // SSO 总闸:强制关闭,回到口令登录
+	if v := os.Getenv("AEGISDB_SSO_DISABLED"); v != "" { // SSO 总闸:强制关闭,回到口令登录
 		cfg.SSO.Disabled = isTruthy(v)
 	}
-	if v := os.Getenv("VELA_ADMIN_IP_ALLOWLIST_DISABLED"); v != "" { // 管理后台 IP 白名单总闸
+	if v := os.Getenv("AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED"); v != "" { // 管理后台 IP 白名单总闸
 		cfg.AdminIP.AllowlistDisabled = isTruthy(v)
 	}
 
 	// Resolve the deployment profile and, from it, the database driver.
 	// Precedence for the driver (highest first):
-	//   1. VELA_DB_DRIVER      — explicit manual override (mysql|postgres|sqlite)
-	//   2. APP_ENV / VELA_ENV / config.env  — dev→sqlite, prod→mysql
-	//      存储库搬到 PG 之后用 VELA_DB_DRIVER=postgres(写在 vela.env)—— 不读配置文件里的
+	//   1. AEGISDB_DB_DRIVER      — explicit manual override (mysql|postgres|sqlite)
+	//   2. APP_ENV / AEGISDB_ENV / config.env  — dev→sqlite, prod→mysql
+	//      存储库搬到 PG 之后用 AEGISDB_DB_DRIVER=postgres(写在 aegisdb.env)—— 不读配置文件里的
 	//      driver:升级包会覆盖 configs/config.yaml,写在那里下一次升级就悄悄连回旧 MySQL。
 	// Local dev thus needs zero dependencies (SQLite) while prod uses MySQL,
 	// switched from a single startup knob.
-	rawEnv := firstNonEmpty(os.Getenv("APP_ENV"), os.Getenv("VELA_ENV"), cfg.Env)
+	rawEnv := firstNonEmpty(os.Getenv("APP_ENV"), os.Getenv("AEGISDB_ENV"), cfg.Env)
 	cfg.EnvRaw = strings.TrimSpace(rawEnv) // remember the requested name for the strong-secret gate (issue 33)
 	if rawEnv != "" && !isKnownEnv(rawEnv) {
 		// e.g. APP_ENV=staging → falls through to dev (SQLite). Surface it rather
@@ -168,7 +168,7 @@ func LoadConfig(path string) (*Config, error) {
 		slog.Warn("未识别的环境名,将按 dev 处理(使用 SQLite)", "env", rawEnv)
 	}
 	cfg.Env = normalizeEnv(firstNonEmpty(rawEnv, "dev"))
-	if v := os.Getenv("VELA_DB_DRIVER"); v != "" {
+	if v := os.Getenv("AEGISDB_DB_DRIVER"); v != "" {
 		cfg.Database.Driver = v
 	} else if cfg.Env == "prod" {
 		cfg.Database.Driver = "mysql"
@@ -217,7 +217,7 @@ func (c *Config) ValidateForServe() error {
 	}
 	sec := strings.TrimSpace(c.JWT.Secret)
 	if weakJWTSecrets[sec] {
-		return fmt.Errorf("非本地部署(prod / staging 等)必须设置强 JWT 密钥：请通过 VELA_JWT_SECRET 或 config.prod.yaml 的 jwt.secret 配置(不能使用仓库里的默认占位值,它是公开的)")
+		return fmt.Errorf("非本地部署(prod / staging 等)必须设置强 JWT 密钥：请通过 AEGISDB_JWT_SECRET 或 config.prod.yaml 的 jwt.secret 配置(不能使用仓库里的默认占位值,它是公开的)")
 	}
 	if len(sec) < 32 {
 		return fmt.Errorf("非本地部署 JWT 密钥过短(至少 32 字符),当前 %d 字符", len(sec))
@@ -278,7 +278,7 @@ func isKnownEnv(s string) bool {
 
 // SecretKeyResolved returns the passphrase used to encrypt stored DB-connection
 // passwords at rest, and whether it fell back to the JWT secret. A dedicated
-// VELA_SECRET_KEY decouples token signing from connection-password encryption so
+// AEGISDB_SECRET_KEY decouples token signing from connection-password encryption so
 // the JWT secret can be rotated without making stored ciphertext undecryptable
 // (A2). When it falls back, the caller should warn.
 func (c *Config) SecretKeyResolved() (string, bool) {

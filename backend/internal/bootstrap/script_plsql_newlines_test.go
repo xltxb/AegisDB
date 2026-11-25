@@ -19,7 +19,7 @@ import (
 // 在压平后吞掉后面的 INSERT 和 END,触发器要么建不出来,要么是空的。
 func TestScriptExecute_PLSQLBlockKeepsItsNewlines(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn, _ := app.sameFileConns(token, "script-plsql-nl")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "set script path")
 
@@ -60,7 +60,7 @@ func TestScriptExecute_PLSQLBlockKeepsItsNewlines(t *testing.T) {
 // 多行的 PL/SQL 块也要原样多行。
 func TestScriptScan_PLSQLBlockIsReportedVerbatim(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn, _ := app.sameFileConns(token, "script-plsql-scan")
 
 	body := "CREATE OR REPLACE PACKAGE pk_nl AS\n  -- 说明\n  FUNCTION f RETURN NUMBER;\nEND pk_nl;"

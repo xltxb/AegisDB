@@ -1,4 +1,4 @@
-# Vela 数据库管理网关 (DP DB GATEWAY)
+# AegisDB 数据库管理网关
 
 面向 DBA 与运维团队的统一数据库访问网关：所有数据库操作经 Web 终端 / 脚本 / 异步任务 /
 数据导出 / 发布流水线 / 开放接口下发，由网关**逐语句实时判定** —— 放行、拦截或转审批；
@@ -6,9 +6,9 @@
 可经 Webhook / 飞书外推。支持真实连接 MySQL、PostgreSQL、Oracle、SQLite 等多引擎实例。
 
 ```
-db-gateway/
+AegisDB/
 ├─ backend/     Go + Gin + GORM 后端（REST + WebSocket；风险引擎/RBAC/审批/审计哈希链/多引擎真实执行）
-├─ frontend/    Vue 3 + TS + Vite 前端（Vela 设计系统，明暗双主题，中英双语，xterm.js 真终端）
+├─ frontend/    Vue 3 + TS + Vite 前端（AegisDB 设计系统，明暗双主题，中英双语，xterm.js 真终端）
 ├─ docs/        PRD / 前后端开发文档 / 交互原型 / ADR / 四份数据库规范 / 接口文档
 ├─ deploy/      systemd unit + 环境变量模板
 ├─ build.sh     一键打包前后端（默认交叉编译 linux/amd64，产出版本化 tar.gz）
@@ -30,14 +30,14 @@ db-gateway/
 
 ### 一键启动（Windows，最省事）
 
-双击项目根目录的 **`start-dev.bat`** —— 自动在两个窗口分别拉起后端（PostgreSQL 存储库，需本机 Docker 容器 `vela-store-pg`，端口 5437）与前端（Vite），
+双击项目根目录的 **`start-dev.bat`** —— 自动在两个窗口分别拉起后端（PostgreSQL 存储库，需本机 Docker 容器 `aegisdb-store-pg`，端口 5437）与前端（Vite），
 然后浏览器打开 http://localhost:5173 。
 （也可单独双击 `backend\run-pg.bat` 或 `frontend\run-dev.bat`；不想装 PG 就双击 `backend\run-sqlite.bat`，零依赖。）
 
 ### 手动启动
 
 ```bash
-# 后端（默认 APP_ENV=dev → SQLite，写 ./vela-gateway.db，自动迁移 + 引用数据）
+# 后端（默认 APP_ENV=dev → SQLite，写 ./aegisdb.db，自动迁移 + 引用数据）
 cd backend && go run ./cmd/server            # 监听 127.0.0.1:8080，健康检查 GET /healthz
 
 # 前端
@@ -56,7 +56,7 @@ cd frontend && npm install && npm run dev    # http://localhost:5173（代理 /a
 
 | 账号 | 密码 | 角色 |
 |------|------|------|
-| `linwei@vela.io` | `vela123` | 平台管理员（全菜单） |
+| `linwei@aegisdb.io` | `aegisdb123` | 平台管理员（全菜单） |
 
 其余角色（DBA L2 / 负责人 / 研发只读 / 审计员）请登录后在【权限】页自行创建 —— 这是验证
 **菜单权限收敛**最快的路子。一个用户可挂多个角色，权限取**所有角色的并集**。
@@ -338,8 +338,8 @@ DBA，按项目跟进升级单的是业务线上的人。页面只做归属与�
 链**可以当场重算**，三个入口共用同一套判断：
 
 ```bash
-./vela-gateway verify-audit            # 全表;链断了退出码 2,可直接挂进巡检
-./vela-gateway verify-audit -limit 5000
+./aegisdb verify-audit            # 全表;链断了退出码 2,可直接挂进巡检
+./aegisdb verify-audit -limit 5000
 ```
 
 另有 `GET /api/v1/audit/verify`（验最近 5000 行，限监督角色）与审计页上的「校验哈希链」按钮。
@@ -393,7 +393,7 @@ DBA，按项目跟进升级单的是业务线上的人。页面只做归属与�
   存量账号在**第一次经 SRD 登录、邮箱对上时自动绑定**:绑定的人只能走 SSO(管理员保留口令应急),
   没用过 SRD 的人照常用口令;管理员可在【权限 · 用户】解绑。网关须部署在 SRD Cookie 的父域下。
   出问题时关掉设置页开关即回到口令登录;进不去设置页时用部署层总闸 `sso.disabled: true` /
-  `VELA_SSO_DISABLED=1`(重启生效)。详见 `DEPLOY.md` 第 7 节。
+  `AEGISDB_SSO_DISABLED=1`(重启生效)。详见 `DEPLOY.md` 第 7 节。
 
 - 会话 TTL、空闲自动锁定、TOTP MFA（自助绑定 / 强制开关 / 生产操作步进验证）、
   登录 IP 白名单（默认关，放行 loopback）；JWT 密钥与连接口令加密密钥解耦，支持 JWT 轮换。
@@ -436,31 +436,31 @@ Webhook（HMAC-SHA256 签名 + 指数退避重试；按「增删改查」与环�
 它们给的是明确的拒绝而不是编出来的数据。跑不过就不出包 —— 来由是一次线上误判，「批量巡检」
 把 88 台实例全报成「可连」，因为那条探测从第一笔提交起就是个 `sleep(120ms); return true` 的桩。
 
-本项目的生产目录是 **`/opt/db-gateway`**（包里 systemd 模板写的是 `/opt/vela-gateway`，
-安装时按实际路径改）。完整步骤（MySQL 准备、迁移、初始化管理员、systemd 托管、TLS、
+约定的生产目录是 **`/opt/aegisdb`**（与包里的 systemd 模板一致；
+装到别处时按实际路径改模板）。完整步骤（MySQL 准备、迁移、初始化管理员、systemd 托管、TLS、
 环境变量一览）见 **`DEPLOY.md`** 与打包产物内的 `README-DEPLOY.md`。
 
 ### 手工跑子命令时，环境变量要自己加载
 
-生产的 DSN 与密钥来自 `vela.env`，而那个文件是 **systemd 通过 `EnvironmentFile=` 注入给服务
-进程**的 —— 你在 root shell 里手工跑 `./vela-gateway migrate` 时它并不存在，配置会回落到
+生产的 DSN 与密钥来自 `aegisdb.env`，而那个文件是 **systemd 通过 `EnvironmentFile=` 注入给服务
+进程**的 —— 你在 root shell 里手工跑 `./aegisdb migrate` 时它并不存在，配置会回落到
 `configs/config.yaml` 里那条本地默认 DSN，于是报 `dial tcp 127.0.0.1:3306: connection refused`。
 
 ```bash
-cd /opt/db-gateway
-set -a; . ./vela.env; set +a     # VELA_MYSQL_DSN / VELA_JWT_SECRET / APP_ENV
-./vela-gateway migrate
+cd /opt/aegisdb
+set -a; . ./aegisdb.env; set +a     # AEGISDB_MYSQL_DSN / AEGISDB_JWT_SECRET / APP_ENV
+./aegisdb migrate
 ```
 
 `verify-audit` 同理 —— 它也要连库。
 
 > `EnvironmentFile=-/...` 前面那个 `-` 表示**文件不存在就静默跳过**。照模板装完却忘了建
-> `vela.env`，服务会照常起来、一个环境变量都没有，然后以同样的方式连本地 3306：起得来、
+> `aegisdb.env`，服务会照常起来、一个环境变量都没有，然后以同样的方式连本地 3306：起得来、
 > 连不上，而且不报配置错误。
 
 ### 升级已有环境的顺序
 
-备份数据库 → 停旧进程 → `./vela-gateway migrate` → 起新进程 → `./vela-gateway version` 确认版本。
+备份数据库 → 停旧进程 → `./aegisdb migrate` → 起新进程 → `./aegisdb version` 确认版本。
 反过来做，新二进制会对着旧表结构跑；迁移之后也不要单独回滚二进制（旧代码按旧列名查询，列已经
 不在了）。这类失败朝"关"的方向 —— 规则查不到就拒绝 —— 不会变成放行，但会是一场故障。
 
@@ -492,8 +492,8 @@ WARN 审批人自检: 默认审批链(DBA 负责人) severity=deadlock
 ### 上线后：给审计链建一个基线
 
 ```bash
-cd /opt/db-gateway && set -a; . ./vela.env; set +a
-./vela-gateway verify-audit
+cd /opt/aegisdb && set -a; . ./aegisdb.env; set +a
+./aegisdb verify-audit
 ```
 
 记下行数，之后定期跑（退出码 2 就告警）。它也值得在**从备份恢复出来的库**上跑一遍 ——
@@ -556,7 +556,7 @@ cd /opt/db-gateway && set -a; . ./vela.env; set +a
 
 ## 文档
 
-- `docs/`：PRD、前后端开发文档、交互原型、Vela 设计系统，以及四份数据库规范
+- `docs/`：PRD、前后端开发文档、交互原型、AegisDB 设计系统，以及四份数据库规范
   （MySQL / TiDB / Oracle / DWS）—— 规范审查的 87 条规则就是从它们来的。
 - `docs/adr/`：14 篇架构决策记录。较关键的几条：
   0003 外部飞书审批 · 0004 按引擎判定方言 · 0005 发布流水线与规范审查 · 0006 开放接口提单 ·

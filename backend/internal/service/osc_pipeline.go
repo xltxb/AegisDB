@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // runReleaseOSC 跑发布内容里要走在线变更的那一条:前置检查 → 建任务(来源 release_id)→ 就地跑完。

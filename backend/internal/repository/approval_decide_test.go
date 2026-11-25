@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10 黑盒(工单 01 第 6、7 条):审批步骤记在实际审批人名下;平台管理员的「全部」看全量。

@@ -10,7 +10,7 @@ import (
 // 超出的部分暂存,GET /terminal/results/:id 取下一批;只取得到本人的。
 func TestTerminal_ResultPagingOverHTTP(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.realSQLiteConnIn(admin, "dev", "paging")
 	const q = "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < 1500) SELECT n FROM s"
 
@@ -43,7 +43,7 @@ func TestTerminal_ResultPagingOverHTTP(t *testing.T) {
 	if len(p.Data) != 500 || p.More || p.Offset != 1000 || p.Data[0][0] != "1001" {
 		t.Fatalf("第二批应是 1001-1500: rows=%d more=%v offset=%d", len(p.Data), p.More, p.Offset)
 	}
-	other := app.login("zhangwei@vela.io", "vela123")
+	other := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodGet, "/api/v1/terminal/results/"+d.ResultID+"?offset=1000", other, nil); r.Code == 0 {
 		t.Error("别人不能取我暂存的结果")
 	}

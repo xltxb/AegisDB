@@ -17,8 +17,8 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // 2026-11 生产:元数据同步每一轮都 tables_dropped=0、tables_added=0,而 cols_dropped 与
@@ -50,7 +50,7 @@ func openMetaStores(t *testing.T) []metaStore {
 	out = append(out, metaStore{"sqlite", lite})
 
 	// 真存储库:与生产同一种驱动,GORM 对它们生成的 INSERT 才是生产上那一条。
-	if base := os.Getenv("VELA_TEST_STORE_MYSQL"); base != "" { // root:pw@tcp(127.0.0.1:3407)/
+	if base := os.Getenv("AEGISDB_TEST_STORE_MYSQL"); base != "" { // root:pw@tcp(127.0.0.1:3407)/
 		name := fmt.Sprintf("vt_metaresync_%d", time.Now().UnixNano()%1_000_000)
 		admin, err := sql.Open("mysql", base)
 		if err != nil {
@@ -69,7 +69,7 @@ func openMetaStores(t *testing.T) []metaStore {
 		}
 		out = append(out, metaStore{"mysql", db})
 	}
-	if base := os.Getenv("VELA_TEST_STORE_PG"); base != "" { // host=… port=… user=… password=… sslmode=disable
+	if base := os.Getenv("AEGISDB_TEST_STORE_PG"); base != "" { // host=… port=… user=… password=… sslmode=disable
 		name := fmt.Sprintf("vt_metaresync_%d", time.Now().UnixNano()%1_000_000)
 		admin, err := gorm.Open(postgres.Open(base+" dbname=postgres"), gcfg)
 		if err != nil {
@@ -178,13 +178,13 @@ func TestMetaSync_UnchangedColumnsKept_SQLiteRemote(t *testing.T) {
 	}
 }
 
-// 真 MySQL 远端(VELA_TEST_MYSQL=host:port/user/password):一张宽表,长注释、超长注释、
+// 真 MySQL 远端(AEGISDB_TEST_MYSQL=host:port/user/password):一张宽表,长注释、超长注释、
 // 各种默认值、NOT NULL、长 ENUM、大小写混写的列名。第二次同步应当一列不动;改了的列
 // (包括注释被截断的列在注释真改了以后)要更新。
 func TestMetaSync_UnchangedColumnsKept_MySQLRemote(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

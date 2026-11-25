@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // bizObj:[库.]对象。

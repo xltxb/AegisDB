@@ -6,7 +6,7 @@ export type LocaleKey = keyof typeof zh
 
 export const i18n = createI18n({
   legacy: false,
-  locale: localStorage.getItem('vela_lang') || 'zh',
+  locale: localStorage.getItem('aegisdb_lang') || 'zh',
   fallbackLocale: 'zh',
   messages: { zh, en },
 })

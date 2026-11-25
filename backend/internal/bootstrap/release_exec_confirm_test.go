@@ -23,7 +23,7 @@ func (a *testApp) confirmStage(token string, relID, stageID int64) apiResp {
 
 func TestExecuteStageWaitsForHumanConfirmation(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "执行闸流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
@@ -77,8 +77,8 @@ func TestExecuteStageWaitsForHumanConfirmation(t *testing.T) {
 // 时机归发起人)或审批角色;无关人等不行。
 func TestExecuteConfirmationAuthz(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	outsider := app.login("zhaolei@vela.io", "vela123") // 研发只读,非创建者非审批角色
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	outsider := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读,非创建者非审批角色
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "执行闸授权流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
@@ -103,7 +103,7 @@ func TestExecuteConfirmationAuthz(t *testing.T) {
 // TestAbortWhileAwaitingExecution — 停在执行闸的单可以终止,execute 标 skipped。
 func TestAbortWhileAwaitingExecution(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "执行闸终止流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},

@@ -16,9 +16,9 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/review"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/review"
 )
 
 func seedRepo(t *testing.T) (*repository.Repo, *gorm.DB) {

@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 拦截理由要以**机器可读的身份**过一遍线,而不只是一句拼好的中文。
@@ -13,7 +13,7 @@ import (
 // 这个版本还不认识的 code 时的回落。
 func TestRiskCheck_CarriesMachineReadableRule(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	r := app.riskCheckIn(token, prod, "DROP TABLE orders_2024_q3", "orders_db")
@@ -35,7 +35,7 @@ func TestRiskCheck_CarriesMachineReadableRule(t *testing.T) {
 // 看到最多规则名的场合。
 func TestRiskCheck_BatchRuleIsStructuredPerStatement(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	r := app.riskCheckIn(token, prod,

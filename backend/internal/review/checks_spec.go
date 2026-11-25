@@ -14,7 +14,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // ---------------------------------------------------------------- MySQL

@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // A Dialect teaches the risk engine how to read one family of command language.

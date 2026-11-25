@@ -30,8 +30,8 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // killTimeout 发 KILL 的预算:连上、发出、拿到回执。

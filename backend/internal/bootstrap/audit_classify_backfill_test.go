@@ -21,7 +21,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // oldAuditRow 插一条"迁移之前写下的"审计行:两列分类都是空的。

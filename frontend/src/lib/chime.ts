@@ -7,7 +7,7 @@
 // 音色刻意收着:两个短音(A5 → E6)、每组约 0.35 秒。它要能在有人盯着别的
 // 窗口时被听见,而不是把整个办公室的头都转过来 —— 一个吓人的提示音,第二天就会被静音。
 
-const MUTE_KEY = 'vela_todo_chime_muted'
+const MUTE_KEY = 'aegisdb_todo_chime_muted'
 
 // 连响几次时,每次之间隔多久。0.45s 让三下听起来是"一串"而不是三次独立的提醒。
 const REPEAT_GAP = 0.45

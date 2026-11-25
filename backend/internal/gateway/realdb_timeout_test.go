@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The MySQL DSN must not carry a socket ReadTimeout: it is a per-read deadline

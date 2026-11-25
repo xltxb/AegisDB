@@ -3,7 +3,7 @@
 // 这里只放状态与纯函数,不引 api / pinia:终端会话日志(lib/transcript.ts)也要读它,而单元测试
 // 是在 Node 里直接跑 lib 的。拉取由 App.vue 在启动时做(GET /auth/branding,未登录也能读)。
 //
-// **没配置时各处保持原来的字样**:界面是 "DP DB GATEWAY",终端日志抬头是「Vela 数据库网关」。
+// **没配置时各处保持原来的字样**:界面是 "AegisDB",终端日志抬头是「AegisDB 数据库网关」。
 // 所以默认值由调用方带(brandText 的 def);只要配了任意一个名称,各处就统一换成配置的名称。
 import { reactive, ref } from 'vue'
 
@@ -14,7 +14,7 @@ export interface Branding {
 }
 
 /** 界面上原来的系统名称:登录页、浏览器标题、设置页「关于」。 */
-export const DEFAULT_BRAND = 'DP DB GATEWAY'
+export const DEFAULT_BRAND = 'AegisDB'
 
 export const brand = reactive<Branding>({ name: '', nameEn: '', logo: '' })
 

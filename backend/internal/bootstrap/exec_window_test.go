@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
 )
 
 // openWindow 建一个此刻正生效的一次性窗口 —— **并批准它**,返回它的 id。
@@ -40,7 +40,7 @@ func (a *testApp) openWindow(token string, connID int64, db string, from, to tim
 // 窗口生效时,本来要审批的中/高风险语句直接执行。
 func TestExecWindow_RelaxesApprovalWhileOpen(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	const sql = "DROP TABLE orders_2024_q3"
@@ -74,7 +74,7 @@ func TestExecWindow_RelaxesApprovalWhileOpen(t *testing.T) {
 // 关掉窗口,立刻恢复审批。
 func TestExecWindow_ClosingRestoresApproval(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const sql = "DROP TABLE orders_2024_q3"
 	const targetDB = "orders_db"
@@ -91,13 +91,13 @@ func TestExecWindow_ClosingRestoresApproval(t *testing.T) {
 // 这是整个功能的安全边界 —— 否则一个只读角色会因为到了凌晨两点就能写生产库。
 func TestExecWindow_NeverOverridesCapabilityDeny(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const targetDB = "orders_db"
 	app.openWindow(admin, prod, targetDB, time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 
 	// 只读角色(ro)在 PROD 上 write=deny。窗口开着也不该让它写。
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", ro, map[string]any{
 		"connectionId": prod, "sql": "UPDATE orders SET status='x' WHERE id=1", "reason": "试探", "database": targetDB,
 	})
@@ -110,7 +110,7 @@ func TestExecWindow_NeverOverridesCapabilityDeny(t *testing.T) {
 // 窗口是按库开的:同一台实例上别的库不受影响。
 func TestExecWindow_ScopedToOneDatabase(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const sql = "DROP TABLE orders_2024_q3"
 	const targetDB = "orders_db"
@@ -127,7 +127,7 @@ func TestExecWindow_ScopedToOneDatabase(t *testing.T) {
 // 语句里写 some_other_db.t 落到的是另一个库,而那个库没有开窗。USE 换库同理。
 func TestExecWindow_QualifiedNameCannotEscapeTheDatabase(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const targetDB = "orders_db"
 	app.openWindow(token, prod, targetDB, time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
@@ -150,7 +150,7 @@ func TestExecWindow_QualifiedNameCannotEscapeTheDatabase(t *testing.T) {
 // 已经过期的窗口不放行。
 func TestExecWindow_ExpiredDoesNotOpen(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	const targetDB = "orders_db"
@@ -165,7 +165,7 @@ func TestExecWindow_ExpiredDoesNotOpen(t *testing.T) {
 // 写不通的定义要当场拒绝,而不是存下一个永远不开、或开在没预料时间的窗口。
 func TestExecWindow_RejectsUnsoundDefinitions(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	base := map[string]any{"name": "x", "enabled": true, "connectionId": prod, "database": "d"}
 

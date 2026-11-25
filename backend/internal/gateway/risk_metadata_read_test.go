@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-27 生产:终端里 `SHOW CREATE TABLE platform_event` 命中「高危命令字典 · 需审批」。

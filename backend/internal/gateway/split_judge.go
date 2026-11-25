@@ -3,7 +3,7 @@ package gateway
 import (
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // SplitForJudge splits a command into the statements to judge, reading `--` the

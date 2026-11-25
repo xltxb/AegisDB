@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // InputError 是一条可以原样给人看的校验失败原因。

@@ -2136,7 +2136,7 @@ SELECT @@session . hostname
 -- @case gateway/bizquery_blackbox_test.go
 SELECT @@version, @@version_comment, @@time_zone, @@session.sql_mode
 -- @case gateway/exec_session_test.go
-SELECT @vela_sess, CONNECTION_ID()
+SELECT @aegisdb_sess, CONNECTION_ID()
 -- @case gateway/bizquery_blackbox_test.go
 SELECT BENCHMARK(100000000, MD5('a'))
 -- @case gateway/sensitive_error_test.go
@@ -2146,13 +2146,13 @@ SELECT CAST(id_card AS int) FROM t_user
 -- @case gateway/sensitive_error_test.go
 SELECT CAST(name AS int) FROM t_user
 -- @case gateway/term_session_test.go
-SELECT COALESCE(@vela_tab, 'none')
+SELECT COALESCE(@aegisdb_tab, 'none')
 -- @case gateway/explain_plan_test.go
 SELECT COALESCE(GROUP_CONCAT(CONCAT(id, ':', v) ORDER BY id), '空表') FROM
 -- @case gateway/explain_plan_test.go
 SELECT COALESCE(string_agg(id || ':' || v, ',' ORDER BY id), '空表') FROM
 -- @case gateway/term_session_test.go
-SELECT CONCAT(DATABASE(), ':', CONNECTION_ID(), ':', COALESCE(@vela_tab, 'none'))
+SELECT CONCAT(DATABASE(), ':', CONNECTION_ID(), ':', COALESCE(@aegisdb_tab, 'none'))
 -- @case gateway/sensitive_test.go
 SELECT CONCAT(id_card, '') AS x, name FROM t_user
 -- @case gateway/exec_session_test.go
@@ -2218,7 +2218,7 @@ SELECT SLEEP(1)
 -- @case gateway/term_session_test.go
 SELECT SLEEP(1.5)
 -- @case gateway/killquery_test.go
-SELECT SLEEP(10) /* vela-prev */
+SELECT SLEEP(10) /* aegisdb-prev */
 -- @case gateway/bizquery_test.go
 SELECT SLEEP(100)
 -- @case gateway/killquery_test.go
@@ -2278,7 +2278,7 @@ SELECT `delete` FROM t
 -- @case gateway/sensitive_test.go
 SELECT `from`, `id_card` AS x FROM t_user
 -- @case gateway/bizquery_blackbox_test.go
-SELECT `get_lock`('vela_bb', 0), `release_lock`('vela_bb')
+SELECT `get_lock`('aegisdb_bb', 0), `release_lock`('aegisdb_bb')
 -- @case gateway/bizquery_blackbox_test.go
 SELECT `get_lock`('x', 10)
 -- @case gateway/sensitive_test.go
@@ -2634,9 +2634,9 @@ SET @my_var = 1
 -- @case gateway/session_scope_escape_test.go
 SET @my_var = 42
 -- @case gateway/exec_session_test.go
-SET @vela_sess = 42
+SET @aegisdb_sess = 42
 -- @case gateway/term_session_test.go
-SET @vela_tab = 'A'
+SET @aegisdb_tab = 'A'
 -- @case gateway/window_scope_test.go
 SET @x = 1
 -- @case gateway/session_scope_escape_test.go

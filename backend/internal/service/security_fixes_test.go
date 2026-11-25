@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // MFA 步进验证的宽限期必须绑到**一个会话**上(M-6)。

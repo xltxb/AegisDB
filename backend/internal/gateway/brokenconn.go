@@ -11,8 +11,8 @@ import (
 
 	mysqldrv "github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/model"
-	"velagateway/internal/schemadiff"
+	"aegisdb/internal/model"
+	"aegisdb/internal/schemadiff"
 )
 
 // 连接池里的连接在中途被对端断开(2026-10 生产:TiDB 实例树展开报 invalid connection)。

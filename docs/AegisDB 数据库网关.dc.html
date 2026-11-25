@@ -8,15 +8,15 @@
 <body>
 <x-dc>
 <helmet>
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/motion.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
-<link rel="stylesheet" href="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/styles.css">
-<script src="_ds/vela-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/_ds_bundle.js"></script>
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/colors.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/typography.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/spacing.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/effects.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/motion.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/tokens/base.css">
+<link rel="stylesheet" href="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/styles.css">
+<script src="_ds/aegisdb-design-system-c1e10b8b-97e8-4176-9954-0f443e59deda/_ds_bundle.js"></script>
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <style>
   html,body{ height:100%; margin:0; }
@@ -29,7 +29,7 @@
 </style>
 </helmet>
 
-<div data-theme="dark" data-screen-label="Vela 数据库网关" style="height:100vh; display:flex; background:var(--surface-page); color:var(--text-body); font-family:var(--font-body); overflow:hidden">
+<div data-theme="dark" data-screen-label="AegisDB 数据库网关" style="height:100vh; display:flex; background:var(--surface-page); color:var(--text-body); font-family:var(--font-body); overflow:hidden">
 
   <!-- ===== LEFT RAIL ===== -->
   <div style="width:74px; flex-shrink:0; border-right:1px solid var(--border-subtle); background:var(--surface-sunken); display:flex; flex-direction:column; align-items:center; padding:14px 0">
@@ -199,8 +199,8 @@
             <div style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
               <div style="display:flex;align-items:center;gap:7px;font:500 11px var(--font-mono);color:var(--text-muted)"><i data-lucide="git-pull-request-arrow" style="width:14px;height:14px;color:#8facff"></i>{{ L.apChain }}</div>
               <div style="margin-left:auto;display:flex;gap:10px">
-                <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="danger" onClick="{{ a.reject }}" hint-size="auto,38px">{{ L.apReject }}</x-import>
-                <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ a.approve }}" hint-size="auto,38px">{{ L.apApprove }}</x-import>
+                <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="danger" onClick="{{ a.reject }}" hint-size="auto,38px">{{ L.apReject }}</x-import>
+                <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ a.approve }}" hint-size="auto,38px">{{ L.apApprove }}</x-import>
               </div>
             </div>
             </sc-if>
@@ -222,8 +222,8 @@
       <div style="display:flex; align-items:center; margin-bottom:18px">
         <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">CONNECTIONS</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ connCount }} {{ L.connSub }}</div></div>
         <div style="margin-left:auto; display:flex; gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,40px">{{ L.importInst }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.newConn }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,40px">{{ L.importInst }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.newConn }}</x-import>
         </div>
       </div>
 
@@ -272,11 +272,11 @@
         <div style="font:500 12px var(--font-body); color:var(--text-muted); margin-bottom:16px">{{ L.formNewConnSub }}</div>
         <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px">
           <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fName }}</div><input value="{{ draftName }}" onChange="{{ onConnName }}" placeholder="order-cluster-2" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" /></div>
-          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEngine }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ engineOpts }}" value="{{ draftEngine }}" onChange="{{ onConnEngine }}" hint-size="100%,40px"></x-import></div>
-          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEnv }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ envSelectOpts }}" value="{{ draftEnv }}" onChange="{{ onConnEnv }}" hint-size="100%,40px"></x-import></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEngine }}</div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ engineOpts }}" value="{{ draftEngine }}" onChange="{{ onConnEngine }}" hint-size="100%,40px"></x-import></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fEnv }}</div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ envSelectOpts }}" value="{{ draftEnv }}" onChange="{{ onConnEnv }}" hint-size="100%,40px"></x-import></div>
           <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fAddr }}</div><input value="{{ draftHost }}" onChange="{{ onConnHost }}" placeholder="10.20.3.12:3306" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" /></div>
-          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fPolicy }}</div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ policyOpts }}" value="{{ draftPolicy }}" onChange="{{ onConnPolicy }}" hint-size="100%,40px"></x-import></div>
-          <div style="display:flex;align-items:flex-end"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" full-width="{{ true }}" onClick="{{ addConnection }}" hint-size="100%,40px">{{ L.fSave }}</x-import></div>
+          <div><div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.fPolicy }}</div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ policyOpts }}" value="{{ draftPolicy }}" onChange="{{ onConnPolicy }}" hint-size="100%,40px"></x-import></div>
+          <div style="display:flex;align-items:flex-end"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" full-width="{{ true }}" onClick="{{ addConnection }}" hint-size="100%,40px">{{ L.fSave }}</x-import></div>
         </div>
       </div>
     </div>
@@ -287,7 +287,7 @@
     <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
       <div style="display:flex; align-items:center; margin-bottom:18px">
         <div><div style="font:500 11px var(--font-mono);letter-spacing:.12em;color:var(--text-faint);text-transform:uppercase">RISK POLICIES</div><div style="font:500 13px var(--font-body);color:var(--text-muted);margin-top:4px">{{ L.riskSub }}</div></div>
-        <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openRuleForm }}" hint-size="auto,40px">{{ L.newRule }}</x-import></div>
+        <div style="margin-left:auto"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openRuleForm }}" hint-size="auto,40px">{{ L.newRule }}</x-import></div>
       </div>
 
       <!-- editable high-risk command dictionary -->
@@ -330,7 +330,7 @@
             <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r1 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">P1</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">{{ L.actBlockAppr }}</span></div>
             <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">env=PROD AND cmd IN (DROP, TRUNCATE, ALTER, RENAME) → 拦截 → 审批链 dba_lead → dba_owner</div>
           </div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn0 }}" onChange="{{ ruleToggle0 }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ ruleOn0 }}" onChange="{{ ruleToggle0 }}" hint-size="44px,24px"></x-import>
         </div>
         <!-- rule 2 -->
         <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--danger);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp1 }};transition:opacity .2s ease">
@@ -338,7 +338,7 @@
             <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r2 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">P1</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--danger-subtle);color:var(--danger-text);font:600 10px var(--font-mono)">{{ L.actBlockAppr }}</span></div>
             <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">cmd IN (DELETE, UPDATE) AND NOT contains(WHERE) → 拦截 → 审批</div>
           </div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn1 }}" onChange="{{ ruleToggle1 }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ ruleOn1 }}" onChange="{{ ruleToggle1 }}" hint-size="44px,24px"></x-import>
         </div>
         <!-- rule 3 -->
         <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--warning);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp2 }};transition:opacity .2s ease">
@@ -346,7 +346,7 @@
             <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r3 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)">P2</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--warning-subtle);color:var(--warning-text);font:600 10px var(--font-mono)">{{ L.actAppr }}</span></div>
             <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">cmd IN (GRANT, REVOKE, CREATE USER, DROP USER) → 审批（安全负责人）</div>
           </div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn2 }}" onChange="{{ ruleToggle2 }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ ruleOn2 }}" onChange="{{ ruleToggle2 }}" hint-size="44px,24px"></x-import>
         </div>
         <!-- rule 4 -->
         <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--cyan-400);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp3 }};transition:opacity .2s ease">
@@ -354,7 +354,7 @@
             <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r4 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">P3</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--accent-subtle);color:var(--accent-text);font:600 10px var(--font-mono)">{{ L.actAlert }}</span></div>
             <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">est_rows &gt; 1,000,000 OR no_index_scan → 告警（不阻断）</div>
           </div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn3 }}" onChange="{{ ruleToggle3 }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ ruleOn3 }}" onChange="{{ ruleToggle3 }}" hint-size="44px,24px"></x-import>
         </div>
         <!-- rule 5 -->
         <div style="border:1px solid var(--border-subtle);border-left:3px solid var(--text-faint);border-radius:12px;background:var(--surface-card);padding:16px 18px;display:flex;align-items:center;gap:18px;opacity:{{ ruleOp4 }};transition:opacity .2s ease">
@@ -362,7 +362,7 @@
             <div style="display:flex;align-items:center;gap:10px"><span style="font:600 14px var(--font-body);color:var(--text-strong)">{{ L.r5 }}</span><span style="display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;background:var(--surface-sunken);color:var(--text-muted);font:600 10px var(--font-mono)">{{ L.actAlert }}</span></div>
             <div style="margin-top:8px;font:500 12px var(--font-mono);color:var(--text-muted);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:8px;padding:8px 11px;display:inline-block">env=PROD AND time IN (00:00–06:00) AND qps &gt; 200 → 告警</div>
           </div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ ruleOn4 }}" onChange="{{ ruleToggle4 }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ ruleOn4 }}" onChange="{{ ruleToggle4 }}" hint-size="44px,24px"></x-import>
         </div>
       </div>
     </div>
@@ -392,7 +392,7 @@
       </div>
       <!-- matrix -->
       <div class="scy" style="padding:24px 28px">
-        <div style="display:flex;align-items:center;margin-bottom:6px"><div style="font:700 16px var(--font-display);color:var(--text-strong)">{{ L.matrixTitle }}{{ selRoleName }}</div><div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ openRoleForm }}" hint-size="auto,40px">{{ L.editRole }}</x-import></div></div>
+        <div style="display:flex;align-items:center;margin-bottom:6px"><div style="font:700 16px var(--font-display);color:var(--text-strong)">{{ L.matrixTitle }}{{ selRoleName }}</div><div style="margin-left:auto"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ openRoleForm }}" hint-size="auto,40px">{{ L.editRole }}</x-import></div></div>
         <div style="font:500 12px var(--font-body);color:var(--text-muted);margin-bottom:18px">{{ selRoleSub }} · {{ L.matrixHint }}</div>
 
         <div style="border:1px solid var(--border-subtle);border-radius:14px;overflow:hidden;background:var(--surface-card)">
@@ -414,7 +414,7 @@
             <div style="display:flex;align-items:center;gap:11px;padding:13px 18px;border-bottom:1px solid var(--border-subtle)">
               <i data-lucide="{{ mn.icon }}" style="width:17px;height:17px;color:var(--text-muted)"></i>
               <span style="flex:1;font:600 13px var(--font-body);color:var(--text-body)">{{ mn.label }}</span>
-              <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" checked="{{ mn.on }}" onChange="{{ mn.toggle }}" hint-size="44px,24px"></x-import>
+              <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" checked="{{ mn.on }}" onChange="{{ mn.toggle }}" hint-size="44px,24px"></x-import>
             </div>
           </sc-for>
         </div>
@@ -435,7 +435,7 @@
       <div class="scy" style="flex:1; min-height:0; padding:24px 28px">
         <div style="display:flex; align-items:center; margin-bottom:18px">
           <div><div style="font:700 16px var(--font-display);color:var(--text-strong)">{{ L.usersTitle }} · {{ userCount }} {{ L.people }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:3px">{{ L.usersSub }}</div></div>
-          <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openInvite }}" hint-size="auto,40px">{{ L.invite }}</x-import></div>
+          <div style="margin-left:auto"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ openInvite }}" hint-size="auto,40px">{{ L.invite }}</x-import></div>
         </div>
         <div style="border:1px solid var(--border-subtle); border-radius:14px; overflow:hidden; background:var(--surface-card)">
           <div style="display:grid;grid-template-columns:1.5fr 1.6fr 2fr 1fr 1fr;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-subtle);background:var(--surface-sunken);font:600 11px var(--font-mono);letter-spacing:.05em;color:var(--text-faint);text-transform:uppercase"><span>{{ L.colUser }}</span><span>{{ L.colAcct }}</span><span>{{ L.colRoles }}</span><span>{{ L.colActive }}</span><span style="text-align:right">{{ L.colStatus }}</span></div>
@@ -467,7 +467,7 @@
           <span style="font:600 12px var(--font-mono);color:var(--success-text)">{{ auditExportText }}</span>
           <div onClick="{{ cycleAuditFilter }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;font:500 12px var(--font-mono);cursor:pointer;color:{{ auditFilterColor }}"><i data-lucide="filter" style="width:14px;height:14px"></i>{{ auditFilterLabel }}</div>
           <div onClick="{{ cycleAuditTime }}" style="display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--border-default);border-radius:10px;font:500 12px var(--font-mono);color:var(--text-muted);cursor:pointer"><i data-lucide="calendar" style="width:14px;height:14px"></i>{{ auditTimeLabel }}</div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ doExport }}" hint-size="auto,36px">{{ L.exportCsv }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ doExport }}" hint-size="auto,36px">{{ L.exportCsv }}</x-import>
         </div>
       </div>
 
@@ -477,7 +477,7 @@
           <div style="width:34px;height:34px;border-radius:10px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="webhook" style="width:18px;height:18px;color:var(--accent-text)"></i></div>
           <div style="flex:1"><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.whTitle }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:2px">{{ L.whSub }}</div></div>
           <span style="display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;background:var(--success-subtle);color:var(--success-text);font:600 11px var(--font-mono)"><span style="width:6px;height:6px;border-radius:50%;background:currentColor"></span>{{ L.whEnabled }}</span>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
         </div>
         <div style="padding:18px 20px; display:grid; grid-template-columns:1.6fr 1fr; gap:18px 22px">
           <div>
@@ -505,8 +505,8 @@
         <div style="display:flex; align-items:center; gap:12px; padding:14px 20px; border-top:1px solid var(--border-subtle); background:var(--surface-raised)">
           <div style="display:flex;align-items:center;gap:7px;font:500 12px var(--font-mono);color:{{ whColor }}"><i data-lucide="{{ whIcon }}" style="width:14px;height:14px"></i>{{ whStatus }}</div>
           <div style="margin-left:auto;display:flex;gap:10px">
-            <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,36px">{{ L.whViewLog }}</x-import>
-            <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ testWebhook }}" hint-size="auto,36px">{{ L.whSendTest }}</x-import>
+            <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,36px">{{ L.whViewLog }}</x-import>
+            <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ testWebhook }}" hint-size="auto,36px">{{ L.whSendTest }}</x-import>
           </div>
         </div>
       </div>
@@ -537,34 +537,34 @@
         <!-- Gateway -->
         <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
           <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="shield" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setGw }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setGwSub }}</div></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setDefPolicy }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setDefPolicyD }}</div></div><div style="width:180px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ setPolicyOpts }}" defaultValue="strict" hint-size="100%,40px"></x-import></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setStrict }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setStrictD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setDefPolicy }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setDefPolicyD }}</div></div><div style="width:180px"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ setPolicyOpts }}" defaultValue="strict" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setStrict }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setStrictD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
           <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setTimeout }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setTimeoutD }}</div></div><div style="font:600 13px var(--font-mono);color:var(--text-body);background:var(--surface-sunken);border:1px solid var(--border-default);border-radius:8px;padding:7px 14px">30s</div></div>
         </div>
 
         <!-- Approval -->
         <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
           <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="git-pull-request-arrow" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setAppr }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setApprSub }}</div></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setApprTimeout }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setApprTimeoutD }}</div></div><div style="width:180px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ apprTimeoutOpts }}" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setApprTimeout }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setApprTimeoutD }}</div></div><div style="width:180px"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ apprTimeoutOpts }}" hint-size="100%,40px"></x-import></div></div>
           <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setDefApprovers }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setDefApproversD }}</div></div><div style="display:flex;gap:6px"><span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-body);color:var(--text-body)"><span style="width:20px;height:20px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">ZW</span>张伟</span><span style="display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 5px;border:1px solid var(--border-default);border-radius:999px;font:600 11px var(--font-body);color:var(--text-body)"><span style="width:20px;height:20px;border-radius:50%;background:#232838;display:flex;align-items:center;justify-content:center;font:600 9px var(--font-body);color:var(--text-muted)">LN</span>李娜</span></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEscalate }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEscalateD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEscalate }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEscalateD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
         </div>
 
         <!-- Session & security -->
         <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
           <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="lock" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setSec }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setSecSub }}</div></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setTtl }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setTtlD }}</div></div><div style="width:160px"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Select" options="{{ ttlOpts }}" hint-size="100%,40px"></x-import></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIdle }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIdleD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setMfa }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setMfaD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIpAllow }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIpAllowD }}</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:600 12px var(--font-mono);color:var(--text-muted)">10.20.0.0/16</span><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,34px">{{ L.manage }}</x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setTtl }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setTtlD }}</div></div><div style="width:160px"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Select" options="{{ ttlOpts }}" hint-size="100%,40px"></x-import></div></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIdle }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIdleD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setMfa }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setMfaD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setIpAllow }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setIpAllowD }}</div></div><div style="display:flex;align-items:center;gap:10px"><span style="font:600 12px var(--font-mono);color:var(--text-muted)">10.20.0.0/16</span><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" hint-size="auto,34px">{{ L.manage }}</x-import></div></div>
         </div>
 
         <!-- Notifications -->
         <div style="border:1px solid var(--border-subtle); border-radius:14px; background:var(--surface-card); overflow:hidden">
           <div style="display:flex;align-items:center;gap:11px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)"><div style="width:32px;height:32px;border-radius:9px;background:var(--accent-subtle);display:flex;align-items:center;justify-content:center"><i data-lucide="bell" style="width:17px;height:17px;color:var(--accent-text)"></i></div><div><div style="font:600 14px var(--font-display);color:var(--text-strong)">{{ L.setNotify }}</div><div style="font:500 12px var(--font-body);color:var(--text-muted);margin-top:1px">{{ L.setNotifySub }}</div></div></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setLark }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setLarkD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEmail }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEmailD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" hint-size="44px,24px"></x-import></div>
-          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setPush }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setPushD }}</div></div><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setLark }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setLarkD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px;border-bottom:1px solid var(--border-subtle)"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setEmail }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setEmailD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" hint-size="44px,24px"></x-import></div>
+          <div style="display:flex;align-items:center;gap:16px;padding:14px 20px"><div style="flex:1"><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.setPush }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.setPushD }}</div></div><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import></div>
         </div>
 
         <!-- Appearance & language -->
@@ -577,8 +577,8 @@
         <!-- About -->
         <div style="display:flex;align-items:center;gap:14px;padding:16px 20px;border:1px solid var(--border-subtle);border-radius:14px;background:var(--surface-card)">
           <div style="width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b6ef6,#2dcde6);display:flex;align-items:center;justify-content:center"><i data-lucide="sailboat" style="width:18px;height:18px;color:#fff"></i></div>
-          <div style="flex:1"><div style="font:700 14px var(--font-display);color:var(--text-strong)">DP DB GATEWAY</div><div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-top:2px">{{ L.verLabel }} 2.4.1 · {{ L.buildLabel }} 20260624</div></div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.saveSettings }}</x-import>
+          <div style="flex:1"><div style="font:700 14px var(--font-display);color:var(--text-strong)">AegisDB</div><div style="font:500 11px var(--font-mono);color:var(--text-faint);margin-top:2px">{{ L.verLabel }} 2.4.1 · {{ L.buildLabel }} 20260624</div></div>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" hint-size="auto,40px">{{ L.saveSettings }}</x-import>
         </div>
       </div>
     </div>
@@ -640,8 +640,8 @@
       <div style="margin-top:16px;display:flex;align-items:center;gap:12px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="display:flex;align-items:center;gap:6px;font:500 11px var(--font-mono);color:var(--text-faint)"><span style="color:var(--success-text)">●</span>{{ L.utf8audit }}</div>
         <div style="margin-left:auto;display:flex;gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeScript }}" hint-size="auto,40px">{{ L.scClose }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ runScript }}" hint-size="auto,40px">{{ scriptRunLabel }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeScript }}" hint-size="auto,40px">{{ L.scClose }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ runScript }}" hint-size="auto,40px">{{ scriptRunLabel }}</x-import>
         </div>
       </div>
     </div>
@@ -688,8 +688,8 @@
       <div style="margin-top:18px;display:flex;align-items:center;gap:12px;padding:14px 26px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="font:500 11px var(--font-mono);color:var(--text-faint)">审计 ID · {{ auditId }}</div>
         <div style="margin-left:auto;display:flex;gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ cancel }}" hint-size="auto,40px">{{ L.mCancel }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ submit }}" hint-size="auto,40px">{{ L.mSubmit }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ cancel }}" hint-size="auto,40px">{{ L.mCancel }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ submit }}" hint-size="auto,40px">{{ L.mSubmit }}</x-import>
         </div>
       </div>
     </div>
@@ -756,8 +756,8 @@
       <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.rfFootHint }}</div>
         <div style="margin-left:auto;display:flex;gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.rfCreate }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.rfCreate }}</x-import>
         </div>
       </div>
     </div>
@@ -795,13 +795,13 @@
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--border-subtle);border-radius:10px;background:var(--surface-sunken)">
           <div><div style="font:600 13px var(--font-body);color:var(--text-strong)">{{ L.erApprAllow }}</div><div style="font:500 11px var(--font-mono);color:var(--text-muted);margin-top:2px">{{ L.erApprAllowSub }}</div></div>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Switch" default-checked="{{ true }}" hint-size="44px,24px"></x-import>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:10px;padding:14px 24px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="margin-left:auto;display:flex;gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.save }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.save }}</x-import>
         </div>
       </div>
     </div>
@@ -831,7 +831,7 @@
       </div>
       <div style="display:flex;align-items:center;padding:13px 22px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="font:500 11px var(--font-mono);color:var(--text-faint)">{{ L.mpFoot }}</div>
-        <div style="margin-left:auto"><x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,38px">{{ L.done }}</x-import></div>
+        <div style="margin-left:auto"><x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,38px">{{ L.done }}</x-import></div>
       </div>
     </div>
   </div>
@@ -850,7 +850,7 @@
       <div style="padding:20px 22px; display:flex; flex-direction:column; gap:16px">
         <div>
           <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.ivEmail }}</div>
-          <input placeholder="name@vela.io" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" />
+          <input placeholder="name@aegisdb.io" style="width:100%;box-sizing:border-box;height:40px;border:1px solid var(--border-default);border-radius:10px;background:var(--surface-sunken);padding:0 12px;font:400 13px var(--font-mono);color:var(--text-body);outline:none" />
         </div>
         <div>
           <div style="font:500 11px var(--font-body);color:var(--text-faint);margin-bottom:6px">{{ L.ivRole }}</div>
@@ -863,8 +863,8 @@
       </div>
       <div style="display:flex;align-items:center;padding:14px 22px;border-top:1px solid var(--border-subtle);background:var(--surface-raised)">
         <div style="margin-left:auto;display:flex;gap:10px">
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
-          <x-import component-from-global-scope="VelaDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.ivSend }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="secondary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.cancel }}</x-import>
+          <x-import component-from-global-scope="AegisDBDesignSystem_c1e10b.Button" variant="primary" onClick="{{ closeForm }}" hint-size="auto,40px">{{ L.ivSend }}</x-import>
         </div>
       </div>
     </div>
@@ -940,15 +940,15 @@ class Component extends DCLogic {
     pmView: 'roles',
     userStatus: { 'Qian Yi': 'disabled' },
     directory: [
-      { n:'Lin Wei', i:'LW', dept:'DBA 组', acct:'linwei@vela.io', last:'2 分钟前' },
-      { n:'Chen Hao', i:'CH', dept:'DBA 组', acct:'chenhao@vela.io', last:'14 分钟前' },
-      { n:'Wang Min', i:'WM', dept:'平台工程', acct:'wangmin@vela.io', last:'1 小时前' },
-      { n:'Zhang Wei', i:'ZW', dept:'DBA 组', acct:'zhangwei@vela.io', last:'刚刚' },
-      { n:'Li Na', i:'LN', dept:'DBA 组', acct:'lina@vela.io', last:'3 小时前' },
-      { n:'Sun Qi', i:'SQ', dept:'数据平台', acct:'sunqi@vela.io', last:'昨天' },
-      { n:'Zhao Lei', i:'ZL', dept:'研发一部', acct:'zhaolei@vela.io', last:'2 天前' },
-      { n:'Qian Yi', i:'QY', dept:'研发二部', acct:'qianyi@vela.io', last:'30 天前' },
-      { n:'Hu Jun', i:'HJ', dept:'安全合规', acct:'hujun@vela.io', last:'5 小时前' }
+      { n:'Lin Wei', i:'LW', dept:'DBA 组', acct:'linwei@aegisdb.io', last:'2 分钟前' },
+      { n:'Chen Hao', i:'CH', dept:'DBA 组', acct:'chenhao@aegisdb.io', last:'14 分钟前' },
+      { n:'Wang Min', i:'WM', dept:'平台工程', acct:'wangmin@aegisdb.io', last:'1 小时前' },
+      { n:'Zhang Wei', i:'ZW', dept:'DBA 组', acct:'zhangwei@aegisdb.io', last:'刚刚' },
+      { n:'Li Na', i:'LN', dept:'DBA 组', acct:'lina@aegisdb.io', last:'3 小时前' },
+      { n:'Sun Qi', i:'SQ', dept:'数据平台', acct:'sunqi@aegisdb.io', last:'昨天' },
+      { n:'Zhao Lei', i:'ZL', dept:'研发一部', acct:'zhaolei@aegisdb.io', last:'2 天前' },
+      { n:'Qian Yi', i:'QY', dept:'研发二部', acct:'qianyi@aegisdb.io', last:'30 天前' },
+      { n:'Hu Jun', i:'HJ', dept:'安全合规', acct:'hujun@aegisdb.io', last:'5 小时前' }
     ],
     roles: [
       { id:'admin', name:'平台管理员', icon:'crown', layer:'L0 · 全局', count:3,

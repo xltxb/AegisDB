@@ -18,8 +18,8 @@ import (
 	"log/slog"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // CancelApproval 撤回一张 pending 工单。

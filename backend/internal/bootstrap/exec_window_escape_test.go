@@ -16,16 +16,16 @@ import (
 )
 
 const (
-	winDBA = "vela_win_a"
-	winDBB = "vela_win_b"
+	winDBA = "aegisdb_win_a"
+	winDBB = "aegisdb_win_b"
 )
 
 // mysqlWindowFixture 在真实 MySQL 上备两个库,返回直连句柄与指向 A 库的 PROD 连接。
 func (a *testApp) mysqlWindowFixture(token string) (*sql.DB, int64) {
 	a.t.Helper()
-	v := os.Getenv("VELA_TEST_MYSQL") // host:port/user/password
+	v := os.Getenv("AEGISDB_TEST_MYSQL") // host:port/user/password
 	if v == "" {
-		a.t.Skip("未设置 VELA_TEST_MYSQL")
+		a.t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	raw, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/", p[1], p[2], p[0]))
@@ -54,7 +54,7 @@ func (a *testApp) mysqlWindowFixture(token string) (*sql.DB, int64) {
 
 func TestExecWindow_CannotWriteAnotherDatabaseOnRealMySQL(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	raw, conn := app.mysqlWindowFixture(admin)
 	app.openWindow(admin, conn, winDBA, time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 
@@ -117,7 +117,7 @@ func TestExecWindow_CannotWriteAnotherDatabaseOnRealMySQL(t *testing.T) {
 // 同一组越库写法在 SQLite 夹具上也走一遍预检(不需要真库):窗口内,预检与执行同口径。
 func TestExecWindow_RiskCheckRefusesCrossDatabaseForms(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const targetDB = "orders_db"
 	app.openWindow(token, prod, targetDB, time.Now().Add(-time.Minute), time.Now().Add(time.Hour))

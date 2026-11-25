@@ -24,11 +24,11 @@ func (a *testApp) tryLogin(email, password string) int {
 
 func TestLoginRateLimit_OwnSuccessDoesNotResetAnotherAccount(t *testing.T) {
 	app := newTestApp(t)
-	const victim = "zhangwei@vela.io"
+	const victim = "zhangwei@aegisdb.io"
 	for i := 0; i < 4; i++ {
 		eq(t, app.tryLogin(victim, "guess"), 40100, "猜错口令")
 	}
-	eq(t, app.tryLogin("linwei@vela.io", "vela123"), 0, "攻击者登录自己的账号")
+	eq(t, app.tryLogin("linwei@aegisdb.io", "aegisdb123"), 0, "攻击者登录自己的账号")
 	eq(t, app.tryLogin(victim, "guess"), 40100, "第 5 次失败:仍被处理,并就此进入锁定")
 	if code := app.tryLogin(victim, "guess"); code != 42900 {
 		t.Fatalf("第 6 次猜受害者口令应被频控挡住,实际 code=%d —— 自己的成功登录清掉了别人的计数", code)
@@ -39,7 +39,7 @@ func TestLoginRateLimit_SprayingAcrossAccountsIsCapped(t *testing.T) {
 	app := newTestApp(t)
 	blocked := false
 	for i := 0; i < 40 && !blocked; i++ {
-		blocked = app.tryLogin(fmt.Sprintf("u%d@vela.io", i), "guess") == 42900
+		blocked = app.tryLogin(fmt.Sprintf("u%d@aegisdb.io", i), "guess") == 42900
 	}
 	if !blocked {
 		t.Fatal("同一来源轮换 40 个邮箱各试一次,始终没被频控挡住")
@@ -50,11 +50,11 @@ func TestLoginRateLimit_SprayingAcrossAccountsIsCapped(t *testing.T) {
 // 同事)送进锁定。
 func TestLoginRateLimit_SuccessClearsOwnFailures(t *testing.T) {
 	app := newTestApp(t)
-	const me = "linwei@vela.io"
+	const me = "linwei@aegisdb.io"
 	for i := 0; i < 4; i++ {
 		eq(t, app.tryLogin(me, "typo"), 40100, "手滑")
 	}
-	eq(t, app.tryLogin(me, "vela123"), 0, "登录成功")
+	eq(t, app.tryLogin(me, "aegisdb123"), 0, "登录成功")
 	for i := 0; i < 4; i++ {
 		eq(t, app.tryLogin(me, "typo"), 40100, "成功之后重新计数,4 次以内不该被挡")
 	}

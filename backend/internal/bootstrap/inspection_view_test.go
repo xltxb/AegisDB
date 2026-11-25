@@ -51,14 +51,14 @@ func TestInspectionView_DBARolesSeeEverythingOthersDoNot(t *testing.T) {
 	eq(t, app.openDo(http.MethodPost, inspectionPath, client, inspectionBody("order-cluster", today, "critical", html)).Code, 0, "上传今天")
 
 	// 三类 DBA 角色都能看
-	owner := app.login("zhangwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	for name, tok := range map[string]string{"平台管理员": admin, "DBA 负责人": owner, "DBA L2": l2} {
 		eq(t, app.do(http.MethodGet, "/api/v1/inspection-reports/latest", tok, nil).Code, 0, name+" 看最新列表")
 	}
 	// 研发只读、审计员看不到;给研发只读勾上菜单也还是看不到(角色校验在)
-	ro := app.login("zhaolei@vela.io", "vela123")
-	auditor := app.login("hujun@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodGet, "/api/v1/inspection-reports/latest", ro, nil).Code, 40300, "研发只读")
 	eq(t, app.do(http.MethodGet, "/api/v1/inspection-reports/latest", auditor, nil).Code, 40300, "审计员")
 	if err := app.repo.DB().Exec("UPDATE tbl_role_menu SET enabled = ? WHERE role_id = ? AND menu_key = ?", true, roleIDByCode(t, app, "ro"), MenuInspection).Error; err != nil {

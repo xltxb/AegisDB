@@ -25,8 +25,8 @@ import (
 	"log/slog"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 设置项。默认值就是"不开、十分钟一轮、四台并发"。

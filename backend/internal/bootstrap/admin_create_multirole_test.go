@@ -10,23 +10,23 @@ import (
 // Short passwords and duplicate emails are rejected.
 func TestAdmin_CreateActiveAccount(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "newbie@vela.io", "name": "New Bie", "password": "initpass9",
+		"email": "newbie@aegisdb.io", "name": "New Bie", "password": "initpass9",
 		"roleIds": []int64{roID},
 	}).Code, 0, "create account")
 
 	// active on creation → sign in right away with the initial password
-	eq(t, app.loginCode("newbie@vela.io", "initpass9"), 0, "new account can log in")
+	eq(t, app.loginCode("newbie@aegisdb.io", "initpass9"), 0, "new account can log in")
 
 	if app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "short@vela.io", "password": "123", "roleIds": []int64{roID}}).Code == 0 {
+		"email": "short@aegisdb.io", "password": "123", "roleIds": []int64{roID}}).Code == 0 {
 		t.Error("short password must be rejected")
 	}
 	if app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "newbie@vela.io", "password": "initpass9", "roleIds": []int64{roID}}).Code == 0 {
+		"email": "newbie@aegisdb.io", "password": "initpass9", "roleIds": []int64{roID}}).Code == 0 {
 		t.Error("duplicate email must be rejected")
 	}
 }
@@ -37,37 +37,37 @@ func TestAdmin_CreateActiveAccount(t *testing.T) {
 // re-reads roles each request, so no re-login is required).
 func TestMultiRole_UnionGrantsAndRevokesAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 	adminID := app.roleIDByCode(admin, "admin")
 
 	// a plain read-only account
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "grant@vela.io", "password": "initpass9", "roleIds": []int64{roID},
+		"email": "grant@aegisdb.io", "password": "initpass9", "roleIds": []int64{roID},
 	}).Code, 0, "create ro account")
-	user := app.login("grant@vela.io", "initpass9")
+	user := app.login("grant@aegisdb.io", "initpass9")
 
 	// ro is not admin → the admin-only create endpoint is forbidden
 	if got := app.do(http.MethodPost, "/api/v1/users", user, map[string]any{
-		"email": "z@vela.io", "password": "initpass9", "roleIds": []int64{roID}}).Code; got != 40300 {
+		"email": "z@aegisdb.io", "password": "initpass9", "roleIds": []int64{roID}}).Code; got != 40300 {
 		t.Errorf("ro user blocked from admin create: got %d, want 40300", got)
 	}
 
-	target := app.userByEmail(admin, "grant@vela.io")
+	target := app.userByEmail(admin, "grant@aegisdb.io")
 	// grant a second role that carries admin (ro stays primary)
 	eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(target.ID), admin,
 		map[string]any{"roleIds": []int64{roID, adminID}}).Code, 0, "assign ro+admin")
 
 	// union now includes admin → the SAME session may create a user
 	eq(t, app.do(http.MethodPost, "/api/v1/users", user, map[string]any{
-		"email": "z@vela.io", "name": "Zed", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0,
+		"email": "z@aegisdb.io", "name": "Zed", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0,
 		"union admin lets the ro user create accounts")
 
 	// drop back to ro-only → admin access is revoked again
 	eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(target.ID), admin,
 		map[string]any{"roleIds": []int64{roID}}).Code, 0, "revoke admin role")
 	if got := app.do(http.MethodPost, "/api/v1/users", user, map[string]any{
-		"email": "y@vela.io", "password": "initpass9", "roleIds": []int64{roID}}).Code; got != 40300 {
+		"email": "y@aegisdb.io", "password": "initpass9", "roleIds": []int64{roID}}).Code; got != 40300 {
 		t.Errorf("after revoking admin, ro user blocked again: got %d, want 40300", got)
 	}
 }
@@ -80,23 +80,23 @@ func TestMultiRole_UnionGrantsAndRevokesAdmin(t *testing.T) {
 // revoked platform-admin from someone would be told it worked and be wrong.
 func TestMultiRole_RemovingMemberRevokesThePrimaryRoleToo(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	adminID := app.roleIDByCode(admin, "admin")
 	roID := app.roleIDByCode(admin, "ro")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "temp-admin@vela.io", "name": "Temp Admin", "password": "initpass9",
+		"email": "temp-admin@aegisdb.io", "name": "Temp Admin", "password": "initpass9",
 		"roleIds": []int64{adminID, roID}, // admin is the primary role
 	}).Code, 0, "create account holding admin + ro")
 
-	victim := app.login("temp-admin@vela.io", "initpass9")
+	victim := app.login("temp-admin@aegisdb.io", "initpass9")
 	eq(t, app.do(http.MethodGet, "/api/v1/users", victim, nil).Code, 0, "admin rights before revocation")
 
-	uid := app.userByEmail(admin, "temp-admin@vela.io").ID
+	uid := app.userByEmail(admin, "temp-admin@aegisdb.io").ID
 	eq(t, app.do(http.MethodDelete, "/api/v1/roles/"+itoa(adminID)+"/members/"+itoa(uid), admin, nil).Code, 0, "remove member")
 
 	// The revocation must actually bite — the guard re-reads roles per request.
-	fresh := app.login("temp-admin@vela.io", "initpass9") // revocation also ends old sessions
+	fresh := app.login("temp-admin@aegisdb.io", "initpass9") // revocation also ends old sessions
 	if app.do(http.MethodGet, "/api/v1/users", fresh, nil).Code == 0 {
 		t.Error("admin rights survived removal from the role: the primary role_id still grants them")
 	}
@@ -109,17 +109,17 @@ func TestMultiRole_RemovingMemberRevokesThePrimaryRoleToo(t *testing.T) {
 // That must be refused outright rather than half-applied.
 func TestMultiRole_RemovingTheOnlyRoleIsRefused(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "solo@vela.io", "name": "Solo", "password": "initpass9",
+		"email": "solo@aegisdb.io", "name": "Solo", "password": "initpass9",
 		"roleIds": []int64{roID},
 	}).Code, 0, "create single-role account")
-	uid := app.userByEmail(admin, "solo@vela.io").ID
+	uid := app.userByEmail(admin, "solo@aegisdb.io").ID
 
 	if app.do(http.MethodDelete, "/api/v1/roles/"+itoa(roID)+"/members/"+itoa(uid), admin, nil).Code == 0 {
 		t.Error("removing the user's only role should be refused")
 	}
-	eq(t, app.loginCode("solo@vela.io", "initpass9"), 0, "account still works")
+	eq(t, app.loginCode("solo@aegisdb.io", "initpass9"), 0, "account still works")
 }

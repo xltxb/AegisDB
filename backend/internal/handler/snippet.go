@@ -5,11 +5,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // Terminal snippets — per-user saved scripts bound to hotkeys 1-9.

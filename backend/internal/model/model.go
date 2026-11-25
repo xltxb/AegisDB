@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/pkg/crypto"
+	"aegisdb/pkg/crypto"
 )
 
 // The five built-in tier codes and what each one MEANS. The code is the lookup

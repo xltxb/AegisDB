@@ -5,9 +5,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // ExecuteApproval runs an approved ticket's command, at the initiator's request.

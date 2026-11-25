@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type openStageWithApprovers struct {
@@ -134,16 +134,16 @@ func (a *testApp) expectedApproveCapable(creatorEmail string) []string {
 // 配了确认角色:名单 = 该角色的在职真人成员;放行后名单消失,放行行为不变。
 func TestOpenReleaseListsManualConfirmersByRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token, relNo := app.openReleaseAtManual(admin, "card-role", `{"confirmRole":"l2"}`)
 
 	stages := app.openStages(token, relNo)
 	g := openStageOf(stages, "manual")
 	got := listedAccounts(g)
-	if !hasAccount(got, "chenhao@vela.io") {
+	if !hasAccount(got, "chenhao@aegisdb.io") {
 		t.Fatalf("l2 member chenhao should be listed, got %v", got)
 	}
-	if hasAccount(got, "zhangwei@vela.io") || hasAccount(got, "linwei@vela.io") {
+	if hasAccount(got, "zhangwei@aegisdb.io") || hasAccount(got, "linwei@aegisdb.io") {
 		t.Fatalf("people outside the confirm role must not be listed, got %v", got)
 	}
 	role, err := app.repo.GetRoleByCode("l2")
@@ -187,12 +187,12 @@ func TestOpenReleaseListsManualConfirmersByRole(t *testing.T) {
 // 没配确认角色:名单 = 全体有审批能力的在职真人,不含发起服务账号、停用账号。
 func TestOpenReleaseListsManualConfirmersWithoutRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token, relNo := app.openReleaseAtManual(admin, "card-norole", "")
 
 	got := listedAccounts(openStageOf(app.openStages(token, relNo), "manual"))
 	want := app.expectedApproveCapable("")
-	if !hasAccount(got, "linwei@vela.io") || !hasAccount(got, "zhangwei@vela.io") {
+	if !hasAccount(got, "linwei@aegisdb.io") || !hasAccount(got, "zhangwei@aegisdb.io") {
 		t.Fatalf("approve-capable people should be listed, got %v", got)
 	}
 	eq(t, len(got), len(want), "exactly the approve-capable active humans")
@@ -208,7 +208,7 @@ func TestOpenReleaseListsManualConfirmersWithoutRole(t *testing.T) {
 	}
 
 	// 停用一位:他立刻从名单上消失,也放行不了。
-	zw, err := app.repo.GetUserByEmail("zhangwei@vela.io")
+	zw, err := app.repo.GetUserByEmail("zhangwei@aegisdb.io")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,29 +216,29 @@ func TestOpenReleaseListsManualConfirmersWithoutRole(t *testing.T) {
 		t.Fatal(err)
 	}
 	got = listedAccounts(openStageOf(app.openStages(token, relNo), "manual"))
-	if hasAccount(got, "zhangwei@vela.io") {
+	if hasAccount(got, "zhangwei@aegisdb.io") {
 		t.Fatalf("a disabled account must drop off the list, got %v", got)
 	}
-	r, _ := app.openConfirm(token, relNo, "zhangwei@vela.io")
+	r, _ := app.openConfirm(token, relNo, "zhangwei@aegisdb.io")
 	if r.Code == 0 {
 		t.Fatal("a disabled account must not pass the gate either")
 	}
 
-	r, _ = app.openConfirm(token, relNo, "linwei@vela.io")
+	r, _ = app.openConfirm(token, relNo, "linwei@aegisdb.io")
 	eq(t, r.Code, 0, "a listed approve-capable person passes the gate")
 }
 
 // 发起人(真人)不在名单上 —— 他点不了自己的单,名单不能把卡片发给他。
 func TestOpenReleaseConfirmersExcludeCreator(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, relNo := app.openReleaseAtManual(admin, "card-creator", "")
 	rel, err := app.repo.GetReleaseByNo(relNo)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 把发起人改成一位真人(linwei),模拟控制台建单的形态。
-	lw, _ := app.repo.GetUserByEmail("linwei@vela.io")
+	lw, _ := app.repo.GetUserByEmail("linwei@aegisdb.io")
 	if err := app.repo.DB().Model(&model.Release{}).Where("id = ?", rel.ID).
 		Updates(map[string]any{"creator_id": lw.ID, "creator": lw.Name}).Error; err != nil {
 		t.Fatal(err)
@@ -250,7 +250,7 @@ func TestOpenReleaseConfirmersExcludeCreator(t *testing.T) {
 			continue
 		}
 		for _, ap := range st.Approvers {
-			if ap.Account == "linwei@vela.io" {
+			if ap.Account == "linwei@aegisdb.io" {
 				t.Fatalf("the creator must not be listed as a confirmer: %+v", st.Approvers)
 			}
 		}

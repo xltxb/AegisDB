@@ -17,7 +17,7 @@ import (
 func newRealBizEnv(t *testing.T, engine, hostPort, user, pw, db string) *bizEnv {
 	t.Helper()
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa, db: db}
@@ -50,7 +50,7 @@ func realDSNParts(t *testing.T, env string) []string {
 }
 
 func TestBizQuery_PGSystemCatalogRefused(t *testing.T) {
-	p := realDSNParts(t, "VELA_TEST_PG")
+	p := realDSNParts(t, "AEGISDB_TEST_PG")
 	b := newRealBizEnv(t, "PostgreSQL 16", p[0], p[1], p[2], "postgres")
 
 	if r, out := b.exec("SELECT version(), current_database(), pg_size_pretty(1024::bigint)"); r.Code != 0 || out.Error != "" || len(out.Rows) != 1 {
@@ -75,7 +75,7 @@ func TestBizQuery_PGSystemCatalogRefused(t *testing.T) {
 }
 
 func TestBizQuery_MySQLQuotedFuncAndInfoRefused(t *testing.T) {
-	p := realDSNParts(t, "VELA_TEST_MYSQL")
+	p := realDSNParts(t, "AEGISDB_TEST_MYSQL")
 	raw, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/", p[1], p[2], p[0]))
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestBizQuery_MySQLQuotedFuncAndInfoRefused(t *testing.T) {
 		"SELECT `sleep`(1)",
 		"SELECT `SLEEP` (1)",
 		"SELECT `benchmark`(1000, md5('a'))",
-		"SELECT `get_lock`('vela_bb', 0)",
+		"SELECT `get_lock`('aegisdb_bb', 0)",
 		"SELECT DATABASE(), USER(), @@hostname",
 		"SELECT CURRENT_USER",
 		"SELECT @@datadir",

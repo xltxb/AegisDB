@@ -31,7 +31,7 @@ func issuesOfKindIn(res precheckResult, kind string) []precheckIssue {
 // 一、字段已存在 —— 这条加列语句必然失败。
 func TestPrecheckAlter_AddingAnExistingColumnIsReported(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-dup-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -58,7 +58,7 @@ func TestPrecheckAlter_AddingAnExistingColumnIsReported(t *testing.T) {
 // 二、字段不存在 —— 删一个没有的列。
 func TestPrecheckAlter_DroppingAMissingColumnIsReported(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-missing-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -77,7 +77,7 @@ func TestPrecheckAlter_DroppingAMissingColumnIsReported(t *testing.T) {
 // 这条在 SQLite 上真的会失败,在 MySQL/PG 上同样 —— 它是这类检查里最常见的一种。
 func TestPrecheckAlter_NotNullColumnOnANonEmptyTableIsReported(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -105,7 +105,7 @@ func TestPrecheckAlter_NotNullColumnOnANonEmptyTableIsReported(t *testing.T) {
 // 上一条证明它会报,这一条证明它不乱报。
 func TestPrecheckAlter_NotNullWithDefaultRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull-default")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -127,7 +127,7 @@ func TestPrecheckAlter_NotNullWithDefaultRaisesNothing(t *testing.T) {
 // 空表上加非空列是合法的 —— 探测要看数据,不是看语句形状。
 func TestPrecheckAlter_NotNullOnAnEmptyTableRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull-empty")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_empty (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -143,7 +143,7 @@ func TestPrecheckAlter_NotNullOnAnEmptyTableRaisesNothing(t *testing.T) {
 // 四、唯一约束撞上重复值。
 func TestPrecheckAlter_UniqueOnDuplicateDataIsReported(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-unique")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_user (id INTEGER, email TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -168,7 +168,7 @@ func TestPrecheckAlter_UniqueOnDuplicateDataIsReported(t *testing.T) {
 // 没有重复值时不报 —— 同样是"证明它不乱报"。
 func TestPrecheckAlter_UniqueOnCleanDataRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-unique-clean")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_user (id INTEGER, email TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -189,7 +189,7 @@ func TestPrecheckAlter_UniqueOnCleanDataRaisesNothing(t *testing.T) {
 // 五、同一批里前面刚建的表,不去查它的字段 —— 它此刻还没有列。
 func TestPrecheckAlter_TableCreatedInTheSameBatchIsNotColumnChecked(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-batch")
 
 	res := submitForPrecheck(t, app, admin, conn,
@@ -207,7 +207,7 @@ func TestPrecheckAlter_TableCreatedInTheSameBatchIsNotColumnChecked(t *testing.T
 // 它同时证明上一条不是靠"字段检查整个没跑"过的。
 func TestPrecheckAlter_ColumnAddedEarlierInTheSameBatchIsSeen(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-batch-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -228,7 +228,7 @@ func TestPrecheckAlter_ColumnAddedEarlierInTheSameBatchIsSeen(t *testing.T) {
 // 六、认不出形状的 ALTER 不下结论 —— 而且要说"没查",不能沉默。
 func TestPrecheckAlter_UnrecognisedShapeSaysNothingWasChecked(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "alter-unknown")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)

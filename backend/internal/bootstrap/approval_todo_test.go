@@ -55,9 +55,9 @@ func (v todoView) has(apNo, kind string) bool {
 
 func TestApprovalTodo_FollowsTheTicketToWhoeverMustActNext(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	approver := app.login("zhangwei@vela.io", "vela123") // 审批链成员
-	outsider := app.login("chenhao@vela.io", "vela123")  // 不在链上、够不到那台实例
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123") // 审批链成员
+	outsider := app.login("chenhao@aegisdb.io", "aegisdb123")  // 不在链上、够不到那台实例
 
 	// 种子数据里本来就有几张演示工单挂在链上,所以下面全按**增量**看:这张单出现前后,
 	// 各人的待办差多少。
@@ -109,7 +109,7 @@ func TestApprovalTodo_FollowsTheTicketToWhoeverMustActNext(t *testing.T) {
 // 它的语义(我看得见的待审批),待办不能沿用它。
 func TestApprovalTodo_IsNotTheVisiblePendingCount(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(admin)
 
 	page := app.approvalPage(admin, "?scope=all&page=1&pageSize=1")

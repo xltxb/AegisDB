@@ -17,7 +17,7 @@ import (
 
 func TestExecuteStageLogNamesStatementRowsAndTiming(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE t_bond (bondseq_id INTEGER, bond_type INTEGER)`)
 		_, _ = db.Exec(`INSERT INTO t_bond VALUES (855048, 0), (855049, 0)`)
@@ -44,7 +44,7 @@ func TestExecuteStageLogNamesStatementRowsAndTiming(t *testing.T) {
 // 失败时日志要有报错原文和出错的那条语句,并且停在那一条。
 func TestExecuteStageLogCarriesFailureText(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE t_ok (n INTEGER)`)
 	})
@@ -79,7 +79,7 @@ func TestExecuteStageLogCarriesFailureText(t *testing.T) {
 // 列表不带阶段日志(体积),详情带 —— 页面必须从详情取日志。这条契约是"暂无日志"的另一半。
 func TestReleaseListOmitsStageLogButDetailCarriesIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE t_bond (bondseq_id INTEGER, bond_type INTEGER)`)
 		_, _ = db.Exec(`INSERT INTO t_bond VALUES (1, 0)`)

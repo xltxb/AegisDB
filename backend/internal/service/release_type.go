@@ -11,9 +11,9 @@ package service
 import (
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 分类口径。SELECT 归 DML:MySQL 官方文档即把 SELECT 列为 DML,且变更单带

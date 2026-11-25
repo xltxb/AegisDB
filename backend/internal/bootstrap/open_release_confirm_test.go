@@ -66,11 +66,11 @@ func (a *testApp) consoleReleaseAtManual(admin, title string) releaseView {
 // 主路径:确认角色里的人经外部平台放行,流水线越过人工确认往下走;审计记下是谁、经由哪个系统。
 func TestOpenConfirmPassesManualGate(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "im-card", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAtManual(admin, "外部确认")
 
-	r, c := app.openConfirm(token, rel.RelNo, "ChenHao@vela.io") // 邮箱不分大小写
+	r, c := app.openConfirm(token, rel.RelNo, "ChenHao@aegisdb.io") // 邮箱不分大小写
 	eq(t, r.Code, 0, "a member of the confirm role passes the gate through the open API")
 	eq(t, c.Stage, "人工确认", "stage name reported")
 	eq(t, c.AlreadyConfirmed, false, "this call passed it")
@@ -88,7 +88,7 @@ func TestOpenConfirmPassesManualGate(t *testing.T) {
 	}
 
 	// 重试安全:再来一次拿到的是"已放行",不报错 —— 也不会顺手把紧跟着的执行闸放了。
-	r, c = app.openConfirm(token, rel.RelNo, "chenhao@vela.io")
+	r, c = app.openConfirm(token, rel.RelNo, "chenhao@aegisdb.io")
 	eq(t, r.Code, 0, "a retry is answered, not refused")
 	eq(t, c.AlreadyConfirmed, true, "reported as already confirmed")
 	after := app.waitRelease(admin, rel.ID, "waiting", "failed", "success")
@@ -108,7 +108,7 @@ func TestOpenConfirmPassesManualGate(t *testing.T) {
 		if strings.Contains(row.Command, "open.release.confirm") && strings.Contains(row.Command, rel.RelNo) {
 			via = true
 			eq(t, row.Operator, "API:im-card-凭据", "the asking system is named")
-			if !strings.Contains(row.Command, "chenhao@vela.io") {
+			if !strings.Contains(row.Command, "chenhao@aegisdb.io") {
 				t.Errorf("the audit line should name the confirmer, got %q", row.Command)
 			}
 		}
@@ -127,25 +127,25 @@ func TestOpenConfirmPassesManualGate(t *testing.T) {
 // 凭据不是确认人:不在确认角色里的、发起人本人、不存在 / 没写的账号都放行不了。
 func TestOpenConfirmRefusesWhoCannotConfirm(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "im-refuse", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAtManual(admin, "外部确认拒绝")
 
-	r, _ := app.openConfirm(token, rel.RelNo, "zhangwei@vela.io") // 有审批权,但不在 l2
+	r, _ := app.openConfirm(token, rel.RelNo, "zhangwei@aegisdb.io") // 有审批权,但不在 l2
 	eq(t, r.Code, 40300, "someone outside the confirm role cannot pass the gate")
-	r, _ = app.openConfirm(token, rel.RelNo, "linwei@vela.io")
+	r, _ = app.openConfirm(token, rel.RelNo, "linwei@aegisdb.io")
 	eq(t, r.Code, 40300, "the initiator cannot pass their own release's gate")
 	if !strings.Contains(r.Msg, "确认人无权") {
 		t.Errorf("should say the confirmer may not pass it, got %q", r.Msg)
 	}
-	r, _ = app.openConfirm(token, rel.RelNo, "nobody@vela.io")
+	r, _ = app.openConfirm(token, rel.RelNo, "nobody@aegisdb.io")
 	eq(t, r.Code, 40001, "unknown confirmer")
-	if !strings.Contains(r.Msg, "nobody@vela.io") {
+	if !strings.Contains(r.Msg, "nobody@aegisdb.io") {
 		t.Errorf("should name the unknown account, got %q", r.Msg)
 	}
 	r, _ = app.openConfirm(token, rel.RelNo, "")
 	eq(t, r.Code, 40001, "confirmer is required")
-	r, _ = app.openConfirm(token, "REL-999999", "chenhao@vela.io")
+	r, _ = app.openConfirm(token, "REL-999999", "chenhao@aegisdb.io")
 	eq(t, r.Code, 40001, "unknown release")
 
 	g := stageByType(app.getRelease(admin, rel.ID), "manual")
@@ -155,16 +155,16 @@ func TestOpenConfirmRefusesWhoCannotConfirm(t *testing.T) {
 // release:approve 必须显式勾选;范围外实例上的单碰不了。
 func TestOpenConfirmNeedsScopeAndInstance(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	rel := app.consoleReleaseAtManual(admin, "外部确认范围")
 
 	def := app.approverCredential(admin, "ci-default", nil, nil, 0) // 默认集合
-	r, _ := app.openConfirm(def, rel.RelNo, "chenhao@vela.io")
+	r, _ := app.openConfirm(def, rel.RelNo, "chenhao@aegisdb.io")
 	if r.Code == 0 {
 		t.Fatal("a credential without release:approve must not pass any gate")
 	}
 	sandbox := app.approverCredential(admin, "im-sandbox", []string{"sandbox"}, []string{"release:approve"}, 0)
-	r, _ = app.openConfirm(sandbox, rel.RelNo, "chenhao@vela.io")
+	r, _ = app.openConfirm(sandbox, rel.RelNo, "chenhao@aegisdb.io")
 	eq(t, r.Code, 40300, "a release outside the service account's instances is off limits")
 
 	g := stageByType(app.getRelease(admin, rel.ID), "manual")
@@ -174,13 +174,13 @@ func TestOpenConfirmNeedsScopeAndInstance(t *testing.T) {
 // 两边都能点,先到先得:控制台先放行了,外部再来拿到 alreadyConfirmed。
 func TestOpenConfirmFirstWins(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "im-race", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAtManual(admin, "外部确认先到先得")
 
 	eq(t, app.confirmStage(l2, rel.ID, stageByType(rel, "manual").ID).Code, 0, "console continues first")
-	r, c := app.openConfirm(token, rel.RelNo, "chenhao@vela.io")
+	r, c := app.openConfirm(token, rel.RelNo, "chenhao@aegisdb.io")
 	eq(t, r.Code, 0, "a late call is answered, not refused")
 	eq(t, c.AlreadyConfirmed, true, "reported as already confirmed")
 }
@@ -188,10 +188,10 @@ func TestOpenConfirmFirstWins(t *testing.T) {
 // 停在审批上(不是人工闸):说清楚,不是放行。
 func TestOpenConfirmWithoutWaitingGate(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "im-nogate", nil, []string{"release:approve"}, 0)
 	rel := app.consoleReleaseAwaitingL2(admin, "停在审批")
-	r, _ := app.openConfirm(token, rel.RelNo, "chenhao@vela.io")
+	r, _ := app.openConfirm(token, rel.RelNo, "chenhao@aegisdb.io")
 	eq(t, r.Code, 40001, "no manual gate waiting")
 	if !strings.Contains(r.Msg, "人工确认") {
 		t.Errorf("should say there is no gate waiting, got %q", r.Msg)
@@ -201,7 +201,7 @@ func TestOpenConfirmWithoutWaitingGate(t *testing.T) {
 // 执行变更不能经开放接口放行:只能在网关上由人点。连 gate=execute 这种字段也不认。
 func TestOpenConfirmNeverPassesExecuteGate(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	token := app.approverCredential(admin, "im-exec", nil, []string{"release:approve"}, 0)
 	pid := app.createPipeline(admin, "执行确认-流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute", "config": `{"confirmRole":"l2"}`},
@@ -219,9 +219,9 @@ func TestOpenConfirmNeverPassesExecuteGate(t *testing.T) {
 	}
 
 	for _, body := range []map[string]any{
-		{"confirmer": "chenhao@vela.io"},
-		{"confirmer": "chenhao@vela.io", "gate": "execute"},
-		{"confirmer": "linwei@vela.io", "gate": "execute"}, // 发起人在控制台能点执行,经接口也不行
+		{"confirmer": "chenhao@aegisdb.io"},
+		{"confirmer": "chenhao@aegisdb.io", "gate": "execute"},
+		{"confirmer": "linwei@aegisdb.io", "gate": "execute"}, // 发起人在控制台能点执行,经接口也不行
 	} {
 		rr, _ := app.openConfirmBody(token, rel.RelNo, body)
 		eq(t, rr.Code, 40001, "the execute gate is never passed through the open API")

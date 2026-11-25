@@ -28,7 +28,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // planOnlyNotice 是改写之后告诉用户的那句话(规范中文;界面按 RuleRef 用读者的语言)。
@@ -190,7 +190,7 @@ func oracleTerminalExplainPlan(ctx context.Context, runner sqlRunner, query stri
 	} else {
 		var b [6]byte
 		_, _ = rand.Read(b[:])
-		id = "vela_" + hex.EncodeToString(b[:])
+		id = "aegisdb_" + hex.EncodeToString(b[:])
 		loc := reOraExplainPlan.FindStringIndex(body)
 		body = body[:loc[1]] + " SET STATEMENT_ID = '" + id + "'" + body[loc[1]:]
 	}

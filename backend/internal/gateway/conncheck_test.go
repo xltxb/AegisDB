@@ -18,7 +18,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/sijms/go-ora/v2/network"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestClassifyDialError_TypedAuthCodesAreAuth(t *testing.T) {

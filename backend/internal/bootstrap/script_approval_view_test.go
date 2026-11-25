@@ -15,7 +15,7 @@ import (
 // 审批链成员);给出之前校验哈希:看到的必须就是审查时、也是将来执行的那份字节。
 func TestApprovalScript_ApproverReadsTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	script := "CREATE TABLE t_a (id INT);\nCREATE TABLE t_b (id INT);\nDROP TABLE t_old;\n"
 	up, path := app.uploadScript(admin, "ddl.sql", script)
@@ -23,7 +23,7 @@ func TestApprovalScript_ApproverReadsTheWholeScript(t *testing.T) {
 		"connectionId": prod, "uploadId": up}).Code, 42200, "高危脚本进审批")
 	id := lastApproval(t, app).ID
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodGet, "/api/v1/approvals/"+itoa(id)+"/script", approver, nil)
 	eq(t, r.Code, 0, "审批链成员读脚本全文")
 	var body struct {
@@ -36,7 +36,7 @@ func TestApprovalScript_ApproverReadsTheWholeScript(t *testing.T) {
 	}
 
 	// 既不是发起人、也不在审批链上的人看不到
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodGet, "/api/v1/approvals/"+itoa(id)+"/script", ro, nil); r.Code == 0 {
 		t.Error("无关的人读到了工单的脚本全文")
 	}

@@ -301,5 +301,5 @@ export function teeFilename(arg: string, now: Date): string {
   const base = arg.replace(/^.*[\\/]/, '').replace(/[^\w.\-一-龥]+/g, '-').replace(/^-+|-+$/g, '')
   if (base) return base
   const p = (n: number) => String(n).padStart(2, '0')
-  return `vela-tee-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}.log`
+  return `aegisdb-tee-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}.log`
 }

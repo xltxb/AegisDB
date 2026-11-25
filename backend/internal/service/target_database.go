@@ -15,8 +15,8 @@ package service
 import (
 	"strings"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // applyTargetDatabase points conn at the database this request targets, when the

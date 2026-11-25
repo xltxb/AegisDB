@@ -12,7 +12,7 @@ import (
 // code 由服务端生成,不会撞上 admin 这类特殊角色。
 func TestRoleCreate_StartsWithNothing(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/roles", admin, map[string]any{
 		"name": "数据分析", "layer": "L3 · 分析", "description": "只看报表库", "canApprove": false,
@@ -51,9 +51,9 @@ func TestRoleCreate_StartsWithNothing(t *testing.T) {
 
 	// 只挂这个新角色的人:在任何环境执行都被拒(矩阵全 deny)
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"name": "分析员", "email": "analyst@vela.io", "password": "initpass9", "roleIds": []int64{role.ID},
+		"name": "分析员", "email": "analyst@aegisdb.io", "password": "initpass9", "roleIds": []int64{role.ID},
 	}).Code, 0, "建只挂新角色的账号")
-	u := app.login("analyst@vela.io", "initpass9")
+	u := app.login("analyst@aegisdb.io", "initpass9")
 	for _, env := range []string{"dev", "prod"} {
 		if rr := app.do(http.MethodPost, "/api/v1/terminal/exec", u, map[string]any{
 			"connectionId": app.connIDByEnv(admin, env), "sql": "SELECT 1",
@@ -65,7 +65,7 @@ func TestRoleCreate_StartsWithNothing(t *testing.T) {
 
 func TestRoleCreate_ValidationAndAccess(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/roles", admin, map[string]any{"name": "  "}); r.Code == 0 {
 		t.Error("名称为空不应建成")
 	}
@@ -83,7 +83,7 @@ func TestRoleCreate_ValidationAndAccess(t *testing.T) {
 		t.Fatal("新角色的 code 不能是 admin")
 	}
 	// 非管理员不能建
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/roles", owner, map[string]any{"name": "越权"}); r.Code == 0 {
 		t.Error("非管理员不应能建角色")
 	}
@@ -92,7 +92,7 @@ func TestRoleCreate_ValidationAndAccess(t *testing.T) {
 // 回归:编辑已有角色照旧(不新建、不动别的角色)。
 func TestRoleUpdate_StillEditsTheSelectedRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ro, _ := app.repo.GetRoleByCode("ro")
 	before, _ := app.repo.ListRoles()
 	eq(t, app.do(http.MethodPatch, "/api/v1/roles/"+itoa(ro.ID), admin, map[string]any{"name": "研发只读(改)"}).Code, 0, "改名")
@@ -105,7 +105,7 @@ func TestRoleUpdate_StillEditsTheSelectedRole(t *testing.T) {
 // 角色详情回传可审批、描述、默认连接身份 —— 编辑表单据此回显,不再按 code 猜
 func TestRoleDetail_ReturnsEditableFields(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner, _ := app.repo.GetRoleByCode("owner")
 	var d struct {
 		CanApprove      bool   `json:"canApprove"`
@@ -138,7 +138,7 @@ func newCustomRole(t *testing.T, app *testApp, admin, name string) (int64, strin
 
 func TestRoleDelete_BuiltinRefused(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	for _, code := range []string{"admin", "owner", "l2", "ro", "audit"} {
 		role, err := app.repo.GetRoleByCode(code)
 		if err != nil {
@@ -160,18 +160,18 @@ func TestRoleDelete_BuiltinRefused(t *testing.T) {
 
 func TestRoleDelete_RefusedWhileInUse_ThenCleansUp(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	id, code := newCustomRole(t, app, admin, "临时角色")
 
 	// 有成员:拒绝
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"name": "临时工", "email": "temp@vela.io", "password": "initpass9", "roleIds": []int64{id},
+		"name": "临时工", "email": "temp@aegisdb.io", "password": "initpass9", "roleIds": []int64{id},
 	}).Code, 0, "建挂着该角色的账号")
 	if r := app.do(http.MethodDelete, "/api/v1/roles/"+itoa(id), admin, nil); r.Code == 0 || !strings.Contains(r.Msg, "用户") {
 		t.Fatalf("有成员时不应能删,实际 code=%d msg=%s", r.Code, r.Msg)
 	}
 	ro, _ := app.repo.GetRoleByCode("ro")
-	u, _ := app.repo.GetUserByEmail("temp@vela.io")
+	u, _ := app.repo.GetUserByEmail("temp@aegisdb.io")
 	if err := app.repo.SetUserRoles(u.ID, []int64{ro.ID}); err != nil {
 		t.Fatal(err)
 	}
@@ -205,9 +205,9 @@ func TestRoleDelete_RefusedWhileInUse_ThenCleansUp(t *testing.T) {
 
 func TestRoleDelete_AdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	id, _ := newCustomRole(t, app, admin, "只读分析")
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodDelete, "/api/v1/roles/"+itoa(id), owner, nil); r.Code == 0 {
 		t.Error("非管理员不应能删角色")
 	}

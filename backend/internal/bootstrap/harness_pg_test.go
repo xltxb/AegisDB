@@ -1,6 +1,6 @@
 package bootstrap
 
-// 测试存储库跑真 PostgreSQL(VELA_TEST_STORE_PG=libpq 键值串,不含 dbname)。
+// 测试存储库跑真 PostgreSQL(AEGISDB_TEST_STORE_PG=libpq 键值串,不含 dbname)。
 //
 // 模板库只建一次:跑 pg 迁移、按开发环境播种、种测试夹具;之后每个测试用
 // CREATE DATABASE … TEMPLATE 复制一份,测试结束 DROP … WITH (FORCE)。
@@ -15,7 +15,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"velagateway/internal/repository"
+	"aegisdb/internal/repository"
 )
 
 var (

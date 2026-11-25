@@ -9,7 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/pkg/jwt"
+	"aegisdb/pkg/jwt"
 )
 
 // 控制台的会话放在 HttpOnly Cookie 里(2026-11 审计 V-16)。
@@ -17,17 +17,17 @@ import (
 // 从前 JWT 存在 localStorage:页面上一旦出现 XSS,脚本就能把令牌读走,拿到别的机器上继续用。放进 HttpOnly
 // Cookie 之后脚本读不到它。代价是 Cookie 会被浏览器自动带上,所以要防 CSRF:
 //
-//   - vela_session:JWT 本身。HttpOnly、SameSite=Strict。
-//   - vela_csrf:由 jti 派生的校验值,脚本能读。写操作要把它放进 X-CSRF-Token,WebSocket 握手放进子协议。
+//   - aegisdb_session:JWT 本身。HttpOnly、SameSite=Strict。
+//   - aegisdb_csrf:由 jti 派生的校验值,脚本能读。写操作要把它放进 X-CSRF-Token,WebSocket 握手放进子协议。
 //     别的站点读不到这个 Cookie,也就发不出带对值的请求;它和会话绑定,登录一次换一个。
 //
-// 只有声明了 X-Vela-Client: web 的客户端才走这条路(SPA 每个请求都带)。脚本、Swagger、老客户端照旧从登录
+// 只有声明了 X-AegisDB-Client: web 的客户端才走这条路(SPA 每个请求都带)。脚本、Swagger、老客户端照旧从登录
 // 响应里拿 token、走 Authorization: Bearer —— Bearer 要靠代码显式附加,不存在 CSRF 问题,也不校验 CSRF。
 const (
-	SessionCookie   = "vela_session"
-	CSRFCookie      = "vela_csrf"
+	SessionCookie   = "aegisdb_session"
+	CSRFCookie      = "aegisdb_csrf"
 	CSRFHeader      = "X-CSRF-Token"
-	WebClientHeader = "X-Vela-Client"
+	WebClientHeader = "X-AegisDB-Client"
 )
 
 // IsWebClient 报告这个请求是不是来自控制台 SPA。

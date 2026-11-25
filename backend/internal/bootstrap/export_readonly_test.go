@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // SECURITY: the export worker executes the submitted SQL against the target DB,
@@ -16,7 +16,7 @@ import (
 // read-only export is still accepted.
 func TestExport_RejectsNonReadOnlySQL(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
@@ -60,7 +60,7 @@ func TestExport_RejectsNonReadOnlySQL(t *testing.T) {
 // database server.
 func TestExport_RejectsDialectLexerSmuggles(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
@@ -88,7 +88,7 @@ func TestExport_RejectsDialectLexerSmuggles(t *testing.T) {
 // through /export (EX1). Maintenance state was skipped for the same reason.
 func TestExport_HonoursCapabilityMatrixAndMaintenance(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
@@ -117,7 +117,7 @@ func TestExport_HonoursCapabilityMatrixAndMaintenance(t *testing.T) {
 // event: it is the moment someone asked for the data.
 func TestExport_SubmissionIsAudited(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
@@ -144,7 +144,7 @@ func TestExport_SubmissionIsAudited(t *testing.T) {
 // 查询被当成了写操作。多条语句改为单独一句、带条数;仍是 CodeForbidden,放行条件不变。
 func TestExport_MultiStatementSaysHowMany(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 2026-11-20:发布单列表改成"先截短再脱敏"。显示出来的预览必须与原先"全文脱敏再截 400"

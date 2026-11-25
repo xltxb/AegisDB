@@ -26,10 +26,10 @@ import (
 	"context"
 	"database/sql"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/internal/osc"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/internal/osc"
+	"aegisdb/pkg/crypto"
 )
 
 // ExecSession 是一次执行独占的连接。零值不可用,用 OpenExecSession 打开,用完必须 Close。

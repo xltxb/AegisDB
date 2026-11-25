@@ -26,7 +26,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestRecordAuditEventTypesAreKnown(t *testing.T) {

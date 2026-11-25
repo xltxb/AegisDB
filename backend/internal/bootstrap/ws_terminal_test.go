@@ -14,7 +14,7 @@ import (
 func (a *testApp) dialWS(token string) *websocket.Conn {
 	a.t.Helper()
 	wsURL := "ws" + strings.TrimPrefix(a.srv.URL, "http") + "/api/v1/terminal/ws"
-	d := websocket.Dialer{Subprotocols: []string{"vela-token", token}}
+	d := websocket.Dialer{Subprotocols: []string{"aegisdb-token", token}}
 	c, _, err := d.Dial(wsURL, nil)
 	if err != nil {
 		a.t.Fatalf("dial ws: %v", err)
@@ -45,7 +45,7 @@ func timeNowPlus(sec int) (deadline time.Time) {
 // command, not only at handshake (R5).
 func TestTerminalWS_RevokedSessionRejectedMidConnection(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	c := app.dialWS(token)

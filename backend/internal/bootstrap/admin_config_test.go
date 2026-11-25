@@ -9,8 +9,8 @@ import (
 // system settings — a non-admin (DBA lead) is blocked on every such mutation.
 func TestAdminOnly_OwnerCannotEditConfig(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("zhangwei@vela.io", "vela123") // DBA 负责人
-	admin := app.login("linwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // DBA 负责人
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// instance config (connections)
 	eq(t, app.do(http.MethodPost, "/api/v1/connections", owner, map[string]any{

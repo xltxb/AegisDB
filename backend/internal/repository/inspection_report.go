@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // AI 巡检报告的元数据(.scratch/inspection-report)。完整 HTML 在文件里,见 service/inspection.go。

@@ -77,8 +77,8 @@ func (p auditPageTyped) firstOfType(ev string) *auditRowTyped {
 // 拦截、审批、登录各写下自己的类型。
 func TestAuditEventType_IsRecordedOnTheRowItself(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123") // 这一下本身就是一条 login
-	approver := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123") // 这一下本身就是一条 login
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	ap := app.submitProdHighRisk(admin) // DROP TABLE orders; → intercept
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
@@ -125,8 +125,8 @@ func kindsOf(rows []auditRowTyped) []string {
 // 按类型筛真的筛得动;拼错的取值报错,不是回空列表。
 func TestAuditEventType_FiltersAndRefusesAnUnknownValue(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	approver := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
@@ -158,7 +158,7 @@ func TestAuditEventType_FiltersAndRefusesAnUnknownValue(t *testing.T) {
 // 导出的 CSV 带这一列,而且认同一组筛选条件。
 func TestAuditEventType_ShowsUpInTheCSVExport(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.submitProdHighRisk(admin)
 
 	r := string(app.raw(http.MethodGet, "/api/v1/audit/export?event=intercept", admin))

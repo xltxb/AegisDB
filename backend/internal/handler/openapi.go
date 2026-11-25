@@ -9,12 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // 开放接口 —— 外部系统提交 SQL 升级单。

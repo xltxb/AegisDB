@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // maxPackageDownload 一次最多下载多少个包。一个 schema 几百个包是常事,但一次把几千个

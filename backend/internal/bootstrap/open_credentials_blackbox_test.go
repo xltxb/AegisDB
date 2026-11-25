@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // issueSA 建一个服务账号并签发一把凭据,返回 (服务账号, 凭据 id, token)。
@@ -53,7 +53,7 @@ func (a *testApp) issueToSA(admin string, saID int64, clientName string, scopes 
 
 func TestBB03_ServiceAccountCannotBeBornAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	adminRole := app.roleIDByCode(admin, "admin")
 	owner := app.roleIDByCode(admin, "owner")
 
@@ -69,7 +69,7 @@ func TestBB03_ServiceAccountCannotBeBornAdmin(t *testing.T) {
 
 func TestBB03_AddingAdminToCredentialBoundAccountRefused(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	adminRole := app.roleIDByCode(admin, "admin")
 	owner := app.roleIDByCode(admin, "owner")
 
@@ -104,10 +104,10 @@ func TestBB03_AddingAdminToCredentialBoundAccountRefused(t *testing.T) {
 // 存量:绑在真人名下的凭据照常工作(不追溯),但给这个人加 admin 要先停用凭据。
 func TestBB03_LegacyHumanBoundCredentialGuardsAdminGrant(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	adminRole := app.roleIDByCode(admin, "admin")
-	uid := app.userIDByEmail(admin, "chenhao@vela.io")
-	tok := app.issueClient(admin, "存量凭据", "chenhao@vela.io", []string{"release:read"})
+	uid := app.userIDByEmail(admin, "chenhao@aegisdb.io")
+	tok := app.issueClient(admin, "存量凭据", "chenhao@aegisdb.io", []string{"release:read"})
 
 	// 存量照常可用。
 	eq(t, app.openDo(http.MethodGet, "/api/v1/open/instances", tok, nil).Code, 0, "存量凭据不追溯")
@@ -127,8 +127,8 @@ func TestBB03_LegacyHumanBoundCredentialGuardsAdminGrant(t *testing.T) {
 
 func TestBB03_CredentialBindsServiceAccountsOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	human := app.userIDByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	human := app.userIDByEmail(admin, "chenhao@aegisdb.io")
 
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "绑真人", "userId": human, "scopes": []string{"release:read"},
@@ -153,7 +153,7 @@ func bb03Audit(app *testApp, like string) (n int64, rows []model.AuditLog) {
 
 func TestBB03_CredentialLifecycleIsAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, id, tok := app.issueSA(admin, "audit-bot", "审计凭据", []string{"owner"}, []string{"release:read"}, 0)
 	secret := tok[strings.Index(tok, ".")+1:]
 
@@ -183,7 +183,7 @@ func TestBB03_CredentialLifecycleIsAudited(t *testing.T) {
 
 func TestBB03_OpenAbortAndReviewAreAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "审计流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
 	})
@@ -222,7 +222,7 @@ func TestBB03_OpenAbortAndReviewAreAudited(t *testing.T) {
 
 func TestBB03_OpenJSONChannelHonors15MB(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "尺寸流程", "", []map[string]any{{"name": "执行变更", "type": "execute"}})
 	_, _, tok := app.issueSA(admin, "size-bot", "尺寸", []string{"owner"},
 		[]string{"release:create", "release:read", "review:check"}, pid)
@@ -255,7 +255,7 @@ func TestBB03_OpenJSONChannelHonors15MB(t *testing.T) {
 
 func TestBB03_ScopesAndAllowIPsValidated(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner := app.roleIDByCode(admin, "owner")
 	sa := app.createServiceAccount(admin, "valid-bot", []int64{owner}, nil)
 
@@ -295,7 +295,7 @@ func TestBB03_ScopesAndAllowIPsValidated(t *testing.T) {
 // 原 TestBB03_SiblingCredentialCannotReadRelease 断言"同账号另一把凭据 40300",按新结论改写。
 func TestBB03_SiblingCredentialCanReadRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "隔离流程", "", []map[string]any{{"name": "执行变更", "type": "execute"}})
 	sa, _, tokA := app.issueSA(admin, "shared-bot", "凭据A", []string{"owner"}, []string{"release:create", "release:read"}, pid)
 	_, tokB := app.issueToSA(admin, sa.ID, "凭据B", []string{"release:create", "release:read"}, pid)
@@ -333,7 +333,7 @@ func TestBB03_SiblingCredentialCanReadRelease(t *testing.T) {
 
 func TestBB03_SQLReviewRejectsUnknownDialect(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, _, tok := app.issueSA(admin, "dialect-bot", "方言", []string{"owner"}, []string{"review:check"}, 0)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/sql-review", tok, map[string]any{
@@ -366,7 +366,7 @@ func TestBB03_SQLReviewRejectsUnknownDialect(t *testing.T) {
 // 第一次对接的人会以为网关坏了。原样取自 docs/开放接口对接文档.md。
 func TestBB03_DocExampleSQLPassesDefaultReview(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, _, tok := app.issueSA(admin, "doc-bot", "文档示例", []string{"owner"}, []string{"review:check"}, 0)
 
 	example := `ALTER TABLE tbl_order ADD COLUMN memo VARCHAR(64) NOT NULL DEFAULT "" COMMENT "备注", ALGORITHM=INPLACE, LOCK=NONE;`

@@ -23,10 +23,10 @@ import (
 	"fmt"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
 )
 
 // NewForOps 是给**运维子命令**用的最小 Services:只接一个仓储,别的什么都不起。

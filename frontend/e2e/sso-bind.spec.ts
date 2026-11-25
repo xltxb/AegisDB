@@ -5,8 +5,8 @@ import { envelope, stubCommon, autoConfirm } from './helpers'
 // 这里只展示,并让管理员解绑;SRD 没有用户名单接口,所以不再有"与 SSO 核对绑定"按钮。
 
 const USERS = [
-  { id: 1, name: 'Lin Wei', email: 'linwei@vela.io', initials: 'LW', dept: 'DBA', roles: ['Admin'], roleIds: [1], primaryRoleId: 1, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '—', ssoBound: true, ssoUserName: 'linwei' },
-  { id: 2, name: 'Chen Hao', email: 'chenhao@vela.io', initials: 'CH', dept: 'Dev', roles: ['RO'], roleIds: [4], primaryRoleId: 4, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '—', ssoBound: false },
+  { id: 1, name: 'Lin Wei', email: 'linwei@aegisdb.io', initials: 'LW', dept: 'DBA', roles: ['Admin'], roleIds: [1], primaryRoleId: 1, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '—', ssoBound: true, ssoUserName: 'linwei' },
+  { id: 2, name: 'Chen Hao', email: 'chenhao@aegisdb.io', initials: 'CH', dept: 'Dev', roles: ['RO'], roleIds: [4], primaryRoleId: 4, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '—', ssoBound: false },
 ]
 
 test.describe('SSO 绑定状态', () => {

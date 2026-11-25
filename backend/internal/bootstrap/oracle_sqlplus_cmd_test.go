@@ -1,7 +1,7 @@
 package bootstrap
 
 // SQL*Plus 客户端命令走完整条 HTTP 链(sqlplus-compat 第一批):判定 → 执行器 → 回话。
-// 拒绝 / 忽略 / PROMPT 不需要库;SHOW ERRORS 要真实的 Oracle(VELA_TEST_ORACLE)。
+// 拒绝 / 忽略 / PROMPT 不需要库;SHOW ERRORS 要真实的 Oracle(AEGISDB_TEST_ORACLE)。
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 
 func TestOracleSQLPlusClientCommands_EndToEnd(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "ora-sqlplus")
 
 	if rc := app.riskCheck(admin, cid, "conn scott/tiger@orcl"); rc.Action != "deny" {
@@ -41,13 +41,13 @@ func TestOracleSQLPlusClientCommands_EndToEnd(t *testing.T) {
 
 // SHOW ERRORS <类型> <名字> 在真实 Oracle 上读回编译错误;修好之后查出零行。
 func TestOracleShowErrors_RealOracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "ora-showerr", "engine": "Oracle 23ai", "host": p[0], "env": "dev", "policy": "audit-only",
 		"username": p[1], "password": p[2], "database": p[3],
@@ -61,15 +61,15 @@ func TestOracleShowErrors_RealOracle(t *testing.T) {
 	_ = json.Unmarshal(r.Data, &c)
 
 	// 建一个编译失败的过程(建完回读 all_errors,这条本身报失败 —— 见 oracle_create_errors.go)
-	execTerm(t, app, admin, c.ID, "CREATE OR REPLACE PROCEDURE vela_showerr_p IS BEGIN no_such_thing; END;", false)
-	defer execTerm(t, app, admin, c.ID, "DROP PROCEDURE vela_showerr_p", false)
+	execTerm(t, app, admin, c.ID, "CREATE OR REPLACE PROCEDURE aegisdb_showerr_p IS BEGIN no_such_thing; END;", false)
+	defer execTerm(t, app, admin, c.ID, "DROP PROCEDURE aegisdb_showerr_p", false)
 
 	type rows struct {
 		Columns []string   `json:"columns"`
 		Data    [][]string `json:"data"`
 	}
 	read := func() rows {
-		r, _ := execTerm(t, app, admin, c.ID, "SHOW ERRORS PROCEDURE vela_showerr_p", false)
+		r, _ := execTerm(t, app, admin, c.ID, "SHOW ERRORS PROCEDURE aegisdb_showerr_p", false)
 		if r.Code != 0 {
 			t.Fatalf("SHOW ERRORS: code=%d msg=%s", r.Code, r.Msg)
 		}
@@ -85,7 +85,7 @@ func TestOracleShowErrors_RealOracle(t *testing.T) {
 		t.Errorf("错误内容不对: %+v", got.Data)
 	}
 
-	execTerm(t, app, admin, c.ID, "CREATE OR REPLACE PROCEDURE vela_showerr_p IS BEGIN NULL; END;", false)
+	execTerm(t, app, admin, c.ID, "CREATE OR REPLACE PROCEDURE aegisdb_showerr_p IS BEGIN NULL; END;", false)
 	if got := read(); len(got.Data) != 0 {
 		t.Errorf("修好之后应查出零行,实际 %+v", got.Data)
 	}
@@ -93,13 +93,13 @@ func TestOracleShowErrors_RealOracle(t *testing.T) {
 
 // WHENEVER SQLERROR / EXIT 在终端批量执行里(真实 Oracle,sqlplus-compat 07)。
 func TestOracleWheneverExit_RealOracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "ora-whenever", "engine": "Oracle 23ai", "host": p[0], "env": "dev", "policy": "audit-only",
 		"username": p[1], "password": p[2], "database": p[3],
@@ -112,11 +112,11 @@ func TestOracleWheneverExit_RealOracle(t *testing.T) {
 	}
 	_ = json.Unmarshal(r.Data, &c)
 
-	execTerm(t, app, admin, c.ID, "BEGIN EXECUTE IMMEDIATE 'DROP TABLE vela_whenever_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", false)
-	execTerm(t, app, admin, c.ID, "CREATE TABLE vela_whenever_t (id NUMBER)", false)
-	defer execTerm(t, app, admin, c.ID, "DROP TABLE vela_whenever_t", false)
+	execTerm(t, app, admin, c.ID, "BEGIN EXECUTE IMMEDIATE 'DROP TABLE aegisdb_whenever_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", false)
+	execTerm(t, app, admin, c.ID, "CREATE TABLE aegisdb_whenever_t (id NUMBER)", false)
+	defer execTerm(t, app, admin, c.ID, "DROP TABLE aegisdb_whenever_t", false)
 	count := func() string {
-		rr, _ := execTerm(t, app, admin, c.ID, "SELECT COUNT(*) AS N FROM vela_whenever_t", false)
+		rr, _ := execTerm(t, app, admin, c.ID, "SELECT COUNT(*) AS N FROM aegisdb_whenever_t", false)
 		var d struct {
 			Data [][]string `json:"data"`
 		}
@@ -128,13 +128,13 @@ func TestOracleWheneverExit_RealOracle(t *testing.T) {
 	}
 
 	// 默认遇错即停:第 2 条失败,第 3 条不执行
-	_, o := execTerm(t, app, admin, c.ID, "INSERT INTO vela_whenever_t VALUES (1);\nINSERT INTO no_such_table VALUES (1);\nINSERT INTO vela_whenever_t VALUES (2);", false)
+	_, o := execTerm(t, app, admin, c.ID, "INSERT INTO aegisdb_whenever_t VALUES (1);\nINSERT INTO no_such_table VALUES (1);\nINSERT INTO aegisdb_whenever_t VALUES (2);", false)
 	if !strings.Contains(o.Output, "失败") || count() != "1" {
 		t.Fatalf("默认应停在失败处,实际 output=%q count=%s", o.Output, count())
 	}
 
 	// WHENEVER SQLERROR CONTINUE:失败的跳过,后面的照跑;EXIT 之后的不执行
-	_, o = execTerm(t, app, admin, c.ID, "WHENEVER SQLERROR CONTINUE\nINSERT INTO no_such_table VALUES (1);\nINSERT INTO vela_whenever_t VALUES (3);\nEXIT\nINSERT INTO vela_whenever_t VALUES (4);", false)
+	_, o = execTerm(t, app, admin, c.ID, "WHENEVER SQLERROR CONTINUE\nINSERT INTO no_such_table VALUES (1);\nINSERT INTO aegisdb_whenever_t VALUES (3);\nEXIT\nINSERT INTO aegisdb_whenever_t VALUES (4);", false)
 	if !strings.Contains(o.Output, "第 4 条 EXIT 处结束") || !strings.Contains(o.Output, "1 条失败") {
 		t.Errorf("结尾说明不对: %q", o.Output)
 	}
@@ -145,13 +145,13 @@ func TestOracleWheneverExit_RealOracle(t *testing.T) {
 
 // 绑定变量:标签页带着变量来,PL/SQL 改了带回去;查询 / DML 按值绑定;值绝不进 SQL 文本(sqlplus-compat 06)。
 func TestOracleBindVariables_RealOracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "ora-binds", "engine": "Oracle 23ai", "host": p[0], "env": "dev", "policy": "audit-only",
 		"username": p[1], "password": p[2], "database": p[3],
@@ -217,17 +217,17 @@ func TestOracleBindVariables_RealOracle(t *testing.T) {
 	}
 
 	// DML:按值写入
-	exec("BEGIN EXECUTE IMMEDIATE 'DROP TABLE vela_bind_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", nil)
-	exec("CREATE TABLE vela_bind_t (id NUMBER, name VARCHAR2(40))", nil)
-	defer exec("DROP TABLE vela_bind_t", nil)
-	exec("INSERT INTO vela_bind_t VALUES (:n, :s)", []bind{{Name: "N", Type: "NUMBER", Value: "7"}, {Name: "S", Type: "VARCHAR2(40)", Value: "seven"}})
-	o = exec("SELECT id || '-' || name AS V FROM vela_bind_t", nil)
+	exec("BEGIN EXECUTE IMMEDIATE 'DROP TABLE aegisdb_bind_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", nil)
+	exec("CREATE TABLE aegisdb_bind_t (id NUMBER, name VARCHAR2(40))", nil)
+	defer exec("DROP TABLE aegisdb_bind_t", nil)
+	exec("INSERT INTO aegisdb_bind_t VALUES (:n, :s)", []bind{{Name: "N", Type: "NUMBER", Value: "7"}, {Name: "S", Type: "VARCHAR2(40)", Value: "seven"}})
+	o = exec("SELECT id || '-' || name AS V FROM aegisdb_bind_t", nil)
 	if len(o.Data) != 1 || o.Data[0][0] != "7-seven" {
 		t.Fatalf("DML 绑定: %+v", o)
 	}
 
 	// 批量(粘贴的一段脚本):VARIABLE 声明 → EXEC 赋值 → 后面的语句看到新值
-	o = exec("VARIABLE r VARCHAR2(20)\nEXEC :r := 'from batch';\nINSERT INTO vela_bind_t VALUES (8, :r);", nil)
+	o = exec("VARIABLE r VARCHAR2(20)\nEXEC :r := 'from batch';\nINSERT INTO aegisdb_bind_t VALUES (8, :r);", nil)
 	var r8 []bind
 	for _, b := range o.Binds {
 		if b.Name == "R" {
@@ -237,12 +237,12 @@ func TestOracleBindVariables_RealOracle(t *testing.T) {
 	if len(r8) != 1 || r8[0].Value != "from batch" {
 		t.Fatalf("批量里声明的变量应带回来: %+v", o)
 	}
-	o = exec("SELECT name AS V FROM vela_bind_t WHERE id = 8", nil)
+	o = exec("SELECT name AS V FROM aegisdb_bind_t WHERE id = 8", nil)
 	if len(o.Data) != 1 || o.Data[0][0] != "from batch" {
 		t.Fatalf("批量里后一条应看到 EXEC 赋的值: %+v", o)
 	}
 	// DML 的 RETURNING … INTO :n:读回
-	o = exec("INSERT INTO vela_bind_t VALUES (9, 'r') RETURNING id INTO :n", []bind{{Name: "N", Type: "NUMBER", Null: true}})
+	o = exec("INSERT INTO aegisdb_bind_t VALUES (9, 'r') RETURNING id INTO :n", []bind{{Name: "N", Type: "NUMBER", Null: true}})
 	if len(o.Binds) != 1 || o.Binds[0].Value != "9" {
 		t.Fatalf("RETURNING INTO 应读回 9: %+v", o)
 	}
@@ -250,13 +250,13 @@ func TestOracleBindVariables_RealOracle(t *testing.T) {
 
 // 2026-10-28:脚本里不带分号的 SET HEAD OFF 曾把下一条语句吞掉(既不执行也不报错)。
 func TestOracleSetAbbrevDoesNotSwallowNext_RealOracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "ora-sethead", "engine": "Oracle 23ai", "host": p[0], "env": "dev", "policy": "audit-only",
 		"username": p[1], "password": p[2], "database": p[3],
@@ -268,15 +268,15 @@ func TestOracleSetAbbrevDoesNotSwallowNext_RealOracle(t *testing.T) {
 		ID int64 `json:"id"`
 	}
 	_ = json.Unmarshal(r.Data, &c)
-	execTerm(t, app, admin, c.ID, "BEGIN EXECUTE IMMEDIATE 'DROP TABLE vela_sethead_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", false)
-	execTerm(t, app, admin, c.ID, "CREATE TABLE vela_sethead_t (id NUMBER)", false)
-	defer execTerm(t, app, admin, c.ID, "DROP TABLE vela_sethead_t", false)
+	execTerm(t, app, admin, c.ID, "BEGIN EXECUTE IMMEDIATE 'DROP TABLE aegisdb_sethead_t'; EXCEPTION WHEN OTHERS THEN NULL; END;", false)
+	execTerm(t, app, admin, c.ID, "CREATE TABLE aegisdb_sethead_t (id NUMBER)", false)
+	defer execTerm(t, app, admin, c.ID, "DROP TABLE aegisdb_sethead_t", false)
 
-	_, o := execTerm(t, app, admin, c.ID, "SET HEAD OFF\nINSERT INTO vela_sethead_t VALUES (1);\nset lin 120\nINSERT INTO vela_sethead_t VALUES (2);", false)
+	_, o := execTerm(t, app, admin, c.ID, "SET HEAD OFF\nINSERT INTO aegisdb_sethead_t VALUES (1);\nset lin 120\nINSERT INTO aegisdb_sethead_t VALUES (2);", false)
 	if !strings.Contains(o.Output, "共 4 条语句") {
 		t.Fatalf("应按 4 条执行,实际 %q", o.Output)
 	}
-	rr, _ := execTerm(t, app, admin, c.ID, "SELECT COUNT(*) AS N FROM vela_sethead_t", false)
+	rr, _ := execTerm(t, app, admin, c.ID, "SELECT COUNT(*) AS N FROM aegisdb_sethead_t", false)
 	var d struct {
 		Data [][]string `json:"data"`
 	}

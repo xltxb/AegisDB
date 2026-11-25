@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // oscJobView 是一个在线变更任务给界面看的样子:任务本身 + 调用人能不能控制它。

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // When a command is intercepted, the response must carry the matched rule text so
@@ -14,7 +14,7 @@ import (
 // instead of a hardcoded label. Observable on the /terminal/exec response.
 func TestExec_InterceptResponseCarriesMatchedRule(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodPost, "/api/v1/terminal/exec", token, map[string]any{

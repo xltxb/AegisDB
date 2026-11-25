@@ -37,7 +37,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	gosqlmysql "github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // MySQLSource is how to reach the instance as a replication client. 账号要有 REPLICATION

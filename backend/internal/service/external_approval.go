@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 // extApprovalConfig is the resolved (decrypted) external-approval configuration

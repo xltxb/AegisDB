@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type fakeStore struct {

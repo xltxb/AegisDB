@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 执行窗口(「班车」)的存取。

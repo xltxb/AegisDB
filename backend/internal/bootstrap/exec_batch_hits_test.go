@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // A batch of high-risk statements pasted as ONE command is judged statement by
@@ -19,7 +19,7 @@ import (
 // the exec path so the approval-reason modal and the ticket agree.
 func TestExec_BatchRuleNamesEveryHighRiskStatement(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	sql := "DROP TABLE a;\r\nTRUNCATE TABLE b;\r\nDELETE FROM c WHERE id = 1;\r\n"
 
@@ -49,7 +49,7 @@ func TestExec_BatchRuleNamesEveryHighRiskStatement(t *testing.T) {
 // that merges or drops a statement fails here rather than in production.
 func TestExec_BatchShapesAllIntercepted(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	shapes := map[string]string{
 		"oneline":   "DROP TABLE a; DROP TABLE b; DROP TABLE c;",

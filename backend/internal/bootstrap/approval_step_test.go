@@ -77,8 +77,8 @@ func (a *testApp) submitProdHighRisk(token string) apWithSteps {
 // through GET /approvals.
 func TestApproval_ApproveMarksActiveStepApproved(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123") // chain member (approver)
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // chain member (approver)
 
 	ap := app.submitProdHighRisk(token)
 	if len(ap.Steps) == 0 {
@@ -109,8 +109,8 @@ func TestApproval_ApproveMarksActiveStepApproved(t *testing.T) {
 // active step (status=rejected) and stamps actedAt.
 func TestApproval_RejectMarksActiveStepRejected(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123") // chain member (approver)
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // chain member (approver)
 
 	ap := app.submitProdHighRisk(token)
 	if len(ap.Steps) == 0 {

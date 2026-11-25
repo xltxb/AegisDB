@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // `explain` became a capability dimension of its own after these databases were
@@ -110,7 +110,7 @@ func TestExplainBackfill_DoesNotOverwriteAnOperatorsChoice(t *testing.T) {
 // later boot — creating a tier must leave it governed immediately.
 func TestExplainBackfill_ANewTierGetsExplainRowsFromItsTemplate(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do("POST", "/api/v1/env-tiers", admin, map[string]any{
 		"code": "prod-hk", "displayName": "香港生产", "templateCode": "prod",

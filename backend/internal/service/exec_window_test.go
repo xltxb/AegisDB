@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 func mustLoc(t *testing.T, name string) *time.Location {

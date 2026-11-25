@@ -3,8 +3,8 @@ package bootstrap
 import (
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
 )
 
 // Export jobs left running/pending by a crashed process must be reconciled to
@@ -13,7 +13,7 @@ import (
 func TestExport_StuckJobsFailedOnStartup(t *testing.T) {
 	app := newTestApp(t)
 	repo := app.svc.Repo
-	u, _ := repo.GetUserByEmail("linwei@vela.io")
+	u, _ := repo.GetUserByEmail("linwei@aegisdb.io")
 
 	// an orphaned in-flight job from a previous process
 	if err := repo.CreateExportJob(&model.ExportJob{UserID: u.ID, Status: model.ExportRunning, Name: "orphan"}); err != nil {

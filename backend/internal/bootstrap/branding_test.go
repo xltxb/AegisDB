@@ -73,7 +73,7 @@ func inBackendRoot(t *testing.T) {
 // otpIssuer 给 chenhao 绑一次 OTP,返回 otpauth URI 里的 issuer。
 func (a *testApp) otpIssuer(admin string) string {
 	a.t.Helper()
-	target := a.userByEmail(admin, "chenhao@vela.io")
+	target := a.userByEmail(admin, "chenhao@aegisdb.io")
 	r := a.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/mfa/bind", admin, nil)
 	if r.Code != 0 {
 		a.t.Fatalf("mfa bind: %d %s", r.Code, r.Msg)
@@ -91,24 +91,24 @@ func (a *testApp) otpIssuer(admin string) string {
 
 func TestBranding_DefaultsUnchanged(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	inBackendRoot(t)
 
 	eq(t, app.branding(), brandResp{}, "未配置时公开接口回空")
-	if !strings.Contains(app.rawGet("/docs"), "<title>DP DB GATEWAY · 接口文档</title>") {
-		t.Error("未配置时接口文档标题应保持 DP DB GATEWAY")
+	if !strings.Contains(app.rawGet("/docs"), "<title>AegisDB · 接口文档</title>") {
+		t.Error("未配置时接口文档标题应保持 AegisDB")
 	}
 	want, err := os.ReadFile("docs/openapi.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	eq(t, app.rawGet("/openapi.yaml") == string(want), true, "未配置时 /openapi.yaml 与文件逐字节一致")
-	eq(t, app.otpIssuer(admin), "DP DB GATEWAY", "未配置时 TOTP issuer 不变")
+	eq(t, app.otpIssuer(admin), "AegisDB", "未配置时 TOTP issuer 不变")
 }
 
 func TestBranding_AdminChangesTakeEffectEverywhere(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	inBackendRoot(t)
 
 	r := app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{
@@ -129,7 +129,7 @@ func TestBranding_AdminChangesTakeEffectEverywhere(t *testing.T) {
 		t.Error("接口文档标题应换成配置的名称")
 	}
 	spec := app.rawGet("/openapi.yaml")
-	if !strings.Contains(spec, `title: "星河数据网关 API"`) || strings.Contains(spec, "title: DP DB GATEWAY API") {
+	if !strings.Contains(spec, `title: "星河数据网关 API"`) || strings.Contains(spec, "title: AegisDB API") {
 		t.Errorf("/openapi.yaml 的 info.title 应换成配置的名称:%.200s", spec)
 	}
 	eq(t, app.otpIssuer(admin), "Galaxy DB", "TOTP issuer 优先用英文名称")
@@ -152,15 +152,15 @@ func TestBranding_AdminChangesTakeEffectEverywhere(t *testing.T) {
 	if !strings.Contains(strings.Join(app.auditCommandsLike("brand.logo=已清除"), ""), "brand.logo=已清除") {
 		t.Error("清除 LOGO 应进审计")
 	}
-	if !strings.Contains(app.rawGet("/docs"), "<title>DP DB GATEWAY · 接口文档</title>") {
+	if !strings.Contains(app.rawGet("/docs"), "<title>AegisDB · 接口文档</title>") {
 		t.Error("清除后接口文档标题回到默认")
 	}
 }
 
 func TestBranding_OnlyAdminCanChange(t *testing.T) {
 	app := newTestApp(t)
-	for _, who := range []string{"chenhao@vela.io", "hujun@vela.io", "zhaolei@vela.io"} {
-		tok := app.login(who, "vela123")
+	for _, who := range []string{"chenhao@aegisdb.io", "hujun@aegisdb.io", "zhaolei@aegisdb.io"} {
+		tok := app.login(who, "aegisdb123")
 		r := app.do(http.MethodPut, "/api/v1/settings", tok, map[string]any{"brand.name": "偷改"})
 		if r.Code == 0 {
 			t.Errorf("%s 不该能改系统名称", who)
@@ -171,7 +171,7 @@ func TestBranding_OnlyAdminCanChange(t *testing.T) {
 
 func TestBranding_InvalidValuesRejected(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	svg := func(s string) string {
 		return "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(s))
 	}

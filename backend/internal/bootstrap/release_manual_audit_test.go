@@ -18,8 +18,8 @@ import (
 
 func TestManualGateConfirmationIsAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	confirmer := app.login("zhangwei@vela.io", "vela123") // approver role, not the creator
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	confirmer := app.login("zhangwei@aegisdb.io", "aegisdb123") // approver role, not the creator
 
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "人工门流程", "", []map[string]any{

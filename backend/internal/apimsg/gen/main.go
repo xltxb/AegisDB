@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/apimsg/scan"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/apimsg/scan"
 )
 
 func main() {

@@ -19,7 +19,7 @@ import (
 // 默认关着:什么都不动时跑一轮,不该给任何实例留下巡检记录。
 func TestConnSweep_DisabledByDefault(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "sweep-off")
 
 	app.svc.SweepConnChecks()
@@ -32,7 +32,7 @@ func TestConnSweep_DisabledByDefault(t *testing.T) {
 // 打开之后会巡检 —— 证明上一条测的是"关着",不是"这功能根本不工作"。
 func TestConnSweep_ChecksWhenEnabled(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "sweep-on")
 	app.setSettings(admin, map[string]any{"conn.check.enabled": true})
 
@@ -50,7 +50,7 @@ func TestConnSweep_ChecksWhenEnabled(t *testing.T) {
 // 维护态跳过:人标的"别碰",定时任务不该是那个例外。
 func TestConnSweep_SkipsMaintenance(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "sweep-maint")
 	if r := app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn), admin, map[string]any{"status": "maint"}); r.Code != 0 {
 		t.Fatalf("标维护态: %s", r.Msg)
@@ -67,7 +67,7 @@ func TestConnSweep_SkipsMaintenance(t *testing.T) {
 // 没配凭据的跳过:没有远端可拨,记一条"连不上"是把我们的配置问题说成远端的状况。
 func TestConnSweep_SkipsInstancesWithoutCredentials(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging") // 种子实例,没有连接凭据
 	app.setSettings(admin, map[string]any{"conn.check.enabled": true})
 
@@ -84,7 +84,7 @@ func TestConnSweep_SkipsInstancesWithoutCredentials(t *testing.T) {
 // 否则它一旦恢复就没人知道。
 func TestConnSweep_SkipsAuthFailuresButKeepsRetryingNetworkFailures(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	authBad := app.realSQLiteConnIn(admin, "dev", "sweep-auth")
 	netBad := app.realSQLiteConnIn(admin, "dev", "sweep-net")
 
@@ -111,7 +111,7 @@ func TestConnSweep_SkipsAuthFailuresButKeepsRetryingNetworkFailures(t *testing.T
 // 手动巡检不受那条限制:人点下去,就是人认为凭据已经改好了。
 func TestConnSweep_ManualCheckStillRunsAfterAuthFailure(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "manual-after-auth")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "ORA-01017: invalid username/password"); err != nil {
 		t.Fatalf("预置: %v", err)
@@ -131,7 +131,7 @@ func TestConnSweep_ManualCheckStillRunsAfterAuthFailure(t *testing.T) {
 // 它按小时重拨一台凭据错误的 Oracle,不到半天就把网关的账号锁掉。
 func TestConnSweep_MetadataSweepAlsoSkipsAuthFailures(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "meta-skips-auth")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_probe (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)

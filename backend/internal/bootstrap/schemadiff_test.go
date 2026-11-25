@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 type diffResp struct {
@@ -75,7 +75,7 @@ func (a *testApp) addConn(token, name, engine, env, host, db, user, pw string) i
 
 func TestSchemaDiff_API(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.addConn(admin, "orders-prod", "SQLite", "prod", "localhost:0", sqliteDB(t,
 		"CREATE TABLE t_order (id INTEGER PRIMARY KEY, code TEXT NOT NULL, note TEXT)",
 		"CREATE TABLE t_user (id INTEGER PRIMARY KEY)",
@@ -171,8 +171,8 @@ func TestSchemaDiff_API(t *testing.T) {
 	// 没有菜单的角色进不来
 	roID := app.roleIDByCode(admin, "ro")
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "ro@vela.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
-	ro := app.login("ro@vela.io", "initpass9")
+		"email": "ro@aegisdb.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
+	ro := app.login("ro@aegisdb.io", "initpass9")
 	if r := app.do(http.MethodPost, "/api/v1/schema-diff", ro, map[string]any{
 		"left": map[string]any{"connectionId": prod}, "right": map[string]any{"connectionId": uat}}); r.Code != 40300 {
 		t.Errorf("没有 schemadiff 菜单应 40300,实际 %d", r.Code)
@@ -182,7 +182,7 @@ func TestSchemaDiff_API(t *testing.T) {
 // 库名下拉:列出实例上的库;读不到回 0 + error(页面退回手填);没有菜单进不来。
 func TestSchemaDiff_Databases(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	lite := app.addConn(admin, "lite", "SQLite", "dev", "localhost:0", sqliteDB(t, "CREATE TABLE t (id INTEGER)"), "", "")
 	down := app.addConn(admin, "mysql-down", "MySQL 8.0", "prod", "127.0.0.1:1", "orders", "u", "p")
 
@@ -216,8 +216,8 @@ func TestSchemaDiff_Databases(t *testing.T) {
 
 	roID := app.roleIDByCode(admin, "ro")
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
-		"email": "ro2@vela.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
-	ro := app.login("ro2@vela.io", "initpass9")
+		"email": "ro2@aegisdb.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
+	ro := app.login("ro2@aegisdb.io", "initpass9")
 	if r := app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(lite))+"/databases", ro, nil); r.Code != 40300 {
 		t.Errorf("没有 schemadiff 菜单应 40300,实际 %d", r.Code)
 	}

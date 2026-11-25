@@ -46,7 +46,7 @@ func (a *testApp) decidabilityOf(token string, id int64) apDecidability {
 // —— 他确实在审批链上,一条指错方向的报错会让人去查权限配置,查一整天。
 func TestApproval_SelfApproveIsRefusedWithTheRealReason(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(owner) // zhangwei 既是发起人,也在审批链上
 
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", owner, nil)
@@ -70,10 +70,10 @@ func TestApproval_SelfApproveIsRefusedWithTheRealReason(t *testing.T) {
 // 不在审批链上的人,拒绝理由才是"审批链成员"。
 func TestApproval_NonMemberIsRefusedAsANonMember(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(owner)
 
-	outsider := app.login("chenhao@vela.io", "vela123") // l2,不在这条链上
+	outsider := app.login("chenhao@aegisdb.io", "aegisdb123") // l2,不在这条链上
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", outsider, nil)
 	if r.Code == 0 {
 		t.Fatal("非审批链成员不该能审批")
@@ -90,7 +90,7 @@ func TestApproval_ListSaysWhetherTheViewerMayDecide(t *testing.T) {
 	app := newTestApp(t)
 	// 审批链是 owner 角色的成员。让 admin 发起,链上的人就不是发起人本人 ——
 	// 这正是"两人控制"想要的常态,也是唯一能同时看到两种答案的组合。
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(admin)
 
 	// 发起人自己看:不能决定,且给得出原因。
@@ -103,7 +103,7 @@ func TestApproval_ListSaysWhetherTheViewerMayDecide(t *testing.T) {
 	}
 
 	// 审批链上的人看:可以决定,且不带原因。
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	theirs := app.decidabilityOf(approver, ap.ID)
 	if !theirs.CanDecide {
 		t.Errorf("审批链上的成员应可决定,原因显示为 %q", theirs.BlockReason)
@@ -117,8 +117,8 @@ func TestApproval_ListSaysWhetherTheViewerMayDecide(t *testing.T) {
 // 这个区分很容易被当成开了就都能审,而那会是一个静悄悄的越权。
 func TestApproval_SelfApproveSettingLiftsOnlyTheSelfBar(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123") // 既是发起人,也在审批链上
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // 既是发起人,也在审批链上
 	ap := app.submitProdHighRisk(owner)
 
 	if row := app.decidabilityOf(owner, ap.ID); row.CanDecide {
@@ -133,7 +133,7 @@ func TestApproval_SelfApproveSettingLiftsOnlyTheSelfBar(t *testing.T) {
 	}
 
 	// 但不在链上的人,开关开了也照样不能审。
-	outsider := app.login("chenhao@vela.io", "vela123")
+	outsider := app.login("chenhao@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", outsider, nil)
 	if r.Code == 0 {
 		t.Error("自审批开关不该让非审批链成员也能审批")
@@ -143,9 +143,9 @@ func TestApproval_SelfApproveSettingLiftsOnlyTheSelfBar(t *testing.T) {
 // 已经处理过的工单,谁都不能再决定。
 func TestApproval_DecidedTicketIsNotDecidableByAnyone(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(admin)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", approver, nil).Code, 0, "reject it")
 
 	row := app.decidabilityOf(approver, ap.ID)

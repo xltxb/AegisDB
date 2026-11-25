@@ -86,7 +86,7 @@ function synthCell(col: string, i: number): string {
   if (k === 'id' || k.endsWith('_id') || k.endsWith('id')) return String(1001 + i)
   if (k.includes('email')) {
     const n = NAMES[i % NAMES.length].split(' ')[0].toLowerCase()
-    return `${n}@vela.io`
+    return `${n}@aegisdb.io`
   }
   if (k.includes('name') || k === 'user' || k === 'actor') return NAMES[i % NAMES.length]
   if (k.includes('status') || k.includes('state')) return STATUSES[i % STATUSES.length]

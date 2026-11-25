@@ -17,7 +17,7 @@ async function openTerm(page: Page) {
     tiers: [{ code: 'dev', displayName: 'DEV', sortOrder: 0, requireMfa: false, dangerBanner: false, countsInPending: false, scanBaseline: false, connLayer: 'L3', defaultRole: 'dba_l2' }],
     envs: [{ code: 'dev', displayName: 'DEV', tierCode: 'dev', sortOrder: 0 }],
   })
-  await page.addInitScript((tok) => localStorage.setItem('vela_session', tok), jwtFor(1, 'login'))
+  await page.addInitScript((tok) => localStorage.setItem('aegisdb_session', tok), jwtFor(1, 'login'))
   await page.route('**/api/v1/connections', (r) => r.fulfill(envelope([conn])))
   await page.route(/\/api\/v1\/connections\/\d+\/schema/, (r) => r.fulfill(envelope({ connectionId: 1, databases: [] })))
   await page.route('**/api/v1/risk/check', (r) => r.fulfill(envelope({ action: 'allow', risk: 'low', requiresApproval: false })))
@@ -52,7 +52,7 @@ const screen = (page: Page) => page.evaluate(() => {
 
 test('改密码换了 token:终端用新 token 重连,不登出', async ({ page }) => {
   const { sockets } = await openTerm(page)
-  await page.evaluate((tok) => localStorage.setItem('vela_session', tok), jwtFor(1, 'after-password-change'))
+  await page.evaluate((tok) => localStorage.setItem('aegisdb_session', tok), jwtFor(1, 'after-password-change'))
   await page.keyboard.type('select 1;')
   await page.keyboard.press('Enter')
   await expect.poll(() => screen(page)).toContain('已用新凭据重新连接')
@@ -65,7 +65,7 @@ test('改密码换了 token:终端用新 token 重连,不登出', async ({ page 
 
 test('token 换成了另一个人的(另一个标签里换人登录):不重连,登出', async ({ page }) => {
   const { sockets } = await openTerm(page)
-  await page.evaluate((tok) => localStorage.setItem('vela_session', tok), jwtFor(2, 'someone-else'))
+  await page.evaluate((tok) => localStorage.setItem('aegisdb_session', tok), jwtFor(2, 'someone-else'))
   await page.keyboard.type('select 1;')
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/\/login/)

@@ -27,7 +27,7 @@ test.describe('水印', () => {
     expect(a).toContain('data:image/png')
 
     const other = await browser.newPage()
-    await open(other, { ...ME, id: 2, name: 'Zhao Lei', email: 'zhaolei@vela.io', initials: 'ZL' })
+    await open(other, { ...ME, id: 2, name: 'Zhao Lei', email: 'zhaolei@aegisdb.io', initials: 'ZL' })
     const b = await bg(other)
     await other.close()
     expect(b).toContain('data:image/png')

@@ -1,4 +1,4 @@
-# DP DB GATEWAY — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
+# AegisDB — LOCAL DEVELOPMENT infrastructure (MySQL 8 + Redis 7).
 # Start with:  docker compose up -d
 # The backend reads connection info from backend/configs/config.yaml
 #
@@ -9,13 +9,13 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: vela-mysql
+    container_name: aegisdb-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: velaroot
-      MYSQL_DATABASE: vela_gateway
-      MYSQL_USER: vela
-      MYSQL_PASSWORD: velapass
+      MYSQL_ROOT_PASSWORD: aegisdbroot
+      MYSQL_DATABASE: aegisdb
+      MYSQL_USER: aegisdb
+      MYSQL_PASSWORD: aegisdbpass
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
@@ -24,26 +24,26 @@ services:
     ports:
       - "127.0.0.1:3306:3306" # bind to loopback only — not the host's public interfaces
     volumes:
-      - vela_mysql:/var/lib/mysql
+      - aegisdb_mysql:/var/lib/mysql
       # Schema is applied by the app, not initdb.d, so it is tracked in
       # schema_migrations and there is a single migration source of truth:
-      #   VELA_MYSQL_DSN=... ./vela-gateway migrate   (then `init` for seed+admin)
+      #   AEGISDB_MYSQL_DSN=... ./aegisdb migrate   (then `init` for seed+admin)
       # (Auto-running the SQL here would replay un-tracked, breaking later ALTERs.)
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uvela", "-pvelapass"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uaegisdb", "-paegisdbpass"]
       interval: 5s
       timeout: 3s
       retries: 20
 
   redis:
     image: redis:7-alpine
-    container_name: vela-redis
+    container_name: aegisdb-redis
     restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379" # loopback only
     volumes:
-      - vela_redis:/data
+      - aegisdb_redis:/data
 
 volumes:
-  vela_mysql:
-  vela_redis:
+  aegisdb_mysql:
+  aegisdb_redis:

@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestExport_NameIsRequired(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
@@ -43,7 +43,7 @@ func TestExport_NameIsRequired(t *testing.T) {
 
 func TestExport_DownloadIsMarked(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
@@ -87,7 +87,7 @@ func TestExport_DownloadIsMarked(t *testing.T) {
 	}
 
 	// 别人的文件下不了,也不会在别人的任务上留下标记
-	other := app.login("zhangwei@vela.io", "vela123")
+	other := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodGet, "/api/v1/export/download?file="+urlEscape(parts[0]), other, nil); r.Code == 0 {
 		t.Error("别人的导出文件不该能下载")
 	}

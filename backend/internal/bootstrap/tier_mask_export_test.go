@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func tierOfCode(t *testing.T, app *testApp, code string) model.EnvTier {
@@ -30,7 +30,7 @@ func TestTierSwitches_DefaultsAndBackfillRunsOnce(t *testing.T) {
 		}
 	}
 	// 运维把 uat 的脱敏打开之后,回填再跑一次(重启)不能把它改回去
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setTierSwitch(admin, "uat", "maskSensitive", true)
 	if err := backfillTierMaskExport(app.repo.DB()); err != nil {
 		t.Fatal(err)
@@ -46,7 +46,7 @@ func TestTierSwitches_DefaultsAndBackfillRunsOnce(t *testing.T) {
 
 func TestTierSwitches_NewTierInheritsTemplateUnlessGiven(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	create := func(code, tmpl string, extra map[string]any) {
 		body := map[string]any{"code": code, "displayName": code, "templateCode": tmpl, "strictNoWhere": true}
 		for k, v := range extra {
@@ -70,7 +70,7 @@ func TestTierSwitches_NewTierInheritsTemplateUnlessGiven(t *testing.T) {
 // 同一个库文件挂在 dev 与 prod 上:同一条查询,prod 打码、dev 原值;dev 打开开关后也打码。
 func TestTierSwitches_TerminalMaskingFollowsTier(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, prod := app.sameFileConns(admin, "tier-mask")
 	const plaintext = "110101199003071234"
 	for _, sql := range []string{
@@ -99,7 +99,7 @@ func TestTierSwitches_TerminalMaskingFollowsTier(t *testing.T) {
 // 导出页:脱敏关掉的分层上,「原值导出」与「结构可能绕过脱敏」都不用审批,直接进队列。
 func TestTierSwitches_ExportNeedsNoSensitiveReviewWhereMaskingIsOff(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "配置导出路径")
 	conn := app.connIDByEnv(admin, "dev")
 	app.addSensitiveColumn(admin, "*", "id_card", "partial")

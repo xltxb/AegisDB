@@ -14,9 +14,9 @@ import (
 )
 
 func TestTerminal_ReadOnlyUserCannotWriteThroughFunction_RealMySQL(t *testing.T) {
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL")
 	}
 	p := strings.SplitN(v, "/", 3)
 	raw, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(%s)/", p[1], p[2], p[0]))
@@ -39,11 +39,11 @@ func TestTerminal_ReadOnlyUserCannotWriteThroughFunction_RealMySQL(t *testing.T)
 	}
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.addConn(admin, "roguard-prod", "MySQL 8.0", "prod", p[0], "vz_roguard", p[1], p[2])
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(prod), admin, map[string]any{"tags": "analytics"}).Code, 0, "贴上只读用户够得到的标签")
 
-	ro := app.login("zhaolei@vela.io", "vela123") // 研发只读
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读
 	type out struct {
 		Output string     `json:"output"`
 		Failed bool       `json:"failed"`

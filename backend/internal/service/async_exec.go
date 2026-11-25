@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // asyncWorkers is how many background SQL jobs run in parallel.

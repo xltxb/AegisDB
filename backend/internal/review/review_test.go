@@ -142,7 +142,7 @@ func TestSecurityAndPerf(t *testing.T) {
 			t.Error("a finding must never carry the password it is reporting")
 		}
 	}
-	got = codes(Check(DialectMySQL, "SELECT id FROM tbl_order WHERE name LIKE '%vela' AND DATE(created_at) = '2026-08-01';", allRules()))
+	got = codes(Check(DialectMySQL, "SELECT id FROM tbl_order WHERE name LIKE '%aegisdb' AND DATE(created_at) = '2026-08-01';", allRules()))
 	if !got["perf.forbid.leading.wildcard"] {
 		t.Error("leading wildcard should be flagged")
 	}

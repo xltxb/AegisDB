@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // A4: the hash chain's integrity must not depend solely on an in-process mutex.

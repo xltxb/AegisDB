@@ -3,8 +3,8 @@ package bootstrap
 // migrate-store 端到端:一个真 MySQL 存储库(迁移 + 播种 + 夹具 + 走接口产生的数据)
 // 搬到一个空的 PG 库,网关在 PG 上起来后,接口看到的东西与在 MySQL 上一模一样。
 //
-//	VELA_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
-//	VELA_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
+//	AEGISDB_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
+//	AEGISDB_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
 
 import (
 	"context"
@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/internal/storemigrate"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/internal/storemigrate"
+	"aegisdb/pkg/crypto"
 )
 
 type storePair struct {
@@ -34,9 +34,9 @@ type storePair struct {
 // newStorePair 建一个迁移 + 播种 + 夹具都齐了的 MySQL 存储库,和一个空的 PG 库。
 func newStorePair(t *testing.T) *storePair {
 	t.Helper()
-	myBase, pgBase := os.Getenv("VELA_TEST_STORE_MYSQL"), os.Getenv("VELA_TEST_STORE_PG")
+	myBase, pgBase := os.Getenv("AEGISDB_TEST_STORE_MYSQL"), os.Getenv("AEGISDB_TEST_STORE_PG")
 	if myBase == "" || pgBase == "" {
-		t.Skip("需要 VELA_TEST_STORE_MYSQL 与 VELA_TEST_STORE_PG")
+		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL 与 AEGISDB_TEST_STORE_PG")
 	}
 	p := &storePair{}
 	myName := fmt.Sprintf("vt_msrc_%d_%d", os.Getpid(), time.Now().UnixNano()%1e6)
@@ -110,7 +110,7 @@ func TestMigrateStore_MySQLToPG_EndToEnd(t *testing.T) {
 
 	// 1) 网关跑在 MySQL 上,走接口产生一批数据(含刁钻内容、大小写、各类事件)。
 	my := p.appOnMySQL(t)
-	admin := my.login("linwei@vela.io", "vela123")
+	admin := my.login("linwei@aegisdb.io", "aegisdb123")
 	dev, prod := my.connIDByEnv(admin, "dev"), my.connIDByEnv(admin, "prod")
 	for i := 0; i < 15; i++ {
 		for _, q := range []string{
@@ -124,11 +124,11 @@ func TestMigrateStore_MySQLToPG_EndToEnd(t *testing.T) {
 			my.execSQL(admin, prod, q)
 		}
 		if i < 3 { // 登录失败计数有限流,几次就够产生事件
-			my.loginCode("linwei@vela.io", "wrong-password")
+			my.loginCode("linwei@aegisdb.io", "wrong-password")
 		}
 	}
 	// 大小写不敏感是 MySQL 这边的现状(*_ci),搬过去要保持。
-	if code := my.loginCode("LinWei@Vela.IO", "vela123"); code != 0 {
+	if code := my.loginCode("LinWei@AegisDB.IO", "aegisdb123"); code != 0 {
 		t.Fatalf("MySQL 上大写邮箱登录 code=%d —— 前提变了,先查清", code)
 	}
 	paths := []string{
@@ -180,7 +180,7 @@ func TestMigrateStore_MySQLToPG_EndToEnd(t *testing.T) {
 	if got := pg.getData(admin2, "/api/v1/audit/verify"); !strings.Contains(got, `"ok":true`) {
 		t.Errorf("PG 上链校验:%s(MySQL 上:%s)", got, beforeVerify)
 	}
-	if code := pg.loginCode("LinWei@Vela.IO", "vela123"); code != 0 {
+	if code := pg.loginCode("LinWei@AegisDB.IO", "aegisdb123"); code != 0 {
 		t.Errorf("PG 上大写邮箱登录 code=%d,MySQL 上是 0", code)
 	}
 	// 4) 继续写:序列已对齐(不撞主键),链接得上。
@@ -215,7 +215,7 @@ func TestMigrateStore_Refusals(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := RefuseIfStoreMoved(cfg, g); err == nil || !strings.Contains(err.Error(), "VELA_DB_DRIVER") {
+	if err := RefuseIfStoreMoved(cfg, g); err == nil || !strings.Contains(err.Error(), "AEGISDB_DB_DRIVER") {
 		t.Fatalf("搬完后网关在 MySQL 上启动应被拒绝,得到 %v", err)
 	}
 	if _, err := p.migrate(t, nil); err == nil || !strings.Contains(err.Error(), storemigrate.MovedMarkerTable) {
@@ -269,7 +269,7 @@ func TestMigrateStore_Refusals(t *testing.T) {
 	p.my.Exec("DELETE FROM schema_migrations WHERE version = '9999_future.sql'")
 
 	// 源里有 PG 存不下的 NUL 字节:拒绝,并指出哪张表哪一行。
-	if _, err := p.my.Exec("UPDATE tbl_user SET name = CONCAT(name, CHAR(0)) WHERE email = 'linwei@vela.io'"); err != nil {
+	if _, err := p.my.Exec("UPDATE tbl_user SET name = CONCAT(name, CHAR(0)) WHERE email = 'linwei@aegisdb.io'"); err != nil {
 		t.Fatal(err)
 	}
 	_, err = p.migrate(t, func(o *storemigrate.Options) { o.Reset = true })
@@ -301,12 +301,12 @@ func TestMigrateStore_DetectsConcurrentWrites(t *testing.T) {
 
 }
 
-// 大表吞吐:VELA_TEST_STORE_BIG=<审计行数>(如 2000000)时,往源库审计表灌一条合法的链再搬,
+// 大表吞吐:AEGISDB_TEST_STORE_BIG=<审计行数>(如 2000000)时,往源库审计表灌一条合法的链再搬,
 // 记下用时,用来估生产停机窗口。平时不跑。
 func TestMigrateStore_Throughput(t *testing.T) {
-	n, _ := strconv.Atoi(os.Getenv("VELA_TEST_STORE_BIG"))
+	n, _ := strconv.Atoi(os.Getenv("AEGISDB_TEST_STORE_BIG"))
 	if n <= 0 {
-		t.Skip("设 VELA_TEST_STORE_BIG=<行数> 才跑")
+		t.Skip("设 AEGISDB_TEST_STORE_BIG=<行数> 才跑")
 	}
 	p := newStorePair(t)
 	crypto.SetSecretKey("test-secret")

@@ -33,7 +33,7 @@ func submitTyped(t *testing.T, app *testApp, token string, connID int64, pid int
 
 func TestReleaseRefusesMixedChangeTypes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "类型混装流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
@@ -55,7 +55,7 @@ func TestReleaseRefusesMixedChangeTypes(t *testing.T) {
 
 func TestReleaseRefusesContentOutsideDeclaredType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "类型校验流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve"},
@@ -93,7 +93,7 @@ func TestReleaseRefusesContentOutsideDeclaredType(t *testing.T) {
 
 func TestReleaseInfersChangeTypeWhenUndeclared(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 	pid := app.createPipeline(admin, "类型推断流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve"},
@@ -120,11 +120,11 @@ func TestReleaseInfersChangeTypeWhenUndeclared(t *testing.T) {
 // 不是第二条流水线。
 func TestOpenAPIEnforcesChangeType(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ctPid := app.createPipeline(admin, "外部类型流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
 	})
-	token := app.issueClientPiped(admin, "类型校验平台", "zhangwei@vela.io", nil, ctPid)
+	token := app.issueClientPiped(admin, "类型校验平台", "zhangwei@aegisdb.io", nil, ctPid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "外部DML单装DDL", "instance": "sandbox-dev",

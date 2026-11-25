@@ -48,13 +48,13 @@ func (a *testApp) createServiceAccount(token, name string, roleIDs []int64, tags
 
 func TestServiceAccountLifecycle(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner := app.roleIDByCode(admin, "owner")
 
 	sa := app.createServiceAccount(admin, "升级单平台", []int64{owner}, []string{"orders"})
 	eq(t, sa.Status, "active", "born active — it exists to be used")
-	if !strings.HasPrefix(sa.Email, "svc-") || !strings.HasSuffix(sa.Email, "@service.vela") {
-		t.Errorf("identity should be a generated svc-…@service.vela handle, got %q", sa.Email)
+	if !strings.HasPrefix(sa.Email, "svc-") || !strings.HasSuffix(sa.Email, "@service.aegisdb") {
+		t.Errorf("identity should be a generated svc-…@service.aegisdb handle, got %q", sa.Email)
 	}
 	eq(t, len(sa.Roles), 1, "role recorded")
 	eq(t, len(sa.Tags), 1, "tag scope recorded")
@@ -74,7 +74,7 @@ func TestServiceAccountLifecycle(t *testing.T) {
 	}
 
 	// Creation is an admin act — it is a standing grant of change rights.
-	dev := app.login("chenhao@vela.io", "vela123")
+	dev := app.login("chenhao@aegisdb.io", "aegisdb123")
 	r = app.do(http.MethodPost, "/api/v1/service-accounts", dev, map[string]any{
 		"name": "越权账号", "roleIds": []int64{owner},
 	})
@@ -86,18 +86,18 @@ func TestServiceAccountLifecycle(t *testing.T) {
 // TestServiceAccountConsoleDoorsStayShut — 登录不是它的门,口令也造不出来。
 func TestServiceAccountConsoleDoorsStayShut(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner := app.roleIDByCode(admin, "owner")
 	sa := app.createServiceAccount(admin, "cicd-deployer", []int64{owner}, nil)
 
 	// No password exists — but the refusal must hold against guessed ones, and
 	// must be indistinguishable from an ordinary wrong password: the login
 	// boundary confirms nothing about what kind of account an email is.
-	lr := app.loginRaw(sa.Email, "vela123")
+	lr := app.loginRaw(sa.Email, "aegisdb123")
 	if lr.Code == 0 {
 		t.Fatal("service account logged in with a guessed password")
 	}
-	human := app.loginRaw("linwei@vela.io", "wrong-password")
+	human := app.loginRaw("linwei@aegisdb.io", "wrong-password")
 	eq(t, lr.Msg, human.Msg, "same refusal as any wrong password — nothing leaked")
 
 	// And an admin cannot mint it a password either: a hash that exists is a
@@ -117,7 +117,7 @@ func TestServiceAccountConsoleDoorsStayShut(t *testing.T) {
 // 外部系统建升级单 → CI/CD 流水线执行 → 审计记到服务账号名下。
 func TestServiceAccountDrivesCICDRelease(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	owner := app.roleIDByCode(admin, "owner")
 	sa := app.createServiceAccount(admin, "upgrade-portal", []int64{owner}, nil)
 
@@ -175,7 +175,7 @@ func TestServiceAccountDrivesCICDRelease(t *testing.T) {
 // 不了 TOTP,硬套的现实结局是共享秘钥进 CI 仓库。它的第二因子是凭据本身。
 func TestServiceAccountExemptFromMandatoryMFA(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.mfaMandatory": true})
 	owner := app.roleIDByCode(admin, "owner")
 	prod := app.connIDByEnv(admin, "prod")

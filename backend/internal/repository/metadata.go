@@ -31,7 +31,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // metaInsertBatch 一次插多少行。

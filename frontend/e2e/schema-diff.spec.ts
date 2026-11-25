@@ -91,7 +91,7 @@ test('右边只列同族实例,库名默认同左边;对比结果三组展示,�
 })
 
 test('读失败:说清是哪一边,不出半份报告;按原因代码显示读者的语言', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await open(page, () => envelope({ left: SIDE(1, 'orders-prod', 'prod'), right: SIDE(2, 'orders-uat', 'uat'),
     error: '右边(orders-uat/orders)读取表结构失败:dial tcp: i/o timeout', errorSide: 'right',
     errorRef: { code: 'sdReadFailed', args: { instance: 'orders-uat', db: 'orders-uat/orders', err: 'dial tcp: i/o timeout' } } }))
@@ -153,7 +153,7 @@ test('读不到库列表:退回输入框,照样能对比', async ({ page }) => {
 })
 
 test('对比前被拒(无权访问一边):按原因代码显示读者的语言', async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('vela_lang', 'en'))
+  await page.addInitScript(() => localStorage.setItem('aegisdb_lang', 'en'))
   await open(page, () => ({ contentType: 'application/json', body: JSON.stringify({ code: 40001, msg: '右边的实例不存在或无权访问',
     data: { reasonRef: { code: 'sdNoConn', args: { side: 'right' } } } }) }))
   await page.getByTestId('sd-run').click()

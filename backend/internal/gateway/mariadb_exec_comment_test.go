@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 2026-11 白盒审计 V-01:MariaDB 的 /*M!…*/ 是可执行注释,从前被当普通注释整段剥掉 —— 判定看到的

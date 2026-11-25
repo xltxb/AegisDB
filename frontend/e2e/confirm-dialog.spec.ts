@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { envelope, stubCommon } from './helpers'
 
-// 确认弹窗(ConfirmDialog)替代了浏览器原生 confirm(2026-10-29):原生框顶着"db-gateway.xxx.com 显示",
+// 确认弹窗(ConfirmDialog)替代了浏览器原生 confirm(2026-10-29):原生框顶着"aegisdb.xxx.com 显示",
 // 命令挤在一行里看不清。钉住:文案里「…」的命令按等宽高亮;取消 / Esc / 点遮罩都不执行;确定 / Enter 才执行。
 
 const AP = {

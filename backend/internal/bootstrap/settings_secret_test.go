@@ -24,7 +24,7 @@ func TestSettings_SavingDoesNotWipeLarkSecret(t *testing.T) {
 	defer lark.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	const secret = "lark-signing-secret-123"
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{

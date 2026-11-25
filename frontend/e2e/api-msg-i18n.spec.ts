@@ -14,7 +14,7 @@ function fail(code: number, msg: string, msgRef?: unknown) {
 }
 
 async function openSsoMfa(page: Page, lang: 'zh' | 'en', msgRef: unknown = MFA_WRONG) {
-  await page.addInitScript((l) => localStorage.setItem('vela_lang', l), lang)
+  await page.addInitScript((l) => localStorage.setItem('aegisdb_lang', l), lang)
   await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: true, loginUrl: 'https://srd.example.com/auth/login' })))
   await page.route('**/api/v1/auth/sso', (r) => {
     const body = r.request().postDataJSON() ?? {}
@@ -47,7 +47,7 @@ test.describe('接口报错 · 多语言', () => {
 
 // 第二批:存库的提示文本(站内通知)按 ref 显示;老通知没有 bodyRef,正文显示中文原句。
 async function openNotifs(page: Page, lang: 'zh' | 'en') {
-  await page.addInitScript((l) => localStorage.setItem('vela_lang', l), lang)
+  await page.addInitScript((l) => localStorage.setItem('aegisdb_lang', l), lang)
   await stubCommon(page)
   await page.route('**/api/v1/connections', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/releases?*', (r) => r.fulfill(envelope({ items: [], total: 0, page: 1, pageSize: 50 })))
@@ -91,7 +91,7 @@ test.describe('站内通知 · 多语言', () => {
 
 // 第三批:规范审查发现的消息按 messageRef 显示。
 async function openReview(page: Page, lang: 'zh' | 'en') {
-  await page.addInitScript((l) => localStorage.setItem('vela_lang', l), lang)
+  await page.addInitScript((l) => localStorage.setItem('aegisdb_lang', l), lang)
   await stubCommon(page)
   await page.route('**/api/v1/sql-review/rules', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/sql-review/catalog', (r) => r.fulfill(envelope({ rules: [], dialects: ['mysql'] })))
@@ -135,7 +135,7 @@ const ASYNC_JOB = {
 }
 
 async function openAsync(page: Page, lang: 'zh' | 'en') {
-  await page.addInitScript((l) => localStorage.setItem('vela_lang', l), lang)
+  await page.addInitScript((l) => localStorage.setItem('aegisdb_lang', l), lang)
   await stubCommon(page)
   await page.route('**/api/v1/connections', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/async-jobs', (r) => r.fulfill(envelope([ASYNC_JOB])))

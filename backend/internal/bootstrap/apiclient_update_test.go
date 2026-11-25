@@ -40,7 +40,7 @@ func (a *testApp) apiClientByName(token, name string) apiClientRow {
 
 func TestAPIClientToggleKeepsAllowlistAndScopes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	uid := app.createServiceAccount(admin, "toggle-bot", []int64{app.roleIDByCode(admin, "owner")}, nil).ID // 凭据只能绑服务账号
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
@@ -76,7 +76,7 @@ func TestAPIClientToggleKeepsAllowlistAndScopes(t *testing.T) {
 // credential as a side effect.
 func TestAPIClientUpdateOmittedEnabledKeepsState(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	uid := app.createServiceAccount(admin, "edit-bot", []int64{app.roleIDByCode(admin, "owner")}, nil).ID
 	r := app.do(http.MethodPost, "/api/v1/api-clients", admin, map[string]any{
 		"name": "CI-Edit", "userId": uid, "scopes": []string{"release:read"},

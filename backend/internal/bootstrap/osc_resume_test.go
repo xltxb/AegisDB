@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // oscInterruptedTicket:终端发起 → 审批 → 执行 → 暂停在拷贝中途 → 检查点落库 → 模拟进程退出 → 启动收尾。
@@ -20,7 +20,7 @@ func (a *testApp) oscInterruptedTicket() (admin string, ap model.Approval, raw *
 	eq(a.t, a.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.chunkSize": 1}).Code, 0, "一行一块")
 	out := a.termExec(admin, prod, "ALTER TABLE big ADD INDEX idx_a (a)")
 	ap = a.approvalByNoFull(admin, out.ApprovalNo)
-	approver := a.login("zhangwei@vela.io", "vela123")
+	approver := a.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(a.t, a.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 	eq(a.t, a.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "执行")
 	a.waitOSC(ap.OSCJobID, func(j *model.OSCJob) bool { return j.Phase == "copying" && j.RowsCopied > 0 })

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/middleware"
+	"aegisdb/internal/middleware"
 )
 
 // 管理后台 IP 白名单(工单 08):只作用于管理接口;开关没开、列表为空、本机回环、部署总闸拉下时放行。
@@ -22,7 +22,7 @@ func adminIPCtx(remote string) *gin.Context {
 
 func TestAdminIPAllowed_Rules(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	set := func(enabled bool, list string) {
 		app.setSettings(admin, map[string]any{"security.adminIpAllowEnabled": enabled, "security.adminIpAllowlist": list})
 	}
@@ -58,7 +58,7 @@ func TestAdminIPAllowed_Rules(t *testing.T) {
 // ClientIP 都是 127.0.0.1,不能因此全部放行。
 func TestAdminIPAllowed_ProxiedLoopbackIsNotLocal(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.adminIpAllowEnabled": true, "security.adminIpAllowlist": "10.9.9.9"})
 	untrusted := func(hdr, val string) *gin.Context {
 		c, e := gin.CreateTestContext(httptest.NewRecorder())
@@ -90,7 +90,7 @@ func TestAdminIPAllowed_ProxiedLoopbackIsNotLocal(t *testing.T) {
 // 走完整的 HTTP 链路:本机访问永远进得来;设置接口带出总闸状态。
 func TestAdminIPAllowlist_LoopbackNeverLockedOut(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.adminIpAllowEnabled": true, "security.adminIpAllowlist": "10.9.9.9"})
 	eq(t, app.do(http.MethodGet, "/api/v1/roles", admin, nil).Code, 0, "本机访问管理接口不受白名单影响")
 	r := app.do(http.MethodGet, "/api/v1/settings", admin, nil)

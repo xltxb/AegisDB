@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-27 UAT-TIDB:数据查询全部报 Error 1235 "function READ ONLY has only noop implementation in tidb now"。
@@ -29,11 +29,11 @@ func TestTiDBNoopReadOnlyRecognised(t *testing.T) {
 	}
 }
 
-// 需要一台真实 TiDB:VELA_TEST_TIDB=host:port/user/password(本地可用 docker run -p 14000:4000 pingcap/tidb)
+// 需要一台真实 TiDB:AEGISDB_TEST_TIDB=host:port/user/password(本地可用 docker run -p 14000:4000 pingcap/tidb)
 func TestTiDBBizQuery_RunsWithoutReadOnlyTransaction(t *testing.T) {
-	v := os.Getenv("VELA_TEST_TIDB")
+	v := os.Getenv("AEGISDB_TEST_TIDB")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_TIDB")
+		t.Skip("未设置 AEGISDB_TEST_TIDB")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

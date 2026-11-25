@@ -5,8 +5,8 @@ package service
 // 三个键都存在 tbl_setting 里:多活各节点读的是同一张表,不靠本机磁盘。LOGO 以 data URI 原样入库
 // (上限 BrandLogoMaxBytes),浏览器只拿它当 <img> / favicon 用。
 //
-// **没配置时各处保持原来的字样**:界面与 TOTP / Webhook / 接口文档写的是 "DP DB GATEWAY",
-// SQL 导出抬头、飞书卡片写的是 "Vela 数据库网关"。所以默认值不在这里统一,由每个调用点自己带
+// **没配置时各处保持原来的字样**:界面与 TOTP / Webhook / 接口文档写的是 "AegisDB",
+// SQL 导出抬头、飞书卡片写的是 "AegisDB 数据库网关"。所以默认值不在这里统一,由每个调用点自己带
 // (Brand.Text 的 def 参数),配置了才统一换成配置的名称。
 
 import (
@@ -18,8 +18,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/repository"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/repository"
 )
 
 const (
@@ -33,8 +33,8 @@ const (
 	BrandLogoMaxBytes = 256 << 10
 
 	// 未配置时各调用点的原字样。
-	BrandDefaultUI     = "DP DB GATEWAY"
-	BrandDefaultLegacy = "Vela 数据库网关"
+	BrandDefaultUI     = "AegisDB"
+	BrandDefaultLegacy = "AegisDB 数据库网关"
 )
 
 // Brand 是当前生效的品牌配置。空字段 = 未配置。

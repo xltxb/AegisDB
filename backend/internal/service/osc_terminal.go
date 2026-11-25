@@ -20,11 +20,11 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/osc"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/osc"
 )
 
 // oscPlan 是一条命令(可能是一批语句)里与在线变更有关的判定结果。

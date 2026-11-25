@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // AI 巡检报告的元数据(.scratch/inspection-report 工单 01)。

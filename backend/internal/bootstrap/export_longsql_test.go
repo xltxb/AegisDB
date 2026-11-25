@@ -13,7 +13,7 @@ import (
 // refusing larger SQL with an actionable message instead of a driver error.
 func TestExport_LongSQLAcceptedAndOversizeRefusedClearly(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token,
 		map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")

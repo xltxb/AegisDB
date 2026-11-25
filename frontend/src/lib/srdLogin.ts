@@ -1,7 +1,7 @@
 // SRD Portal 授权登录的前端两件事:拼跳转地址,以及认出"刚从 SRD 回来却没拿到登录态"。
 
 /** 跳去 SRD 之前在 sessionStorage 里记下时间,回来时据此判断是不是刚授权完。 */
-export const SRD_REDIRECTED_KEY = 'vela_srd_redirected_at'
+export const SRD_REDIRECTED_KEY = 'aegisdb_srd_redirected_at'
 
 /**
  * {SRD}/auth/login?redirect=<网关登录页>。回跳地址整体 encodeURIComponent(文档要求);

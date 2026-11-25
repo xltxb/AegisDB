@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // Config tunes a migration. 零值字段取默认值。

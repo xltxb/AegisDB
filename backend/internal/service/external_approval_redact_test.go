@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // A high-risk command goes to 审批魔方 — a third-party service that stores it,

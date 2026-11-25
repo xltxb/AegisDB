@@ -11,14 +11,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/sqlutil"
-	"velagateway/pkg/totp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/sqlutil"
+	"aegisdb/pkg/totp"
 )
 
 // maintNotice 是维护态那条提示的规范中文串。

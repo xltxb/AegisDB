@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // backslashReading 把 MySQL 对 \' 的理解改写成标准写法,且长度不变。

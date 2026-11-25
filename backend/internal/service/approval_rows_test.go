@@ -3,7 +3,7 @@ package service
 import (
 	"testing"
 
-	"velagateway/internal/gateway"
+	"aegisdb/internal/gateway"
 )
 
 func TestApprovalRows_UnknownIsStoredAsMinusOne(t *testing.T) {

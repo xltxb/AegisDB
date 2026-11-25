@@ -31,7 +31,7 @@ func TestExport_MultilineAndTrailingSemicolonExecute(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "ml-sqlite", "engine": "SQLite", "host": "localhost:0",
 		"env": "dev", "policy": "audit-only", "database": dbfile,

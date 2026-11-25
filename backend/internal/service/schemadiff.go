@@ -11,10 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/schemadiff"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/schemadiff"
 )
 
 // SchemaDiffConnections 列出调用人能访问、引擎支持对比的实例。

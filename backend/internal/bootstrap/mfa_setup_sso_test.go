@@ -8,7 +8,7 @@ import (
 
 	jwtlib "github.com/golang-jwt/jwt/v5"
 
-	"velagateway/pkg/jwt"
+	"aegisdb/pkg/jwt"
 )
 
 // 2026-10-26 回归 03:只经 SSO 登录的账号往往不知道管理员开号时设的本地口令,绑 MFA 时被
@@ -28,7 +28,7 @@ func (a *testApp) sessionToken(email, authMethod string, loginAt time.Time) stri
 			ID:        "test-" + authMethod + "-" + itoa(loginAt.Unix()),
 			IssuedAt:  jwtlib.NewNumericDate(loginAt),
 			ExpiresAt: jwtlib.NewNumericDate(time.Now().Add(time.Hour)),
-			Issuer:    "vela-gateway",
+			Issuer:    "aegisdb",
 		},
 	}
 	tok, err := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims).SignedString([]byte("test-secret"))
@@ -40,7 +40,7 @@ func (a *testApp) sessionToken(email, authMethod string, loginAt time.Time) stri
 
 func TestMFASetup_FreshSSOSessionSkipsPassword(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.sessionToken("chenhao@vela.io", jwt.AuthMethodSSO, time.Now().Add(-2*time.Minute))
+	tok := app.sessionToken("chenhao@aegisdb.io", jwt.AuthMethodSSO, time.Now().Add(-2*time.Minute))
 	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, nil)
 	eq(t, r.Code, 0, "刚经 SSO 登录的会话绑 MFA 不要求本地口令")
 	var out struct {
@@ -54,7 +54,7 @@ func TestMFASetup_FreshSSOSessionSkipsPassword(t *testing.T) {
 
 func TestMFASetup_StaleSSOSessionAsksReauth(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.sessionToken("chenhao@vela.io", jwt.AuthMethodSSO, time.Now().Add(-20*time.Minute))
+	tok := app.sessionToken("chenhao@aegisdb.io", jwt.AuthMethodSSO, time.Now().Add(-20*time.Minute))
 	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, nil)
 	eq(t, r.Code, 42801, "SSO 登录超过 15 分钟:不带口令应被拒")
 	var data struct {
@@ -66,13 +66,13 @@ func TestMFASetup_StaleSSOSessionAsksReauth(t *testing.T) {
 	}
 	// 知道口令的人仍可出示口令绑定。
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, map[string]any{"password": "wrong-pass"}).Code, 42801, "口令错误照旧拒绝")
-	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, map[string]any{"password": "vela123"}).Code, 0, "带正确口令照旧放行")
+	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, map[string]any{"password": "aegisdb123"}).Code, 0, "带正确口令照旧放行")
 }
 
 // 原行为保留:本地口令登录的会话、以及没有登录方式的老 token,即使刚登录也要口令。
 func TestMFASetup_NonSSOSessionStillNeedsPassword(t *testing.T) {
 	app := newTestApp(t)
-	legacy := app.sessionToken("chenhao@vela.io", "", time.Now())
+	legacy := app.sessionToken("chenhao@aegisdb.io", "", time.Now())
 	r := app.do(http.MethodPost, "/api/v1/auth/mfa/setup", legacy, nil)
 	eq(t, r.Code, 42801, "老 token(无登录方式)不算 SSO 会话")
 	if string(r.Data) != "" && string(r.Data) != "null" {
@@ -84,7 +84,7 @@ func TestMFASetup_NonSSOSessionStillNeedsPassword(t *testing.T) {
 			t.Error("非 SSO 会话不应提示重新 SSO 登录")
 		}
 	}
-	local := app.login("chenhao@vela.io", "vela123")
+	local := app.login("chenhao@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", local, nil).Code, 42801, "本地口令登录的会话照旧要口令")
 }
 
@@ -92,7 +92,7 @@ func TestMFASetup_NonSSOSessionStillNeedsPassword(t *testing.T) {
 func TestMFASetup_RealSSOLoginSkipsPassword(t *testing.T) {
 	srdJWT := jwtFor("chenhao")
 	fake := &fakeSRD{identity: map[string]map[string]any{
-		srdJWT: {"id": 7, "username": "chenhao", "email": "chenhao@vela.io", "department": "IT", "internal_department": "DBA"},
+		srdJWT: {"id": 7, "username": "chenhao", "email": "chenhao@aegisdb.io", "department": "IT", "internal_department": "DBA"},
 	}}
 	app := newSSOApp(t, fake)
 	tok := ssoToken(t, app.ssoLogin(srdJWT))

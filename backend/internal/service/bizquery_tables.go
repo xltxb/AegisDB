@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // bizBrowseSource:浏览库结构(表、列)前的判定 —— 实例仍是业务查询源、不在维护态、调用人对该库有此刻

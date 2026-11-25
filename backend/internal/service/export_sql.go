@@ -21,10 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/sqlutil"
 )
 
 const (

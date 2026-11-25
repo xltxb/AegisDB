@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // unquoteIdents 只抹单引号字符串、把标识符引号(反引号 / 双引号 / 方括号)换成空格:

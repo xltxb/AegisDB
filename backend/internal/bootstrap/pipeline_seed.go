@@ -5,8 +5,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // Reference data for the two features that ship together: the 规范审查规则库 and

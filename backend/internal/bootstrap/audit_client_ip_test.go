@@ -66,11 +66,11 @@ func rowWithCommand(items []auditRowIP, cmd string) *auditRowIP {
 // 登录、被拒的登录、真执行 —— 三条路径写下的行都带着来源地址。
 func TestAuditClientIP_RecordedOnLoginFailureAndExec(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 一次密码错误。它不该带来一个 token,但**必须**留下一行,而且带着来源。
 	if r := app.do(http.MethodPost, "/api/v1/auth/login", "", map[string]any{
-		"email": "linwei@vela.io", "password": "wrong-password",
+		"email": "linwei@aegisdb.io", "password": "wrong-password",
 	}); r.Code == 0 {
 		t.Fatal("错误的密码登录成功了")
 	}
@@ -97,7 +97,7 @@ func TestAuditClientIP_RecordedOnLoginFailureAndExec(t *testing.T) {
 // 操作人与来源 IP 共用一个模糊搜索框:两边任意一边命中都算。
 func TestAuditFilter_KeywordMatchesActorOrIP(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	const sql = "SELECT 'kw-probe'"
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
@@ -126,7 +126,7 @@ func TestAuditFilter_KeywordMatchesActorOrIP(t *testing.T) {
 // 按实例筛;下拉的可选值来自 /audit/instances,两者说的是同一批实例。
 func TestAuditFilter_ByInstanceAndInstanceList(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	prod := app.connIDByEnv(admin, "prod")
 	const devSQL = "SELECT 'on-dev'"
@@ -167,7 +167,7 @@ func TestAuditFilter_ByInstanceAndInstanceList(t *testing.T) {
 // 事件类型与增删改查都支持多选;任何一个取值认不出就整条报错。
 func TestAuditFilter_MultiSelectAndRejectsUnknownValue(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{
 		"connectionId": dev, "sql": "SELECT 'multi'", "reason": "多选用例",
@@ -200,7 +200,7 @@ func TestAuditFilter_MultiSelectAndRejectsUnknownValue(t *testing.T) {
 // 导出跟着列表走:同一组筛选条件,而且表头多了 client_ip 那一列。
 func TestAuditExport_CarriesClientIPAndHonoursFilters(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	const sql = "SELECT 'export-probe'"
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{

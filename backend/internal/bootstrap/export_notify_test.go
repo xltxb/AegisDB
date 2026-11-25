@@ -33,7 +33,7 @@ func (a *testApp) waitForNotif(token, typ string, within time.Duration) (notifIt
 
 func TestExport_NotifiesOnCompletion(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConn(admin)
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_rows (id INTEGER PRIMARY KEY, v TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -63,7 +63,7 @@ func TestExport_NotifiesOnCompletion(t *testing.T) {
 
 func TestExport_NotifiesOnFailure(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConn(admin)
 
 	// 查一张不存在的表:数据库会拒,任务落到失败分支。
@@ -87,9 +87,9 @@ func TestExport_NotifiesOnFailure(t *testing.T) {
 // "人已经走开了,结果要追上去告诉他")。
 func TestApproval_NotifiesTheInitiator(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	ap := app.submitProdHighRisk(admin) // linwei 发起
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/reject", approver, nil).Code, 0, "驳回")
 

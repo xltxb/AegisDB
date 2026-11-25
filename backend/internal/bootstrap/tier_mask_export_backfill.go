@@ -3,7 +3,7 @@ package bootstrap
 import (
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // tierMaskExportGuard marks that dev / uat have been switched off once (migration 0056).

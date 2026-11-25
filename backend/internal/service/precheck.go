@@ -28,10 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 上限。收单是同步的,这里每多一次往返都加在提单方的等待上。

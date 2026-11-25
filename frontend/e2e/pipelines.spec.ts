@@ -33,7 +33,7 @@ async function openPipelines(page: Page, opts: { readonly?: boolean; tiers?: unk
   await stubCommon(page, { tiers: opts.tiers })
   if (opts.readonly) {
     await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({
-      id: 9, name: 'Zhao Lei', email: 'zhaolei@vela.io', initials: 'ZL',
+      id: 9, name: 'Zhao Lei', email: 'zhaolei@aegisdb.io', initials: 'ZL',
       roleId: 3, roleCode: 'ro', roleName: '研发只读', layer: 'L4',
       roleIds: [3], roleNames: ['研发只读'], roleCodes: ['ro'], canApprove: false, mfaEnabled: false,
       menus: { terminal: true, pipeline: true, pipelines: true, releases: true }, capabilities: {},

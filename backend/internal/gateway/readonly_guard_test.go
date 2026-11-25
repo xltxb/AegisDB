@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestReadOnlyStatements(t *testing.T) {
@@ -191,9 +191,9 @@ func TestReadOnlyGuard_OracleAutonomous_RealOracle(t *testing.T) {
 // 引擎标签写成 MySQL 的 TiDB(生产上疑似有):SET transaction_read_only 报 1235。守卫跳过,
 // 只读用户的查询与所有人的导出照常 —— 不能因为加固把它们全弄挂。
 func TestReadOnlyGuard_TiDBLabelledMySQL_StillRuns(t *testing.T) {
-	v := os.Getenv("VELA_TEST_TIDB")
+	v := os.Getenv("AEGISDB_TEST_TIDB")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_TIDB")
+		t.Skip("未设置 AEGISDB_TEST_TIDB")
 	}
 	p := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(p[0], ":", 2)

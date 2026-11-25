@@ -47,7 +47,7 @@ func (a *testApp) tableExists(token string, connID int64, table string) bool {
 // 这条是整件事的核心:审批通过之后,命令**还没有跑**。
 func TestApprovedCommand_IsNotExecutedUntilTheInitiatorRunsIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-timing") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_victim (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -57,7 +57,7 @@ func TestApprovedCommand_IsNotExecutedUntilTheInitiatorRunsIt(t *testing.T) {
 	}
 
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_victim`)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	// ——— 关键断言 ———
@@ -76,13 +76,13 @@ func TestApprovedCommand_IsNotExecutedUntilTheInitiatorRunsIt(t *testing.T) {
 // 一张工单只能执行一次。批准是对**一次**执行的授权,不是一张可以反复使用的通行证。
 func TestApprovedCommand_ExecutesOnlyOnce(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-once") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_once (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_once`)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "第一次执行")
@@ -98,7 +98,7 @@ func TestApprovedCommand_ExecutesOnlyOnce(t *testing.T) {
 // 一个够不到这台实例的人,拿着一张已批准的工单也跑不了。
 func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-who") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_who (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -107,10 +107,10 @@ func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn), admin,
 		map[string]any{"tags": "orders"}).Code, 0, "贴标签")
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_who`)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
-	outsider := app.login("zhaolei@vela.io", "vela123")
+	outsider := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", outsider, nil); r.Code == 0 {
 		t.Error("够不到这台实例的人不该能执行这张工单")
 	}
@@ -122,7 +122,7 @@ func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 // 还没批、或被驳回的工单,不能执行。
 func TestApprovedCommand_RefusesWhenNotApproved(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-state") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_state (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -133,7 +133,7 @@ func TestApprovedCommand_RefusesWhenNotApproved(t *testing.T) {
 		t.Error("待审批的工单不该能执行")
 	}
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(pending.ID)+"/reject", approver, nil).Code, 0, "驳回")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(pending.ID)+"/execute", admin, nil); r.Code == 0 {
 		t.Error("被驳回的工单不该能执行")
@@ -147,13 +147,13 @@ func TestApprovedCommand_RefusesWhenNotApproved(t *testing.T) {
 // 以为事情办完了,然后那条命令就一直挂在那里。
 func TestApprovedCommand_NotifiesTheInitiatorToGoRunIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-notify") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_notify (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_notify`)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	n, ok := app.waitForNotif(admin, "approval-approved", 5000000000) // 5s
@@ -169,7 +169,7 @@ func TestApprovedCommand_NotifiesTheInitiatorToGoRunIt(t *testing.T) {
 // 否则同一个变更会被应用两次 —— 一次在这里,一次在还以为自己没跑过的流水线里。
 func TestReleaseTicket_IsNotExecutableThroughThisPath(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "执行时机流程", "", []map[string]any{
 		{"name": "人工审批", "type": "approve"},
 		{"name": "执行变更", "type": "execute"}, // 流程必须恰好一个执行阶段(工单 02 第 12 条)
@@ -211,13 +211,13 @@ func TestReleaseTicket_IsNotExecutableThroughThisPath(t *testing.T) {
 // 一部分(审计、合规回溯都读它),被执行动作改掉是不能接受的。
 func TestApprovedCommand_ExecutingDoesNotRewriteWhenItWasApproved(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, conn := app.sameFileConns(admin, "exec-times") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_times (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
 	ap := app.interceptedTicket(admin, conn, `DROP TABLE t_times`)
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	decidedBefore := app.approvalTimes(admin, ap.ApNo).DecidedAt

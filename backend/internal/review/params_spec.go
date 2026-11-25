@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // Param types the console knows how to render.

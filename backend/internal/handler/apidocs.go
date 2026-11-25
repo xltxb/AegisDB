@@ -26,7 +26,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/service"
+	"aegisdb/internal/service"
 )
 
 // SpecPath is where the contract lives relative to the process's working
@@ -117,18 +117,18 @@ var swaggerShell = template.Must(template.New("swagger").Parse(`<!doctype html>
     .swagger-ui .topbar { display: none; }
     .swagger-ui .info { margin: 26px 0 18px; }
     .swagger-ui .info .title { font-family: "Space Grotesk", "Noto Sans SC", -apple-system, sans-serif; }
-    .vela-note {
+    .aegisdb-note {
       max-width: 1460px; margin: 18px auto 0; padding: 12px 18px;
       border-radius: 10px; background: #eef3ff; color: #1c41b8;
       font: 500 13px "Manrope", "Noto Sans SC", -apple-system, sans-serif; line-height: 1.7;
     }
-    .vela-note code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
+    .aegisdb-note code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
       background: rgba(255,255,255,.7); padding: 1px 6px; border-radius: 5px; }
-    .vela-note a { color: #1c41b8; }
+    .aegisdb-note a { color: #1c41b8; }
   </style>
 </head>
 <body>
-  <div class="vela-note">
+  <div class="aegisdb-note">
     先点右上角 <strong>Authorize</strong> 填凭据再 <strong>Try it out</strong>:控制台接口用
     <code>bearerAuth</code>(登录拿到的 JWT),外部系统的开放接口用 <code>openApiKey</code>
     (<code>&lt;key&gt;.&lt;secret&gt;</code>)。原始契约:<a href="/openapi.yaml">/openapi.yaml</a>。

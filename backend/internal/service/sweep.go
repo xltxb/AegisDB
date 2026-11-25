@@ -16,7 +16,7 @@ package service
 import (
 	"sync"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // sweepTally 是一轮的账。

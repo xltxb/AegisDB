@@ -47,8 +47,8 @@ func TestWebhook_TestSendCarriesBearerTokenAndPlatformSchema(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	const secret = "vela-shared-secret"
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	const secret = "aegisdb-shared-secret"
 	app.configureWebhook(token, stub.URL, secret, "create,delete,update", 3)
 
 	r := app.do(http.MethodPost, "/api/v1/settings/webhook/test", token, nil)
@@ -89,7 +89,7 @@ func TestWebhook_FailedDeliveryRetriesAreBoundedByRetryMax(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	const retryMax = 2
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", retryMax)

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
 )
 
 // GLI (法务) is a first-class connection environment whose risk/capability tier
@@ -21,7 +21,7 @@ import (
 // is why this test still asserts exactly what it always did.
 func TestExec_GliHighRiskIsGatedLikeStaging(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// Create a GLI instance (approve-1 policy).
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{

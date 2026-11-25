@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // Action results of a verdict.

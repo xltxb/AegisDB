@@ -59,10 +59,10 @@ function onTreeSelectDb(id: number, db: string) { openDb(id, db) }
 //
 // 判的是 !== '0' 而不是 === '1':没存过 = 收起(新的默认),而**明确展开过**的人
 // 存的是 '0',那份选择继续算数。把默认写成"没存过就展开"才会把人的选择吃掉。
-const inspCollapsed = ref(localStorage.getItem('vela_insp_collapsed') !== '0')
+const inspCollapsed = ref(localStorage.getItem('aegisdb_insp_collapsed') !== '0')
 function toggleInsp() {
   inspCollapsed.value = !inspCollapsed.value
-  localStorage.setItem('vela_insp_collapsed', inspCollapsed.value ? '1' : '0')
+  localStorage.setItem('aegisdb_insp_collapsed', inspCollapsed.value ? '1' : '0')
 }
 
 // ---- 两侧边栏的宽度:可拖 ----
@@ -75,8 +75,8 @@ function toggleInsp() {
 // 存像素而不是百分比 —— 这跟终端/结果表那根横向分隔条相反,是故意的:树和执行上下文
 // 装的是**定宽的东西**(实例名、字段标签),它们需要的宽度不随窗口变;而结果表要占
 // 的是"剩下的一半",所以那边存比例。
-const TREE_W_KEY = 'vela_tree_w'
-const INSP_W_KEY = 'vela_insp_w'
+const TREE_W_KEY = 'aegisdb_tree_w'
+const INSP_W_KEY = 'aegisdb_insp_w'
 const TREE_MIN = 180
 const TREE_MAX = 560
 const INSP_MIN = 240
@@ -181,8 +181,8 @@ const zen = ref(false)
 function toggleZen() { zen.value = !zen.value }
 // HTML result-grid panel: results render in a real table (horizontal scroll,
 // select/copy) instead of an ASCII table in the terminal. Persisted per browser.
-const gridView = ref(localStorage.getItem('vela_termgrid') === '1')
-function toggleGrid() { gridView.value = !gridView.value; localStorage.setItem('vela_termgrid', gridView.value ? '1' : '0') }
+const gridView = ref(localStorage.getItem('aegisdb_termgrid') === '1')
+function toggleGrid() { gridView.value = !gridView.value; localStorage.setItem('aegisdb_termgrid', gridView.value ? '1' : '0') }
 
 // ---- 终端 / 结果表格的上下分割 ----
 //
@@ -192,7 +192,7 @@ function toggleGrid() { gridView.value = !gridView.value; localStorage.setItem('
 //
 // 存的是百分比而不是像素:换一块屏幕、或把浏览器窗口拖成另一个高度时,按比例
 // 还原仍然合理,按像素还原会在小屏上把终端压没。
-const GRID_H_KEY = 'vela_termgrid_h'
+const GRID_H_KEY = 'aegisdb_termgrid_h'
 const GRID_H_DEFAULT = 42
 const GRID_H_MIN = 15
 const GRID_H_MAX = 80

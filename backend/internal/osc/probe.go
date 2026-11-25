@@ -10,10 +10,10 @@ import (
 
 	gosqlmysql "github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
-// ProbeAlter 在一张空的探测表(_vela_ocp_<随机>,原表的结构克隆)上真跑一遍这条 ALTER,再按变更后的真实
+// ProbeAlter 在一张空的探测表(_aegisdb_ocp_<随机>,原表的结构克隆)上真跑一遍这条 ALTER,再按变更后的真实
 // 结构做列映射检查(工单 08)。生成工单之前就能告诉人:语句本身有错、删了定位行的键、新加的
 // 非空列没写默认值……而不是等审批通过、开跑之后才失败。
 //
@@ -68,4 +68,4 @@ func probeName() (string, error) {
 	return probePrefix + hex.EncodeToString(b), nil
 }
 
-const probePrefix = "_vela_ocp_"
+const probePrefix = "_aegisdb_ocp_"

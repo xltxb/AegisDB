@@ -11,7 +11,7 @@ import (
 // 借此拿到它)。地址(主机 / 端口)变了必须重新输入口令;从库同理。
 func TestConnection_AddressChangeRequiresPassword(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "rebind", "engine": "MySQL 8.0", "host": "10.0.0.1:3306",
 		"env": "staging", "policy": "strict", "username": "u", "password": "secret", "database": "app",

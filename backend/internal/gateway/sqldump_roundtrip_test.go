@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 导出成 SQL 的验收标准只有一个:导出的 INSERT 在同结构的表里执行一遍,读回来的就是原来的

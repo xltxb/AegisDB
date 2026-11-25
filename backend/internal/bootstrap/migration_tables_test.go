@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/migrations"
+	"aegisdb/migrations"
 )
 
 var (
@@ -16,7 +16,7 @@ var (
 
 // Migrations run only against MySQL, so the sqlite-backed suite never executes
 // them — a typo'd table name ships silently and dies on the operator's box
-// ("Table 'vela_gateway.tbl_audit' doesn't exist", migration 0018: the audit
+// ("Table 'aegisdb.tbl_audit' doesn't exist", migration 0018: the audit
 // table is tbl_audit_log). Cheap static guard: every ALTER TABLE target across
 // all migration files must be a table some migration CREATEs.
 func TestMigrations_AlterTargetsExistingTables(t *testing.T) {

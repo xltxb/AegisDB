@@ -13,13 +13,13 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // 关掉 write 之后,前导分隔符不能把一条 UPDATE 偷渡进异步通道。
 func TestAsyncExec_LeadingSeparatorCannotSmuggleAWrite(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	roleID := app.roleIDByCode(token, "admin")
 
@@ -57,7 +57,7 @@ func TestAsyncExec_LeadingSeparatorCannotSmuggleAWrite(t *testing.T) {
 // 反方向:修完之后,正常的读仍然走得通。把洞堵上不能把通道一起堵死。
 func TestAsyncExec_OrdinaryReadsStillGoThrough(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	for _, sql := range []string{"SELECT run_long_proc()", "SELECT 1;", "  SELECT 2  "} {
@@ -71,7 +71,7 @@ func TestAsyncExec_OrdinaryReadsStillGoThrough(t *testing.T) {
 // 多语句仍按最严的那一条判 —— 这是原来就有的行为,不能在修 H-1 时丢掉。
 func TestAsyncExec_MultiStatementStillJudgedByTheStrictest(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	roleID := app.roleIDByCode(token, "admin")
 
@@ -94,7 +94,7 @@ func TestAsyncExec_MultiStatementStillJudgedByTheStrictest(t *testing.T) {
 // 空输入/纯注释不该被当成一次可执行的提交。
 func TestAsyncExec_BlankInputIsRefused(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	for _, sql := range []string{"   ", "-- just a comment", "/* only a comment */"} {

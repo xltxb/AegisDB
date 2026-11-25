@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
-	"velagateway/pkg/totp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
+	"aegisdb/pkg/totp"
 )
 
 // Judgement used to key off the connection's env string and compare it against
@@ -51,7 +51,7 @@ func (a *testApp) newProdLikeTier(token, tierCode, envCode, connName string) int
 // no rule rows copied and therefore no window in which it is unregulated.
 func TestTierJudgement_NewEnvironmentInheritsItsTiersRules(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/environments", admin, map[string]any{
 		"code": "prod-hk", "displayName": "香港生产", "tierCode": "prod",
@@ -83,7 +83,7 @@ func TestTierJudgement_NewEnvironmentInheritsItsTiersRules(t *testing.T) {
 // counting rows.
 func TestTierJudgement_NewTierGovernsItsInstancesImmediately(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.newProdLikeTier(admin, "prod-hk", "hk-cluster-1", "hk-billing")
 
 	v := app.riskCheck(admin, conn, "DROP TABLE orders;")
@@ -113,7 +113,7 @@ func TestTierJudgement_NewTierGovernsItsInstancesImmediately(t *testing.T) {
 // environment — exactly the instances that most need it.
 func TestTierJudgement_MFAFollowsTheFlagNotTheName(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	secret := app.setupMFA(token)
 	conn := app.newProdLikeTier(token, "prod-hk", "hk-cluster-1", "hk-billing")
 
@@ -132,7 +132,7 @@ func TestTierJudgement_MFAFollowsTheFlagNotTheName(t *testing.T) {
 // genuinely what is being read.
 func TestTierJudgement_MFAStopsWhenTheFlagIsCleared(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setupMFA(token)
 	prod := app.connIDByEnv(token, "prod")
 
@@ -161,7 +161,7 @@ func TestTierJudgement_MFAStopsWhenTheFlagIsCleared(t *testing.T) {
 // incompletely (or predates a tier entirely) can no longer leave a hole.
 func TestRiskCommands_UpsertReachesEveryTierIncludingOnesTheCallerOmitted(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// A tier the caller has never heard of, plus the historically-missed gli.
 	eq(t, app.do(http.MethodPost, "/api/v1/env-tiers", admin, map[string]any{
@@ -197,7 +197,7 @@ func TestRiskCommands_UpsertReachesEveryTierIncludingOnesTheCallerOmitted(t *tes
 // intercepted correctly but never showed up in the number.
 func TestPendingStats_AggregateByAttributeNotByTheProdLiteral(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.newProdLikeTier(admin, "prod-hk", "hk-cluster-1", "hk-billing")
 
 	before := gatewayIntercepts(app, admin)
@@ -217,7 +217,7 @@ func TestPendingStats_AggregateByAttributeNotByTheProdLiteral(t *testing.T) {
 // it just quietly describes a tier that no longer governs the instance.
 func TestTierDefaults_FollowTheTierRatherThanTheStoredCopy(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	layerOf := func(id int64) (string, string) {
 		app.t.Helper()
@@ -289,7 +289,7 @@ func TestTierDefaults_FollowTheTierRatherThanTheStoredCopy(t *testing.T) {
 // really performs the statement.
 func TestExplain_PlanIsAReadButAnalyzeStillExecutes(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	// The statement this came up with: an upsert that is gated on prod.
@@ -326,7 +326,7 @@ func TestExplain_PlanIsAReadButAnalyzeStillExecutes(t *testing.T) {
 // schema and row-count statistics.
 func TestExplain_StillObeysTheReadGate(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 
 	eq(t, app.riskCheck(admin, prod, "EXPLAIN SELECT * FROM orders").Action, "allow", "allowed before the change")
@@ -343,7 +343,7 @@ func TestExplain_StillObeysTheReadGate(t *testing.T) {
 // what folding EXPLAIN into `select` forced.
 func TestExplain_HasItsOwnCapabilityDimension(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	roleID := itoa(app.roleIDByCode(admin, "admin"))
 
@@ -371,7 +371,7 @@ func TestExplain_HasItsOwnCapabilityDimension(t *testing.T) {
 // plans of the tables it may not read. Both gates apply; the stricter wins.
 func TestExplain_DenyingSelectStillDeniesThePlan(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	roleID := itoa(app.roleIDByCode(admin, "admin"))
 

@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // matrixOf reads a role's capability matrix through the API.
@@ -37,7 +37,7 @@ func (a *testApp) matrixOf(token string, roleID int64) map[string]map[string]str
 // guard: every role × tier must carry a stored `release` level.
 func TestReleaseCapabilityHasRowsForEveryRoleAndTier(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	var tiers []model.EnvTier
 	if err := app.repo.DB().Find(&tiers).Error; err != nil {
@@ -65,7 +65,7 @@ func TestReleaseCapabilityHasRowsForEveryRoleAndTier(t *testing.T) {
 // that needs approval to write needs it to release.
 func TestReleaseCapabilityMirrorsWrite(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	for _, code := range []string{"admin", "owner", "l2", "ro", "audit"} {
 		m := app.matrixOf(token, app.roleIDByCode(token, code))
 		for tier, write := range m["write"] {
@@ -78,7 +78,7 @@ func TestReleaseCapabilityMirrorsWrite(t *testing.T) {
 
 func TestPipelineMenuIsGrantable(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(token, "ro")
 
 	// The seeded read-only role does not hold it…
@@ -112,7 +112,7 @@ func TestPipelineMenuIsGrantable(t *testing.T) {
 // denied — and the refusal happens at submit, not three stages later.
 func TestReleaseCapabilityDeniesRaisingOnTier(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	pid := app.createPipeline(token, "受限流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
@@ -143,7 +143,7 @@ func TestReleaseCapabilityDeniesRaisingOnTier(t *testing.T) {
 // statement the matrix would have allowed.
 func TestReleaseCapabilityApproveForcesApprovalStage(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	adminID := app.roleIDByCode(token, "admin")

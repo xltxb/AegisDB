@@ -28,7 +28,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/migrations"
+	"aegisdb/migrations"
 )
 
 // createTableBodyRe 抓一条 CREATE TABLE 的表名,以及括号里的定义体。

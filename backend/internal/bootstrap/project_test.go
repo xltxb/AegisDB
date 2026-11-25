@@ -71,7 +71,7 @@ func (a *testApp) projectByID(token string, id int64) projectView {
 
 func TestProjectCRUD(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	p := app.createProject(admin, "订单业务线", "订单组")
 	if p.ID == 0 {
@@ -110,8 +110,8 @@ func TestProjectCRUD(t *testing.T) {
 // 项目的增删改、以及给库定归属,都是管理动作 —— 与连接配置同一档:看得见,改不了。
 func TestProjectMutationsAreAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	dba := app.login("chenhao@vela.io", "vela123") // l2:能看配置,不能改
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	dba := app.login("chenhao@aegisdb.io", "aegisdb123") // l2:能看配置,不能改
 
 	p := app.createProject(admin, "只读验证项目", "x")
 	connID := app.connIDByEnv(admin, "staging")
@@ -135,7 +135,7 @@ func TestProjectMutationsAreAdminOnly(t *testing.T) {
 // 跟进视图就只能二选一地说谎。
 func TestTwoDatabasesOnOneInstanceBelongToDifferentProjects(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	orders := app.createProject(admin, "订单业务线", "订单组")
 	billing := app.createProject(admin, "计费业务线", "计费组")
 	connID := app.connIDByEnv(admin, "staging") // 同一个实例
@@ -164,7 +164,7 @@ func TestTwoDatabasesOnOneInstanceBelongToDifferentProjects(t *testing.T) {
 // 项目名下还有库时不能删 —— 悄悄把库变成"未归属",会让跟进视图静静地说谎。
 func TestProjectRefusesDeleteWhileDatabasesAreFiledUnderIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	p := app.createProject(admin, "订单业务线", "订单组")
 	connID := app.connIDByEnv(admin, "staging")
 	eq(t, app.fileDatabase(admin, connID, "db_orders", p.ID).Code, 0, "file one database")
@@ -185,7 +185,7 @@ func TestProjectRefusesDeleteWhileDatabasesAreFiledUnderIt(t *testing.T) {
 // 升级单归到**目标库**所属的项目,且是提交时快照 —— 库以后换项目,历史单据不改账。
 func TestReleaseIsFiledUnderTheTargetDatabasesProject(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	orders := app.createProject(admin, "订单业务线", "订单组")
 	billing := app.createProject(admin, "计费业务线", "计费组")
 	connID := app.connIDByEnv(admin, "staging")
@@ -258,7 +258,7 @@ func (a *testApp) releaseListHas(token string, projectID, releaseID int64) bool 
 // 未归属的库照常可用 —— 项目是组织维度,不是准入条件。没有项目的库不该被挡。
 func TestUnassignedDatabaseStillWorks(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	connID := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "未归属流程", "", []map[string]any{

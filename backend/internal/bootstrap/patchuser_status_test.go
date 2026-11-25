@@ -10,8 +10,8 @@ import (
 // disabled-session check don't cover, so still-valid JWTs keep working.
 func TestPatchUser_StatusWhitelist(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
 	bad := app.do(http.MethodPatch, "/api/v1/users/"+itoa(target.ID), admin, map[string]any{"status": "bogus"})
 	if bad.Code == 0 {

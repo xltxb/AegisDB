@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestSQLPlusSet(t *testing.T) {
@@ -67,12 +67,12 @@ func TestExecutor_SQLPlusSetIsNotSent(t *testing.T) {
 
 // ---------------------------------------------------------------- 真实 Oracle
 
-// testOracle 从 VELA_TEST_ORACLE=host:port/user/password/service 取一台可用的 Oracle。
+// testOracle 从 AEGISDB_TEST_ORACLE=host:port/user/password/service 取一台可用的 Oracle。
 func testOracle(t *testing.T) *model.Connection {
 	t.Helper()
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE=host:port/user/password/service,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE=host:port/user/password/service,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	hp := strings.SplitN(p[0], ":", 2)

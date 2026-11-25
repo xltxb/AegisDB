@@ -11,7 +11,7 @@ import (
 // non-admins are blocked.
 func TestConnection_AdminUpdatesInstance(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	cr := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "editme", "engine": "MySQL 8.0", "host": "10.0.0.1:3306",
@@ -58,7 +58,7 @@ func TestConnection_AdminUpdatesInstance(t *testing.T) {
 	}
 
 	// Non-admins cannot edit instance config.
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/connections/"+itoa(conn.ID), owner, map[string]any{
 		"name": "x", "engine": "MySQL 8.0", "host": "1.1.1.1:3306", "env": "dev", "policy": "strict",
 	}).Code, 40300, "non-admin blocked from editing an instance")

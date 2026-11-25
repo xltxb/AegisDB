@@ -29,7 +29,7 @@ func (a *testApp) countEscalations(token, apNo string) int {
 // marking the ticket, so repeated sweeps re-audited + re-notified forever (R13).
 func TestApprovalTimeout_AutoEscalateOnlyOnce(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// escalate immediately-overdue pending approvals
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{

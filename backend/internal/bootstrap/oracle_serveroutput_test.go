@@ -2,7 +2,7 @@ package bootstrap
 
 // Oracle 的 SET SERVEROUTPUT ON 与其它 SQL*Plus SET(端到端,经 /terminal/exec)。
 //
-// 判定、执行、批量拆分、DBMS_OUTPUT 读回这一整条链要真实的 Oracle(VELA_TEST_ORACLE=
+// 判定、执行、批量拆分、DBMS_OUTPUT 读回这一整条链要真实的 Oracle(AEGISDB_TEST_ORACLE=
 // host:port/user/password/service 时运行);SET 不下发、判定放行这两条不需要库,每次都跑。
 
 import (
@@ -33,7 +33,7 @@ func execTerm(t *testing.T, app *testApp, token string, connID int64, sql string
 // SET 不下发,也不因为"未知动词按写判"被拦 —— 连库都不需要。
 func TestOracleSQLPlusSet_NotSentAndNotGated(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	cid := app.newOracleConn(admin, "ora-set")
 	r, o := execTerm(t, app, admin, cid, "SET SERVEROUTPUT ON", false)
 	if r.Code != 0 || o.Intercepted || !strings.Contains(o.Output, "SQL*Plus") {
@@ -50,13 +50,13 @@ func TestOracleSQLPlusSet_NotSentAndNotGated(t *testing.T) {
 }
 
 func TestOracleServerOutput_EndToEnd(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE,跳过真实 Oracle 用例")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE,跳过真实 Oracle 用例")
 	}
 	p := strings.SplitN(v, "/", 4)
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "ora-real", "engine": "Oracle 23ai", "host": p[0], "env": "dev", "policy": "audit-only",
 		"username": p[1], "password": p[2], "database": p[3],

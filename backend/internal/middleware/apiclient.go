@@ -8,14 +8,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/resp"
 )
 
-const ctxAPIClient = "vela_api_client"
+const ctxAPIClient = "aegisdb_api_client"
 
 // CurrentAPIClient returns the external client behind an open-API request, or
 // nil for a console request.
@@ -32,7 +32,7 @@ func CurrentAPIClient(c *gin.Context) *model.APIClient {
 //
 // Credential format: `Authorization: Bearer <key>.<secret>`. The key is the
 // public half (safe to log, used for the lookup); the secret is compared against
-// a bcrypt hash. `X-Vela-Key` + `X-Vela-Secret` headers are accepted as well, for
+// a bcrypt hash. `X-AegisDB-Key` + `X-AegisDB-Secret` headers are accepted as well, for
 // callers whose HTTP client reserves the Authorization header.
 //
 // It FAILS CLOSED on everything: unknown key, wrong secret, disabled client,
@@ -138,8 +138,8 @@ func RequireScope(scope string) gin.HandlerFunc {
 
 // apiCredential reads the key/secret from either supported carrier.
 func apiCredential(c *gin.Context) (key, secret string) {
-	if k := strings.TrimSpace(c.GetHeader("X-Vela-Key")); k != "" {
-		return k, strings.TrimSpace(c.GetHeader("X-Vela-Secret"))
+	if k := strings.TrimSpace(c.GetHeader("X-AegisDB-Key")); k != "" {
+		return k, strings.TrimSpace(c.GetHeader("X-AegisDB-Secret"))
 	}
 	tok := strings.TrimSpace(c.GetHeader("Authorization"))
 	const p = "bearer "
@@ -186,4 +186,4 @@ func clipKey(k string) string {
 
 // dummyAPISecretHash equalises the timing of an unknown-key lookup against a
 // real bcrypt comparison (same reasoning as service.dummyPasswordHash).
-var dummyAPISecretHash, _ = crypto.HashPassword("vela-open-api-timing-equalizer")
+var dummyAPISecretHash, _ = crypto.HashPassword("aegisdb-open-api-timing-equalizer")

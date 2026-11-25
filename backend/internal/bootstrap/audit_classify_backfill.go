@@ -33,8 +33,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
-	"velagateway/internal/service"
+	"aegisdb/internal/model"
+	"aegisdb/internal/service"
 )
 
 // auditBackfillBatch 是一次取回多少行。分批是因为审计表可能很大，一次性读进内存不合适;

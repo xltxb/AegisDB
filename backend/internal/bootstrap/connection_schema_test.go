@@ -11,7 +11,7 @@ import (
 // the UI. GET /connections/:id/schema returns databases each carrying tables.
 func TestConnectionSchema_ReturnsDatabasesWithTables(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 
 	r := app.do(http.MethodGet, "/api/v1/connections/"+itoa(prodConn)+"/schema", token, nil)
@@ -53,7 +53,7 @@ func TestConnectionSchema_ReturnsDatabasesWithTables(t *testing.T) {
 // hardcoded blob).
 func TestConnectionSchema_IsPerConnection(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	dev := app.connIDByEnv(token, "dev")
 

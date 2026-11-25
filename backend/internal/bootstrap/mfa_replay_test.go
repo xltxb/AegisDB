@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/pkg/totp"
+	"aegisdb/pkg/totp"
 )
 
 // A TOTP code consumed for a PROD step-up must not be replayable to disable MFA.
@@ -14,8 +14,8 @@ import (
 // (R15) — an attacker who captured one step-up code could turn MFA off.
 func TestMFA_StepUpCodeCannotAlsoDisableMFA(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
 	// admin-bind MFA (does not consume a code, so the counter starts clean)
 	bind := app.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/mfa/bind", admin, nil)
@@ -32,7 +32,7 @@ func TestMFA_StepUpCodeCannotAlsoDisableMFA(t *testing.T) {
 	// (TestLogin_MFACodeIsSingleUse). The step-up below therefore uses the NEXT
 	// time-step's code, which validation accepts within its ±1-step skew.
 	now := time.Now()
-	token := app.login("chenhao@vela.io", "vela123", totp.Code(b.Secret, now))
+	token := app.login("chenhao@aegisdb.io", "aegisdb123", totp.Code(b.Secret, now))
 	prod := app.connIDByEnv(token, "prod")
 	code := totp.Code(b.Secret, now.Add(30*time.Second))
 

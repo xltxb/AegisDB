@@ -18,7 +18,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 会返回结果集的语句:必须按读处理(否则执行侧不取结果集),且只需 select 权限。

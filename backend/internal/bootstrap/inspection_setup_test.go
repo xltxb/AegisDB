@@ -33,17 +33,17 @@ func TestInspection_MenuDefaultsToTheDBARoles(t *testing.T) {
 // inspection:write 不在默认范围里:没勾的凭据没有,显式勾选才有。
 func TestInspection_UploadScopeIsOptIn(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	app.issueClient(admin, "ci-default", "zhangwei@vela.io", nil)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	app.issueClient(admin, "ci-default", "zhangwei@aegisdb.io", nil)
 	if s := app.apiClientByName(admin, "ci-default").Scopes; strings.Contains(s, "inspection:write") {
 		t.Errorf("默认范围不该含 inspection:write,实际 %q", s)
 	}
-	app.issueClient(admin, "ai-inspector", "zhangwei@vela.io", []string{"inspection:write"})
+	app.issueClient(admin, "ai-inspector", "zhangwei@aegisdb.io", []string{"inspection:write"})
 	if s := app.apiClientByName(admin, "ai-inspector").Scopes; s != "inspection:write" {
 		t.Errorf("显式勾选后应只有 inspection:write,实际 %q", s)
 	}
 	// 设置项能存能读
-	app.setSettings(admin, map[string]any{"inspection.savePath": "/var/vela/inspection"})
+	app.setSettings(admin, map[string]any{"inspection.savePath": "/var/aegisdb/inspection"})
 	r := app.do(http.MethodGet, "/api/v1/settings", admin, nil)
 	if !strings.Contains(string(r.Data), `inspection.savePath`) {
 		t.Errorf("系统设置里应能读到 inspection.savePath: %s", r.Data)

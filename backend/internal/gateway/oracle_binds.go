@@ -27,7 +27,7 @@ import (
 
 	goora "github.com/sijms/go-ora/v2"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // Bind 是一个绑定变量(定义在 model 里,请求 / 响应的 dto 也用它)。

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func (b *bizEnv) export(query string) (status int, ctype string, body []byte) {

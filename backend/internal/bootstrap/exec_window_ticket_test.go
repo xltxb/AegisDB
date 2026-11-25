@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // windowBody 是一个一次性窗口的请求体。
@@ -40,8 +40,8 @@ func (a *testApp) backdateWindow(id int64, from, to time.Time) {
 // 生效的却是改过的样子。
 func TestExecWindow_EditWithdrawsThePendingTicket(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
-	admin := app.login("linwei@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const sql, db = "DROP TABLE orders_2024_q3", "orders_db"
 
@@ -55,7 +55,7 @@ func TestExecWindow_EditWithdrawsThePendingTicket(t *testing.T) {
 	if old.Status == model.StatusPending {
 		t.Fatalf("改窗口之后旧单仍在待审批: %s", old.Status)
 	}
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(old.ID)+"/approve", approver, nil); r.Code == 0 {
 		t.Fatal("旧单还能被批准 —— 签的是旧定义,生效的却是新定义")
 	}
@@ -77,8 +77,8 @@ func TestExecWindow_EditWithdrawsThePendingTicket(t *testing.T) {
 // 让窗口生效 —— 窗口只认自己当前挂着的那张单。
 func TestExecWindow_StaleTicketDecisionIsIgnored(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
-	admin := app.login("linwei@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 
 	winID, oldNo := app.applyWindow(l2, prod, "orders_db", "存量旧单")
@@ -90,7 +90,7 @@ func TestExecWindow_StaleTicketDecisionIsIgnored(t *testing.T) {
 	if ok, err := app.repo.ClaimApproval(old.ID, old.Status, model.StatusPending); err != nil || !ok {
 		t.Fatalf("前提:拨回旧单失败 ok=%v err=%v (status=%s)", ok, err, old.Status)
 	}
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(old.ID)+"/approve", approver, nil); r.Code == 0 {
 		t.Error("非当前单的批准应被拒绝")
 	}
@@ -101,8 +101,8 @@ func TestExecWindow_StaleTicketDecisionIsIgnored(t *testing.T) {
 // 第 3 条:删一个还在等审批的窗口,它的单要一起撤回,不能留在待办里。
 func TestExecWindow_DeleteWithdrawsThePendingTicket(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
-	admin := app.login("linwei@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 
 	winID, apNo := app.applyWindow(l2, prod, "orders_db", "删掉的班车")
@@ -110,7 +110,7 @@ func TestExecWindow_DeleteWithdrawsThePendingTicket(t *testing.T) {
 
 	ap := app.approvalByNoFull(admin, apNo)
 	eq(t, ap.Status, model.StatusCancelled, "删窗之后单子应撤回")
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil); r.Code == 0 {
 		t.Fatal("删掉的窗口的单还能被批准(还会回一句「执行窗口已生效」)")
 	}
@@ -119,8 +119,8 @@ func TestExecWindow_DeleteWithdrawsThePendingTicket(t *testing.T) {
 // 第 4 条:够不到的实例不能申请窗口;不存在的实例与够不到的实例回同一个错误。
 func TestExecWindow_ApplicantMustReachTheInstance(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")        // 标签 orders / users
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")  // 标签 orders / users
 	analytics := app.connIDByName(admin, "analytics-ro") // 标签 analytics,l2 够不到
 	prod := app.connIDByEnv(admin, "prod")
 	now := time.Now()
@@ -148,8 +148,8 @@ func TestExecWindow_ApplicantMustReachTheInstance(t *testing.T) {
 // 第 4 条:回看按访问权校验 —— 够不到那台实例的人,看不到那扇门放行过的语句原文。
 func TestWindowStatements_RequireInstanceAccess(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	analytics := app.connIDByName(admin, "analytics-ro")
 	id := app.openWindow(admin, analytics, "analytics", time.Now().Add(-time.Minute), time.Now().Add(time.Hour))
 
@@ -165,7 +165,7 @@ func TestWindowStatements_RequireInstanceAccess(t *testing.T) {
 // 第 5 条:一次性窗口的结束时间要晚于现在,时长不超过 31 天。
 func TestExecWindow_OnceWindowMustBeFutureAndBounded(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	now := time.Now()
 

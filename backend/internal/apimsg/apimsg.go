@@ -23,7 +23,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 //go:generate go run ./gen

@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-28 元数据同步改为按照片比对:终态必须与"先删后插"逐行相同,

@@ -13,10 +13,10 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
-	"velagateway/internal/presence"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
+	"aegisdb/internal/presence"
+	"aegisdb/pkg/crypto"
 )
 
 // MaxApprovalSeq returns the largest numeric suffix of any AP-<n> approval number.

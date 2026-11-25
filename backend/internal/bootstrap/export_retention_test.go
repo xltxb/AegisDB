@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // seedExportJob writes real part files and a matching row, aged as asked.
@@ -64,11 +64,11 @@ func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 // halves people forget: the row survives, and the password does not.
 func TestExportRetentionDeletesAgedArchives(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"export.savePath": dir})
 
-	uid := app.userIDByEmail(token, "linwei@vela.io")
+	uid := app.userIDByEmail(token, "linwei@aegisdb.io")
 	old, oldFiles := seedExportJob(t, app, dir, uid, "aged", 4*24*time.Hour)
 	fresh, freshFiles := seedExportJob(t, app, dir, uid, "recent", 12*time.Hour)
 
@@ -104,10 +104,10 @@ func TestExportRetentionDeletesAgedArchives(t *testing.T) {
 // an event, not housekeeping. The trail names the owner AND the sweep.
 func TestExportRetentionAuditsTheDeletion(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"export.savePath": dir})
-	uid := app.userIDByEmail(token, "linwei@vela.io")
+	uid := app.userIDByEmail(token, "linwei@aegisdb.io")
 	seedExportJob(t, app, dir, uid, "aged", 5*24*time.Hour)
 
 	app.svc.SweepExportRetention()
@@ -140,11 +140,11 @@ func TestExportRetentionAuditsTheDeletion(t *testing.T) {
 // TestExportRetentionDisabled — 0 means keep forever, not "delete everything".
 func TestExportRetentionDisabled(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"export.savePath": dir})
 	app.setSettings(token, map[string]any{"export.retentionDays": 0})
-	uid := app.userIDByEmail(token, "linwei@vela.io")
+	uid := app.userIDByEmail(token, "linwei@aegisdb.io")
 	job, files := seedExportJob(t, app, dir, uid, "ancient", 400*24*time.Hour)
 
 	app.svc.SweepExportRetention()
@@ -162,10 +162,10 @@ func TestExportRetentionDisabled(t *testing.T) {
 // operator-chosen directory and may hold other people's files.
 func TestExportRetentionOrphanSweep(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"export.savePath": dir})
-	uid := app.userIDByEmail(token, "linwei@vela.io")
+	uid := app.userIDByEmail(token, "linwei@aegisdb.io")
 
 	// A live job's parts, and an aged orphan of the same shape.
 	_, claimed := seedExportJob(t, app, dir, uid, "claimed", 1*time.Hour)
@@ -205,10 +205,10 @@ func TestExportRetentionOrphanSweep(t *testing.T) {
 // rather than 500 on a path that is gone.
 func TestExpiredExportIsNotDownloadable(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	app.setSettings(token, map[string]any{"export.savePath": dir})
-	uid := app.userIDByEmail(token, "linwei@vela.io")
+	uid := app.userIDByEmail(token, "linwei@aegisdb.io")
 	_, files := seedExportJob(t, app, dir, uid, "aged", 7*24*time.Hour)
 
 	app.svc.SweepExportRetention()

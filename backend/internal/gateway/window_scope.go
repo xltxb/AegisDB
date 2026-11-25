@@ -49,7 +49,7 @@ import (
 	"regexp"
 	"strings"
 
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/sqlutil"
 )
 
 // StaysInDatabase 报告这批语句是否都只触及 db 这个库(Oracle 是 schema)。

@@ -1,7 +1,7 @@
 package bootstrap
 
 // 在线变更任务的运行器(.scratch/osc-product 工单 02):跑完、同表互斥、暂停后中止、重启收尾。
-// 对着真 MySQL(VELA_OSC_TEST_DSN)。
+// 对着真 MySQL(AEGISDB_OSC_TEST_DSN)。
 
 import (
 	"context"
@@ -16,14 +16,14 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/model"
-	"velagateway/internal/osc"
-	"velagateway/internal/service"
+	"aegisdb/internal/model"
+	"aegisdb/internal/osc"
+	"aegisdb/internal/service"
 )
 
 func oscRaw(t *testing.T, schema string) *sql.DB {
 	t.Helper()
-	cfg, _ := mysql.ParseDSN(os.Getenv("VELA_OSC_TEST_DSN"))
+	cfg, _ := mysql.ParseDSN(os.Getenv("AEGISDB_OSC_TEST_DSN"))
 	cfg.DBName = schema
 	db, err := sql.Open("mysql", cfg.FormatDSN())
 	if err != nil {
@@ -59,7 +59,7 @@ func (a *testApp) newOSCJob(connID int64, stmt string) *model.OSCJob {
 	if err != nil || len(blockers) > 0 {
 		a.t.Fatalf("前置检查: err=%v blockers=%+v", err, blockers)
 	}
-	u, _ := a.repo.GetUserByEmail("linwei@vela.io")
+	u, _ := a.repo.GetUserByEmail("linwei@aegisdb.io")
 	j, err := a.svc.NewOSCJob(u, conn, stmt, d, warnings)
 	if err != nil {
 		a.t.Fatal(err)
@@ -88,7 +88,7 @@ func oscFinished(j *model.OSCJob) bool {
 
 func (a *testApp) oscSetup(chunk int) (prod int64, raw *sql.DB) {
 	a.t.Helper()
-	admin := a.login("linwei@vela.io", "vela123")
+	admin := a.login("linwei@aegisdb.io", "aegisdb123")
 	prod, _, schema := a.oscTestConns(admin)
 	eq(a.t, a.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{
 		"osc.minRows": 100, "osc.minBytes": 1 << 40, "osc.chunkSize": chunk}).Code, 0, "设阈值")
@@ -184,11 +184,11 @@ func TestOSCJob_RestartFailsRunningAndDropsTheGhost(t *testing.T) {
 func TestOSCJob_WarningsAreStoredInTheShapeTheUIReads(t *testing.T) {
 	app := newTestApp(t)
 	prod, _ := app.oscSetup(50)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn, _ := app.repo.GetConnection(prod)
 	stmt := "ALTER TABLE big ADD INDEX idx_a (a)"
 	d := app.svc.OSCRoute(context.Background(), conn, stmt)
-	u, _ := app.repo.GetUserByEmail("linwei@vela.io")
+	u, _ := app.repo.GetUserByEmail("linwei@aegisdb.io")
 	j, err := app.svc.NewOSCJob(u, conn, stmt, d, []osc.Warning{{Code: "long_transaction", Reason: "当前有已运行 60 秒的事务"}})
 	if err != nil {
 		t.Fatal(err)

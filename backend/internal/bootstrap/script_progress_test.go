@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/service"
+	"aegisdb/internal/service"
 )
 
 // 上传脚本弹窗的进度(2026-10):扫描 / 执行请求带上 progressId,服务端逐条记进度,前端轮询
@@ -21,8 +21,8 @@ func (a *testApp) scriptProgress(token, id string) (int, service.ScriptProgress)
 
 func TestScriptProgress_ExecuteRecordsEveryStatement(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	other := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	other := app.login("chenhao@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "保存路径")
 
@@ -53,7 +53,7 @@ func TestScriptProgress_ExecuteRecordsEveryStatement(t *testing.T) {
 
 func TestScriptProgress_ScanRecordsProgress(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "保存路径")
 

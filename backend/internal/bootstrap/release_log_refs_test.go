@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func parseRefs(t *testing.T, raw string) []model.RuleRef {
@@ -29,7 +29,7 @@ func parseRefs(t *testing.T, raw string) []model.RuleRef {
 
 func TestReleaseStageLogRefsRenderToTheStoredLog(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE t_bond (bondseq_id INTEGER, bond_type INTEGER)`)
 		_, _ = db.Exec(`INSERT INTO t_bond VALUES (1, 0), (2, 0)`)
@@ -97,7 +97,7 @@ func TestReleaseStageLogRefsRenderToTheStoredLog(t *testing.T) {
 
 func TestReleaseErrorRefRendersToTheStoredError(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE t_ok (n INTEGER)`)
 	})

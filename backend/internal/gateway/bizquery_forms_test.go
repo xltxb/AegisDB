@@ -3,7 +3,7 @@ package gateway
 import (
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-29:数据查询放开 SHOW 表结构白名单与 DESC,并拦"看着是查询、实际在做别的"的变种。

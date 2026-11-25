@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-10-29 实测:带 PRAGMA AUTONOMOUS_TRANSACTION 的函数在 SET TRANSACTION READ ONLY 里照样写库,

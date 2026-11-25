@@ -11,8 +11,8 @@ import (
 // loaded (own only) so the terminal can scan + dispatch it for execution.
 func TestScriptUpload_PathAndContentForTerminal(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "set path")
 
 	body := "SELECT count(*) FROM orders;\nUPDATE users SET tier='vip' WHERE id=1;\n"

@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/model"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/model"
 )
 
 // 管理后台新建角色(2026-10-22)。

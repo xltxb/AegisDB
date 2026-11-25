@@ -1,6 +1,6 @@
 package dto
 
-import "velagateway/internal/model"
+import "aegisdb/internal/model"
 
 // ---- 开放接口凭据(控制台管理) ----
 

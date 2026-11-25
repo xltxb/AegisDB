@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
 )
 
 type grantView struct {
@@ -44,7 +44,7 @@ type grantEnv struct {
 func newGrantEnv(t *testing.T) *grantEnv {
 	t.Helper()
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	e := &grantEnv{app: app, admin: admin}
 	// 凭据不能绑管理员(那会让一串密钥拥有管理员权限),绑一个服务账号。owner 角色不带标签,
 	// 即不限实例 —— 外部审批系统通常就是这样配的。
@@ -158,7 +158,7 @@ func TestQueryGrant_OnlyBizSourcesAreListed(t *testing.T) {
 		t.Error("标签范围外的实例不该授得了")
 	}
 
-	ro := e.app.login("chenhao@vela.io", "vela123")
+	ro := e.app.login("chenhao@aegisdb.io", "aegisdb123")
 	if r := e.app.do(http.MethodPatch, "/api/v1/connections/"+itoa(e.main), ro, map[string]any{"bizQuery": true}); r.Code == 0 {
 		t.Error("非管理员不该能标记业务查询源")
 	}
@@ -242,9 +242,9 @@ func TestQueryGrant_BizOnlyAccountHasNoLocalPassword(t *testing.T) {
 
 func TestQueryGrant_ExistingUserKeepsPrimaryRole(t *testing.T) {
 	e := newGrantEnv(t)
-	before, _ := e.app.repo.FindUserByEmailCI("chenhao@vela.io")
-	grantOf(t, e.put(e.body("chenhao@vela.io", "OA-7")))
-	after, _ := e.app.repo.FindUserByEmailCI("chenhao@vela.io")
+	before, _ := e.app.repo.FindUserByEmailCI("chenhao@aegisdb.io")
+	grantOf(t, e.put(e.body("chenhao@aegisdb.io", "OA-7")))
+	after, _ := e.app.repo.FindUserByEmailCI("chenhao@aegisdb.io")
 	eq(t, after.RoleID, before.RoleID, "主角色不变")
 	role, _ := e.app.repo.GetRoleByCode(model.RoleCodeBizQuery)
 	has := false
@@ -254,12 +254,12 @@ func TestQueryGrant_ExistingUserKeepsPrimaryRole(t *testing.T) {
 	if !has {
 		t.Error("已有账号应追加业务查询角色")
 	}
-	e.app.login("chenhao@vela.io", "vela123") // 原来的登录方式不受影响
+	e.app.login("chenhao@aegisdb.io", "aegisdb123") // 原来的登录方式不受影响
 }
 
 func TestQueryGrant_Refusals(t *testing.T) {
 	e := newGrantEnv(t)
-	_ = e.app.repo.CreateUser(&model.User{Name: "bot", Email: "bot@vela.io", Status: "active", Kind: model.UserKindService})
+	_ = e.app.repo.CreateUser(&model.User{Name: "bot", Email: "bot@aegisdb.io", Status: "active", Kind: model.UserKindService})
 	with := func(k string, v any) map[string]any { b := e.body("x@corp.io", "OA-9"); b[k] = v; return b }
 	without := func(k string) map[string]any { b := e.body("x@corp.io", "OA-9"); delete(b, k); return b }
 	cases := []struct {
@@ -275,8 +275,8 @@ func TestQueryGrant_Refusals(t *testing.T) {
 		{"有效期超过 90 天", with("endsAt", time.Now().Add(91*24*time.Hour).Format(time.RFC3339)), "90"},
 		{"到期时间已过", with("endsAt", time.Now().Add(-time.Hour).Format(time.RFC3339)), "endsAt"},
 		{"没有外部单号", without("externalId"), "externalId"},
-		{"服务账号", with("email", "bot@vela.io"), "服务账号"},
-		{"停用账号", with("email", "qianyi@vela.io"), "停用"},
+		{"服务账号", with("email", "bot@aegisdb.io"), "服务账号"},
+		{"停用账号", with("email", "qianyi@aegisdb.io"), "停用"},
 	}
 	for _, c := range cases {
 		r := e.put(c.body)
@@ -336,7 +336,7 @@ func TestQueryGrant_ExternalIDIsIdempotent(t *testing.T) {
 func TestQueryGrant_AuditOperatorNamesTheClient(t *testing.T) {
 	e := newGrantEnv(t)
 	g, _ := grantOf(t, e.put(e.body("aud@corp.io", "OA-AUD")))                 // 下发 + 自动建号
-	grantOf(t, e.put(e.body("chenhao@vela.io", "OA-AUD2")))                    // 已有账号追加角色
+	grantOf(t, e.put(e.body("chenhao@aegisdb.io", "OA-AUD2")))                    // 已有账号追加角色
 	e.app.do(http.MethodDelete, "/api/v1/open/query-grants/"+itoa(g.ID), e.token, nil) // 外部撤销
 	g2, _ := grantOf(t, e.put(e.body("aud2@corp.io", "OA-AUD3")))
 	e.app.do(http.MethodPost, "/api/v1/query-grants/"+itoa(g2.ID)+"/revoke", e.admin, map[string]any{"reason": "x"})

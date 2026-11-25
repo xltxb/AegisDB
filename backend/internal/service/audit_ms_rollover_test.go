@@ -4,7 +4,7 @@ package service
 // 行读回来进到下一秒,秒级的哈希载荷就对不上了。这里把时钟钉在这些时刻上写审计,再用网关
 // 自己的 VerifyAuditChain 校验。
 //
-// 真 MySQL 的用例要设 VELA_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑;SQLite 的用例总跑,
+// 真 MySQL 的用例要设 AEGISDB_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑;SQLite 的用例总跑,
 // 守住"写进去的时间已经截到毫秒"这一条。
 
 import (
@@ -19,9 +19,9 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
 )
 
 // 刁钻的小数秒:前三个在修复前也没事,后面的在 MySQL 上都会进位。
@@ -88,9 +88,9 @@ func TestAppendAudit_SubMillisecondTruncatedBeforeHash(t *testing.T) {
 }
 
 func TestAppendAudit_MillisecondRolloverKeepsChain_RealMySQL(t *testing.T) {
-	base := os.Getenv("VELA_TEST_STORE_MYSQL")
+	base := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
 	if base == "" {
-		t.Skip("未设置 VELA_TEST_STORE_MYSQL,跳过真实 MySQL 存储库用例")
+		t.Skip("未设置 AEGISDB_TEST_STORE_MYSQL,跳过真实 MySQL 存储库用例")
 	}
 	crypto.SetSecretKey("test-secret")
 	name := fmt.Sprintf("vt_auditms_%d", os.Getpid())

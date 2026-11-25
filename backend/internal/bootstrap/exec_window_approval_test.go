@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // applyWindow 提交一个覆盖此刻的一次性窗口申请,返回窗口 id 与它的审批单号。
@@ -66,7 +66,7 @@ func (a *testApp) windowStatus(token string, id int64) string {
 // 用自审批跑通的测试证明不了它。
 func (a *testApp) decideWindowTicket(apNo string, approve bool) {
 	a.t.Helper()
-	approver := a.login("zhangwei@vela.io", "vela123")
+	approver := a.login("zhangwei@aegisdb.io", "aegisdb123")
 	id := a.approvalIDByNo(apNo)
 	verb := "reject"
 	if approve {
@@ -80,7 +80,7 @@ func (a *testApp) decideWindowTicket(apNo string, approve bool) {
 // 待审批的窗口不放行;批准之后放行。这是这次改动的**全部意义**。
 func TestExecWindow_PendingDoesNotRelax_ApprovedDoes(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	const sql = "DROP TABLE orders_2024_q3"
@@ -111,7 +111,7 @@ func TestExecWindow_PendingDoesNotRelax_ApprovedDoes(t *testing.T) {
 // 被驳回的窗口永远不放行。
 func TestExecWindow_RejectedNeverRelaxes(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const sql = "DROP TABLE orders_2024_q3"
 	const targetDB = "orders_db"
@@ -132,7 +132,7 @@ func TestExecWindow_RejectedNeverRelaxes(t *testing.T) {
 // 那扇门上签的字已经不对应它现在的样子了。
 func TestExecWindow_EditReturnsToPending(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	const sql = "DROP TABLE orders_2024_q3"
 	const targetDB = "orders_db"
@@ -163,7 +163,7 @@ func TestExecWindow_EditReturnsToPending(t *testing.T) {
 // 把那句中文当 SQL 发给数据库。这和升级单、导出单挡在同一处,理由也是同一个。
 func TestExecWindow_ApprovalIsNotManuallyExecutable(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	_, apNo := app.applyWindow(token, prod, "orders_db", "不可执行的班车")

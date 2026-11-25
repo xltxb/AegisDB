@@ -19,8 +19,8 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/service"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/service"
 )
 
 // settingCheck 校验一个键的值,返回要存的规整值。
@@ -127,7 +127,7 @@ func outboundURL(key string, v any) (any, error) {
 // absPath:空串(未配置,用默认目录或不接收)或一个绝对路径,且不含 ".." 段。
 //
 // 同时认 "/" 开头的写法:后端只部署在 Linux 上,但开发机是 Windows,filepath.IsAbs 在那里不认
-// "/var/vela/x" —— 不能因为在哪台机器上点了保存就得出不同的结论。
+// "/var/aegisdb/x" —— 不能因为在哪台机器上点了保存就得出不同的结论。
 func absPath(key string, v any) (any, error) {
 	sv, err := str(key, v)
 	if err != nil {

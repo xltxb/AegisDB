@@ -28,7 +28,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/sijms/go-ora/v2/network"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // CheckKind 是探测结论的种类。它会原样存进 tbl_connection.last_check_kind。

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/middleware"
+	"aegisdb/internal/middleware"
 )
 
 // 管理后台独立空闲超时(工单 09,后端那一半)。
@@ -32,7 +32,7 @@ func jtiOf(t *testing.T, token string) string {
 
 func TestAdminIdle_ExpiresAndOnlyEnterRevives(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.adminIdleMinutes": 5})
 	sid := jtiOf(t, admin)
 
@@ -56,8 +56,8 @@ func TestAdminIdle_ExpiresAndOnlyEnterRevives(t *testing.T) {
 
 func TestAdminIdle_EnterNeedsAdminPortalAccess(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
-	auditor := app.login("hujun@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	auditor := app.login("hujun@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/admin/enter", l2, nil).Code, 40300, "非管理员不能进入管理后台")
 	eq(t, app.do(http.MethodPost, "/api/v1/admin/enter", auditor, nil).Code, 0, "审计员可以进入(只看审计)")
 	r := app.do(http.MethodGet, "/api/v1/auth/session-policy", l2, nil)
@@ -70,8 +70,8 @@ func TestAdminIdle_EnterNeedsAdminPortalAccess(t *testing.T) {
 // 用户后台工作台上取的最近审计(不带 full)不受空闲影响(2026-10-26 回归 16);mine=1 不受影响。
 func TestAudit_FullListFollowsAdminIdle(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	l2 := app.login("chenhao@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	conn := app.connIDByName(admin, "order-cluster")
 	app.do(http.MethodPost, "/api/v1/terminal/exec", admin, map[string]any{"connectionId": conn, "sql": "SELECT 1 FROM t"})
 	app.do(http.MethodPost, "/api/v1/terminal/exec", l2, map[string]any{"connectionId": conn, "sql": "SELECT 2 FROM t"})
@@ -104,7 +104,7 @@ func TestAudit_FullListFollowsAdminIdle(t *testing.T) {
 // 后端判空闲留 30 秒余量:前端心跳节流,后端看到的最后一次操作会落后一点。
 func TestAdminIdle_GraceCoversHeartbeatThrottle(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{"security.adminIdleMinutes": 5})
 	eq(t, app.do(http.MethodPost, "/api/v1/admin/enter", admin, nil).Code, 0, "进入")
 	middleware.AgeAdminSessionForTest(jtiOf(t, admin), 5*time.Minute+15*time.Second)

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func TestSplitQualified(t *testing.T) {
@@ -25,13 +25,13 @@ func TestSplitQualified(t *testing.T) {
 	}
 }
 
-// tcMySQL 连真实 MySQL(VELA_TEST_MYSQL=host:port/user/password),没设就跳过。
+// tcMySQL 连真实 MySQL(AEGISDB_TEST_MYSQL=host:port/user/password),没设就跳过。
 // 不叫 testMySQL:别的分支(killquery_test.go)已有同名函数,合并后会重复定义。
 func tcMySQL(t *testing.T) *model.Connection {
 	t.Helper()
-	v := os.Getenv("VELA_TEST_MYSQL")
+	v := os.Getenv("AEGISDB_TEST_MYSQL")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_MYSQL,跳过")
+		t.Skip("未设置 AEGISDB_TEST_MYSQL,跳过")
 	}
 	parts := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(parts[0], ":", 2)
@@ -76,9 +76,9 @@ func TestTableColumns_MySQLFiltersByDatabase(t *testing.T) {
 
 // PostgreSQL:不加引号的名字折成小写;schema 限定。
 func TestTableColumns_Postgres(t *testing.T) {
-	v := os.Getenv("VELA_TEST_PG")
+	v := os.Getenv("AEGISDB_TEST_PG")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_PG,跳过")
+		t.Skip("未设置 AEGISDB_TEST_PG,跳过")
 	}
 	parts := strings.SplitN(v, "/", 3)
 	hp := strings.SplitN(parts[0], ":", 2)
@@ -93,9 +93,9 @@ func TestTableColumns_Postgres(t *testing.T) {
 
 // Oracle:不加引号的名字折成大写;owner 限定,不限定时是当前 schema。
 func TestTableColumns_Oracle(t *testing.T) {
-	v := os.Getenv("VELA_TEST_ORACLE")
+	v := os.Getenv("AEGISDB_TEST_ORACLE")
 	if v == "" {
-		t.Skip("未设置 VELA_TEST_ORACLE=host:port/user/password/service,跳过")
+		t.Skip("未设置 AEGISDB_TEST_ORACLE=host:port/user/password/service,跳过")
 	}
 	parts := strings.SplitN(v, "/", 4)
 	hp := strings.SplitN(parts[0], ":", 2)

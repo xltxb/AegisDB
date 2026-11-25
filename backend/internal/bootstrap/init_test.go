@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
 )
 
 // Production init: migrate + reference data + admin only (no demo users/connections),

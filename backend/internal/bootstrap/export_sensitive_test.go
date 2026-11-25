@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 func (a *testApp) lastExportJob(connID int64) model.ExportJob {
@@ -34,7 +34,7 @@ func (a *testApp) exportSetup(token string) int64 {
 // 普通导出照旧:不勾选项就直接进队列,不惊动任何人。
 func TestSensitiveExport_APlainExportStillRunsStraightAway(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -53,7 +53,7 @@ func TestSensitiveExport_APlainExportStillRunsStraightAway(t *testing.T) {
 // 勾了"包含敏感字段"就不进队列,而是停在 awaiting 并生成审批单。
 func TestSensitiveExport_WaitsForApprovalInsteadOfRunning(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -82,14 +82,14 @@ func TestSensitiveExport_WaitsForApprovalInsteadOfRunning(t *testing.T) {
 // 的语句,放它过去,网关会把那句描述当成命令发给数据库。
 func TestSensitiveExport_ItsTicketIsNotManuallyExecutable(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
 		"connectionId": conn, "sql": "SELECT 1", "name": "raw", "includeSensitive": true,
 	}).Code, 0, "提交")
 	job := app.lastExportJob(conn)
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/execute", admin, nil)
@@ -101,14 +101,14 @@ func TestSensitiveExport_ItsTicketIsNotManuallyExecutable(t *testing.T) {
 // 批准之后任务离开 awaiting,由 worker 去跑。
 func TestSensitiveExport_ApprovalReleasesTheJob(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
 		"connectionId": conn, "sql": "SELECT 1", "name": "raw", "includeSensitive": true,
 	}).Code, 0, "提交")
 	job := app.lastExportJob(conn)
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/approve", approver, nil).Code, 0, "审批通过")
 
 	after := app.lastExportJob(conn)
@@ -120,14 +120,14 @@ func TestSensitiveExport_ApprovalReleasesTheJob(t *testing.T) {
 // 驳回之后任务不能跑 —— 它永远拿不到原值。
 func TestSensitiveExport_ARejectedTicketNeverRuns(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
 		"connectionId": conn, "sql": "SELECT 1", "name": "raw", "includeSensitive": true,
 	}).Code, 0, "提交")
 	job := app.lastExportJob(conn)
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/reject", approver, nil).Code, 0, "驳回")
 
 	after := app.lastExportJob(conn)
@@ -139,7 +139,7 @@ func TestSensitiveExport_ARejectedTicketNeverRuns(t *testing.T) {
 // 最常见的失效方式是后来有人加了新路径、忘了先检查。
 func TestSensitiveExport_TheWorkerRefusesToUnmaskWithoutAGrantedTicket(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
 		"connectionId": conn, "sql": "SELECT 1", "name": "raw", "includeSensitive": true,

@@ -10,7 +10,7 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 
-	"velagateway/pkg/crypto"
+	"aegisdb/pkg/crypto"
 )
 
 // Real execution path: a connection configured with credentials (here a real
@@ -33,7 +33,7 @@ func TestRealExec_SqliteRunsAgainstRealDB(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// register a real connection pointing at that sqlite file
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{

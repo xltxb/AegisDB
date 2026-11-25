@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 导出任务被人终止 = 调用方取消了 RealQueryEach 的 context。取消必须真的让查询停下:

@@ -15,9 +15,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // Branding godoc
@@ -59,7 +59,7 @@ func brandLogoAuditNote(v any) string {
 
 // specTitleLine 是 docs/openapi.yaml 里 info.title 那一行(文件里只出现一次;不带换行,CRLF / LF 都对得上)。配置了系统名称时,/openapi.yaml 把它换成
 // 新名称;没配置时原样输出文件,一个字节不动。
-const specTitleLine = "title: DP DB GATEWAY API"
+const specTitleLine = "title: AegisDB API"
 
 // OpenAPISpec 输出接口契约。
 func (h *Handler) OpenAPISpec(c *gin.Context) {

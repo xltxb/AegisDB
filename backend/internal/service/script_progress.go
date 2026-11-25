@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 脚本扫描 / 执行的进度(Web 命令行上传脚本弹窗用,2026-10)。

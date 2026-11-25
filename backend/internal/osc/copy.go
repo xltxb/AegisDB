@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // copier moves the table's existing rows into the shadow table, one key range

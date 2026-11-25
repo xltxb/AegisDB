@@ -32,7 +32,7 @@ func scriptResults(t *testing.T, raw json.RawMessage) []scriptStmtResult {
 
 func TestScript_ReturnsEachStatementsResult(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.realSQLiteConnIn(admin, "dev", "script-results")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 
@@ -63,7 +63,7 @@ func TestScript_ReturnsEachStatementsResult(t *testing.T) {
 // 停在某一条时:已执行的那几条和失败的那一条的结果也带回,终端照样逐条打出来。
 func TestScript_FailureStillReturnsResultsSoFar(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.realSQLiteConnIn(admin, "dev", "script-results-fail")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 

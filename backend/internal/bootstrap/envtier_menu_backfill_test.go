@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // Tiers and environments got a menu of their own ("envtier"). A menu key with no

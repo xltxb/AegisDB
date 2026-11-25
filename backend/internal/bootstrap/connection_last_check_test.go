@@ -56,7 +56,7 @@ func (a *testApp) connView(token string, id int64) connCheckView {
 // 一台连得上的实例:巡检之后留下"通了"和时间。
 func TestConnCheck_SuccessIsRecorded(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "check-ok")
 
 	if r := app.do(http.MethodPost, "/api/v1/connections/"+itoa(conn)+"/test", admin, nil); r.Code != 0 {
@@ -78,7 +78,7 @@ func TestConnCheck_SuccessIsRecorded(t *testing.T) {
 // 一台连不上的实例:这正是线上那两台的样子 —— 状态仍然是 online,而巡检说连不上。
 func TestConnCheck_FailureIsRecordedAndStatusIsNotTouched(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 指向一个不存在的 MySQL 地址:建得成,但连不上 —— 与用户新加的那两台同形。
 	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
 		"name": "unreachable-probe", "engine": "MySQL", "host": "127.0.0.1", "port": 1,
@@ -123,7 +123,7 @@ func TestConnCheck_FailureIsRecordedAndStatusIsNotTouched(t *testing.T) {
 // 从没巡检过 ≠ 正常。接口上必须能分辨这两种。
 func TestConnCheck_NeverCheckedIsDistinctFromHealthy(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging") // 种子实例,没人巡检过
 
 	v := app.connView(admin, stg)
@@ -135,7 +135,7 @@ func TestConnCheck_NeverCheckedIsDistinctFromHealthy(t *testing.T) {
 // 好了之后要能恢复:上次的错误必须被清掉,否则一台已经修好的实例永远显示成坏的。
 func TestConnCheck_RecoveryClearsThePreviousError(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "check-recover")
 
 	// 先人为记一笔失败,再巡检一次真的(这台是连得上的)。
@@ -162,7 +162,7 @@ func TestConnCheck_RecoveryClearsThePreviousError(t *testing.T) {
 // 于是那条假的"连不上"永远不会被刷新 —— 审查时发现手动路径正好在这么做。
 func TestConnCheck_NoCredentialsIsNotRecordedAsUnreachable(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging") // 种子实例,没有凭据
 
 	r := app.do(http.MethodPost, "/api/v1/connections/"+itoa(stg)+"/test", admin, nil)
@@ -180,7 +180,7 @@ func TestConnCheck_NoCredentialsIsNotRecordedAsUnreachable(t *testing.T) {
 // 不清的话,改好密码的实例会带着旧的"认证失败"被定时巡检永久跳过。
 func TestConnCheck_ChangingCredentialsClearsTheVerdict(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "clear-on-edit")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "Access denied"); err != nil {
 		t.Fatalf("预置: %v", err)
@@ -207,7 +207,7 @@ func TestConnCheck_ChangingCredentialsClearsTheVerdict(t *testing.T) {
 // 只改名字这类与拨号无关的字段,不该清 —— 否则每次改个备注都会丢掉巡检历史。
 func TestConnCheck_RenamingKeepsTheVerdict(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "keep-on-rename")
 	if err := app.svc.Repo.SaveConnCheck(conn, "unreachable", false, "i/o timeout"); err != nil {
 		t.Fatalf("预置: %v", err)
@@ -228,7 +228,7 @@ func TestConnCheck_RenamingKeepsTheVerdict(t *testing.T) {
 // 切换维护态走的是"加载再整行 Save":它**不能**把并发那次巡检刚记下的结论写回去。
 func TestConnCheck_StatusToggleDoesNotOverwriteTheVerdict(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "toggle-keeps")
 
 	// 模拟"加载了旧快照 → 巡检写入 → 快照 Save"的交错:先记结论,再 Toggle。
@@ -262,14 +262,14 @@ func TestConnCheck_StatusToggleDoesNotOverwriteTheVerdict(t *testing.T) {
 // 巡检失败的原文只给管理员 —— 它是驱动的原始错误,带网关出口 IP、pg_hba 拒绝详情。
 func TestConnCheck_ErrorTextIsHiddenFromNonAdmins(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.realSQLiteConnIn(admin, "dev", "err-hidden")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "Access denied for user 'gw'@'10.1.2.3'"); err != nil {
 		t.Fatalf("预置: %v", err)
 	}
 	// 让开发者能看到这台实例(按标签授权),但他不是管理员。
 	app.grantConnToDeveloper(admin, conn)
-	dev := app.login("zhaolei@vela.io", "vela123") // 研发只读,不是管理员
+	dev := app.login("zhaolei@aegisdb.io", "aegisdb123") // 研发只读,不是管理员
 
 	if v := app.connView(admin, conn); v.LastCheckErr == "" {
 		t.Error("管理员应当看到原文")

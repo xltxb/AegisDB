@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // A script approval references the uploaded file instead of carrying its body.
@@ -65,7 +65,7 @@ func lastApproval(t *testing.T, app *testApp) model.Approval {
 // The ticket holds an excerpt and a digest — not 200KB of script.
 func TestScriptRef_ApprovalReferencesTheFileInsteadOfCarryingIt(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	content := riskyScript()
 	id, _ := app.uploadScript(token, "migrate.sql", content)
@@ -99,7 +99,7 @@ func TestScriptRef_ApprovalReferencesTheFileInsteadOfCarryingIt(t *testing.T) {
 // The requirement: the file is scanned, and what is scanned is what runs.
 func TestScriptRef_FileIsScannedServerSideNotTakenFromTheRequest(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	// The FILE holds a high-risk statement; the request body claims something
@@ -124,7 +124,7 @@ func TestScriptRef_FileIsScannedServerSideNotTakenFromTheRequest(t *testing.T) {
 // 校验"即将执行的这些字节" —— 也正因为窗口变长了,这条测试比以前更要紧。
 func TestScriptRef_AFileChangedAfterReviewIsRefused(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	id, path := app.uploadScript(token, "migrate.sql", "DROP TABLE orders;\nSELECT 1;\n")
 
@@ -133,7 +133,7 @@ func TestScriptRef_AFileChangedAfterReviewIsRefused(t *testing.T) {
 	}).Code, 42200, "submitted for approval")
 	ap := lastApproval(t, app)
 	// The approver must not be the initiator (self-approval is off by default).
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	// Someone replaces the file while the ticket sits in the queue.
 	if err := os.WriteFile(path, []byte("DROP TABLE payments;\n"), 0o600); err != nil {
@@ -159,7 +159,7 @@ func TestScriptRef_AFileChangedAfterReviewIsRefused(t *testing.T) {
 // A missing file is refused rather than reported as a successful run.
 func TestScriptRef_AMissingFileIsRefused(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	id, path := app.uploadScript(token, "gone.sql", "DROP TABLE orders;\n")
 
@@ -168,7 +168,7 @@ func TestScriptRef_AMissingFileIsRefused(t *testing.T) {
 	}).Code, 42200, "submitted for approval")
 	ap := lastApproval(t, app)
 	// The approver must not be the initiator (self-approval is off by default).
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	if err := os.Remove(path); err != nil {
 		t.Fatalf("remove script: %v", err)
@@ -185,11 +185,11 @@ func TestScriptRef_AMissingFileIsRefused(t *testing.T) {
 // An upload belonging to someone else is not readable through this path.
 func TestScriptRef_AnotherUsersUploadIsRefused(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("linwei@vela.io", "vela123")
+	owner := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(owner, "prod")
 	id, _ := app.uploadScript(owner, "mine.sql", "DROP TABLE orders;\n")
 
-	other := app.login("chenhao@vela.io", "vela123")
+	other := app.login("chenhao@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", other, map[string]any{
 		"connectionId": prod, "uploadId": id,
 	})

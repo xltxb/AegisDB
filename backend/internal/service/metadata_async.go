@@ -15,7 +15,7 @@ import (
 	"log/slog"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // ErrMetaSyncRunning 这台实例已经有一个同步在跑。

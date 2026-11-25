@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // Every audited command must record WHICH database it ran against — both an
@@ -13,7 +13,7 @@ import (
 // one of each with an explicit target database and assert the audit rows carry it.
 func TestExec_TargetDatabaseRecordedOnAudit(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prodConn := app.connIDByEnv(token, "prod")
 	const targetDB = "reporting_db"
 

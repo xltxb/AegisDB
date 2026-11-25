@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // defaultExportRetentionDays is the shipped default: three days on disk.

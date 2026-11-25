@@ -9,15 +9,15 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/pkg/crypto"
 )
 
 // Seed inserts demo data mirroring the prototype. The full dataset is written
 // only on an empty DB, but additive blocks (e.g. the schema tree) are backfilled
 // idempotently on every boot so DBs created before a seed addition self-heal.
-// Default login: linwei@vela.io / vela123 (platform admin).
+// Default login: linwei@aegisdb.io / aegisdb123 (platform admin).
 func Seed(repo *repository.Repo, cfg *Config) error {
 	if repo.Count(&model.Role{}) == 0 {
 		// The demo seed creates a platform administrator whose password is
@@ -668,17 +668,17 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 // platform-admin account for first login. All business data (users beyond the
 // admin, connections, approvals, audit) starts empty so the console reflects real
 // usage rather than prototype fixtures. Only ever called on an empty DB (dev).
-// Default login: linwei@vela.io / vela123.
+// Default login: linwei@aegisdb.io / aegisdb123.
 func seedFreshData(repo *repository.Repo, cfg *Config) error {
 	roleID, err := seedReference(repo, cfg)
 	if err != nil {
 		return err
 	}
 	db := repo.DB()
-	pw, _ := crypto.HashPassword("vela123")
+	pw, _ := crypto.HashPassword("aegisdb123")
 
 	admin := model.User{
-		Name: "Lin Wei", Initials: "LW", Dept: "DBA 组", Email: "linwei@vela.io",
+		Name: "Lin Wei", Initials: "LW", Dept: "DBA 组", Email: "linwei@aegisdb.io",
 		RoleID: roleID["admin"], Status: "active", LastActive: "刚刚", PasswordHash: pw,
 	}
 	if err := db.Create(&admin).Error; err != nil {

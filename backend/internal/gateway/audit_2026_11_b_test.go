@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-11 白盒审计 V-12:orders 与 ORDERS 在区分大小写的库上是两个库,有 orders 授权不等于能碰 ORDERS。

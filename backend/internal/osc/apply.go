@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"strings"
 
-	"velagateway/internal/apimsg"
+	"aegisdb/internal/apimsg"
 )
 
 // applier replays binlog row changes onto the shadow table.

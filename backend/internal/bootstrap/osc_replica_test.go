@@ -13,13 +13,13 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // pointReplicaAtNonReplica 把连接的从库配成测试 MySQL 本身(它不是从库)。
 func (a *testApp) pointReplicaAtNonReplica(connID int64) {
 	a.t.Helper()
-	cfg, err := mysql.ParseDSN(os.Getenv("VELA_OSC_TEST_DSN"))
+	cfg, err := mysql.ParseDSN(os.Getenv("AEGISDB_OSC_TEST_DSN"))
 	if err != nil {
 		a.t.Fatal(err)
 	}
@@ -58,7 +58,7 @@ func hasCode(codes []string, c string) bool {
 func TestOSCReplica_PreflightSaysWhetherLagIsGuarded(t *testing.T) {
 	app := newTestApp(t)
 	prod, _ := app.oscSetup(50)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	if c := app.oscWarningCodes(prod); !hasCode(c, "replica_none") {
 		t.Errorf("没配从库应提示不按延迟限流: %v", c)

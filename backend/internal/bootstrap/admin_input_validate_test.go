@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 风险字典:等级、分层要合法;PATCH 不存在的命令 404;POST 只传部分分层时其余分层取 off
 // (工单 02 第 5 条)。
 func TestRiskCommands_Validation(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/risk-commands", admin, map[string]any{
 		"command": "NEWCMD", "tiers": map[string]string{"prod": "bogus"},
@@ -48,7 +48,7 @@ func TestRiskCommands_Validation(t *testing.T) {
 // (工单 02 第 6 条)。
 func TestReviewRules_ValidateRegexCategoryDialect(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	base := func(over map[string]any) map[string]any {
 		b := map[string]any{"code": "bad.rule", "name": "坏规则", "level": "error", "enabled": true, "params": `{"pattern":"FOO"}`}
@@ -108,7 +108,7 @@ func TestReviewRules_ValidateRegexCategoryDialect(t *testing.T) {
 // 分层 PUT 只传名称时,未传的字段保持原值(工单 02 第 9 条)。
 func TestEnvTierUpdate_IsPartial(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	var before model.EnvTier
 	app.repo.DB().First(&before, "code = ?", "prod")
@@ -137,7 +137,7 @@ func TestEnvTierUpdate_IsPartial(t *testing.T) {
 // POST 的 tags 支持、port 合并进 host(工单 02 第 10 条)。
 func TestConnectionCreate_ValidationMatchesEdit(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	mk := func(over map[string]any) apiResp {
 		b := map[string]any{"name": "v-conn", "engine": "MySQL 8.0", "host": "10.1.1.1", "env": "dev", "policy": "strict"}
@@ -166,7 +166,7 @@ func TestConnectionCreate_ValidationMatchesEdit(t *testing.T) {
 // 用户:邮箱格式、角色存在、长度上限,各自明确的错误信息;重置口令提示与规则一致(工单 02 第 11 条)。
 func TestUserInputValidation(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 
 	check := func(r apiResp, wantSub, what string) {
@@ -181,13 +181,13 @@ func TestUserInputValidation(t *testing.T) {
 	}
 
 	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "not-an-email", "roleId": roID}), "邮箱", "invite 非法邮箱")
-	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "a b@vela.io", "roleId": roID}), "邮箱", "invite 邮箱带空格")
-	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "ghost@vela.io", "roleId": 999999}), "角色", "invite 不存在的角色")
-	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": strings.Repeat("a", 250) + "@vela.io", "roleId": roID}), "邮箱过长", "invite 邮箱过长")
-	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "chenhao@vela.io", "roleId": roID}), "已存在", "invite 重复邮箱")
+	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "a b@aegisdb.io", "roleId": roID}), "邮箱", "invite 邮箱带空格")
+	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "ghost@aegisdb.io", "roleId": 999999}), "角色", "invite 不存在的角色")
+	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": strings.Repeat("a", 250) + "@aegisdb.io", "roleId": roID}), "邮箱过长", "invite 邮箱过长")
+	check(app.do(http.MethodPost, "/api/v1/users/invite", admin, map[string]any{"email": "chenhao@aegisdb.io", "roleId": roID}), "已存在", "invite 重复邮箱")
 
 	mk := func(over map[string]any) apiResp {
-		b := map[string]any{"name": "新人", "email": "newbie@vela.io", "password": "Str0ng-Passw0rd!", "roleIds": []int64{roID}}
+		b := map[string]any{"name": "新人", "email": "newbie@aegisdb.io", "password": "Str0ng-Passw0rd!", "roleIds": []int64{roID}}
 		for k, v := range over {
 			b[k] = v
 		}
@@ -201,9 +201,9 @@ func TestUserInputValidation(t *testing.T) {
 	check(mk(map[string]any{"password": "Password"}), "过于常见", "create 常见弱口令(大小写不敏感)")
 	check(mk(map[string]any{"password": "aaaaaaaaaa"}), "过于常见", "create 单一字符重复")
 	check(mk(map[string]any{"roleIds": []int64{999999}}), "角色", "create 不存在的角色")
-	check(mk(map[string]any{"email": "chenhao@vela.io"}), "已存在", "create 重复邮箱")
+	check(mk(map[string]any{"email": "chenhao@aegisdb.io"}), "已存在", "create 重复邮箱")
 
-	u, _ := app.repo.GetUserByEmail("chenhao@vela.io")
+	u, _ := app.repo.GetUserByEmail("chenhao@aegisdb.io")
 	check(app.do(http.MethodPost, "/api/v1/users/"+itoa(u.ID)+"/password", admin, map[string]any{"password": "1234567"}), "8 位", "重置口令过短")
 	check(app.do(http.MethodPost, "/api/v1/users/"+itoa(u.ID)+"/password", admin, map[string]any{"password": "qwerty123"}), "过于常见", "重置为常见弱口令")
 }
@@ -211,7 +211,7 @@ func TestUserInputValidation(t *testing.T) {
 // 流水线:恰好一个 execute 阶段、tierCode 必须存在、名称不可重复(工单 02 第 12 条)。
 func TestPipelineValidation(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	save := func(name, tier string, stages []map[string]any) apiResp {
 		return app.do(http.MethodPost, "/api/v1/pipelines", admin, map[string]any{
@@ -242,7 +242,7 @@ func TestPipelineValidation(t *testing.T) {
 // 不存在的角色返回 40400,也不写审计(工单 02 第 13 条)。
 func TestNonexistentRole_Is404(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPut, "/api/v1/roles/999999/capabilities", admin, map[string]any{
 		"matrix": map[string]any{"ddl": map[string]string{"prod": "allow"}},
@@ -260,7 +260,7 @@ func TestNonexistentRole_Is404(t *testing.T) {
 // 项目名:大小写不敏感去重,长度上限 64(工单 02 第 14 条)。
 func TestProjectName_CaseInsensitiveUniqueAndBounded(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/projects", admin, map[string]any{"name": "Alpha"})
 	eq(t, r.Code, 0, "建 Alpha")

@@ -1,7 +1,7 @@
 package bootstrap
 
 // 在线变更的判定(.scratch/osc-product 工单 01):生产 + MySQL + 单个索引变更 + 大表 → 走在线变更;
-// 大表上做不了的 DDL → 照原路径但提示;其余照原路径。对着真 MySQL(VELA_OSC_TEST_DSN)。
+// 大表上做不了的 DDL → 照原路径但提示;其余照原路径。对着真 MySQL(AEGISDB_OSC_TEST_DSN)。
 
 import (
 	"context"
@@ -15,15 +15,15 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"velagateway/internal/service"
+	"aegisdb/internal/service"
 )
 
 // oscTestConns 在测试库上建一大一小两张表,并在网关里登记生产 / 开发两条连接。
 func (a *testApp) oscTestConns(token string) (prod, dev int64, schema string) {
 	a.t.Helper()
-	dsn := os.Getenv("VELA_OSC_TEST_DSN")
+	dsn := os.Getenv("AEGISDB_OSC_TEST_DSN")
 	if dsn == "" {
-		a.t.Skip("未设置 VELA_OSC_TEST_DSN")
+		a.t.Skip("未设置 AEGISDB_OSC_TEST_DSN")
 	}
 	cfg, err := mysql.ParseDSN(dsn)
 	if err != nil {
@@ -65,7 +65,7 @@ func (a *testApp) oscTestConns(token string) (prod, dev int64, schema string) {
 
 func TestOSCRoute(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod, dev, schema := app.oscTestConns(admin)
 	// 阈值调小:300 行算大表,5 行不算;字节阈值调到不会触发
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.minRows": 100, "osc.minBytes": 1 << 40}).Code, 0, "设阈值")
@@ -120,7 +120,7 @@ func TestOSCRoute(t *testing.T) {
 // 生产大表加索引整个绕开在线变更(2026-10 端到端验收)。
 func TestOSCRoute_ProductionMeansTheDangerBanner(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod, _, _ := app.oscTestConns(admin)
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.minRows": 100, "osc.minBytes": 1 << 40}).Code, 0, "设阈值")
 	setFlags := func(banner, mfa bool) {
@@ -151,10 +151,10 @@ func TestOSCRoute_ProductionMeansTheDangerBanner(t *testing.T) {
 // 变更、在前置检查被拦下 —— 生产大表上的 DDL 既不走在线变更、也执行不了。现在照原路径、不提示。
 func TestOSCRoute_OnlyMySQL(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, _, schema := app.oscTestConns(admin)
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.minRows": 100, "osc.minBytes": 1 << 40}).Code, 0, "设阈值")
-	cfg, _ := mysql.ParseDSN(os.Getenv("VELA_OSC_TEST_DSN"))
+	cfg, _ := mysql.ParseDSN(os.Getenv("AEGISDB_OSC_TEST_DSN"))
 	for _, c := range []struct {
 		engine string
 		want   service.OSCRouteKind
@@ -188,10 +188,10 @@ func TestOSCRoute_OnlyMySQL(t *testing.T) {
 // replica_host_status),而不是"未配置从库"。
 func TestOSCReplica_AuroraReadsLagOnTheWriter(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, _, schema := app.oscTestConns(admin)
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"osc.minRows": 100, "osc.minBytes": 1 << 40}).Code, 0, "设阈值")
-	cfg, _ := mysql.ParseDSN(os.Getenv("VELA_OSC_TEST_DSN"))
+	cfg, _ := mysql.ParseDSN(os.Getenv("AEGISDB_OSC_TEST_DSN"))
 	id := app.addConn(admin, "osc-aurora", "Aurora MySQL", "prod", cfg.Addr, schema, cfg.User, cfg.Passwd)
 	codes := app.oscWarningCodes(id)
 	if !hasCode(codes, "replica_unreadable") || hasCode(codes, "replica_none") {

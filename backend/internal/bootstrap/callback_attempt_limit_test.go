@@ -10,7 +10,7 @@ import (
 
 func TestLarkCallback_LocksSourceAfterRepeatedAuthFailures(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	const good = "s3cr3t-callback-key"
 	app.setSettings(token, map[string]any{"approval.external.enabled": true, "approval.external.callbackSecret": good})
 	body := map[string]any{"external_task_id": "AP-doesnotexist", "approved": true}
@@ -29,7 +29,7 @@ func TestLarkCallback_LocksSourceAfterRepeatedAuthFailures(t *testing.T) {
 
 func TestSettings_CallbackSecretMinLength(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"approval.external.callbackSecret": "short"})
 	if r.Code == 0 {
 		t.Fatal("短于 16 个字符的回调密钥不应保存成功")

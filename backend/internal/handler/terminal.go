@@ -19,15 +19,15 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/dto"
-	"velagateway/internal/gateway"
-	"velagateway/internal/metrics"
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/presence"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/metrics"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/presence"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // Login godoc
@@ -812,12 +812,12 @@ var upgrader = websocket.Upgrader{
 }
 
 const (
-	wsTokenProto = "vela-token"
-	wsCSRFProto  = "vela-csrf"
+	wsTokenProto = "aegisdb-token"
+	wsCSRFProto  = "aegisdb-csrf"
 )
 
 // wsToken extracts the JWT for the terminal socket from the
-// Sec-WebSocket-Protocol header ("vela-token, <jwt>"). The credential is
+// Sec-WebSocket-Protocol header ("aegisdb-token, <jwt>"). The credential is
 // deliberately NOT read from the query string — that would put the token into
 // gin's access logs and any Referer header (R17).
 func wsToken(c *gin.Context) string {
@@ -830,7 +830,7 @@ func wsToken(c *gin.Context) string {
 	return ""
 }
 
-// wsCSRF extracts the CSRF value from "vela-csrf, <csrf>".
+// wsCSRF extracts the CSRF value from "aegisdb-csrf, <csrf>".
 func wsCSRF(c *gin.Context) string {
 	if proto := c.GetHeader("Sec-WebSocket-Protocol"); proto != "" {
 		parts := strings.Split(proto, ",")

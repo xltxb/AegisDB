@@ -3,8 +3,8 @@ package repository
 import (
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // CreateOSCJob inserts a new in-line index migration job.

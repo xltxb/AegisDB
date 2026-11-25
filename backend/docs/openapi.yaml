@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: DP DB GATEWAY API
+  title: AegisDB API
   version: "2.0"
   description: |
     数据库管理网关的 HTTP 接口。**每一条**已注册的路由都在本文件里 —— 由
@@ -117,7 +117,7 @@ components:
       scheme: bearer
       description: |
         开放接口凭据,格式 `<key>.<secret>`,在【系统设置 · 开放接口】签发。
-        也接受 `X-Vela-Key` + `X-Vela-Secret` 两个请求头(给保留了 Authorization 的客户端)。
+        也接受 `X-AegisDB-Key` + `X-AegisDB-Secret` 两个请求头(给保留了 Authorization 的客户端)。
         鉴权失败的码:key/secret 不对或凭据已吊销(删除)= 40100;凭据**已停用**或绑定的服务账号已停用 = 40300;
         来源 IP 不在凭据白名单 = 40301;同一来源 IP 认证失败过多 = 42900。
 
@@ -196,7 +196,7 @@ components:
       type: object
       required: [email, password]
       properties:
-        email: { type: string, example: linwei@vela.io }
+        email: { type: string, example: linwei@aegisdb.io }
         password: { type: string, format: password }
         mfaCode: { type: string, description: 已绑定 TOTP 的账号在第二步提交 }
 
@@ -562,7 +562,7 @@ components:
       properties:
         id: { type: integer, format: int64 }
         name: { type: string }
-        email: { type: string, example: svc-upgrade-portal-1a2b3c4d@service.vela, description: 自动生成的唯一标识,不是邮箱 }
+        email: { type: string, example: svc-upgrade-portal-1a2b3c4d@service.aegisdb, description: 自动生成的唯一标识,不是邮箱 }
         status: { type: string }
         dept: { type: string }
         roles: { type: array, items: { type: string } }
@@ -749,7 +749,7 @@ paths:
       description: |
         公开接口。返回 `enabled` 与 `loginUrl`(`{SRD 地址}/auth/login`)。没有登录态时,前端跳
         `loginUrl?redirect=<encodeURIComponent(网关登录页地址)>`,在 SRD 完成 Lark 授权后回到网关。
-        `forcedOff` 为 true:部署配置(`sso.disabled` / 环境变量 `VELA_SSO_DISABLED`)强制关闭了 SSO,
+        `forcedOff` 为 true:部署配置(`sso.disabled` / 环境变量 `AEGISDB_SSO_DISABLED`)强制关闭了 SSO,
         此时 `enabled` 恒为 false,设置页的开关不生效。
       security: []
       responses:
@@ -2507,7 +2507,7 @@ paths:
         响应里另附一句 `reasonText`(及其机器可读身份 `reasonRef`,同信封的 msgRef),前端不照着三个取值各写一份文案。
 
         载荷的键集是**分代**的(0039 的 event、0040 的 action、0041 的 ip),校验时从新到
-        老逐代试,并要求代不倒退。整表校验走命令行:`vela-gateway verify-audit`,退出码 2
+        老逐代试,并要求代不倒退。整表校验走命令行:`aegisdb verify-audit`,退出码 2
         表示链断了,可直接挂进巡检。
 
         门槛是 audit 菜单 + **平台管理员、审计员或 DBA 负责人**(角色 admin / audit / owner,路由上的
@@ -2610,7 +2610,7 @@ paths:
     post:
       tags: [settings]
       summary: '[settings · admin] 创建服务账号(kind=service)'
-      description: 对接升级单/CI/CD 系统的机器主体。像人一样持有角色与标签,能力矩阵、标签范围、审计链一视同仁;区别只有两处且都朝收紧方向 —— 控制台登录一律拒绝(口令不存在也设不上),security.mfaMandatory 不约束它(机器无法注册 TOTP,第二因子是 API 凭据的 bcrypt secret + 每凭据 IP 白名单)。身份标识自动生成为 svc-<slug>-<hash>@service.vela,仅作唯一标识,不是邮箱。停用走常规 PATCH /users/{id}(停用即刻切断其所有凭据,已有回归覆盖)。
+      description: 对接升级单/CI/CD 系统的机器主体。像人一样持有角色与标签,能力矩阵、标签范围、审计链一视同仁;区别只有两处且都朝收紧方向 —— 控制台登录一律拒绝(口令不存在也设不上),security.mfaMandatory 不约束它(机器无法注册 TOTP,第二因子是 API 凭据的 bcrypt secret + 每凭据 IP 白名单)。身份标识自动生成为 svc-<slug>-<hash>@service.aegisdb,仅作唯一标识,不是邮箱。停用走常规 PATCH /users/{id}(停用即刻切断其所有凭据,已有回归覆盖)。
       requestBody:
         content:
           application/json:
@@ -2876,7 +2876,7 @@ paths:
               type: object
               required: [approver, action]
               properties:
-                approver: { type: string, example: chenhao@vela.io, description: 审批人的网关账号邮箱 }
+                approver: { type: string, example: chenhao@aegisdb.io, description: 审批人的网关账号邮箱 }
                 action: { type: string, enum: [approve, reject], description: 不用布尔值:漏传不会被读成驳回 }
                 comment: { type: string, maxLength: 200, description: 审批意见,记入审计 }
       responses:
@@ -2920,7 +2920,7 @@ paths:
               type: object
               required: [confirmer]
               properties:
-                confirmer: { type: string, example: chenhao@vela.io, description: 确认人的网关账号邮箱 }
+                confirmer: { type: string, example: chenhao@aegisdb.io, description: 确认人的网关账号邮箱 }
                 comment: { type: string, maxLength: 200, description: 备注,记入审计 }
       responses:
         '200':

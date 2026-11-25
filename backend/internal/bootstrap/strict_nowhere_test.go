@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/resp"
 )
 
 // tierStrict flips one tier's no-WHERE gate through the admin API.
@@ -34,7 +34,7 @@ func (a *testApp) tierStrict(token, code string, on bool) {
 // too. The flag now lives on the tier, like the two layers above it.
 func TestStrictNoWhere_IsPerTier(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 	prod := app.connIDByEnv(token, "prod")
 
@@ -97,7 +97,7 @@ func TestStrictNoWhere_IsPerTier(t *testing.T) {
 // come back with the gate ON: the switch looked saved and was not.
 func TestStrictNoWhere_SurvivesTierCreation(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/env-tiers", token, map[string]any{
 		"code": "sandbox", "displayName": "沙盒", "templateCode": "dev",

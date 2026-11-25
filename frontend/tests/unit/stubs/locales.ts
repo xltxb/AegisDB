@@ -12,7 +12,7 @@
 //      dies on line 4 ("Missing semicolon"), taking the WHOLE run down with it.
 //      Not two specs — collection aborts, and every test in the suite silently
 //      stops existing.
-//   2. `localStorage.getItem('vela_lang')` — no such global in Node.
+//   2. `localStorage.getItem('aegisdb_lang')` — no such global in Node.
 //
 // So the *loading* is stubbed and nothing else. The catalogue is the real
 // `zh.json5` / `en.json5` off disk, and the i18n instance is a real vue-i18n

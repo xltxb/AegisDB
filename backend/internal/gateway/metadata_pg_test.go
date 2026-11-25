@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 打开一个真的 SQLite 库当作"连得上、但不是 PostgreSQL"的目标。

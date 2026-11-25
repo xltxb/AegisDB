@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // 执行窗口(「班车」)的管理接口。

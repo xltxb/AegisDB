@@ -4,8 +4,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // Seeding must be idempotent for additive data: a database created before the

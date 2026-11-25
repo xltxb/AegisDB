@@ -26,7 +26,7 @@ import (
 // REST 与 WS 终端两条路,写下的审计行都要带来源 IP。
 func TestAuditClientIP_RESTAndWebSocketPathsBothRecordIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(admin, "dev")
 
 	// ---- REST(JWTAuth 认人)----
@@ -60,12 +60,12 @@ func TestAuditClientIP_RESTAndWebSocketPathsBothRecordIt(t *testing.T) {
 // 而对接文档里也是这么承诺的。
 func TestAuditClientIP_OpenAPIPathRecordsIt(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	pid := app.createPipeline(admin, "IP 用例流程", "", []map[string]any{
 		{"name": "规范审查", "type": "review", "config": `{"failOn":"error"}`},
 		{"name": "执行变更", "type": "execute"}, // 流程必须恰好一个执行阶段(工单 02 第 12 条)
 	})
-	token := app.issueClientPiped(admin, "审计IP用例", "zhangwei@vela.io", nil, pid)
+	token := app.issueClientPiped(admin, "审计IP用例", "zhangwei@aegisdb.io", nil, pid)
 
 	r := app.openDo(http.MethodPost, "/api/v1/open/releases", token, map[string]any{
 		"title": "审计 IP 用例", "externalRef": "AUDIT-IP-1",

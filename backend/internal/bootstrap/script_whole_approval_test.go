@@ -14,7 +14,7 @@ import (
 // 建了一张单,后面 5 条既没执行也没进审批。审批人批的那张单里只有第一条 CREATE TABLE。
 func TestScript_OneStatementNeedingApprovalSendsTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, prod := app.sameFileConns(admin, "script-whole")
 	script := "CREATE TABLE t_w1 (id INTEGER PRIMARY KEY);\nCREATE TABLE t_w2 (id INTEGER PRIMARY KEY);\nCREATE TABLE t_w3 (id INTEGER PRIMARY KEY);\n"
 
@@ -36,7 +36,7 @@ func TestScript_OneStatementNeedingApprovalSendsTheWholeScript(t *testing.T) {
 		t.Fatalf("应是一张引用整份脚本的脚本工单,实际: %+v", ap)
 	}
 
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "审批通过")
 	eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/execute", admin, nil).Code, 0, "执行")
 	for _, tb := range []string{"t_w1", "t_w2", "t_w3"} {
@@ -49,7 +49,7 @@ func TestScript_OneStatementNeedingApprovalSendsTheWholeScript(t *testing.T) {
 // 扫描报告要和执行说同一句话:要审批的语句标出来,不能把整份显示成"脚本干净"。
 func TestScriptScan_ReportsApprovalFromTheFullJudgement(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	_, prod := app.sameFileConns(admin, "script-scan-full")
 	if !app.riskCheck(admin, prod, "CREATE TABLE t_x (id INTEGER)").RequiresApproval {
 		t.Skip("前提不成立")
@@ -72,13 +72,13 @@ func TestScriptScan_ReportsApprovalFromTheFullJudgement(t *testing.T) {
 // 有一条被禁止,整份脚本不执行 —— 前面那些"允许"的语句也不能先跑掉。
 func TestScript_OneDeniedStatementRefusesTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "script-deny")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_deny (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
 	eq(t, app.do(http.MethodPatch, "/api/v1/connections/"+itoa(dev), admin, map[string]any{"tags": "analytics"}).Code, 0, "贴上 ro 够得到的标签")
-	ro := app.login("zhaolei@vela.io", "vela123")
+	ro := app.login("zhaolei@aegisdb.io", "aegisdb123")
 	if v := app.riskCheck(ro, dev, "GRANT SELECT ON t_deny TO someone"); v.Action != "deny" {
 		t.Skipf("前提不成立:ro 在 dev 上 GRANT 不是 deny(%s)", v.Action)
 	}

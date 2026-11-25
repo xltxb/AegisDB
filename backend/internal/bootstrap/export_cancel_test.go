@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 
 	_ "github.com/glebarez/go-sqlite"
 )
@@ -80,7 +80,7 @@ func (a *testApp) waitStatus(token string, id int64, want string, within time.Du
 
 func TestExport_CancelRunningJob(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": dir, "export.maxRows": 0}).Code, 0, "导出路径(不限行数:慢查询不能先撞上上限)")
 	conn := app.slowExportConn(admin)
@@ -118,7 +118,7 @@ func TestExport_CancelRunningJob(t *testing.T) {
 
 func TestExport_CancelAwaitingJobWithdrawsItsTicket(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.exportSetup(admin)
 	eq(t, app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
 		"connectionId": conn, "sql": "SELECT 1", "name": "raw", "includeSensitive": true,
@@ -133,7 +133,7 @@ func TestExport_CancelAwaitingJobWithdrawsItsTicket(t *testing.T) {
 	eq(t, ap.Status, model.StatusCancelled, "审批单一并撤回")
 
 	// 审批人手慢一步再点批准:单子已撤回,任务不会被放出来
-	approver := app.login("zhangwei@vela.io", "vela123")
+	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	app.do(http.MethodPost, "/api/v1/approvals/"+itoa(job.ApprovalID)+"/approve", approver, nil)
 	time.Sleep(300 * time.Millisecond)
 	eq(t, app.lastExportJob(conn).Status, model.ExportCancelled, "撤回后再批也不跑")
@@ -141,7 +141,7 @@ func TestExport_CancelAwaitingJobWithdrawsItsTicket(t *testing.T) {
 
 func TestExport_CancelRules(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dir := t.TempDir()
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": dir, "export.maxRows": 0}).Code, 0, "导出路径(不限行数:慢查询不能先撞上上限)")
 	conn := app.slowExportConn(admin)
@@ -157,7 +157,7 @@ func TestExport_CancelRules(t *testing.T) {
 	// 别人的任务终止不了(也不透露它存在)
 	id := app.submitExport(admin, conn, slowExportSQL, "slow")
 	app.waitStatus(admin, id, model.ExportRunning, 5*time.Second)
-	other := app.login("chenhao@vela.io", "vela123")
+	other := app.login("chenhao@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/export/jobs/"+itoa(id)+"/cancel", other, nil); r.Code == 0 {
 		t.Error("不是提交人、也不是管理员,不该能终止别人的导出")
 	}

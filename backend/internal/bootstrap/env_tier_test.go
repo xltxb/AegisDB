@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The tier/environment split exists because both rule lookups treat a missing
@@ -63,7 +63,7 @@ func (a *testApp) countRuleRows(tier string) (caps, cmds int64) {
 // baseline; conn_layer/default_role match the connEnvMeta map they replaced.
 func TestEnvTier_SeedsBuiltinsWithTodaysBehaviour(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	byCode := map[string]tierRow{}
 	for _, tr := range app.tiers(token) {
@@ -101,7 +101,7 @@ func TestEnvTier_SeedsBuiltinsWithTodaysBehaviour(t *testing.T) {
 // already valid.
 func TestEnvTier_EnvironmentsMirrorTiersSoNoBackfillIsNeeded(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	for _, e := range app.environments(token) {
 		eq(t, e.TierCode, e.Code, "seeded environment "+e.Code+" binds the tier of the same name")
@@ -133,7 +133,7 @@ func TestEnvTier_EnvironmentsMirrorTiersSoNoBackfillIsNeeded(t *testing.T) {
 // every capability lookup and every dictionary lookup falls through to allowed.
 func TestEnvTier_CreateClonesTemplateRules(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	wantCaps, wantCmds := app.countRuleRows("prod")
 	if wantCaps == 0 || wantCmds == 0 {
@@ -167,7 +167,7 @@ func TestEnvTier_CreateClonesTemplateRules(t *testing.T) {
 // operator could name any string and get an unregulated tier.
 func TestEnvTier_RejectsUnknownTemplateAndBadCode(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	if r := app.do(http.MethodPost, "/api/v1/env-tiers", admin, map[string]any{
 		"code": "ghost", "displayName": "无模板", "templateCode": "nope",
@@ -218,7 +218,7 @@ func TestEnvTier_RejectsUnknownTemplateAndBadCode(t *testing.T) {
 // a tier that no longer has rules.
 func TestEnvTier_DeleteGuards(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// In use by the identically-named seeded environment.
 	if r := app.do(http.MethodDelete, "/api/v1/env-tiers/staging", admin, nil); r.Code == 0 {
@@ -247,7 +247,7 @@ func TestEnvTier_DeleteGuards(t *testing.T) {
 // it can never be switched off outright.
 func TestEnvTier_ScanBaselineStaysUniqueAndPresent(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// Move the baseline to gli.
 	eq(t, app.do(http.MethodPut, "/api/v1/env-tiers/gli", admin, map[string]any{
@@ -276,7 +276,7 @@ func TestEnvTier_ScanBaselineStaysUniqueAndPresent(t *testing.T) {
 // second by the tier's existing rules.
 func TestEnvironment_CreateBindsExistingTierWithoutCloning(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	beforeCaps, beforeCmds := app.countRuleRows("prod")
 	eq(t, app.do(http.MethodPost, "/api/v1/environments", admin, map[string]any{
@@ -298,7 +298,7 @@ func TestEnvironment_CreateBindsExistingTierWithoutCloning(t *testing.T) {
 // left pointing at a deleted code resolves to no tier and therefore no rules.
 func TestEnvironment_DeleteMovesInstances(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, app.do(http.MethodPost, "/api/v1/environments", admin, map[string]any{
 		"code": "prod-sh", "displayName": "上海生产", "tierCode": "prod",
@@ -342,7 +342,7 @@ func TestEnvironment_DeleteMovesInstances(t *testing.T) {
 // guarantee, now enforced from the table rather than a hardcoded whitelist.
 func TestEnvironment_UnknownCodeStillRejectedOnConnections(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// Plausible-looking near-misses: an operator typing what they call the
 	// environment rather than the code it was registered under. ("uat" used to be
@@ -374,7 +374,7 @@ func TestEnvironment_UnknownCodeStillRejectedOnConnections(t *testing.T) {
 // Reads are open (the terminal renders from them); every mutation is admin-only.
 func TestEnvTier_MutationsAreAdminOnly(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	if r := app.do(http.MethodGet, "/api/v1/env-tiers", owner, nil); r.Code != 0 {
 		t.Error("a non-admin must be able to READ tiers — the console renders from them")

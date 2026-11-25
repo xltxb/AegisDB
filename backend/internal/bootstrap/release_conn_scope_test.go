@@ -16,14 +16,14 @@ import (
 // releaseNarrowedL2 把 chenhao(l2)的标签收窄到 analytics:staging 实例他够不到了。
 func releaseNarrowedL2(app *testApp, admin string) string {
 	app.t.Helper()
-	u, _ := app.repo.GetUserByEmail("chenhao@vela.io")
+	u, _ := app.repo.GetUserByEmail("chenhao@aegisdb.io")
 	eq(app.t, app.do(http.MethodPut, "/api/v1/users/"+itoa(u.ID)+"/tags", admin, map[string]any{"tags": []string{"analytics"}}).Code, 0, "收窄标签")
-	return app.login("chenhao@vela.io", "vela123")
+	return app.login("chenhao@aegisdb.io", "aegisdb123")
 }
 
 func TestRelease_ManualGateIgnoresInstanceTags(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.connIDByEnv(admin, "staging")
 	l2 := releaseNarrowedL2(app, admin) // 本流程的确认角色,但够不到 staging
 
@@ -71,13 +71,13 @@ func TestRelease_ManualGateIgnoresInstanceTags(t *testing.T) {
 // 也不是发起人的人仍终止不了(角色判断照旧)。
 func TestRelease_AbortPendingIgnoresInstanceTags(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := app.connIDByEnv(admin, "staging")
-	l2 := app.login("chenhao@vela.io", "vela123") // l2 没有审批资格
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123") // l2 没有审批资格
 	// owner(有审批资格)标签收窄到 analytics:staging 实例他够不到了
-	ow, _ := app.repo.GetUserByEmail("zhangwei@vela.io")
+	ow, _ := app.repo.GetUserByEmail("zhangwei@aegisdb.io")
 	eq(t, app.do(http.MethodPut, "/api/v1/users/"+itoa(ow.ID)+"/tags", admin, map[string]any{"tags": []string{"analytics"}}).Code, 0, "收窄标签")
-	owner := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	pid := app.createPipeline(admin, "无标签·终止", "", []map[string]any{
 		{"name": "人工确认", "type": "manual", "config": `{"confirmRole":"l2"}`},

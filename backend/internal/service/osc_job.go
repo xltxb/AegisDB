@@ -21,10 +21,10 @@ import (
 	"sync"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/internal/osc"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/internal/osc"
 )
 
 const oscPersistEvery = 3 * time.Second

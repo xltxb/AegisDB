@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // The five built-in tiers, and what each one MEANS. Two were mislabelled until
@@ -20,7 +20,7 @@ import (
 
 func TestBuiltinTiers_MeanWhatTheySay(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	byCode := map[string]tierRow{}
 	for _, tr := range app.tiers(token) {
@@ -42,7 +42,7 @@ func TestBuiltinTiers_MeanWhatTheySay(t *testing.T) {
 // blank slate: both lookups read a missing row as permission granted.
 func TestBuiltinTiers_UatIsGovernedLikeStaging(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	wantCaps, wantCmds := app.countRuleRows("staging")
 	gotCaps, gotCmds := app.countRuleRows("uat")

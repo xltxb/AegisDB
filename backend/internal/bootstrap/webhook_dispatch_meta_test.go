@@ -4,7 +4,7 @@ package bootstrap
 //
 // 这两样此前都不在请求体里:
 //
-//   - 事件类型只活在 X-Vela-Event 这个头上,而接收端入库的是 body —— 头不会跟着进去。
+//   - 事件类型只活在 X-AegisDB-Event 这个头上,而接收端入库的是 body —— 头不会跟着进去。
 //     顶层的 resource 一开始填的是事件类型,但审计事件会把它覆盖成实例名;summary 里那个
 //     [exec] 前缀是给人读的一句话,不是字段。于是"这条是什么事件"入了库就查不出来了。
 //   - 推送时间根本没有。occurred_at 是事件**发生**的时间,ingested_at 是对方**收到**的时间,
@@ -53,8 +53,8 @@ func TestWebhook_TestEventCarriesEventTypeAndPushTime(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		_ = json.Unmarshal(raw, &got.body)
-		got.event = r.Header.Get("X-Vela-Event")
-		got.pushHdr = r.Header.Get("X-Vela-Pushed-At")
+		got.event = r.Header.Get("X-AegisDB-Event")
+		got.pushHdr = r.Header.Get("X-AegisDB-Pushed-At")
 		mu.Unlock()
 		select {
 		case received <- struct{}{}:
@@ -65,7 +65,7 @@ func TestWebhook_TestEventCarriesEventTypeAndPushTime(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", 3)
 	eq(t, app.do(http.MethodPost, "/api/v1/settings/webhook/test", token, nil).Code, 0, "test send")
 
@@ -83,10 +83,10 @@ func TestWebhook_TestEventCarriesEventTypeAndPushTime(t *testing.T) {
 	}
 	assertPushTime(t, rp["pushed_at"])
 	if got.event != "test" || got.pushHdr == "" {
-		t.Errorf("两个头也要带上:X-Vela-Event=%q X-Vela-Pushed-At=%q", got.event, got.pushHdr)
+		t.Errorf("两个头也要带上:X-AegisDB-Event=%q X-AegisDB-Pushed-At=%q", got.event, got.pushHdr)
 	}
 	// 原来就有的那份内容不能被挤掉 —— 新字段是加在旁边的兄弟键。
-	if rp["ping"] != "dp-db-gateway" {
+	if rp["ping"] != "aegisdb" {
 		t.Errorf("raw_payload 里原有的内容应原样还在,实际 %#v", rp)
 	}
 }
@@ -100,7 +100,7 @@ func TestWebhook_RealEventKeepsAuditFieldsBesideTheNewOnes(t *testing.T) {
 		raw, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		_ = json.Unmarshal(raw, &got.body)
-		got.event = r.Header.Get("X-Vela-Event")
+		got.event = r.Header.Get("X-AegisDB-Event")
 		mu.Unlock()
 		select {
 		case received <- struct{}{}:
@@ -111,7 +111,7 @@ func TestWebhook_RealEventKeepsAuditFieldsBesideTheNewOnes(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", 3)
 
@@ -175,7 +175,7 @@ func TestWebhook_RetryCarriesItsOwnPushTime(t *testing.T) {
 	defer stub.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	// 订阅按**增删改查**匹配(见 service.Dispatch):这条 DROP 是一次「删」。
 	app.configureWebhook(token, stub.URL, "s3cr3t", "delete", 2)
 

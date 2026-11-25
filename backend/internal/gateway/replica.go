@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // replicaProbeTimeout 探从库的预算。比巡检的 pingTimeout 短得多:探测在每次数据查询的路径上,

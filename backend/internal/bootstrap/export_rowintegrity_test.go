@@ -12,8 +12,8 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 
-	"velagateway/internal/service"
-	"velagateway/pkg/crypto"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/crypto"
 )
 
 // Splitting a CSV export into parts must never break a single row across two files
@@ -53,7 +53,7 @@ func TestExport_PartsPreserveCompleteRows(t *testing.T) {
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "tricky", "engine": "SQLite", "host": "localhost:0",
 		"env": "dev", "policy": "audit-only", "database": dbfile,

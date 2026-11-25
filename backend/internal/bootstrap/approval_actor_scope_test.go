@@ -51,8 +51,8 @@ func TestApproval_StepRecordsTheActualApprover(t *testing.T) {
 	for _, verb := range []string{"approve", "reject"} {
 		t.Run(verb, func(t *testing.T) {
 			app := newTestApp(t)
-			admin := app.login("linwei@vela.io", "vela123")
-			lina := app.login("lina@vela.io", "vela123")
+			admin := app.login("linwei@aegisdb.io", "aegisdb123")
+			lina := app.login("lina@aegisdb.io", "aegisdb123")
 			ap := app.submitProdHighRisk(admin)
 
 			if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/"+verb, lina, nil); r.Code != 0 {
@@ -88,8 +88,8 @@ func TestApproval_StepRecordsTheActualApprover(t *testing.T) {
 // 第 7 条:不在审批链上的平台管理员,scope=all 也要看到全部待审单(只读,canDecide 仍按链)。
 func TestApproval_PlatformAdminSeesAllPendingInScopeAll(t *testing.T) {
 	app := newTestApp(t)
-	l2 := app.login("chenhao@vela.io", "vela123")
-	wangmin := app.login("wangmin@vela.io", "vela123") // 平台管理员,不是 owner,不在默认审批链上
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
+	wangmin := app.login("wangmin@aegisdb.io", "aegisdb123") // 平台管理员,不是 owner,不在默认审批链上
 	ap := app.submitProdHighRisk(l2)
 
 	items, total := app.approvalsPage(wangmin, "?scope=all&status=pending")
@@ -101,7 +101,7 @@ func TestApproval_PlatformAdminSeesAllPendingInScopeAll(t *testing.T) {
 		t.Error("不在链上的管理员只读:canDecide 应为 false")
 	}
 	// 普通成员的 all 不变:不在链上、不是发起人,看不到
-	ro := app.login("sunqi@vela.io", "vela123")
+	ro := app.login("sunqi@aegisdb.io", "aegisdb123")
 	if items, _ := app.approvalsPage(ro, "?scope=all&status=pending"); findAp(items, ap.ApNo) != nil {
 		t.Error("非管理员的「全部」不该看到与自己无关的工单")
 	}

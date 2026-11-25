@@ -27,7 +27,7 @@ func (a *testApp) columnsOf(token string, conn int64, database, table string) ([
 
 func TestColumns_LiveInTableOrderWithOriginalCase(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	file := filepath.Join(t.TempDir(), "cols.db")
 	db, err := sql.Open("sqlite", file)
 	if err != nil {
@@ -61,7 +61,7 @@ func TestColumns_LiveInTableOrderWithOriginalCase(t *testing.T) {
 	}
 
 	// 访问不到这台实例的人拿不到它的列(新建的实例不带 l2 角色的标签)
-	other := app.login("chenhao@vela.io", "vela123")
+	other := app.login("chenhao@aegisdb.io", "aegisdb123")
 	if cols, r := app.columnsOf(other, c.ID, "", "orders"); r.Code == 0 && len(cols) > 0 {
 		t.Errorf("无权访问的实例不该返回列,实际 %v", cols)
 	}

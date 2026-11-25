@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
 )
 
 // Handler bundles dependencies for all routes.

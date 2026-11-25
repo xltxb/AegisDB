@@ -29,7 +29,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/migrations"
+	"aegisdb/migrations"
 )
 
 // createTableOptsRe 抓一条 CREATE TABLE 的表名,以及它结尾的表选项

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 type apListView struct {
@@ -44,7 +44,7 @@ func (a *testApp) listApprovals(token, status string) apListView {
 // 一页 —— 客户端筛就会漏报,而那张卡片漏报等于没有。
 func TestApprovals_FilterByStatus(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	all := app.listApprovals(token, "")
 	if all.Total == 0 {
@@ -72,7 +72,7 @@ func TestApprovals_FilterByStatus(t *testing.T) {
 // 长得一模一样,调用方看不出自己把参数写错了。
 func TestApprovals_RejectsUnknownStatus(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodGet, "/api/v1/approvals?status=whatever", token, nil)
 	if r.Code == 0 {

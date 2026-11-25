@@ -3,10 +3,10 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/dto"
-	"velagateway/internal/middleware"
-	"velagateway/internal/service"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/dto"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/resp"
 )
 
 // ListSensitiveColumns returns the sensitive-field rules.

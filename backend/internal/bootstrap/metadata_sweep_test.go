@@ -17,7 +17,7 @@ import (
 // 默认关着:什么设置都不动时,跑一轮 sweep 不该给任何实例留下同步记录。
 func TestMetaSweep_DisabledByDefault(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "sweep-off")
 
 	app.svc.SweepMetadata()
@@ -30,7 +30,7 @@ func TestMetaSweep_DisabledByDefault(t *testing.T) {
 // 打开之后会同步 —— 证明上一条测的是"关着",不是"这功能根本不工作"。
 func TestMetaSweep_SyncsWhenEnabled(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "sweep-on")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_sweep_on (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -51,7 +51,7 @@ func TestMetaSweep_SyncsWhenEnabled(t *testing.T) {
 // 维护态的实例跳过。它是被人为标成"别碰"的,定时任务不该是那个例外。
 func TestMetaSweep_SkipsMaintenanceInstances(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "sweep-maint")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_sweep_maint (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)

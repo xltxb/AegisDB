@@ -21,9 +21,9 @@ import (
 	"log/slog"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // 设置项。默认值就是"不开、一天一次、两台并发"。

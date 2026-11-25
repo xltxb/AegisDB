@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/pkg/resp"
+	"aegisdb/pkg/resp"
 )
 
 // 请求体上限(2026-10 安全审计 H3)。

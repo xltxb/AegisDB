@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // L-API2(2026-10 安全审计):导出、后台执行的队列全员共用,却没有按人限额 —— 一个人连发几十个
@@ -12,8 +12,8 @@ import (
 
 func TestJobQuota_PerUserCap(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
-	u, _ := app.repo.GetUserByEmail("linwei@vela.io")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	u, _ := app.repo.GetUserByEmail("linwei@aegisdb.io")
 	dev := app.connIDByEnv(token, "dev")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "导出路径")
 
@@ -30,7 +30,7 @@ func TestJobQuota_PerUserCap(t *testing.T) {
 	eq(t, app.do(http.MethodPost, "/api/v1/terminal/exec-async", token, map[string]any{"connectionId": dev, "sql": "SELECT 1", "reason": "q"}).Code, 42900, "后台执行超出按人限额")
 
 	// 别人不受影响
-	other := app.login("zhangwei@vela.io", "vela123")
+	other := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/terminal/exec-async", other, map[string]any{"connectionId": dev, "sql": "SELECT 1", "reason": "q"}); r.Code == 42900 {
 		t.Error("别人的限额不应受牵连")
 	}

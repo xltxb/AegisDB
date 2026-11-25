@@ -12,8 +12,8 @@ func writeTempConfig(t *testing.T, envLine string) string {
 	t.Helper()
 	body := envLine + `
 database:
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway"
-  sqlite_path: "vela-gateway.db"
+  mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb"
+  sqlite_path: "aegisdb.db"
   auto_migrate: false
   seed: false
 jwt:
@@ -31,15 +31,15 @@ jwt:
 // config for `migrate`/`init` (which don't sign tokens) must still succeed (R26).
 func TestConfig_ProdServeRejectsCommittedDevSecretButMigrateLoads(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
-	t.Setenv("VELA_ENV", "")
-	t.Setenv("VELA_DB_DRIVER", "")
+	t.Setenv("AEGISDB_ENV", "")
+	t.Setenv("AEGISDB_DB_DRIVER", "")
 
 	body := `env: "prod"
 database:
-  mysql_dsn: "vela:velapass@tcp(127.0.0.1:3306)/vela_gateway"
-  sqlite_path: "vela-gateway.db"
+  mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb"
+  sqlite_path: "aegisdb.db"
 jwt:
-  secret: "change-me-vela-gateway-dev-secret"
+  secret: "change-me-aegisdb-dev-secret"
 `
 	p := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
@@ -59,8 +59,8 @@ jwt:
 // A strong prod secret passes the serve-time validation.
 func TestConfig_ProdServeAcceptsStrongSecret(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
-	t.Setenv("VELA_ENV", "")
-	t.Setenv("VELA_DB_DRIVER", "")
+	t.Setenv("AEGISDB_ENV", "")
+	t.Setenv("AEGISDB_DB_DRIVER", "")
 	body := `env: "prod"
 jwt:
   secret: "a-strong-production-secret-0123456789abcd"
@@ -79,13 +79,13 @@ jwt:
 }
 
 // TestLoadConfigDriverResolution pins the dev(sqlite)/prod(mysql) switch and the
-// precedence: VELA_DB_DRIVER > APP_ENV/VELA_ENV > config.env > default(dev).
+// precedence: AEGISDB_DB_DRIVER > APP_ENV/AEGISDB_ENV > config.env > default(dev).
 func TestLoadConfigDriverResolution(t *testing.T) {
 	cases := []struct {
 		name       string
 		envLine    string // yaml `env:` line (may be empty)
 		appEnv     string
-		velaEnv    string
+		aegisdbEnv string
 		driverEnv  string
 		wantEnv    string
 		wantDriver string
@@ -94,15 +94,15 @@ func TestLoadConfigDriverResolution(t *testing.T) {
 		{"yaml env:prod -> mysql", `env: "prod"`, "", "", "", "prod", "mysql"},
 		{"APP_ENV=prod overrides yaml dev", `env: "dev"`, "prod", "", "", "prod", "mysql"},
 		{"APP_ENV=production alias", "", "production", "", "", "prod", "mysql"},
-		{"VELA_ENV=prod when APP_ENV empty", "", "", "prod", "", "prod", "mysql"},
-		{"VELA_DB_DRIVER wins over prod env", `env: "prod"`, "prod", "", "sqlite", "prod", "sqlite"},
+		{"AEGISDB_ENV=prod when APP_ENV empty", "", "", "prod", "", "prod", "mysql"},
+		{"AEGISDB_DB_DRIVER wins over prod env", `env: "prod"`, "prod", "", "sqlite", "prod", "sqlite"},
 		{"unknown env falls back to dev", "", "staging", "", "", "dev", "sqlite"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("APP_ENV", tc.appEnv)
-			t.Setenv("VELA_ENV", tc.velaEnv)
-			t.Setenv("VELA_DB_DRIVER", tc.driverEnv)
+			t.Setenv("AEGISDB_ENV", tc.aegisdbEnv)
+			t.Setenv("AEGISDB_DB_DRIVER", tc.driverEnv)
 
 			cfg, err := LoadConfig(writeTempConfig(t, tc.envLine))
 			if err != nil {
@@ -118,12 +118,12 @@ func TestLoadConfigDriverResolution(t *testing.T) {
 	}
 }
 
-// 存储库搬到 PG 之后:切换只认 vela.env 里的 VELA_DB_DRIVER=postgres + VELA_POSTGRES_DSN;
+// 存储库搬到 PG 之后:切换只认 aegisdb.env 里的 AEGISDB_DB_DRIVER=postgres + AEGISDB_POSTGRES_DSN;
 // 配置文件里写的 driver 在 prod 下不算数 —— 升级包会覆盖 config.yaml,写在那里的切换下一次升级
 // 就没了,网关会悄悄连回旧 MySQL。
 func TestConfig_ProdPostgresSwitchIsEnvOnly(t *testing.T) {
 	t.Setenv("APP_ENV", "prod")
-	t.Setenv("VELA_ENV", "")
+	t.Setenv("AEGISDB_ENV", "")
 	body := `env: "prod"
 database:
   driver: postgres
@@ -134,8 +134,8 @@ database:
 		t.Fatal(err)
 	}
 
-	t.Setenv("VELA_DB_DRIVER", "")
-	t.Setenv("VELA_POSTGRES_DSN", "")
+	t.Setenv("AEGISDB_DB_DRIVER", "")
+	t.Setenv("AEGISDB_POSTGRES_DSN", "")
 	cfg, err := LoadConfig(p)
 	if err != nil {
 		t.Fatal(err)
@@ -144,12 +144,12 @@ database:
 		t.Errorf("prod 下配置文件写 driver: postgres 不该生效,得到 %q", cfg.Database.Driver)
 	}
 
-	t.Setenv("VELA_DB_DRIVER", "postgres")
-	t.Setenv("VELA_POSTGRES_DSN", "host=from-env dbname=vela_gateway")
+	t.Setenv("AEGISDB_DB_DRIVER", "postgres")
+	t.Setenv("AEGISDB_POSTGRES_DSN", "host=from-env dbname=aegisdb")
 	if cfg, err = LoadConfig(p); err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Database.Driver != "postgres" || cfg.Database.PostgresDSN != "host=from-env dbname=vela_gateway" {
+	if cfg.Database.Driver != "postgres" || cfg.Database.PostgresDSN != "host=from-env dbname=aegisdb" {
 		t.Errorf("环境变量切换:driver=%q dsn=%q", cfg.Database.Driver, cfg.Database.PostgresDSN)
 	}
 }

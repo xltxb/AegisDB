@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // M1(2026-10 安全审计):窗口回看不按人收窄,却不看窗口批没批过,一次性窗口的起点又能倒填 ——
@@ -14,7 +14,7 @@ import (
 // 绕过"非监督角色只看自己的记录"。非监督角色只能回看批准过的窗口,且只看批准之后的。
 func TestWindowStatements_NonOverseerOnlySeesApprovedPeriod(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(admin, "prod")
 	const targetDB = "orders_db"
 	const earlier = "SELECT 'm1-before-window' AS tag"
@@ -24,7 +24,7 @@ func TestWindowStatements_NonOverseerOnlySeesApprovedPeriod(t *testing.T) {
 	}).Code, 0, "管理员先跑一条")
 
 	// L2:有班车菜单、不是监督角色。建一扇起点倒填到一小时前的窗口。
-	l2 := app.login("chenhao@vela.io", "vela123")
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/exec-windows", l2, map[string]any{
 		"name": "m1", "enabled": true, "connectionId": prod, "database": targetDB, "kind": "once",
 		"startsAt": time.Now().Add(-time.Hour).Format(time.RFC3339), "endsAt": time.Now().Add(time.Hour).Format(time.RFC3339),

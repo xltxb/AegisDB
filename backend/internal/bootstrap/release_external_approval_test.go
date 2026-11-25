@@ -45,7 +45,7 @@ func TestReleaseApproval_ExternalDispatchFollowsReleaseSwitch(t *testing.T) {
 	}
 
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	app.setSettings(admin, map[string]any{
 		"approval.external.enabled":         true,
 		"approval.external.baseURL":         stub.URL,

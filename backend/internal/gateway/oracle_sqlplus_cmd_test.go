@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // SQL*Plus 客户端命令表(sqlplus-compat 工单 01 / 03)。

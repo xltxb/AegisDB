@@ -11,7 +11,7 @@ import (
 // the immutable log must never store a password in the clear.
 func TestAudit_RedactsPasswordLiterals(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev := app.connIDByEnv(token, "dev")
 
 	const secret = "sup3rSecretPw!"

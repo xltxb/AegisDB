@@ -9,7 +9,7 @@ import (
 // 动词、按读级放行。前面多一行 `#` 注释,判定结果必须与不带注释时完全一样。
 func TestTerminalExec_LeadingHashCommentJudgedLikeBareStatement(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	for _, sql := range []string{
 		"UPDATE orders SET status = 'x' WHERE id = 1;",

@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // backfillApprovalExecuted stamps executed_at on tickets that ran under the OLD

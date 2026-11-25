@@ -39,10 +39,10 @@ func (a *testApp) seesApproval(token, apNo string) bool {
 // approval chain — nobody else can see other people's approvals.
 func TestApproval_VisibleOnlyToInitiatorAndChain(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")    // initiator
-	owner := app.login("zhangwei@vela.io", "vela123")  // chain member (approver)
-	l2 := app.login("chenhao@vela.io", "vela123")      // neither
-	wangmin := app.login("wangmin@vela.io", "vela123") // admin role, but neither party
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")    // initiator
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")  // chain member (approver)
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")      // neither
+	wangmin := app.login("wangmin@aegisdb.io", "aegisdb123") // admin role, but neither party
 
 	ap := app.submitProdHighRisk(admin) // initiator = Lin Wei, chain = owner members
 
@@ -58,8 +58,8 @@ func TestApproval_VisibleOnlyToInitiatorAndChain(t *testing.T) {
 // 自己的待办。scope=chain 是与本人相关的那一份(升级成全量之前的「全部」)。
 func TestApprovals_ChainScopeIsPersonalEvenForPlatformAdmin(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	wangmin := app.login("wangmin@vela.io", "vela123") // admin role, not initiator / not on chain
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	wangmin := app.login("wangmin@aegisdb.io", "aegisdb123") // admin role, not initiator / not on chain
 	ap := app.submitProdHighRisk(admin)
 	sees := func(tok, scope string) bool {
 		r := app.do(http.MethodGet, "/api/v1/approvals?scope="+scope+"&pageSize=500", tok, nil)
@@ -85,7 +85,7 @@ func TestApprovals_ChainScopeIsPersonalEvenForPlatformAdmin(t *testing.T) {
 // `IN (...)`. Both grow without bound.
 func TestApprovals_ArePaged(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// Enough tickets to need more than one page.
 	for i := 0; i < 7; i++ {
@@ -119,7 +119,7 @@ func TestApprovals_ArePaged(t *testing.T) {
 // right one — otherwise the link silently fails exactly as it did before paging.
 func TestApprovals_LookupByTicketNumberIgnoresPaging(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	target := app.submitProdHighRisk(token) // oldest of the batch
 	for i := 0; i < 5; i++ {

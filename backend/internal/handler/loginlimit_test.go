@@ -68,14 +68,14 @@ func TestLoginThrottle_IPv6CountedPerSlash64(t *testing.T) {
 func TestLoginThrottle_AccountBackoffAcrossSources(t *testing.T) {
 	th := newLoginThrottle()
 	now := time.Now()
-	const acct = "victim@vela.io"
+	const acct = "victim@aegisdb.io"
 	for i := 0; i < accountBackoffAfter; i++ {
 		th.fail("10.1.0."+fmt.Sprint(i+1), acct, now) // 每次换一个来源
 	}
 	if !th.blocked("10.9.9.9", acct, now) {
 		t.Fatal("同一账号跨来源失败多次后,应进入退避(任何来源都要等)")
 	}
-	if th.blocked("10.9.9.9", "other@vela.io", now) {
+	if th.blocked("10.9.9.9", "other@aegisdb.io", now) {
 		t.Fatal("别的账号不受影响")
 	}
 	if th.blocked("10.9.9.9", acct, now.Add(accountBackoffMax+time.Second)) {

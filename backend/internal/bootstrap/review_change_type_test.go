@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-11-12 发布单报障:DDL 单里夹着 UPDATE,外部平台先调 /open/sql-review 预检,只得到 ALGORITHM
@@ -14,8 +14,8 @@ import (
 // 预检现在也报 DML/DDL 同单,声明了 changeType 时核对内容;措辞与建单时一致。
 func TestOpenReview_ReportsMixedDMLAndDDL(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	tok := app.issueClient(admin, "混单预检", "zhangwei@vela.io", []string{model.ScopeReviewCheck})
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	tok := app.issueClient(admin, "混单预检", "zhangwei@aegisdb.io", []string{model.ScopeReviewCheck})
 
 	type finding struct {
 		Code    string `json:"code"`
@@ -72,7 +72,7 @@ func TestOpenReview_ReportsMixedDMLAndDDL(t *testing.T) {
 // 控制台的规范审查走同一套。
 func TestReviewCheck_ConsoleReportsMixed(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/sql-review/check", tok, map[string]any{
 		"dialect": "mysql", "sql": "UPDATE t SET a = 1 WHERE id = 1;\nDROP TABLE x;",
 	})

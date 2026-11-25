@@ -52,7 +52,7 @@ func snippetID(t *testing.T, r apiResp) int64 {
 
 func TestSnippets_CreateListAndHotkeyOrder(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	eq(t, len(app.snippets(tok)), 0, "a new user starts with no snippets")
 
@@ -74,7 +74,7 @@ func TestSnippets_CreateListAndHotkeyOrder(t *testing.T) {
 // one key would leave the key running whichever row came back first.
 func TestSnippets_BindingATakenHotkeyReleasesTheOther(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	first := snippetID(t, app.saveSnippet(tok, "旧的", "SELECT 'old';", 1))
 	eq(t, app.saveSnippet(tok, "新的", "SELECT 'new';", 1).Code, 0, "claim hotkey 1")
@@ -99,7 +99,7 @@ func TestSnippets_BindingATakenHotkeyReleasesTheOther(t *testing.T) {
 // way looks like it worked and leaves the key bound.
 func TestSnippets_UnbindingAHotkeyPersists(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	id := snippetID(t, app.saveSnippet(tok, "统计", "SELECT count(*) FROM orders;", 2))
 	r := app.do(http.MethodPut, "/api/v1/snippets/"+strconv.FormatInt(id, 10), tok,
@@ -115,8 +115,8 @@ func TestSnippets_UnbindingAHotkeyPersists(t *testing.T) {
 // user's row would be a way to aim SQL at instances the author cannot even see.
 func TestSnippets_AreNotReachableByAnotherUser(t *testing.T) {
 	app := newTestApp(t)
-	owner := app.login("linwei@vela.io", "vela123")
-	other := app.login("zhangwei@vela.io", "vela123")
+	owner := app.login("linwei@aegisdb.io", "aegisdb123")
+	other := app.login("zhangwei@aegisdb.io", "aegisdb123")
 
 	id := snippetID(t, app.saveSnippet(owner, "我的", "SELECT 1;", 1))
 
@@ -146,7 +146,7 @@ func TestSnippets_AreNotReachableByAnotherUser(t *testing.T) {
 // the excess would be truncated on write — silently, in a script that later runs.
 func TestSnippets_BodyCapCountsBytesNotCharacters(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	// 4,000 Chinese characters: well under 8,192 CHARACTERS, but 12,000 BYTES.
 	tooBig := "-- " + strings.Repeat("注", 4000) + "\nSELECT 1;"
@@ -166,7 +166,7 @@ func TestSnippets_BodyCapCountsBytesNotCharacters(t *testing.T) {
 
 func TestSnippets_RejectEmptyAndOutOfRangeHotkey(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	if app.saveSnippet(tok, "  ", "SELECT 1;", 0).Code == 0 {
 		t.Error("a nameless snippet is unusable in the picker — refuse it")

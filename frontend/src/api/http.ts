@@ -85,7 +85,7 @@ function endSession() {
 
 declare module 'axios' {
   interface AxiosRequestConfig {
-    /** 40303 由调用方自己提示,拦截器不发 vela:admin-ip-blocked 事件 */
+    /** 40303 由调用方自己提示,拦截器不发 aegisdb:admin-ip-blocked 事件 */
     quietAdminGate?: boolean
   }
 }
@@ -101,11 +101,11 @@ http.interceptors.response.use(
     // 管理后台 IP 白名单拒绝:交给布局去提示并退回用户后台(这里不引路由,免得循环依赖)
     // quietAdminGate:调用方自己处理(路由守卫里的进入管理后台),不再发事件,免得提示两遍
     if (res.data?.code === CODE_ADMIN_IP_BLOCKED && !res.config.quietAdminGate) {
-      window.dispatchEvent(new CustomEvent('vela:admin-ip-blocked', { detail: res.data?.msg || '' }))
+      window.dispatchEvent(new CustomEvent('aegisdb:admin-ip-blocked', { detail: res.data?.msg || '' }))
     }
     // 管理后台空闲超时:同样交给布局,退回用户后台(工单 09)
     if (res.data?.code === CODE_ADMIN_IDLE) {
-      window.dispatchEvent(new CustomEvent('vela:admin-idle', { detail: res.data?.msg || '' }))
+      window.dispatchEvent(new CustomEvent('aegisdb:admin-idle', { detail: res.data?.msg || '' }))
     }
     return res.data
   },

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 2026-11-12 UAT-DWS:PG 系 / Oracle 上的 SHOW CREATE TABLE 在数据查询里被当成"不能执行 SHOW"。
@@ -79,22 +79,22 @@ func TestPostgresBiz_ShowCreateTable(t *testing.T) {
 	}
 	defer raw.Close()
 	for _, s := range []string{
-		`DROP SCHEMA IF EXISTS vela_ddl CASCADE`, `DROP TABLE IF EXISTS public.vela_ddl_t`,
-		`CREATE SCHEMA vela_ddl`,
-		`CREATE TABLE vela_ddl.orders (id bigint PRIMARY KEY, amount numeric(10,2) NOT NULL DEFAULT 0)`,
-		`COMMENT ON TABLE vela_ddl.orders IS '订单'`,
-		`CREATE TABLE public.vela_ddl_t (k text)`,
+		`DROP SCHEMA IF EXISTS aegisdb_ddl CASCADE`, `DROP TABLE IF EXISTS public.aegisdb_ddl_t`,
+		`CREATE SCHEMA aegisdb_ddl`,
+		`CREATE TABLE aegisdb_ddl.orders (id bigint PRIMARY KEY, amount numeric(10,2) NOT NULL DEFAULT 0)`,
+		`COMMENT ON TABLE aegisdb_ddl.orders IS '订单'`,
+		`CREATE TABLE public.aegisdb_ddl_t (k text)`,
 	} {
 		if _, err := raw.Exec(s); err != nil {
 			t.Fatalf("%s: %v", s, err)
 		}
 	}
-	defer raw.Exec(`DROP SCHEMA IF EXISTS vela_ddl CASCADE; DROP TABLE IF EXISTS public.vela_ddl_t`)
+	defer raw.Exec(`DROP SCHEMA IF EXISTS aegisdb_ddl CASCADE; DROP TABLE IF EXISTS public.aegisdb_ddl_t`)
 
 	for q, want := range map[string]string{
-		"SHOW CREATE TABLE vela_ddl.orders":  "numeric(10,2)",
-		"show create table VELA_DDL.Orders;": "订单",
-		"SHOW CREATE TABLE vela_ddl_t":       "vela_ddl_t",
+		"SHOW CREATE TABLE aegisdb_ddl.orders":  "numeric(10,2)",
+		"show create table AEGISDB_DDL.Orders;": "订单",
+		"SHOW CREATE TABLE aegisdb_ddl_t":       "aegisdb_ddl_t",
 	} {
 		if r := BizReadOnlyCheck(conn.Engine, q, conn.Database, nil); r != nil {
 			t.Fatalf("%q 判定应放行:%s", q, model.RenderBizReason(r))
@@ -120,12 +120,12 @@ func TestOracleBiz_ShowCreateTable(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer release()
-	_, _ = db.Exec(`DROP TABLE vela_ddl_ora PURGE`)
-	if _, err := db.Exec(`CREATE TABLE vela_ddl_ora (id NUMBER(10) PRIMARY KEY, name VARCHAR2(40))`); err != nil {
+	_, _ = db.Exec(`DROP TABLE aegisdb_ddl_ora PURGE`)
+	if _, err := db.Exec(`CREATE TABLE aegisdb_ddl_ora (id NUMBER(10) PRIMARY KEY, name VARCHAR2(40))`); err != nil {
 		t.Fatal(err)
 	}
-	defer db.Exec(`DROP TABLE vela_ddl_ora PURGE`)
-	for _, q := range []string{"SHOW CREATE TABLE vela_ddl_ora", "show create table system.VELA_DDL_ORA;"} {
+	defer db.Exec(`DROP TABLE aegisdb_ddl_ora PURGE`)
+	for _, q := range []string{"SHOW CREATE TABLE aegisdb_ddl_ora", "show create table system.AEGISDB_DDL_ORA;"} {
 		if r := BizReadOnlyCheck(conn.Engine, q, "SYSTEM", []string{"SYSTEM"}); r != nil && r.Code != model.BizSystemDB {
 			t.Fatalf("%q 判定:%s", q, model.RenderBizReason(r))
 		}

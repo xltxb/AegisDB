@@ -16,11 +16,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/gateway"
-	"velagateway/internal/model"
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/sqlutil"
 )
 
 // exportSQLReadOnly reports whether an export query is a single read-only
@@ -843,7 +843,7 @@ func exportCell(col string, i int) string {
 	case k == "id" || strings.HasSuffix(k, "id"):
 		return strconv.Itoa(1001 + i)
 	case strings.Contains(k, "email"):
-		return strings.ToLower(strings.Split(exportNames[i%len(exportNames)], " ")[0]) + "@vela.io"
+		return strings.ToLower(strings.Split(exportNames[i%len(exportNames)], " ")[0]) + "@aegisdb.io"
 	case strings.Contains(k, "name") || k == "user" || k == "actor":
 		return exportNames[i%len(exportNames)]
 	case strings.Contains(k, "status") || strings.Contains(k, "state"):

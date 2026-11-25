@@ -34,7 +34,7 @@ func (a *testApp) metaSyncStatus(token string, connID int64) metaSyncStatusResp 
 
 func TestMetadata_AsyncSyncReturnsAtOnceThenFinishes(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	dev, _ := app.sameFileConns(admin, "meta-async")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_async (id INTEGER PRIMARY KEY, name TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
@@ -78,7 +78,7 @@ func TestMetadata_AsyncSyncReturnsAtOnceThenFinishes(t *testing.T) {
 // 检查(存在 / 有凭据)当场报,不进后台 —— 这些不需要等。
 func TestMetadata_AsyncSyncRejectsUnknownConnAtOnce(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	r := app.do(http.MethodPost, "/api/v1/connections/999999/metadata/sync?async=1", admin, map[string]any{})
 	if r.Code == 0 {
 		t.Fatal("不存在的实例应当当场报错")

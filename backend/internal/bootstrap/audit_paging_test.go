@@ -30,7 +30,7 @@ func (a *testApp) auditPage(token, query string) auditPage {
 // render page counts. It also filters by an absolute time window (from/to).
 func TestAudit_PaginationAndAbsoluteWindow(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 
 	// Generate a few audit rows deterministically.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // 班车(执行窗口)时段内执行 \i 脚本:本该审批的语句由窗口放行,整份脚本直接执行,不送审。
@@ -16,7 +16,7 @@ import (
 // 不降风险等级 —— 高危还是高危,于是含字典高危语句的脚本在窗口里永远要审批。
 func TestScript_WindowRelaxesTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	prod := app.connIDByEnv(token, "prod")
 	app.setSettings(token, map[string]any{"script.savePath": t.TempDir()})
 	const targetDB = "orders_db"

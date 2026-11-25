@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"velagateway/internal/model"
+	"aegisdb/internal/model"
 )
 
 // OpenDB connects using the configured driver and runs AutoMigrate.
@@ -130,12 +130,12 @@ var allModels = []any{
 }
 
 // storeMovedMarker 与 storemigrate.MovedMarkerTable 同名(本包不依赖 storemigrate)。
-const storeMovedMarker = "vela_store_moved"
+const storeMovedMarker = "aegisdb_store_moved"
 
 // RefuseIfStoreMoved:存储库已经搬到 PostgreSQL 后,网关却连到了旧 MySQL 上 —— 拒绝启动。
 //
 // 那份 MySQL 停在搬迁时刻,在它上面照常服务会接受写入,两边从此分叉(审计、工单都会丢一半)。
-// 通常是 vela.env 里的 VELA_DB_DRIVER=postgres 丢了。真要回退到 MySQL,删掉标记表再启动。
+// 通常是 aegisdb.env 里的 AEGISDB_DB_DRIVER=postgres 丢了。真要回退到 MySQL,删掉标记表再启动。
 func RefuseIfStoreMoved(cfg *Config, db *gorm.DB) error {
 	if cfg.Database.Driver != "mysql" || !db.Migrator().HasTable(storeMovedMarker) {
 		return nil
@@ -146,7 +146,7 @@ func RefuseIfStoreMoved(cfg *Config, db *gorm.DB) error {
 	}
 	db.Raw("SELECT moved_at, target FROM " + storeMovedMarker + " ORDER BY moved_at DESC LIMIT 1").Scan(&row)
 	return fmt.Errorf("这个 MySQL 存储库已于 %s 搬到 PostgreSQL(%s),不能再在它上面启动:"+
-		"检查 vela.env 里的 VELA_DB_DRIVER=postgres 与 VELA_POSTGRES_DSN。"+
+		"检查 aegisdb.env 里的 AEGISDB_DB_DRIVER=postgres 与 AEGISDB_POSTGRES_DSN。"+
 		"确实要回退到 MySQL 时,先在 MySQL 上 DROP TABLE %s(切到 PG 之后的数据不在这里)",
 		row.MovedAt.Format("2006-01-02 15:04:05"), row.Target, storeMovedMarker)
 }

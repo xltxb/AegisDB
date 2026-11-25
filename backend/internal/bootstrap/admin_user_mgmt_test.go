@@ -35,13 +35,13 @@ func (a *testApp) loginCode(email, pw string) int {
 // Admin can reset a user's password and manage their OTP binding.
 func TestAdmin_UserPasswordAndOTP(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
 	// reset password → new one works, old one stops working
 	eq(t, app.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/password", admin, map[string]any{"password": "newpass9"}).Code, 0, "set password")
-	eq(t, app.loginCode("chenhao@vela.io", "newpass9"), 0, "login with new password")
-	if app.loginCode("chenhao@vela.io", "vela123") == 0 {
+	eq(t, app.loginCode("chenhao@aegisdb.io", "newpass9"), 0, "login with new password")
+	if app.loginCode("chenhao@aegisdb.io", "aegisdb123") == 0 {
 		t.Error("old password should no longer work")
 	}
 	// too-short password is rejected
@@ -60,13 +60,13 @@ func TestAdmin_UserPasswordAndOTP(t *testing.T) {
 	if b.Secret == "" || b.OtpauthURI == "" {
 		t.Fatalf("expected secret + otpauth, got %+v", b)
 	}
-	if !app.userByEmail(admin, "chenhao@vela.io").MFAEnabled {
+	if !app.userByEmail(admin, "chenhao@aegisdb.io").MFAEnabled {
 		t.Error("user should show mfaEnabled after bind")
 	}
 
 	// reset OTP → unbound
 	eq(t, app.do(http.MethodPost, "/api/v1/users/"+itoa(target.ID)+"/mfa/reset", admin, nil).Code, 0, "reset otp")
-	if app.userByEmail(admin, "chenhao@vela.io").MFAEnabled {
+	if app.userByEmail(admin, "chenhao@aegisdb.io").MFAEnabled {
 		t.Error("user should show mfa off after reset")
 	}
 }
@@ -76,20 +76,20 @@ func TestAdmin_UserPasswordAndOTP(t *testing.T) {
 // effect on login — this also guards the correct column mapping for the R8 fix.
 func TestAdmin_PatchUserStatusTakesEffect(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 
-	eq(t, app.loginCode("chenhao@vela.io", "vela123"), 0, "login before disable")
+	eq(t, app.loginCode("chenhao@aegisdb.io", "aegisdb123"), 0, "login before disable")
 
 	eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(target.ID), admin,
 		map[string]any{"status": "disabled"}).Code, 0, "disable user")
-	if app.loginCode("chenhao@vela.io", "vela123") == 0 {
+	if app.loginCode("chenhao@aegisdb.io", "aegisdb123") == 0 {
 		t.Error("disabled user must not be able to log in")
 	}
 
 	eq(t, app.do(http.MethodPatch, "/api/v1/users/"+itoa(target.ID), admin,
 		map[string]any{"status": "active"}).Code, 0, "re-enable user")
-	eq(t, app.loginCode("chenhao@vela.io", "vela123"), 0, "login after re-enable")
+	eq(t, app.loginCode("chenhao@aegisdb.io", "aegisdb123"), 0, "login after re-enable")
 }
 
 // EU4: recordAudit is called for logins, executions, exports and approval
@@ -102,8 +102,8 @@ func TestAdmin_PatchUserStatusTakesEffect(t *testing.T) {
 // Account-altering actions must land in the same immutable log.
 func TestAdmin_AccountMutationsAreAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	target := app.userByEmail(admin, "chenhao@vela.io")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	target := app.userByEmail(admin, "chenhao@aegisdb.io")
 	tid := itoa(target.ID)
 
 	eq(t, app.do(http.MethodPost, "/api/v1/users/"+tid+"/password", admin, map[string]any{"password": "newpass99"}).Code, 0, "reset password")
@@ -121,13 +121,13 @@ func TestAdmin_AccountMutationsAreAudited(t *testing.T) {
 	for _, want := range []string{"password", "mfa", "status"} {
 		found := false
 		for _, r := range rows {
-			if strings.Contains(strings.ToLower(r.Command), want) && strings.Contains(r.Command, "chenhao@vela.io") {
+			if strings.Contains(strings.ToLower(r.Command), want) && strings.Contains(r.Command, "chenhao@aegisdb.io") {
 				found = true
 				eq(t, r.Actor, "Lin Wei", "audited actor for "+want)
 			}
 		}
 		if !found {
-			t.Errorf("no audit row for the %q change to chenhao@vela.io", want)
+			t.Errorf("no audit row for the %q change to chenhao@aegisdb.io", want)
 		}
 	}
 }
@@ -139,7 +139,7 @@ func TestAdmin_AccountMutationsAreAudited(t *testing.T) {
 // chain showing only the action, never the grant that permitted it.
 func TestAdmin_PermissionChangesAreAudited(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	roID := app.roleIDByCode(admin, "ro")
 	rid := itoa(roID)
 

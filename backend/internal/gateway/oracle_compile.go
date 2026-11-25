@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // CompileTarget is one compiled unit and what Oracle thinks of it afterwards.

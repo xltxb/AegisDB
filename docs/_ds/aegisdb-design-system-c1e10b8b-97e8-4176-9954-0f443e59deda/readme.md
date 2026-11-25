@@ -1,8 +1,8 @@
-# Vela Design System
+# AegisDB Design System
 
-> **Vela** is a fictional internet-platform brand created for this design system: a **realtime collaboration & data platform** ("以光速前行 — move at the speed of light"). The look is **young & energetic in light mode, futuristic & neon in dark** — built on a vivid azure blue with a cyan glow accent. Use it to mock SaaS consoles, mobile apps, marketing pages, and decks that need to feel like a modern, confident tech product.
+> **AegisDB** is a fictional internet-platform brand created for this design system: a **realtime collaboration & data platform** ("以光速前行 — move at the speed of light"). The look is **young & energetic in light mode, futuristic & neon in dark** — built on a vivid azure blue with a cyan glow accent. Use it to mock SaaS consoles, mobile apps, marketing pages, and decks that need to feel like a modern, confident tech product.
 
-Vela = the constellation "the Sails." The logomark is a stylized sail with a glowing star node.
+AegisDB = the constellation "the Sails." The logomark is a stylized sail with a glowing star node.
 
 ---
 
@@ -12,7 +12,7 @@ This system was **not** derived from an existing codebase — the attached repo 
 
 - Input repo (empty at time of authoring): `https://github.com/xltxb/design`
 
-**Fonts are Google Fonts stand-ins**, chosen to match the intended Vela voice. Swap for licensed brand fonts when available (see *Visual Foundations → Type*).
+**Fonts are Google Fonts stand-ins**, chosen to match the intended AegisDB voice. Swap for licensed brand fonts when available (see *Visual Foundations → Type*).
 
 ---
 
@@ -24,30 +24,30 @@ This system was **not** derived from an existing codebase — the attached repo 
 | `tokens/` | `colors.css`, `typography.css`, `spacing.css`, `effects.css`, `motion.css`, `fonts.css`, `base.css` |
 | `components/forms/` | Button, Input, Select, Checkbox, Switch |
 | `components/core/` | Card, Badge, Avatar, Tabs, Alert, Spinner |
-| `ui_kits/web/` | **Vela Console** — SaaS dashboard (login → overview → projects → realtime → members → settings) |
-| `ui_kits/mobile/` | **Vela Mobile** — phone app (home · projects · settings) with tab bar |
+| `ui_kits/web/` | **AegisDB Console** — SaaS dashboard (login → overview → projects → realtime → members → settings) |
+| `ui_kits/mobile/` | **AegisDB Mobile** — phone app (home · projects · settings) with tab bar |
 | `slides/` | 6 deck templates (title, section, stat, content, quote, closing) |
 | `guidelines/` | Foundation specimen cards (colors, type, spacing, brand) |
 | `assets/` | Logo (mark + light/dark wordmark) |
 | `SKILL.md` | Agent-Skill manifest for use in Claude Code |
 
-Components are consumed via the compiled bundle: `const { Button, Card } = window.VelaDesignSystem_c1e10b`.
+Components are consumed via the compiled bundle: `const { Button, Card } = window.AegisDBDesignSystem_c1e10b`.
 
 ---
 
-## CONTENT FUNDAMENTALS — how Vela writes
+## CONTENT FUNDAMENTALS — how AegisDB writes
 
-**Voice:** confident, fast, technical-but-human. Vela talks like an engineer who ships. It is never salesy or fluffy.
+**Voice:** confident, fast, technical-but-human. AegisDB talks like an engineer who ships. It is never salesy or fluffy.
 
 - **Bilingual 中英混排.** UI is Chinese-first with English running mates for product nouns and metrics: `概览 Overview`, `实时 Realtime`, `p50 延迟`. Marketing headlines lean Chinese; code/metrics/labels stay English + mono.
-- **Person:** addresses the user as **你** ("晚上好,Lin 👋 — 这是你团队今天的概况"). Refers to itself as **Vela**, not "we/我们" in UI.
+- **Person:** addresses the user as **你** ("晚上好,Lin 👋 — 这是你团队今天的概况"). Refers to itself as **AegisDB**, not "we/我们" in UI.
 - **Casing:** English UI labels are **Title Case** for nav, **sentence case** for body. Mono eyebrows are **UPPERCASE** with wide tracking (`REALTIME PLATFORM`).
 - **Numbers are the hero.** Lead with concrete metrics — `99.98%`, `12ms`, `40k+`, `1.24M`. Always pair a number with a one-line unit/label. Deltas use `+12.4%` / `-0.4%`, never prose.
 - **Tone of verbs:** imperative and short — `开始使用`, `新建项目`, `升级到 Pro →`. CTAs often end with a `→`.
 - **Emoji:** used **very sparingly** — a single 👋 in a greeting, occasionally ⚡. Never decorative emoji in lists or as bullets/icons (use Lucide). Never more than one per screen.
 - **Length:** microcopy is terse. Helper text is one sentence. Empty states get one line + one action.
 
-**Examples in the wild:** `晚上好,Lin 👋`, `用量达到本月配额的 60%`, `部署了 realtime-gateway v2.4`, `免费创建你的第一个 Vela 工作区,5 分钟接入实时能力。`
+**Examples in the wild:** `晚上好,Lin 👋`, `用量达到本月配额的 60%`, `部署了 realtime-gateway v2.4`, `免费创建你的第一个 AegisDB 工作区,5 分钟接入实时能力。`
 
 ---
 
@@ -86,11 +86,11 @@ Components are consumed via the compiled bundle: `const { Button, Card } = windo
 
 ## ICONOGRAPHY
 
-- **Icon set: [Lucide](https://lucide.dev)** (MIT) — clean 2px-stroke line icons that match Vela's geometric, technical feel. **This is a substitution** (no brand icon set existed in the source); swap if the real product standardizes on another set.
+- **Icon set: [Lucide](https://lucide.dev)** (MIT) — clean 2px-stroke line icons that match AegisDB's geometric, technical feel. **This is a substitution** (no brand icon set existed in the source); swap if the real product standardizes on another set.
 - **Delivery:** loaded from CDN (`unpkg.com/lucide`) and rendered via `window.lucide.createIcons()` against `<i data-lucide="name">` elements. Icons inherit `currentColor` and a 2px stroke.
 - **Sizing:** 16px (inline/badges), 18px (nav, buttons), 20–22px (mobile, feature tiles). Never below 14px.
 - **Color:** icons take the text color of their context (`--text-muted` for nav idle, `--accent-text` when active/featured). Featured icons sit in a `--radius-md` chip with `--accent-subtle` background.
-- **No hand-drawn SVG icons, no emoji-as-icon, no unicode glyphs.** The only bespoke SVG is the **logo** (`assets/vela-*.svg`) and inline data-viz (sparklines, charts), which are intentionally not icons.
+- **No hand-drawn SVG icons, no emoji-as-icon, no unicode glyphs.** The only bespoke SVG is the **logo** (`assets/aegisdb-*.svg`) and inline data-viz (sparklines, charts), which are intentionally not icons.
 - Common icons in use: `layout-dashboard, folder-kanban, activity, users, settings, search, bell, moon, sun, plus, filter, rocket, user-plus, alert-triangle, trending-up, zap, shield-check, box, arrow-right`.
 
 ---
@@ -103,8 +103,8 @@ Components are consumed via the compiled bundle: `const { Button, Card } = windo
 Each component dir has a `.jsx` (impl), `.d.ts` (props contract), `.prompt.md` (when/how), and a `@dsCard` HTML thumbnail.
 
 ## UI kits & templates
-- `ui_kits/web/index.html` — **Vela Console** (also a *Web App* starting point)
-- `ui_kits/mobile/index.html` — **Vela Mobile** (also a *Mobile App* starting point)
+- `ui_kits/web/index.html` — **AegisDB Console** (also a *Web App* starting point)
+- `ui_kits/mobile/index.html` — **AegisDB Mobile** (also a *Mobile App* starting point)
 - `slides/*.html` — 6 deck templates
 
 ---

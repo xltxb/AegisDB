@@ -19,9 +19,9 @@ import (
 
 func TestApproveStageUsesConfiguredRole(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123") // owner —— 全局默认链上的人
-	l2 := app.login("chenhao@vela.io", "vela123")     // l2 —— 本流程指定的审批角色
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123") // owner —— 全局默认链上的人
+	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")     // l2 —— 本流程指定的审批角色
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "指定审批角色", "", []map[string]any{
@@ -56,8 +56,8 @@ func TestApproveStageUsesConfiguredRole(t *testing.T) {
 // 不配 approverRole 时行为不变:仍走全局默认链。
 func TestApproveStageWithoutRoleKeepsGlobalChain(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
-	owner := app.login("zhangwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	owner := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	pid := app.createPipeline(admin, "默认审批链", "", []map[string]any{
@@ -79,7 +79,7 @@ func TestApproveStageWithoutRoleKeepsGlobalChain(t *testing.T) {
 // 保存流程时就要拦住不存在的角色 —— 否则错误要等到某次真实发布才暴露。
 func TestApproveStageRejectsUnknownRoleAtSaveTime(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 
 	r := app.do(http.MethodPost, "/api/v1/pipelines", admin, map[string]any{
 		"name": "错角色流程", "enabled": true, "stages": []map[string]any{
@@ -98,7 +98,7 @@ func TestApproveStageRejectsUnknownRoleAtSaveTime(t *testing.T) {
 // 都没有,isChainMember 对谁都返回 false,发布单永远停在那儿。必须在阶段失败。
 func TestApproveStageRefusesRoleWithNoMembers(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	// 把 audit 角色清空,造出"存在但没有成员"的状态。成员不止夹具里那一个
@@ -164,7 +164,7 @@ func (a *testApp) roleMembers(token string, roleID int64) []int64 {
 // 里只剩服务账号,等同于空角色。
 func TestApproverChainExcludesServiceAccounts(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	stg := app.connIDByEnv(admin, "staging")
 
 	// 把 audit 角色清空,只放一个服务账号进去。

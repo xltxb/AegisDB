@@ -62,7 +62,7 @@ func runExecOnlyRelease(t *testing.T, app *testApp, token string, connID int64, 
 
 func TestExecuteStageLogsQueryResults(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE checks (status_col TEXT, answer INTEGER)`)
 		_, _ = db.Exec(`INSERT INTO checks VALUES ('all-good', 42)`)
@@ -84,7 +84,7 @@ func TestExecuteStageLogsQueryResults(t *testing.T) {
 // what it left out.
 func TestExecuteStageResultLogIsBounded(t *testing.T) {
 	app := newTestApp(t)
-	admin := app.login("linwei@vela.io", "vela123")
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	conn := realConnForRelease(t, app, admin, func(db *sql.DB) {
 		_, _ = db.Exec(`CREATE TABLE big (n INTEGER, v TEXT)`)
 		for i := 1; i <= 55; i++ {

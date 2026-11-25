@@ -12,13 +12,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"velagateway/internal/handler"
-	"velagateway/internal/middleware"
-	"velagateway/internal/model"
-	"velagateway/internal/repository"
-	"velagateway/internal/service"
-	"velagateway/pkg/jwt"
-	"velagateway/pkg/resp"
+	"aegisdb/internal/handler"
+	"aegisdb/internal/middleware"
+	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
+	"aegisdb/internal/service"
+	"aegisdb/pkg/jwt"
+	"aegisdb/pkg/resp"
 )
 
 // NewRouter wires all routes, middleware and the three-layer guards.

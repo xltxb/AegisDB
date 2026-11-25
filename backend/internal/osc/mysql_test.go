@@ -18,15 +18,15 @@ import (
 // 的绿色是假的(ADR 0011)。需要一个开了 ROW binlog 的 MySQL 8.0.13+,账号要有建库
 // 与复制权限:
 //
-//	docker run -d --name vela-mysql-osc -e MYSQL_ROOT_PASSWORD=velaosc -p 127.0.0.1:13307:3306 mysql:8.0
-//	VELA_OSC_TEST_DSN='root:velaosc@tcp(127.0.0.1:13307)/' go test ./internal/osc/
+//	docker run -d --name aegisdb-mysql-osc -e MYSQL_ROOT_PASSWORD=aegisdbosc -p 127.0.0.1:13307:3306 mysql:8.0
+//	AEGISDB_OSC_TEST_DSN='root:aegisdbosc@tcp(127.0.0.1:13307)/' go test ./internal/osc/
 //
 // 每个测试建一个自己的库,结束时删掉。
 func mysqlDB(t *testing.T) (*sql.DB, string) {
 	t.Helper()
-	dsn := os.Getenv("VELA_OSC_TEST_DSN")
+	dsn := os.Getenv("AEGISDB_OSC_TEST_DSN")
 	if dsn == "" {
-		t.Skip("未设置 VELA_OSC_TEST_DSN,跳过对真 MySQL 的测试")
+		t.Skip("未设置 AEGISDB_OSC_TEST_DSN,跳过对真 MySQL 的测试")
 	}
 	cfg, err := mysql.ParseDSN(dsn)
 	if err != nil {

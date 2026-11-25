@@ -14,10 +14,10 @@ import (
 // 没有本地口令的账号(业务查询账号、口令为空的 SSO 账号)明确拒绝;成功与失败都写审计。
 func TestSelfPassword_ChangeRotatesSessions(t *testing.T) {
 	app := newTestApp(t)
-	tokA := app.login("chenhao@vela.io", "vela123")
-	tokB := app.login("chenhao@vela.io", "vela123") // 另一台设备上的会话
+	tokA := app.login("chenhao@aegisdb.io", "aegisdb123")
+	tokB := app.login("chenhao@aegisdb.io", "aegisdb123") // 另一台设备上的会话
 
-	r := app.do(http.MethodPost, "/api/v1/auth/password", tokA, map[string]any{"oldPassword": "vela123", "newPassword": "newpass99"})
+	r := app.do(http.MethodPost, "/api/v1/auth/password", tokA, map[string]any{"oldPassword": "aegisdb123", "newPassword": "newpass99"})
 	eq(t, r.Code, 0, "change password: "+r.Msg)
 	var out struct {
 		Token     string `json:"token"`
@@ -34,13 +34,13 @@ func TestSelfPassword_ChangeRotatesSessions(t *testing.T) {
 	eq(t, app.do(http.MethodGet, "/api/v1/auth/me", tokA, nil).Code, 40100, "old token of this session revoked")
 
 	// 新口令能登录,旧口令不能
-	eq(t, app.loginCode("chenhao@vela.io", "newpass99"), 0, "login with new password")
-	if app.loginCode("chenhao@vela.io", "vela123") == 0 {
+	eq(t, app.loginCode("chenhao@aegisdb.io", "newpass99"), 0, "login with new password")
+	if app.loginCode("chenhao@aegisdb.io", "aegisdb123") == 0 {
 		t.Error("old password must stop working")
 	}
 
 	// 审计里有这一条,且口令本身不进审计
-	raw := string(app.auditItemsRaw(app.login("linwei@vela.io", "vela123"), "?pageSize=200"))
+	raw := string(app.auditItemsRaw(app.login("linwei@aegisdb.io", "aegisdb123"), "?pageSize=200"))
 	if !strings.Contains(raw, "password.change") {
 		t.Error("self password change must be audited")
 	}
@@ -51,7 +51,7 @@ func TestSelfPassword_ChangeRotatesSessions(t *testing.T) {
 
 func TestSelfPassword_Refusals(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("chenhao@vela.io", "vela123")
+	tok := app.login("chenhao@aegisdb.io", "aegisdb123")
 	post := func(body map[string]any) apiResp {
 		return app.do(http.MethodPost, "/api/v1/auth/password", tok, body)
 	}
@@ -61,34 +61,34 @@ func TestSelfPassword_Refusals(t *testing.T) {
 		t.Errorf("wrong old password must be refused with a clear message, got %d %q", r.Code, r.Msg)
 	}
 	// 新密码太短(与建号 / 重置一致:至少 8 位)
-	if r := post(map[string]any{"oldPassword": "vela123", "newPassword": "short7x"}); r.Code == 0 || !strings.Contains(r.Msg, "8") {
+	if r := post(map[string]any{"oldPassword": "aegisdb123", "newPassword": "short7x"}); r.Code == 0 || !strings.Contains(r.Msg, "8") {
 		t.Errorf("short new password must be refused, got %d %q", r.Code, r.Msg)
 	}
 	// 新旧相同
-	if r := post(map[string]any{"oldPassword": "vela123", "newPassword": "vela123"}); r.Code == 0 {
+	if r := post(map[string]any{"oldPassword": "aegisdb123", "newPassword": "aegisdb123"}); r.Code == 0 {
 		t.Error("new password equal to the old one must be refused")
 	}
 	// 常见弱口令:说清理由,而不是 50000「修改失败」(2026-10-26 回归)
-	if r := post(map[string]any{"oldPassword": "vela123", "newPassword": "Password123"}); r.Code != 40001 || !strings.Contains(r.Msg, "常见") {
+	if r := post(map[string]any{"oldPassword": "aegisdb123", "newPassword": "Password123"}); r.Code != 40001 || !strings.Contains(r.Msg, "常见") {
 		t.Errorf("common password must be refused as 40001 with a reason, got %d %q", r.Code, r.Msg)
 	}
 	// 缺字段
-	if r := post(map[string]any{"oldPassword": "vela123"}); r.Code == 0 {
+	if r := post(map[string]any{"oldPassword": "aegisdb123"}); r.Code == 0 {
 		t.Error("missing newPassword must be refused")
 	}
 	// 被拒的尝试不改口令、不踢会话
 	eq(t, app.do(http.MethodGet, "/api/v1/auth/me", tok, nil).Code, 0, "session survives refused attempts")
-	eq(t, app.loginCode("chenhao@vela.io", "vela123"), 0, "password unchanged after refusals")
+	eq(t, app.loginCode("chenhao@aegisdb.io", "aegisdb123"), 0, "password unchanged after refusals")
 
 	// 未登录不可用
-	eq(t, app.do(http.MethodPost, "/api/v1/auth/password", "", map[string]any{"oldPassword": "vela123", "newPassword": "newpass99"}).Code, 40100, "unauthenticated")
+	eq(t, app.do(http.MethodPost, "/api/v1/auth/password", "", map[string]any{"oldPassword": "aegisdb123", "newPassword": "newpass99"}).Code, 40100, "unauthenticated")
 }
 
 // 没有本地口令的账号(口令为空:SSO 开通 / 业务查询)不能"修改"一个不存在的口令。
 func TestSelfPassword_NoLocalPassword(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("chenhao@vela.io", "vela123")
-	u, err := app.repo.GetUserByEmail("chenhao@vela.io")
+	tok := app.login("chenhao@aegisdb.io", "aegisdb123")
+	u, err := app.repo.GetUserByEmail("chenhao@aegisdb.io")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestSelfPassword_NoLocalPassword(t *testing.T) {
 // 工单 05 第 2 条:登录后的 API 响应不得被浏览器 / 代理缓存。
 func TestAPI_NoStoreCacheHeaders(t *testing.T) {
 	app := newTestApp(t)
-	tok := app.login("linwei@vela.io", "vela123")
+	tok := app.login("linwei@aegisdb.io", "aegisdb123")
 	for _, p := range []string{"/api/v1/auth/me", "/api/v1/users", "/api/v1/connections"} {
 		req, _ := http.NewRequest(http.MethodGet, app.srv.URL+p, nil)
 		req.Header.Set("Authorization", "Bearer "+tok)

@@ -514,7 +514,7 @@ onMounted(() => {
     // 会话 Cookie 由浏览器带上;握手再用子协议证明读得到 CSRF Cookie,别的站点开的 WebSocket 证明不了。
     protocols: () => {
       wsToken = sessionMarker()
-      return ['vela-csrf', csrfToken()]
+      return ['aegisdb-csrf', csrfToken()]
     },
     onMessage: onWsMessage,
     onStatus: (s) => {

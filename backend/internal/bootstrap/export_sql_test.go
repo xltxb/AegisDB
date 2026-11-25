@@ -10,8 +10,8 @@ import (
 
 	_ "github.com/glebarez/go-sqlite"
 
-	"velagateway/pkg/crypto"
-	"velagateway/pkg/sqlutil"
+	"aegisdb/pkg/crypto"
+	"aegisdb/pkg/sqlutil"
 )
 
 // 导出成 SQL 文件:导出的 INSERT 在一张空库里执行一遍,读回来的必须就是原来的数据 ——
@@ -37,7 +37,7 @@ line2')`,
 	raw.Close()
 
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
 		"name": "sqlexp", "engine": "SQLite", "host": "localhost:0", "env": "dev", "policy": "audit-only", "database": src,
 	})
@@ -118,7 +118,7 @@ line2')`,
 // 联表查询认不出目标表:不填就拒绝,填了就照填的写,但不附建表语句(那是哪张表的结构?)。
 func TestExportSQL_JoinNeedsAnExplicitTargetTable(t *testing.T) {
 	app := newTestApp(t)
-	token := app.login("linwei@vela.io", "vela123")
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 	dev := app.connIDByEnv(token, "dev")
 	q := "SELECT a.id, b.id FROM t_a a JOIN t_b b ON a.id = b.id"

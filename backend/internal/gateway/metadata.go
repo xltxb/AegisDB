@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"velagateway/internal/apimsg"
-	"velagateway/internal/model"
+	"aegisdb/internal/apimsg"
+	"aegisdb/internal/model"
 )
 
 // MetaTableRow / MetaColumnRow 是探查的产物,与 model.MetaTable / MetaColumn 一一对应。
