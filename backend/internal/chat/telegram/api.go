@@ -38,7 +38,7 @@ const (
 	maxErrRunes = 200
 
 	shortWait = 3 * time.Second // 平台要求等的在这以内就等一下再试,再久的交给上层
-	maxWait   = time.Minute     // 长轮询被限流时,一次最多等这么久
+	maxWait   = 5 * time.Minute // 被限流时,一次最多等这么久
 )
 
 var (
@@ -340,7 +340,7 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// pollWait 是长轮询被限流时等多久。
+// pollWait 是被限流时等多久。
 func pollWait(asked time.Duration) time.Duration { return min(max(asked, time.Second), maxWait) }
 
 // ---------------------------------------------------------------- 发与改
@@ -420,11 +420,15 @@ func (t *Transport) edit(ctx context.Context, chatID, messageID int64, c chat.Ca
 	return clean
 }
 
-// reply 回一句话。不带 parse_mode,里面什么标记都不解析:话里有别人起的名字。
+// reply 回一句话,只试一次。话里有别人起的名字:不带 parse_mode,里面什么标记都不解析;整句标成 code,平台也
+// 不去认里面的链接、@ 某人和 /命令。
 func (t *Transport) reply(ctx context.Context, chatID int64, text string) error {
 	text, _ = clipUTF16(chat.Visible(text), maxUnits)
+	ctx, cancel := context.WithTimeout(ctx, callWithin)
+	defer cancel()
 	var out json.RawMessage
-	if err := t.call(ctx, "sendMessage", map[string]any{"chat_id": chatID, "text": text, "link_preview_options": noPreview}, &out); err != nil {
+	if err := t.do(ctx, "sendMessage", map[string]any{"chat_id": chatID, "text": text, "link_preview_options": noPreview,
+		"entities": []any{map[string]any{"type": "code", "offset": 0, "length": unitsOf(text)}}}, &out, maxCallBody); err != nil {
 		return t.wrap("reply", err)
 	}
 	return nil

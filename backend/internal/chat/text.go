@@ -60,13 +60,13 @@ var texts = map[string]map[string]string{
 		"reject.placeholder": "拒绝原因(可不填)",
 		"partial":            "卡片未显示全文,通过前请到网关核对。",
 
-		"outcome.approved":  "已由 %s 通过 · %s",
-		"outcome.rejected":  "已由 %s 拒绝 · %s",
-		"outcome.cancelled": "已撤回",
-		"outcome.voided":    "已作废",
+		"outcome.approved":  "✅ 已由 %s 通过 · %s",
+		"outcome.rejected":  "❌ 已由 %s 拒绝 · %s",
+		"outcome.cancelled": "⚪ 已撤回",
+		"outcome.voided":    "⚪ 已作废",
 		// 查不到是谁决定的(步骤没写成)时退而求其次
-		"outcome.approvedBare": "已通过",
-		"outcome.rejectedBare": "已拒绝",
+		"outcome.approvedBare": "✅ 已通过",
+		"outcome.rejectedBare": "❌ 已拒绝",
 
 		"bind.usage":   "请先在网关右上角用户菜单的「审批机器人」里生成绑定码,再把它发给我。",
 		"bind.done":    "已绑定网关账号 %s。之后需要你审批的单子会发到这里。",
@@ -148,13 +148,13 @@ var texts = map[string]map[string]string{
 		"reject.placeholder": "Reason for rejecting (optional)",
 		"partial":            "This card does not show the full content. Check it in the gateway before approving.",
 
-		"outcome.approved":  "Approved by %s · %s",
-		"outcome.rejected":  "Rejected by %s · %s",
-		"outcome.cancelled": "Withdrawn",
-		"outcome.voided":    "Voided",
+		"outcome.approved":  "✅ Approved by %s · %s",
+		"outcome.rejected":  "❌ Rejected by %s · %s",
+		"outcome.cancelled": "⚪ Withdrawn",
+		"outcome.voided":    "⚪ Voided",
 
-		"outcome.approvedBare": "Approved",
-		"outcome.rejectedBare": "Rejected",
+		"outcome.approvedBare": "✅ Approved",
+		"outcome.rejectedBare": "❌ Rejected",
 
 		"bind.usage":   "Generate a binding code under “Approval bots” in the gateway's user menu (top right), then send it to me.",
 		"bind.done":    "Linked to gateway account %s. Requests that need your approval will be sent here.",

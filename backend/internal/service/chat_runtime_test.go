@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
@@ -602,11 +603,8 @@ func TestRunChat_UptimeAccumulates(t *testing.T) {
 				return errors.New("closed")
 			}))
 			r.enable("cli_a")
-			// 清零:每轮约 61ms;不清零:第 11 次之前光等就要 1+2+…+512 ms 以上
-			time.Sleep(1100 * time.Millisecond)
-			if n := r.transports()[0].count(); n < 11 {
-				t.Errorf("退避没有清零:重连了 %d 次", n)
-			}
+			// 不清零的话,第 20 次之前光等就要 1+2+…+2^18 ms
+			waitFor(t, "退避清零", func() bool { tr := r.transports(); return len(tr) == 1 && tr[0].count() >= 20 })
 		})
 	}
 }
@@ -768,6 +766,58 @@ func TestRunChat_TelegramEndToEnd(t *testing.T) {
 		t.Errorf("令牌进了日志: %s", out)
 	}
 }
+
+// 同一个机器人前后两个连接(存设置、换代理)认得同一批 update;换了机器人不相干。
+func TestNewTelegram_SharesSeen(t *testing.T) {
+	var polls atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch {
+		case strings.HasSuffix(req.URL.Path, "getMe"):
+			fmt.Fprint(w, `{"ok":true,"result":{"id":987654321,"username":"b"}}`)
+		case strings.HasSuffix(req.URL.Path, "getWebhookInfo"):
+			fmt.Fprint(w, `{"ok":true,"result":{"url":""}}`)
+		case strings.HasSuffix(req.URL.Path, "getUpdates"):
+			polls.Add(1)
+			fmt.Fprint(w, `{"ok":true,"result":[{"update_id":5,"message":{"from":{"id":7},"chat":{"id":7,"type":"private"},"text":"AB2CD3EF4G"}}]}`)
+		default:
+			fmt.Fprint(w, `{"ok":true,"result":true}`)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	s, _ := cardDB(t)
+	var texts atomic.Int64
+	run := func(token string) {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan struct{})
+		tr := s.newTelegram(ChatConfig{BotToken: token}, telegram.WithBaseURL(srv.URL))
+		go func() {
+			defer close(done)
+			_ = tr.Run(ctx, countTexts{&texts}, func(chat.State, string) {})
+		}()
+		n := polls.Load()
+		waitFor(t, "收了几次", func() bool { return polls.Load() >= n+2 })
+		cancel()
+		<-done
+	}
+	run(runToken)
+	run(runToken + "x") // 换过令牌,还是同一个机器人
+	if texts.Load() != 1 {
+		t.Errorf("处理了 %d 次", texts.Load())
+	}
+	run("1234567:" + strings.Repeat("a", 35))
+	if texts.Load() != 2 {
+		t.Errorf("别的机器人不相干:%d", texts.Load())
+	}
+}
+
+type countTexts struct{ n *atomic.Int64 }
+
+func (c countTexts) OnText(context.Context, chat.Channel, string, string, string, string) string {
+	c.n.Add(1)
+	return ""
+}
+func (countTexts) OnClick(context.Context, chat.Click) chat.ClickResult { return chat.ClickResult{} }
 
 // 令牌不对、机器人挂着 webhook 这两种,管理员改得了:状态里说人话,能随界面语言走。
 func TestRunChat_ReasonsInPlainWords(t *testing.T) {

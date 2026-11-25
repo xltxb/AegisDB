@@ -1173,6 +1173,29 @@ func TestClick_Slow(t *testing.T) {
 	}
 }
 
+// 先答了「正在处理」、做完却是拒绝:另发一句说原因,只发给点的人本人。
+func TestClick_SlowRefusal(t *testing.T) {
+	f := newFake(t)
+	block := make(chan struct{})
+	h := &fakeHandler{click: func(context.Context, chat.Click) chat.ClickResult {
+		<-block
+		return chat.ClickResult{Toast: "你不在这张审批单的审批链上。"}
+	}}
+	tr := f.transport()
+	tr.answerWithin = 20 * time.Millisecond
+	s := start(t, f, tr, h)
+	s.event(clickEvent(obj{"t": "tok", "a": "confirm"}, nil))
+	if n := len(f.calls()); n != 0 {
+		t.Errorf("还没做完就发了 %d 句", n)
+	}
+	close(block)
+	eventually(t, "说原因", func() bool { return len(f.calls()) == 1 })
+	r := f.calls()[0]
+	if r.Query != "receive_id_type=open_id" || r.Body["receive_id"] == "" || r.Body["content"] != renderReply("你不在这张审批单的审批链上。") {
+		t.Errorf("请求 %+v", r)
+	}
+}
+
 func TestClick_PanicAndBusy(t *testing.T) {
 	logs := captureLog(t)
 	f := newFake(t)

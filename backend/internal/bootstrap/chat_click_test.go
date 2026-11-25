@@ -117,7 +117,7 @@ func TestChatClick_Approve(t *testing.T) {
 	if !res.OK || res.Toast != "已通过" {
 		t.Errorf("应答: %+v", res)
 	}
-	if res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "已由 Li Na 通过 · ") || res.Card.Token != "" || res.Card.Confirming ||
+	if res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "✅ 已由 Li Na 通过 · ") || res.Card.Token != "" || res.Card.Confirming ||
 		cardNo(*res.Card) != view.ApNo || !strings.Contains(res.Card.Statement, "t_victim") {
 		t.Errorf("结论卡片: %+v", res.Card)
 	}
@@ -168,7 +168,7 @@ func TestChatClick_FourKinds(t *testing.T) {
 			id, no := app.raise(kind)
 			app.sweepCards()
 			res := app.larkClick(owner1, cardToken(t, lark, no, "lark:"+owner1), chat.ActConfirm)
-			if !res.OK || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "已由 Zhang Wei 通过 · ") {
+			if !res.OK || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "✅ 已由 Zhang Wei 通过 · ") {
 				t.Errorf("应答: %+v", res)
 			}
 			eq(t, app.ticket(id).Status, model.StatusApproved, "状态")
@@ -185,7 +185,7 @@ func TestChatClick_Reject(t *testing.T) {
 	id, no, token, _ := app.sentCommand(lark)
 	res := app.svc.OnClick(context.Background(), chat.Click{Channel: chat.Lark, BotID: chatBot, AccountID: "lark:" + owner1,
 		Token: token, Action: chat.ActReject, Reason: "  影响大促\n"})
-	if !res.OK || res.Toast != "已拒绝" || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "已由 Zhang Wei 拒绝 · ") || res.Card.Token != "" {
+	if !res.OK || res.Toast != "已拒绝" || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "❌ 已由 Zhang Wei 拒绝 · ") || res.Card.Token != "" {
 		t.Errorf("应答: %+v %+v", res, res.Card)
 	}
 	ap := app.ticket(id)
@@ -399,14 +399,14 @@ func TestChatClick_AlreadyHandled(t *testing.T) {
 	}{
 		{"别人在站内通过", func(id int64, _ string) {
 			eq(t, app.do(http.MethodPost, "/api/v1/approvals/"+itoa(id)+"/approve", app.login(owner2, "aegisdb123"), nil).Code, 0, "通过")
-		}, "已由 Li Na 通过 · "},
-		{"自己在卡片上拒绝过", func(_ int64, token string) { app.larkClick(owner1, token, chat.ActReject) }, "已由 Zhang Wei 拒绝 · "},
-		{"发起人撤回", func(id int64, _ string) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "已撤回"},
+		}, "✅ 已由 Li Na 通过 · "},
+		{"自己在卡片上拒绝过", func(_ int64, token string) { app.larkClick(owner1, token, chat.ActReject) }, "❌ 已由 Zhang Wei 拒绝 · "},
+		{"发起人撤回", func(id int64, _ string) { eq(t, app.cancel(admin, id).Code, 0, "撤回") }, "⚪ 已撤回"},
 		{"作废", func(id int64, _ string) {
 			if err := app.repo.UpdateApprovalStatus(id, model.StatusExpired); err != nil {
 				t.Fatal(err)
 			}
-		}, "已作废"},
+		}, "⚪ 已作废"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			id, no, token, _ := app.sentCommand(lark)
@@ -445,7 +445,7 @@ func TestChatClick_StaleWindowTicket(t *testing.T) {
 	token := cardToken(t, lark, no, "lark:"+owner1)
 	app.repo.DB().Model(&model.ExecWindow{}).Where("id = ?", app.ticket(id).WindowID).UpdateColumn("approval_id", 999999)
 	res := app.larkClick(owner1, token, chat.ActConfirm)
-	if res.OK || res.Toast != toastHandled || res.Card == nil || res.Card.Outcome != "已作废" {
+	if res.OK || res.Toast != toastHandled || res.Card == nil || res.Card.Outcome != "⚪ 已作废" {
 		t.Errorf("应答: %+v %+v", res, res.Card)
 	}
 	if ap := app.ticket(id); ap.Status != model.StatusCancelled || ap.DecidedVia != "" {
@@ -747,7 +747,7 @@ func TestChatClick_Telegram(t *testing.T) {
 	// 同一张单在 Lark 上的卡片再点,是已处理
 	res := app.larkClick(owner1, cardToken(t, lark, no, "lark:"+owner1), chat.ActConfirm)
 	if res.OK || res.Toast != chat.Tr("zh", "click.handled") || res.Card == nil || res.Card.Token != "" ||
-		!strings.HasPrefix(res.Card.Outcome, "已由 Zhang Wei 通过 · ") {
+		!strings.HasPrefix(res.Card.Outcome, "✅ 已由 Zhang Wei 通过 · ") {
 		t.Errorf("已处理: %+v %+v", res, res.Card)
 	}
 }
@@ -760,7 +760,7 @@ func TestChatClick_English(t *testing.T) {
 	res := app.larkClick(owner2, token, chat.ActConfirm)
 	eq(t, res.Toast, "This card is no longer valid. Check the gateway.", "失效")
 	res = app.larkClick(owner1, token, chat.ActConfirm)
-	if res.Toast != "Approved" || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "Approved by Zhang Wei · ") {
+	if res.Toast != "Approved" || res.Card == nil || !strings.HasPrefix(res.Card.Outcome, "✅ Approved by Zhang Wei · ") {
 		t.Errorf("通过: %+v %+v", res, res.Card)
 	}
 	eq(t, app.larkClick(owner2, peer, chat.ActReject).Toast, "This request has already been handled.", "已处理")
@@ -867,11 +867,36 @@ func TestChatClick_OutcomeFollowsTwoStepAnswer(t *testing.T) {
 			}
 			app.dueCards()
 			app.sweepCards()
-			if c := last(); c == nil || !strings.HasPrefix(c.Outcome, "已由 Li Na 通过") || c.Token != "" {
+			if c := last(); c == nil || !strings.HasPrefix(c.Outcome, "✅ 已由 Li Na 通过") || c.Token != "" {
 				t.Errorf("最后停在: %+v", c)
 			}
 			eq(t, app.cardOf(id, owner1).State, model.ChatCardClosed, "收场")
 		})
+	}
+}
+
+// 卡片送到了、库里还没记成已发,人就点了「通过」:记成已发的时候不能把推迟抹掉。
+func TestChatClick_HoldSurvivesMarkingSent(t *testing.T) {
+	app, lark, _ := cardApp(t)
+	id, _ := app.submitCommand()
+	var once atomic.Bool
+	lark.setHooks(func(_ context.Context, account string, c chat.Card) error {
+		if account == "lark:"+owner1 && once.CompareAndSwap(false, true) {
+			time.Sleep(50 * time.Millisecond)
+			if res := app.larkClick(owner1, c.Token, chat.ActApprove); !res.OK || !res.Card.Confirming {
+				t.Errorf("应答: %+v", res)
+			}
+		}
+		return nil
+	}, nil)
+	before := time.Now()
+	app.sweepCards()
+	row, other := app.cardOf(id, owner1), app.cardOf(id, owner2)
+	if row.State != model.ChatCardSent || row.NextAt.Sub(before) < chat.CardWithin {
+		t.Errorf("推迟没了:%s,%s 之后", row.State, row.NextAt.Sub(before))
+	}
+	if other.State != model.ChatCardSent || other.NextAt.After(time.Now()) {
+		t.Errorf("没点的不推迟:%+v", other)
 	}
 }
 
@@ -889,7 +914,7 @@ func TestChatClick_DecidedWhileAnsweringTwoStep(t *testing.T) {
 	}
 	res := app.larkClick(owner1, token, chat.ActApprove)
 	_ = app.repo.DB().Callback().Update().Remove(name)
-	if res.OK || res.Toast != toastHandled || res.Card == nil || res.Card.Outcome != "已撤回" || res.Card.Token != "" {
+	if res.OK || res.Toast != toastHandled || res.Card == nil || res.Card.Outcome != "⚪ 已撤回" || res.Card.Token != "" {
 		t.Errorf("应答: %+v %+v", res, res.Card)
 	}
 }
@@ -904,6 +929,33 @@ func TestChatClick_OnText(t *testing.T) {
 	}
 	if rows := app.chatRows(app.storedUser("chenhao@aegisdb.io").ID); len(rows) != 1 || rows[0].AccountID != "ou_1" || rows[0].ChatID != "oc_1" {
 		t.Errorf("绑定: %+v", rows)
+	}
+}
+
+// 没绑上的回话有频控:一个人刷屏,不能让机器人跟着刷。绑上的那句照回,别人的照回。
+func TestChatClick_OnTextRepliesAreLimited(t *testing.T) {
+	app, _ := chatApp(t)
+	say := func(account, text string) string {
+		return app.svc.OnText(context.Background(), chat.Lark, chatBot, account, "oc_1", text)
+	}
+	replies := 0
+	for range 40 {
+		if say("ou_1", "hello") != "" {
+			replies++
+		}
+	}
+	if replies != 12 {
+		t.Errorf("回了 %d 句", replies)
+	}
+	if say("ou_1", "ABCDEFGH23") != "" {
+		t.Error("输错的也在频控里")
+	}
+	if !strings.Contains(say("ou_2", "hello"), "生成绑定码") {
+		t.Error("别人的照回")
+	}
+	code := app.bindCode(app.login("chenhao@aegisdb.io", "aegisdb123"))
+	if got := say("ou_1", code); !strings.Contains(got, boundReply) {
+		t.Errorf("绑上的照回: %q", got)
 	}
 }
 

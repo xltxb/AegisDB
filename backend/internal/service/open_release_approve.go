@@ -33,6 +33,9 @@ const (
 	OpenActionReject  = "reject"
 )
 
+// ErrChainUnreadable:审批链暂时读不出来,是网关自己的问题,不是调用方的。
+var ErrChainUnreadable = errors.New("暂时读不出审批链,请稍后再试")
+
 // DecideReleaseForClient 让外部系统以审批链上某个人的名义决定一张发布单当前的审批阶段。
 func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, relNo string, req dto.OpenDecideReq) (*dto.OpenDecideResp, error) {
 	if cl == nil || u == nil {
@@ -88,7 +91,7 @@ func (s *Services) DecideReleaseForClient(u *model.User, cl *model.APIClient, re
 	if berr != nil {
 		// 审批链读不出来不等于不在链上:不按拒绝答复,也不按拒绝记。
 		slog.Error("读审批链失败", "apNo", ap.ApNo, "err", berr)
-		return nil, errors.New("暂时读不出审批链,请稍后再试")
+		return nil, ErrChainUnreadable
 	}
 	switch block {
 	case BlockNone:

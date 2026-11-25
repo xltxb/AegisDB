@@ -137,8 +137,12 @@ func TestRender_Confirming(t *testing.T) {
 
 func TestRender_OutcomeHasNoButtons(t *testing.T) {
 	c := pendingCard()
-	c.Outcome, c.Partial, c.Confirming = "已由 王芳 通过 · 11-25 19:40", true, true
+	c.Outcome, c.Partial, c.Confirming = "✅ 已由 王芳 通过 · 11-25 19:40", true, true
 	m := render(c)
+	// 结论里有人的名字,也放进 code;结论自己带记号,标题不再带一个
+	if !strings.Contains(m.text, "<code>"+c.Outcome+"</code>") || !strings.HasPrefix(m.text, "<b>"+c.Title) {
+		t.Errorf("正文:%s", m.text)
+	}
 	if text := parseHTML(t, m.text); !strings.Contains(text, c.Outcome) || strings.Contains(text, "未显示全文") || strings.Contains(text, "确定通过") {
 		t.Errorf("正文:%s", text)
 	}

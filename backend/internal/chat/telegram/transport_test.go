@@ -539,7 +539,7 @@ func TestRun_PollRetryAfter(t *testing.T) {
 	if got := strings.Join(st.list(), ","); !strings.Contains(got, "error|telegram: getUpdates: ") {
 		t.Errorf("状态 %s", got)
 	}
-	if got := pollWait(time.Hour); got != time.Minute {
+	if got := pollWait(time.Hour); got != 5*time.Minute {
 		t.Errorf("最多等 %s", got)
 	}
 }
@@ -750,6 +750,138 @@ func TestRun_StopSkipsQueued(t *testing.T) {
 	}
 }
 
+// 陌生人刷屏、平台又不让回话:不拖着别人的点击,也不拖着 offset。
+func TestReplies_FailingDontHoldOthers(t *testing.T) {
+	f := newFake(t)
+	f.hook("sendMessage", always(429, "Too Many Requests: retry after 2", 2))
+	h := &fakeHandler{text: func(gotText) string { return "用法" }}
+	f.run(f.transport(), h)
+	for range 140 {
+		f.push("message", textMsg(1, "hi"))
+	}
+	began := time.Now()
+	f.push("callback_query", callback(2, "c:"+testCard))
+	eventually(t, "别人的点击", func() bool { _, clicks := h.got(); return len(clicks) == 1 })
+	eventually(t, "推进 offset", func() bool { return len(f.unconfirmed()) == 0 })
+	if d := time.Since(began); d > 2*time.Second {
+		t.Errorf("用了 %s", d)
+	}
+	// 平台不让发,就先不回了,别接着花发卡片要用的额度;每句只试一次
+	if n := len(f.all("sendMessage")); n > replySlots {
+		t.Errorf("试着回了 %d 次", n)
+	}
+}
+
+// 回话同时只有几句在发,多出来的丢掉。
+func TestReplies_Bounded(t *testing.T) {
+	f := newFake(t)
+	release := make(chan struct{})
+	f.hook("sendMessage", func(http.ResponseWriter, *http.Request, call) bool { <-release; return false })
+	defer close(release)
+	h := &fakeHandler{text: func(gotText) string { return "x" }}
+	f.run(f.transport(), h)
+	for i := range int64(30) {
+		f.push("message", textMsg(i+1, "hi"))
+	}
+	eventually(t, "都处理、都确认", func() bool { texts, _ := h.got(); return len(texts) == 30 && len(f.unconfirmed()) == 0 })
+	eventually(t, "占满", func() bool { return len(f.all("sendMessage")) == replySlots })
+	time.Sleep(30 * time.Millisecond)
+	if n := len(f.all("sendMessage")); n != replySlots {
+		t.Errorf("同时在发 %d 句", n)
+	}
+}
+
+// 许多人的文字一起卡住:点击总有位子,也总看得到。
+func TestDispatch_TextsLeaveRoomForClicks(t *testing.T) {
+	f := newFake(t)
+	gate := make(chan struct{})
+	defer close(gate)
+	h := &fakeHandler{text: func(gotText) string { <-gate; return "" }}
+	tr := f.transport()
+	f.run(tr, h)
+	for i := range int64(400) {
+		f.push("message", textMsg(i%10+1, "flood"))
+	}
+	for i := range int64(60) {
+		f.push("callback_query", callback(1000+i, "c:"+testCard))
+	}
+	eventually(t, "全部点击", func() bool { _, clicks := h.got(); return len(clicks) == 60 })
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	if tr.texts > maxTexts {
+		t.Errorf("文字占了 %d 个位子", tr.texts)
+	}
+}
+
+// 同一个机器人换了连接(存一次设置就会):做完的不再做一遍 —— 输错的码不多算,刚绑上的不回「码无效」;还排着
+// 没做的由新连接接着做。
+func TestSeen_SharedAcrossTransports(t *testing.T) {
+	f := newFake(t)
+	seen := NewSeen()
+	gate := make(chan struct{})
+	h := &fakeHandler{text: func(g gotText) string {
+		if g.text == "slow" {
+			<-gate
+		}
+		return ""
+	}}
+	_, stop := f.run(f.transport(WithSeen(seen)), h)
+	f.push("message", textMsg(1, "slow"))
+	f.push("message", textMsg(1, "queued"))
+	f.push("message", textMsg(2, "done"))
+	eventually(t, "做到一半", func() bool { texts, _ := h.got(); return len(texts) == 2 })
+	time.AfterFunc(50*time.Millisecond, func() { close(gate) })
+	_ = stop()
+	if n := len(f.unconfirmed()); n != 3 {
+		t.Fatalf("还剩 %d 条没确认", n)
+	}
+	f.run(f.transport(WithSeen(seen)), h)
+	eventually(t, "接着做", func() bool { return len(f.unconfirmed()) == 0 })
+	texts, _ := h.got()
+	count := map[string]int{}
+	for _, g := range texts {
+		count[g.text]++
+	}
+	if fmt.Sprint(count) != "map[done:1 queued:1 slow:1]" {
+		t.Errorf("处理了 %v", count)
+	}
+}
+
+// 一批里一个号都认不出来:推进不了,断开退避,不能空转。
+func TestPoll_NoUsableID(t *testing.T) {
+	f := newFake(t)
+	f.hook("getUpdates", func(w http.ResponseWriter, _ *http.Request, _ call) bool {
+		ok200(w, []any{map[string]any{"message": textMsg(1, "x")}, "junk"})
+		return true
+	})
+	if _, err := f.runOnce(f.transport()); !strings.Contains(err.Error(), "unexpected") || len(f.all("getUpdates")) != 1 {
+		t.Errorf("%v,收了 %d 次", err, len(f.all("getUpdates")))
+	}
+}
+
+// 启动时就嫌太频繁:等够了再来,不断开。
+func TestRun_StartupRetryAfter(t *testing.T) {
+	for _, m := range []string{"getMe", "getWebhookInfo"} {
+		f := newFake(t)
+		var n atomic.Int32
+		f.hook(m, func(w http.ResponseWriter, _ *http.Request, _ call) bool {
+			if n.Add(1) == 1 {
+				fail(w, 429, "Too Many Requests: retry after 4", 4)
+				return true
+			}
+			return false
+		})
+		st, _ := f.run(f.transport(), &fakeHandler{})
+		calls := f.all(m)
+		if len(calls) != 2 || calls[1].At.Sub(calls[0].At) < 3900*time.Millisecond {
+			t.Errorf("%s 试了 %d 次", m, len(calls))
+		}
+		if got := strings.Join(st.list(), ","); !strings.Contains(got, "error|telegram: "+m) {
+			t.Errorf("状态 %s", got)
+		}
+	}
+}
+
 // ---------------------------------------------------------------- 文字
 
 func TestText_BindAndReply(t *testing.T) {
@@ -765,8 +897,9 @@ func TestText_BindAndReply(t *testing.T) {
 	if r.num("chat_id") != testUser || r.str("text") != "已绑定网关账号 <b>王&芳</b>。" {
 		t.Errorf("回复 %+v", r.Body)
 	}
-	if _, ok := r.Body["parse_mode"]; ok {
-		t.Error("回复不许解析标记:话里有别人起的名字")
+	// 不解析标记,整句放进 code:话里有别人起的名字,平台不会去认里面的链接与 /命令
+	if _, ok := r.Body["parse_mode"]; ok || fmt.Sprint(r.Body["entities"]) != fmt.Sprintf("[map[length:%d offset:0 type:code]]", u16(r.str("text"))) {
+		t.Errorf("回复 %+v", r.Body)
 	}
 	if fmt.Sprint(r.Body["link_preview_options"]) != "map[is_disabled:true]" {
 		t.Errorf("链接预览 %v", r.Body["link_preview_options"])
@@ -975,6 +1108,33 @@ func TestClick_Slow(t *testing.T) {
 	}
 }
 
+// 先答了「正在处理」、做完却是拒绝:原因已经弹不出来了,另发一句。换得了卡片的、没话说的不发。
+func TestClick_SlowRefusal(t *testing.T) {
+	card := pendingCard()
+	for name, c := range map[string]struct {
+		res  chat.ClickResult
+		want int
+	}{"拒绝": {chat.ClickResult{Toast: "你不在这张审批单的审批链上。"}, 1}, "换卡片": {chat.ClickResult{Toast: "已处理", Card: &card}, 0}, "没话说": {chat.ClickResult{OK: true}, 0}} {
+		t.Run(name, func(t *testing.T) {
+			f := newFake(t)
+			release := make(chan struct{})
+			h := &fakeHandler{click: func(chat.Click) chat.ClickResult { <-release; return c.res }}
+			tr := f.transport()
+			tr.answerWithin = 20 * time.Millisecond
+			f.run(tr, h)
+			f.push("callback_query", callback(testUser, "c:"+testCard))
+			eventually(t, "正在处理", func() bool { return len(f.all("answerCallbackQuery")) == 1 })
+			close(release)
+			eventually(t, "做完", func() bool { return len(f.unconfirmed()) == 0 && len(f.all("sendMessage")) == c.want })
+			time.Sleep(30 * time.Millisecond)
+			s := f.all("sendMessage")
+			if len(s) != c.want || c.want == 1 && (s[0].num("chat_id") != testUser || s[0].str("text") != c.res.Toast) {
+				t.Errorf("另发了 %+v", s)
+			}
+		})
+	}
+}
+
 // 换卡片有时限:过了就算了,不许再换(见 chat.CardWithin)。
 func TestClick_EditIsBounded(t *testing.T) {
 	f := newFake(t)
@@ -1021,6 +1181,7 @@ func TestHandlerPanics(t *testing.T) {
 	f.run(f.transport(), h)
 	f.push("callback_query", callback(1, "c:"+testCard))
 	f.push("message", textMsg(1, "boom"))
+	eventually(t, "第一句", func() bool { return len(f.all("sendMessage")) == 1 })
 	f.push("message", textMsg(1, "ok"))
 	eventually(t, "都处理完", func() bool { return len(f.all("sendMessage")) == 2 && len(f.unconfirmed()) == 0 })
 	if a := f.all("answerCallbackQuery"); len(a) != 1 || a[0].str("text") != chat.Tr("zh", "click.retry") {

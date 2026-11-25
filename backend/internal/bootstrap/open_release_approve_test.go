@@ -308,7 +308,7 @@ func TestOpenApproveChainUnreadable(t *testing.T) {
 	}
 	r, _ := app.openDecide(token, rel.RelNo, "chenhao@aegisdb.io", "approve")
 	_ = app.repo.DB().Callback().Query().Remove(name)
-	if r.Code == 0 || r.Code == 40300 || strings.Contains(r.Msg, "审批链上") || strings.Contains(r.Msg, "injected") {
+	if r.Code != 50000 || strings.Contains(r.Msg, "审批链上") || strings.Contains(r.Msg, "injected") {
 		t.Errorf("code=%d msg=%s", r.Code, r.Msg)
 	}
 	for _, row := range app.auditCommandsLike("open.release.approve") {

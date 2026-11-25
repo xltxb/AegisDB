@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -37,6 +38,16 @@ func (s *Seen) Again(id string) bool {
 	s.at[id] = now
 	s.order = append(s.order, id)
 	return false
+}
+
+// Forget 忘掉一个号:当时没来得及处理,平台再给时要处理。
+func (s *Seen) Forget(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.at[id]; ok {
+		delete(s.at, id)
+		s.order = slices.DeleteFunc(s.order, func(x string) bool { return x == id })
+	}
 }
 
 func (s *Seen) forget() {

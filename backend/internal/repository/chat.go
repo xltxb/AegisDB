@@ -227,6 +227,19 @@ func (r *Repo) dueChatCards(state, channel string, now time.Time, limit int, ext
 	return cs, err
 }
 
+// HoldChatCard 把一张卡片的下次时间推迟到 until:已发出的晚一点再收敛,正在发的等记成已发之后也一样。
+func (r *Repo) HoldChatCard(id int64, until time.Time) error {
+	return r.db.Model(&model.ChatCard{}).Where("id = ? AND state IN ?", id, []string{model.ChatCardQueued, model.ChatCardSent}).
+		Update("next_at", until).Error
+}
+
+// KeepIfMoved 是 next_at 的取值:库里还是先前写下的 planned 就换成 now,已被别处改过就不动。比的是范围,
+// 不是相等:各家数据库存时间的精度不同。
+func KeepIfMoved(planned, now time.Time) clause.Expr {
+	const fuzz = 5 * time.Millisecond
+	return gorm.Expr("CASE WHEN next_at BETWEEN ? AND ? THEN ? ELSE next_at END", planned.Add(-fuzz), planned.Add(fuzz), now)
+}
+
 // UpdateChatCard 改一张卡片,前提是它还处在 from 状态;返回是否真的改到了。
 // 卡片会被后台扫描与按钮点击两处改,谁都不能把对方刚收场的卡片改回去。
 func (r *Repo) UpdateChatCard(id int64, from string, fields map[string]any) (bool, error) {

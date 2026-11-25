@@ -8,9 +8,11 @@
 //   - 同一个人的按先后一件件来(点「通过」再点「返回」,卡片不能停在前一个上),不同的人互不等待;
 //   - 处理完才推进 offset。有一条还没处理完,offset 就停在它那里:平台会把它和它之后的再给一遍,认得出来
 //     的不再处理,新来的照常处理,所以一条慢的不会堵住别的;
-//   - 一条处理了 holdFor 还没完,就不再为它停着(不然它后面积到 100 条就看不到新的了)。它接着在后台做完;
-//     只有进程恰好在这之后、它做完之前崩掉才会丢,而点击可以再点一次 —— 决定是幂等的;
-//   - 重放靠 update_id 认出来,所以输错的绑定码不会多算一次。进程重启之后认不出来,靠幂等兜住。
+//   - 停着有两个例外:收下(不是开始处理)已经 holdFor 还没完的;以及平台一次给满了 —— 后面可能还有,停着就
+//     看不到。不再为它停着之后它照样做完,只有进程在它做完之前崩掉才会丢,而点击可以再点一次;
+//   - 文字谁都能发,所以文字占的位子有上限,多出来的丢掉;回话不在处理的路上发,发得慢、发不出都不拖着谁;
+//   - 重放靠 update_id 认出来,所以输错的绑定码不会多算一次。记号按机器人由上层保管(WithSeen),换连接也认得;
+//     进程重启之后认不出来,靠幂等兜住。
 package telegram
 
 import (
@@ -41,7 +43,12 @@ const (
 	holdFor     = 30 * time.Second
 	maxUpdates  = 100 // 一次最多要多少条,也是平台的上限
 	maxInflight = 200 // 没处理完的积到这么多就先不收新的
-	laneMax     = 32  // 一个人排队的上限,多出来的丢掉:不然一个人刷屏,别人的都要等
+	maxTexts    = 100 // 其中文字最多占这么多,余下的留给点击
+	laneMax     = 32  // 一个人排队的上限,多出来的丢掉
+
+	// 回话:同时最多这么几句,每句发完还占着位子一会儿。发消息的额度是整个机器人的(约每秒 30 条),要留给卡片。
+	replySlots = 8
+	replyGap   = 500 * time.Millisecond
 
 	seenMax = 4096
 	seenFor = 24 * time.Hour // 平台替人存 update 的期限
@@ -67,17 +74,24 @@ type Transport struct {
 
 	mu       sync.Mutex
 	next     int64               // 收到过的最后一条之后
-	inflight map[int64]time.Time // 没处理完的 update,从什么时候起
+	passed   int64               // 向平台用过的最大 offset:比它小的不会再给了
+	full     bool                // 上一批给满了
+	inflight map[int64]time.Time // 没处理完的 update,从什么时候收下的
+	texts    int                 // 其中的文字
 	lanes    map[int64][]job     // 每个人排着的;有键就有一个协程在做
 	changed  chan struct{}       // 有一条处理完了
+
+	replies chan struct{} // 回话的位子
+	quiet   atomic.Int64  // 平台嫌太频繁:这之前(UnixNano)不回话
 }
 
 type identity struct{ id, name string }
 
 type job struct {
-	id  int64 // update_id
-	run *running
-	do  func(done func())
+	id   int64 // update_id
+	text bool
+	run  *running
+	do   func()
 }
 
 // running 是一次 Run:事件交给谁、用哪个 ctx。
@@ -100,6 +114,14 @@ func WithLang(lang func() string) Option {
 	return func(t *Transport) { t.lang = lang }
 }
 
+// NewSeen 是记 update_id 的本子,一个机器人一本。
+func NewSeen() *chat.Seen { return chat.NewSeen(seenMax, seenFor) }
+
+// WithSeen 用一本已有的记号:同一个机器人换了连接(存一次设置就会),处理过的还认得。
+func WithSeen(s *chat.Seen) Option {
+	return func(t *Transport) { t.seen = s }
+}
+
 // New 建一个渠道。proxyURL 为空就是直连;它可能带口令,与令牌一样当机密。
 func New(token, proxyURL string, opts ...Option) (*Transport, error) {
 	if !ValidToken(token) {
@@ -113,12 +135,13 @@ func New(token, proxyURL string, opts ...Option) (*Transport, error) {
 		token: token, base: defaultBase, proxy: proxy,
 		secrets:      secretsOf(token, proxy, proxyURL),
 		lang:         func() string { return "" },
-		seen:         chat.NewSeen(seenMax, seenFor),
+		seen:         NewSeen(),
 		answerWithin: answerWithin, cardWithin: chat.CardWithin, settle: settleFor, holdFor: holdFor,
 		limit:    maxUpdates,
 		inflight: map[int64]time.Time{},
 		lanes:    map[int64][]job{},
 		changed:  make(chan struct{}, 1),
+		replies:  make(chan struct{}, replySlots),
 	}
 	for _, o := range opts {
 		o(t)
@@ -159,10 +182,18 @@ func (t *Transport) Run(ctx context.Context, h chat.Handler, onState func(chat.S
 	onState(chat.StateConnecting, "")
 	run := &running{ctx: ctx, h: h}
 	err := t.hello(ctx)
+	for err != nil && chat.RetryAfter(err) > 0 { // 嫌太频繁:等够了再来
+		onState(chat.StateError, err.Error())
+		if !sleep(ctx, pollWait(chat.RetryAfter(err))) {
+			break
+		}
+		err = t.hello(ctx)
+	}
 	if err == nil {
 		err = t.poll(run, onState)
 	}
 	if ctx.Err() != nil {
+		t.unqueue()
 		run.drain()
 		return ctx.Err()
 	}
@@ -235,9 +266,11 @@ func (t *Transport) poll(run *running, onState func(chat.State, string)) error {
 			return clean
 		}
 		quick = false
+		if !t.dispatch(run, ups, len(ups) >= t.limit) && len(ups) > 0 {
+			return t.wrap("getUpdates", errors.New("unexpected response")) // 推进不了,再问还是这些
+		}
 		t.limit = min(t.limit*2, maxUpdates)
 		onState(chat.StateConnected, "")
-		t.dispatch(run, ups)
 		t.rest(ctx)
 	}
 }
@@ -248,6 +281,9 @@ func (t *Transport) getUpdates(ctx context.Context, offset int64, seconds int) (
 	in := map[string]any{"limit": t.limit, "timeout": seconds, "allowed_updates": []string{"message", "callback_query"}}
 	if offset > 0 {
 		in["offset"] = offset
+		t.mu.Lock()
+		t.passed = max(t.passed, offset)
+		t.mu.Unlock()
 	}
 	var out []json.RawMessage
 	err := t.do(ctx, "getUpdates", in, &out, maxPollBody)
@@ -274,6 +310,9 @@ func (t *Transport) offset() (next int64, holding bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	next = t.next
+	if t.full {
+		return next, false
+	}
 	for id, since := range t.inflight {
 		if time.Since(since) < t.holdFor {
 			holding = true
@@ -340,8 +379,8 @@ func (m *textMessage) with(who *sender) bool {
 	return m != nil && who != nil && who.ID > 0 && !who.IsBot && m.Chat.Type == "private" && m.Chat.ID == who.ID && m.SenderChat == nil
 }
 
-// dispatch 把一批 update 交下去,并记下收到了哪里。
-func (t *Transport) dispatch(run *running, batch []json.RawMessage) {
+// dispatch 把一批 update 交下去,并记下收到了哪里;full 是这一批给满了。返回里面有没有认得出标识的。
+func (t *Transport) dispatch(run *running, batch []json.RawMessage, full bool) bool {
 	var last int64
 	for _, raw := range batch {
 		var u update
@@ -354,34 +393,42 @@ func (t *Transport) dispatch(run *running, batch []json.RawMessage) {
 			continue
 		}
 		if who, do := t.jobOf(run, &u); do != nil {
-			t.enqueue(who, job{id: u.ID, run: run, do: do})
+			t.enqueue(who, job{id: u.ID, text: u.Message != nil, run: run, do: do})
 		}
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.full = full
 	if last > 0 {
-		t.mu.Lock()
 		t.next = last + 1 // 不取历来最大的:平台闲置一周之后会另起一段标识
-		t.mu.Unlock()
 	}
+	return last > 0
 }
 
 // jobOf 是一条 update 要做的事与它是谁的;不归这里管的返回 nil。
-func (t *Transport) jobOf(run *running, u *update) (who int64, do func(done func())) {
-	if m := u.Message; m != nil && m.with(m.From) && strings.TrimSpace(m.Text) != "" {
-		return m.From.ID, func(done func()) { t.onText(run, m, done) }
+func (t *Transport) jobOf(run *running, u *update) (who int64, do func()) {
+	if m := u.Message; m != nil {
+		if !m.with(m.From) || strings.TrimSpace(m.Text) == "" {
+			return 0, nil
+		}
+		return m.From.ID, func() { t.onText(run, m) }
 	}
 	c := u.Callback
 	if c == nil || c.ID == "" || !c.Message.with(c.From) || c.Message.From != nil && formatID(c.Message.From.ID) != t.BotID() {
 		return 0, nil
 	}
-	return c.From.ID, func(func()) { t.onClick(run, c.ID, c.Data, c.From.ID, c.Message.ID) }
+	return c.From.ID, func() { t.onClick(run, c.ID, c.Data, c.From.ID, c.Message.ID) }
 }
 
 func (t *Transport) enqueue(who int64, j job) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	queue, working := t.lanes[who]
-	if len(queue) >= laneMax {
+	if len(queue) >= laneMax || j.text && t.texts >= maxTexts {
 		return
+	}
+	if j.text {
+		t.texts++
 	}
 	t.inflight[j.id] = time.Now()
 	t.lanes[who] = append(queue, j)
@@ -409,24 +456,47 @@ func (t *Transport) work(who int64) {
 }
 
 func (t *Transport) one(j job) {
-	done := func() { t.finish(j.id) }
 	defer j.run.wg.Done()
-	// 已经停了:没推进过 offset,留给下一次。现在做的话,回的话送不出去。
-	if j.run.ctx.Err() != nil {
-		return
-	}
-	defer done()
+	defer t.finish(j)
 	defer func() {
 		if recover() != nil {
 			logPanic()
 		}
 	}()
-	j.do(done)
+	j.do()
 }
 
-func (t *Transport) finish(id int64) {
+// unqueue 在停下时把还没开始的放回去:offset 没越过它们,平台会再给,由下一个连接处理 —— 现在处理的话,回的
+// 话已经送不出去。offset 已经越过的留着做完,不然就丢了。
+func (t *Transport) unqueue() {
 	t.mu.Lock()
-	delete(t.inflight, id)
+	defer t.mu.Unlock()
+	for who, queue := range t.lanes {
+		var keep []job
+		for _, j := range queue {
+			if j.id < t.passed {
+				keep = append(keep, j)
+				continue
+			}
+			t.seen.Forget(formatID(j.id))
+			t.drop(j)
+			j.run.wg.Done()
+		}
+		t.lanes[who] = keep
+	}
+}
+
+// drop 把一条从没处理完的里面拿掉;要持 t.mu。
+func (t *Transport) drop(j job) {
+	delete(t.inflight, j.id)
+	if j.text {
+		t.texts--
+	}
+}
+
+func (t *Transport) finish(j job) {
+	t.mu.Lock()
+	t.drop(j)
 	t.mu.Unlock()
 	select {
 	case t.changed <- struct{}{}:
@@ -436,16 +506,35 @@ func (t *Transport) finish(id int64) {
 
 // ---------------------------------------------------------------- 文字
 
-// onText 处理一条私聊文字。交上去就算处理完;回的那句话送不送得到,不拦着 offset。
-func (t *Transport) onText(run *running, m *textMessage, done func()) {
-	reply := t.safeText(run, m)
-	done()
-	if reply == "" {
+// onText 处理一条私聊文字。交上去就算处理完;回的那句话另发。
+func (t *Transport) onText(run *running, m *textMessage) {
+	if reply := t.safeText(run, m); reply != "" {
+		t.later(run, m.Chat.ID, reply)
+	}
+}
+
+// later 另起一路回一句话,只试一次;位子占满了、平台正嫌太频繁,就不回了。要在一件事处理的途中调(run.wg
+// 还没归零)。
+func (t *Transport) later(run *running, chatID int64, text string) {
+	if time.Now().UnixNano() < t.quiet.Load() {
 		return
 	}
-	if err := t.reply(run.ctx, m.Chat.ID, reply); err != nil {
-		slog.Warn("Telegram 回复失败", "err", err)
+	select {
+	case t.replies <- struct{}{}:
+	default:
+		return
 	}
+	run.wg.Add(1)
+	go func() {
+		defer run.wg.Done()
+		defer time.AfterFunc(replyGap, func() { <-t.replies })
+		if err := t.reply(run.ctx, chatID, text); err != nil {
+			if wait := chat.RetryAfter(err); wait > 0 {
+				t.quiet.Store(time.Now().Add(pollWait(wait)).UnixNano())
+			}
+			slog.Warn("Telegram 回复失败", "err", err)
+		}
+	}()
 }
 
 func (t *Transport) safeText(run *running, m *textMessage) (reply string) {
@@ -498,6 +587,9 @@ func (t *Transport) onClick(run *running, queryID, data string, who, messageID i
 		t.tryAnswer(ctx, queryID, r.Toast, !r.OK && r.Toast != "", click.Token)
 	}
 	if r.Card == nil {
+		if answered && r.Toast != "" { // 弹窗的机会已经用在「正在处理」上了
+			t.later(run, who, r.Toast)
+		}
 		return
 	}
 	if err := t.edit(ctx, who, messageID, *r.Card); err != nil {

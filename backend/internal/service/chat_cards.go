@@ -25,6 +25,7 @@ import (
 
 	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 	"aegisdb/pkg/sqlutil"
 )
 
@@ -317,6 +318,12 @@ func (s *Services) sweepChatChannel(ctx context.Context, ch chat.Channel, t chat
 	if bot == "" {
 		return
 	}
+	// 平台嫌太频繁:到它说的时候之前,发送与收敛都不去碰。限流是对这个机器人的。
+	who := chatBot{ch, bot}
+	paused := func() bool {
+		until, ok := s.chatPauses.Load(who)
+		return ok && time.Now().Before(until.(time.Time))
+	}
 	phase := func(list func(string, time.Time, int) ([]model.ChatCard, error), do func(*model.ChatCard) error) {
 		started := time.Now()
 		rows, err := list(string(ch), started, chatSweepBatch)
@@ -325,11 +332,15 @@ func (s *Services) sweepChatChannel(ctx context.Context, ch chat.Channel, t chat
 			return
 		}
 		for i := range rows {
-			if ctx.Err() != nil || time.Since(started) > chatSweepBudget {
+			if ctx.Err() != nil || time.Since(started) > chatSweepBudget || paused() {
 				return
 			}
-			// 超时多半是整个渠道不通,平台嫌太频繁则发谁都一样:这一轮不再逐张去试。
-			if err := do(&rows[i]); errors.Is(err, context.DeadlineExceeded) || chat.RetryAfter(err) > 0 {
+			err := do(&rows[i])
+			if wait := chat.RetryAfter(err); wait > 0 {
+				s.chatPauses.Store(who, time.Now().Add(min(wait, chatRetryMax)))
+			}
+			// 超时多半是整个渠道不通,这一轮不再逐张去试。
+			if errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
 		}
@@ -380,10 +391,11 @@ func (s *Services) sendChatCard(ctx context.Context, ch chat.Channel, t chat.Tra
 	// 先写令牌摘要再发:反过来,发出之后没写上就崩了,那张卡片的按钮永远认不出来。重发会换掉它,
 	// 旧卡片的按钮随之作废。次数与下次时间也在这里先记:发出去却记不下来时,不至于每轮都重发一张。
 	attempts := row.Attempts + 1
+	planned := time.Now().Add(chatRetryAfter(attempts))
 	if !s.setChatCard(row, model.ChatCardQueued, map[string]any{
 		"token_hash": chatCodeHash(card.Token), "bot_id": bot,
 		"partial": card.Partial, "with_sql": chatShowsSQL(ch, includeSQL),
-		"attempts": attempts, "next_at": time.Now().Add(chatRetryAfter(attempts)),
+		"attempts": attempts, "next_at": planned,
 	}) {
 		return nil
 	}
@@ -392,8 +404,10 @@ func (s *Services) sendChatCard(ctx context.Context, ch chat.Channel, t chat.Tra
 		s.chatCallFailed(row, ap, attempts, "发送审批卡片失败", err)
 		return err
 	}
+	// 发送途中它已经送到、被点过,next_at 就是点击推迟的那个(见 holdChatCard),要留着。
 	s.setChatCard(row, model.ChatCardSent, map[string]any{
-		"chat_id": ref.ChatID, "message_id": ref.MessageID, "attempts": 0, "next_at": time.Now(), "last_error": "",
+		"chat_id": ref.ChatID, "message_id": ref.MessageID, "attempts": 0, "last_error": "",
+		"next_at": repository.KeepIfMoved(planned, time.Now()),
 	})
 	return nil
 }
@@ -443,15 +457,27 @@ func (s *Services) convergeChatCard(ctx context.Context, t chat.Transport, bot s
 	return err
 }
 
+// chatBot 是一个渠道上的一个机器人。
+type chatBot struct {
+	ch  chat.Channel
+	bot string
+}
+
 // chatCallFailed 记下一次失败;次数用完就不再试。下次时间从此刻重新算:调用之前记的那个没算上调用本身
-// 花掉的时间,一次拖到超时的调用会让重试紧接着就来。平台要求等得更久的按它的,有上限。
+// 花掉的时间,一次拖到超时的调用会让重试紧接着就来。
+//
+// 平台嫌太频繁的不算一次(退回调用之前记的那次),等够它说的时间再来,有上限。
 func (s *Services) chatCallFailed(row *model.ChatCard, ap *model.Approval, attempts int, what string, err error) {
 	text, state := chatErrText(err), row.State
-	if attempts >= chatMaxAttempts {
+	asked, counted := chat.RetryAfter(err), attempts
+	switch {
+	case asked > 0:
+		counted--
+	case attempts >= chatMaxAttempts:
 		state = model.ChatCardFailed
 	}
-	wait := max(chatRetryAfter(attempts), min(chat.RetryAfter(err), chatRetryMax))
-	s.setChatCard(row, state, map[string]any{"last_error": text, "next_at": time.Now().Add(wait)})
+	wait := max(chatRetryAfter(attempts), min(asked, chatRetryMax))
+	s.setChatCard(row, state, map[string]any{"last_error": text, "attempts": counted, "next_at": time.Now().Add(wait)})
 	slog.Warn(what, "channel", row.Channel, "apNo", ap.ApNo, "user", row.UserID, "attempt", attempts, "err", text)
 }
 

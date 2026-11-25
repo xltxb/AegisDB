@@ -3,7 +3,8 @@ package telegram
 // 把 chat.Card 画成 Telegram 的 HTML 消息。
 //
 // 用 HTML 不用 MarkdownV2:HTML 只有 < > & " 四个字符要转义,漏不了;Markdown 要转义的有十几个,随上下文
-// 而变。来自用户的值放进 code / pre:那里面平台不会再去认链接、@ 某人和 /命令。
+// 而变。来自用户的值(字段、原因、语句、结论里的名字)放进 code / pre:那里面平台不会再去认链接、@ 某人和
+// /命令。标题只有固定文案与单号。
 
 import (
 	"net/url"
@@ -101,7 +102,7 @@ var escaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "
 func compose(c chat.Card) *rich {
 	tr := func(key string) string { return chat.Tr(c.Lang, key) }
 	r := &rich{}
-	r.add("b", icon(c)+" "+c.Title)
+	r.add("b", icon(c)+c.Title)
 	sep := "\n\n"
 	line := func(label, value string) {
 		r.add("", sep+label+": ")
@@ -120,7 +121,7 @@ func compose(c chat.Card) *rich {
 	}
 	if c.Outcome != "" {
 		r.add("", "\n\n")
-		r.add("b", c.Outcome)
+		r.add("code", c.Outcome)
 		return r
 	}
 	if c.Partial {
@@ -133,16 +134,17 @@ func compose(c chat.Card) *rich {
 	return r
 }
 
+// icon 按风险给标题一个记号;有了结论的不给,结论自己带着。
 func icon(c chat.Card) string {
 	switch {
 	case c.Outcome != "":
-		return "⚪"
+		return ""
 	case c.Risk == "high":
-		return "🔴"
+		return "🔴 "
 	case c.Risk == "mid":
-		return "🟠"
+		return "🟠 "
 	}
-	return "🔵"
+	return "🔵 "
 }
 
 // actions 是动作在 callback_data 里的短码:整个串最多 64 字节,令牌占了 32。

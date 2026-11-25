@@ -21,9 +21,19 @@ import (
 
 var _ chat.Handler = (*Services)(nil)
 
-// OnText 处理一条私聊文字:只有兑换绑定码这一件事。
+// OnText 处理一条私聊文字:只有兑换绑定码这一件事。没绑上的回话有频控:谁都能给机器人发消息,不能让它跟着
+// 刷,把发卡片要用的平台额度花在这上面。
 func (s *Services) OnText(_ context.Context, ch chat.Channel, botID, accountID, chatID, text string) string {
-	return s.RedeemChatBindCode(ch, botID, accountID, chatID, text)
+	reply, bound := s.redeemChatBindCode(ch, botID, accountID, chatID, text)
+	if bound {
+		return reply
+	}
+	who, now := chatAccount{ch, botID, accountID}, time.Now()
+	if s.chatReplies.locked(who, now) {
+		return ""
+	}
+	s.chatReplies.fail(who, now)
+	return reply
 }
 
 // OnClick 处理一次按钮点击。
@@ -239,8 +249,8 @@ var chatAnswerSlack = 5 * time.Second
 // 扫描都看得到这个推迟;读到已有结论,就不给按钮。
 func (s *Services) holdChatCard(row *model.ChatCard) (*model.Approval, error) {
 	began := time.Now()
-	// 只有已发出的会被收敛;没改到(刚被扫描收场)不要紧,下面会读到结论。
-	if _, err := s.Repo.UpdateChatCard(row.ID, model.ChatCardSent, map[string]any{"next_at": began.Add(chat.CardWithin + chatAnswerSlack)}); err != nil {
+	// 没改到(刚被扫描收场)不要紧,下面会读到结论。
+	if err := s.Repo.HoldChatCard(row.ID, began.Add(chat.CardWithin+chatAnswerSlack)); err != nil {
 		return nil, err
 	}
 	ap, err := s.Repo.GetApproval(row.ApprovalID)

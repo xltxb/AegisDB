@@ -36,6 +36,9 @@ type Services struct {
 	chatRun        chatRuntime
 	chatLang       atomic.Pointer[string] // 最近一次读到的卡片语言(chat_runtime.go)
 	chatTests      *failBook[chatTester]  // 测试卡片的频控(chat_runtime.go)
+	chatReplies    *failBook[chatAccount] // 没绑上的回话的频控(chat_click.go)
+	chatPauses     sync.Map               // chatBot → 平台要求等到什么时候(chat_cards.go)
+	chatSeen       sync.Map               // Telegram 机器人标识 → 处理过的 update(chat_runtime.go)
 	chatRefusals   *failBook[chatRefusal] // 被拒点击的日志的频控(chat_click.go)
 	Engine     *gateway.RiskEngine
 	Executor   *gateway.Executor
@@ -90,6 +93,7 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 		chatCodeFails: newFailBook[chatAccount](chatCodeMaxFails, chatCodeWindow, chatCodeLockout),
 		chatCodeGens:  newFailBook[int64](chatCodeMaxGens, chatCodeWindow, chatCodeLockout),
 		chatTests:     newFailBook[chatTester](1, chatTestEvery, chatTestEvery),
+		chatReplies:   newFailBook[chatAccount](chatReplyMax, time.Minute, time.Minute),
 		chatRefusals:  newFailBook[chatRefusal](1, time.Minute, time.Minute),
 	}
 	// Seed counters from the MAX existing sequence (never reuse a number, even

@@ -51,11 +51,11 @@ func TestTr(t *testing.T) {
 			t.Errorf("Tr(%q, %q) = %q,应为 %q", c.lang, c.key, got, c.want)
 		}
 	}
-	if got := Tr("zh", "outcome.approved", "王芳", "11-25 19:40"); got != "已由 王芳 通过 · 11-25 19:40" {
+	if got := Tr("zh", "outcome.approved", "王芳", "11-25 19:40"); got != "✅ 已由 王芳 通过 · 11-25 19:40" {
 		t.Errorf("带参数:%q", got)
 	}
 	// 参数里的 % 是数据,不是格式串。
-	if got := Tr("en", "outcome.rejected", "100%d", "x"); got != "Rejected by 100%d · x" {
+	if got := Tr("en", "outcome.rejected", "100%d", "x"); got != "❌ Rejected by 100%d · x" {
 		t.Errorf("参数里带 %%:%q", got)
 	}
 }

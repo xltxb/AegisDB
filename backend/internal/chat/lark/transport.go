@@ -403,6 +403,17 @@ func (t *Transport) onClick(e *callback.CardActionTriggerEvent) *callback.CardAc
 		}
 		return out
 	case <-timer.C:
+		// 提示的机会用在「正在处理」上了:做完没有卡片可更新的(多半是被拒),另发一句说原因。按点的人发,只到他
+		// 的私聊。
+		run.wg.Add(1)
+		go func() {
+			defer run.wg.Done()
+			if res := <-done; res.Card == nil && res.Toast != "" {
+				if _, err := t.post(run.ctx, "open_id", c.AccountID, "interactive", renderReply(res.Toast)); err != nil {
+					slog.Warn("Lark 回复失败", "err", t.scrub.wrap("reply", err, c.Token))
+				}
+			}
+		}()
 		return t.toast("info", t.say("click.processing"))
 	}
 }

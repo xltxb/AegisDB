@@ -165,7 +165,10 @@ func (s *Services) newChatTransport(ch chat.Channel, c ChatConfig) chat.Transpor
 }
 
 func (s *Services) newTelegram(c ChatConfig, opts ...telegram.Option) chat.Transport {
-	t, err := telegram.New(c.BotToken, c.Proxy, append(opts, telegram.WithLang(s.quickCardLang))...)
+	// 记号按机器人保管:令牌的前半就是机器人的标识,换了令牌、代理也还是它。
+	bot, _, _ := strings.Cut(c.BotToken, ":")
+	seen, _ := s.chatSeen.LoadOrStore(bot, telegram.NewSeen())
+	t, err := telegram.New(c.BotToken, c.Proxy, append(opts, telegram.WithLang(s.quickCardLang), telegram.WithSeen(seen.(*chat.Seen)))...)
 	if err != nil {
 		return nil // 格式已在 chatConfig 里核对过
 	}

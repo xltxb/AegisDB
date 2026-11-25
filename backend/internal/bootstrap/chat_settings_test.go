@@ -359,7 +359,7 @@ func TestChatSettings_IncludeSQLAffectsLaterCardsOnly(t *testing.T) {
 	app.dueCards()
 	app.sweepCards()
 	ups := tg.updates()
-	if len(ups) != 1 || ups[0].Card.Outcome != "已撤回" || ups[0].Card.Statement != "" || ups[0].Card.Reason != "" {
+	if len(ups) != 1 || ups[0].Card.Outcome != "⚪ 已撤回" || ups[0].Card.Statement != "" || ups[0].Card.Reason != "" {
 		t.Errorf("先前那张的更新: %+v", ups)
 	}
 	if rows := app.auditCommandsLike("chat.telegram.includeSql=true"); len(rows) != 1 {
