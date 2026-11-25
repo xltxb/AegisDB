@@ -128,7 +128,7 @@ func realSchemaOnce(conn *model.Connection) ([]SchemaGroup, error) {
 // source as SHOW DATABASES — minus the system ones the table query also skips.
 func mysqlSchemaNames(ctx context.Context, db *sql.DB) ([]string, error) {
 	rows, err := db.QueryContext(ctx, `SELECT schema_name FROM information_schema.schemata `+
-		`WHERE schema_name NOT IN ('mysql','information_schema','performance_schema','sys')`)
+		`WHERE LOWER(schema_name) NOT IN `+mysqlSystemSchemas)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func schemaIntrospectQuery(conn *model.Connection) (query string, singleDB bool)
 	case strings.Contains(e, "tidb") || strings.Contains(e, "mysql") || strings.Contains(e, "mariadb"):
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
 			`WHERE table_type IN ('BASE TABLE','VIEW') ` +
-			`AND table_schema NOT IN ('mysql','information_schema','performance_schema','sys') ` +
+			`AND LOWER(table_schema) NOT IN ` + mysqlSystemSchemas + ` ` +
 			`ORDER BY table_schema, table_name`, false
 	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
