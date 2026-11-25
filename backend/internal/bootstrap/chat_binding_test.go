@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -16,6 +17,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 
 	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
@@ -499,6 +502,7 @@ func TestChatBind_StaleSessionGetsNoCode(t *testing.T) {
 	for what, col := range map[string]map[string]any{
 		"口令改了":   {"password_hash": "x"},
 		"停用了":    {"status": "disabled"},
+		"会话作废了":  {"token_version": 99},
 		"MFA 换了": {"mfa_enabled": true, "mfa_secret": "JBSWY3DPEHPK3PXP"},
 	} {
 		before := mustUser(t, app, u.ID)
@@ -510,7 +514,7 @@ func TestChatBind_StaleSessionGetsNoCode(t *testing.T) {
 			t.Errorf("%s:不该留下绑定码", what)
 		}
 		app.repo.DB().Model(&model.User{}).Where("id = ?", u.ID).Updates(map[string]any{
-			"password_hash": u.PasswordHash, "status": "active", "mfa_enabled": false, "mfa_secret": ""})
+			"password_hash": u.PasswordHash, "status": "active", "mfa_enabled": false, "mfa_secret": "", "token_version": u.TokenVersion})
 	}
 }
 
@@ -524,7 +528,7 @@ func TestChatUnbind_Automatic(t *testing.T) {
 		{"停用账号", "停用", model.AuditSourceAdmin, false, func(app *testApp, admin, _ string, id int64) apiResp {
 			return app.do(http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", id), admin, map[string]any{"status": "disabled"})
 		}},
-		{"改成受邀", "停用", model.AuditSourceAdmin, false, func(app *testApp, admin, _ string, id int64) apiResp {
+		{"改成受邀", "账号状态变更", model.AuditSourceAdmin, false, func(app *testApp, admin, _ string, id int64) apiResp {
 			return app.do(http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", id), admin, map[string]any{"status": "invited"})
 		}},
 		{"管理员重置口令", "重置了登录口令", model.AuditSourceAdmin, false, func(app *testApp, admin, _ string, id int64) apiResp {
@@ -705,4 +709,160 @@ func TestChatUnbind_RacesWithRedeem(t *testing.T) {
 			t.Fatalf("第 %d 轮:重置口令之后还留着绑定 %+v", i, rows)
 		}
 	}
+}
+
+// beforeTokenBump 在「会话代次即将提升」的那一刻(旧 token 还认得)跑一次 fn。
+func (a *testApp) beforeTokenBump(t *testing.T, fn func(tx *gorm.DB)) {
+	t.Helper()
+	const name = "test:before_bump"
+	fired := false
+	err := a.repo.DB().Callback().Update().Before("gorm:begin_transaction").Register(name, func(tx *gorm.DB) {
+		if cols, ok := tx.Statement.Dest.(map[string]any); ok && !fired {
+			if _, bump := cols["token_version"]; bump {
+				fired = true
+				fn(tx)
+			}
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = a.repo.DB().Callback().Update().Remove(name)
+		if !fired {
+			t.Error("没有等到提升会话代次的那一步,用例没有生效")
+		}
+	})
+}
+
+// chatResets 是会作废会话的三件事;做之前旧会话都还活着。
+var chatResets = map[string]func(app *testApp, admin, self string, id int64) apiResp{
+	"管理员重置口令": func(app *testApp, admin, _ string, id int64) apiResp {
+		return app.do(http.MethodPost, fmt.Sprintf("/api/v1/users/%d/password", id), admin, map[string]any{"password": "newpass99"})
+	},
+	"管理员重置 MFA": func(app *testApp, admin, _ string, id int64) apiResp {
+		return app.do(http.MethodPost, fmt.Sprintf("/api/v1/users/%d/mfa/reset", id), admin, nil)
+	},
+	"本人改口令": func(app *testApp, _, self string, _ int64) apiResp {
+		return app.do(http.MethodPost, "/api/v1/auth/password", self, map[string]any{"oldPassword": "aegisdb123", "newPassword": "newpass99"})
+	},
+}
+
+// 凭据已经写下、旧会话还没作废的空当里,旧会话看到的就是新凭据 —— 光比凭据发现不了它。
+// 它在空当里拿到的码、以及空当里过了鉴权而晚些才存的码,重置之后都不能留着。
+func TestChatUnbind_OldSessionInResetWindow(t *testing.T) {
+	for name, reset := range chatResets {
+		t.Run(name, func(t *testing.T) {
+			app, _ := chatApp(t)
+			admin := app.login("linwei@aegisdb.io", "aegisdb123")
+			old := app.login("chenhao@aegisdb.io", "aegisdb123")  // 被盗的会话
+			self := app.login("chenhao@aegisdb.io", "aegisdb123") // 本人的会话
+			u := app.storedUser("chenhao@aegisdb.io")
+			if name == "管理员重置 MFA" {
+				app.setupMFA(old) // 重置之后 MFA 是关的,空当里不再要码
+			}
+			var leaked apiResp
+			var authed *model.User
+			app.beforeTokenBump(t, func(*gorm.DB) {
+				leaked = app.do(http.MethodPost, larkCode, old, map[string]any{})
+				authed = mustUser(t, app, u.ID) // 空当里过了鉴权、还没存码的另一个请求
+			})
+			if r := reset(app, admin, self, u.ID); r.Code != 0 {
+				t.Fatalf("code=%d msg=%s", r.Code, r.Msg)
+			}
+			if rows := app.chatCodes(u.ID); len(rows) != 0 {
+				t.Errorf("重置之后还留着绑定码: %+v", rows)
+			}
+			var d struct {
+				Code string `json:"code"`
+			}
+			_ = json.Unmarshal(leaked.Data, &d)
+			if reply := app.redeem("ou_evil", d.Code); strings.Contains(reply, boundReply) {
+				t.Errorf("已作废的会话在空当里拿到的码兑成了: %q", reply)
+			}
+			if _, _, err := app.svc.NewChatBindCode(authed, chat.Lark, ""); err != service.ErrChatUserChanged {
+				t.Errorf("空当里过了鉴权的请求晚些才存码: %v", err)
+			}
+			if rows := app.chatCodes(u.ID); len(rows) != 0 {
+				t.Errorf("不该留下绑定码: %+v", rows)
+			}
+			if rows := app.chatRows(u.ID); len(rows) != 0 {
+				t.Errorf("不该绑上: %+v", rows)
+			}
+		})
+	}
+}
+
+// 作废会话失败:照旧报错,但绑定要解掉 —— 凭据已经换了。停用同理。
+func TestChatUnbind_EvenIfTokenBumpFails(t *testing.T) {
+	resets := map[string]func(app *testApp, admin, self string, id int64) apiResp{
+		"停用": func(app *testApp, admin, _ string, id int64) apiResp {
+			return app.do(http.MethodPatch, fmt.Sprintf("/api/v1/users/%d", id), admin, map[string]any{"status": "disabled"})
+		},
+	}
+	for k, v := range chatResets {
+		resets[k] = v
+	}
+	for name, reset := range resets {
+		t.Run(name, func(t *testing.T) {
+			app, _ := chatApp(t)
+			admin := app.login("linwei@aegisdb.io", "aegisdb123")
+			self := app.bindAs("chenhao@aegisdb.io", "ou_1")
+			u := app.storedUser("chenhao@aegisdb.io")
+			app.beforeTokenBump(t, func(tx *gorm.DB) { _ = tx.AddError(errors.New("bump failed")) })
+			if r := reset(app, admin, self, u.ID); r.Code == 0 {
+				t.Error("作废会话失败应如实报错")
+			}
+			if rows := app.chatRows(u.ID); len(rows) != 0 {
+				t.Errorf("绑定应解掉: %+v", rows)
+			}
+		})
+	}
+}
+
+// 改写已有绑定时那一行已经没了:当作失败,不能回「已绑定」而库里什么都没有;码也没用掉。
+func TestChatBind_ReplaceLosesRow(t *testing.T) {
+	app, _ := chatApp(t)
+	token := app.bindAs("chenhao@aegisdb.io", "ou_1")
+	u := app.storedUser("chenhao@aegisdb.io")
+	code := app.bindCode(token)
+	const name = "test:lose_row"
+	_ = app.repo.DB().Callback().Update().Before("gorm:update").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "tbl_chat_binding" {
+			tx.Session(&gorm.Session{NewDB: true}).Exec("DELETE FROM tbl_chat_binding")
+		}
+	})
+	if reply := app.redeem("ou_2", code); !strings.Contains(reply, "绑定失败") {
+		t.Errorf("回复: %q", reply)
+	}
+	_ = app.repo.DB().Callback().Update().Remove(name)
+	if rows := app.chatRows(u.ID); len(rows) != 1 || rows[0].AccountID != "ou_1" {
+		t.Errorf("应整体回滚: %+v", rows)
+	}
+	if reply := app.redeem("ou_2", code); !strings.Contains(reply, boundReply) {
+		t.Errorf("码不该被用掉: %q", reply)
+	}
+}
+
+// 绑定与解绑的审计能对上是同一个聊天账号,但不写出账号标识。
+func TestChatAudit_AccountFingerprint(t *testing.T) {
+	app, _ := chatApp(t)
+	token := app.bindAs("chenhao@aegisdb.io", "ou_fingerprint")
+	eq(t, app.do(http.MethodDelete, bindURL+"/lark", token, nil).Code, 0, "解绑")
+	sum := sha256.Sum256([]byte("ou_fingerprint"))
+	for _, p := range []string{"chat.bind %", "chat.unbind %"} {
+		rows := app.auditLike(p)
+		if len(rows) != 1 || !strings.Contains(rows[0].Command, "account="+hex.EncodeToString(sum[:])[:12]+" ") || strings.Contains(rows[0].Command, "ou_fingerprint") {
+			t.Errorf("%s: %+v", p, rows)
+		}
+	}
+}
+
+// 带类型的 nil 也是「关闭」,不能让后面的调用崩掉。
+func TestChatTransport_TypedNil(t *testing.T) {
+	app, _ := chatApp(t)
+	var none *fakeChat
+	app.svc.SetChatTransport(chat.Lark, none)
+	raw, _ := app.chatBindings(app.login("chenhao@aegisdb.io", "aegisdb123"))
+	eq(t, raw, "[]", "带类型的 nil")
 }

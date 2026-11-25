@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"log/slog"
+	"reflect"
 	"strings"
 	"time"
 
@@ -51,11 +52,12 @@ type chatAccount struct {
 	bot, accountID string
 }
 
-// SetChatTransport 换上一个渠道的实现;nil = 关闭这个渠道。「渠道开着」就是这里有实现。
+// SetChatTransport 换上一个渠道的实现;nil(包括带类型的 nil 指针)= 关闭这个渠道。「渠道开着」就是
+// 这里有实现。
 func (s *Services) SetChatTransport(ch chat.Channel, t chat.Transport) {
 	s.chatMu.Lock()
 	defer s.chatMu.Unlock()
-	if t == nil {
+	if v := reflect.ValueOf(t); t == nil || v.Kind() == reflect.Pointer && v.IsNil() {
 		delete(s.chatTransports, ch)
 		return
 	}
@@ -160,6 +162,7 @@ func (s *Services) NewChatBindCode(u *model.User, ch chat.Channel, mfaCode strin
 	if u.Kind == model.UserKindService {
 		return "", time.Time{}, ErrChatHumanOnly
 	}
+	// 查与记是两步,同时发来的几个请求可能都过了这一查、多生成几个;上限只防滥用,不追求精确。
 	if s.chatCodeGens.locked(u.ID, time.Now()) {
 		return "", time.Time{}, ErrChatTooManyGens
 	}
@@ -177,12 +180,17 @@ func (s *Services) NewChatBindCode(u *model.User, ch chat.Channel, mfaCode strin
 	if err := s.Repo.SaveChatBindCode(u.ID, string(ch), hash, expires); err != nil {
 		return "", time.Time{}, err
 	}
-	// 口令重置、停用、MFA 变更都会作废已有的码(autoUnbindChat),但这个请求可能在那之前就过了
-	// 鉴权、在那之后才存下码。存完回头看一眼:凭据变了就收回 —— 变更写在作废之前,所以要么这里
-	// 看得到变更,要么那边删得到这个码。
+	// 口令重置、停用、MFA 变更都会删掉已有的码,但这个请求可能更早就过了鉴权、在那之后才存下码。
+	// 所以存完回头再看一眼,变了就收回。那边的顺序是:写凭据 / 状态 → 提升会话代次 → 删码
+	// (revokeSessionsAndChat);这边是:鉴权读用户 → 存码 → 重读。于是
+	//   - 存码在删码之前:那边删得到它;
+	//   - 存码在删码之后:重读也在提升代次之后,而请求过鉴权时的代次是提升之前的(提升之后旧 token
+	//     过不了鉴权),比得出来。
+	// 只比凭据不够:夹在"写凭据"与"提升代次"之间过鉴权的旧会话,手里已经是新凭据。凭据与状态仍要
+	// 比:AdminBindMFA 不提升代次。
 	fresh, err := s.Repo.GetUserByID(u.ID)
-	if err == nil && (fresh.Status != "active" || fresh.Kind != u.Kind || fresh.PasswordHash != u.PasswordHash ||
-		fresh.MFAEnabled != u.MFAEnabled || fresh.MFASecret != u.MFASecret) {
+	if err == nil && (fresh.TokenVersion != u.TokenVersion || fresh.Status != "active" || fresh.Kind != u.Kind ||
+		fresh.PasswordHash != u.PasswordHash || fresh.MFAEnabled != u.MFAEnabled || fresh.MFASecret != u.MFASecret) {
 		err = ErrChatUserChanged
 	}
 	if err != nil {
@@ -208,6 +216,7 @@ func (s *Services) RedeemChatBindCode(ch chat.Channel, botID, accountID, chatID,
 	}
 	who := chatAccount{ch, botID, accountID}
 	now := time.Now()
+	// 查与记是两步,并发的几条消息可能多试几次;码有约 49 bit,多这几次无碍(MFA 的计数同样如此)。
 	if s.chatCodeFails.locked(who, now) {
 		return say("bind.locked")
 	}
@@ -229,7 +238,7 @@ func (s *Services) RedeemChatBindCode(ch chat.Channel, botID, accountID, chatID,
 		return say("bind.failed")
 	}
 	// 这里没有 HTTP 请求给 u 盖来源,显式记 auth:这是本人给自己加了一把凭据。
-	s.recordAuditSrc(model.AuditSourceAuth, u, nil, "chat.bind 绑定审批机器人 channel="+ch.Name()+" user="+u.Email,
+	s.recordAuditSrc(model.AuditSourceAuth, u, nil, "chat.bind 绑定审批机器人 channel="+ch.Name()+" account="+chatAccountMark(accountID)+" user="+u.Email,
 		model.RiskMid, model.ResultExecuted, "", "")
 	s.notify(u.ID, model.NotifChatBound, apimsg.T("已绑定审批机器人"),
 		apimsg.Sprintf("你的账号已绑定 %s 审批机器人,可以直接在聊天里审批。\n不是你本人操作的话,请立即在右上角用户菜单的「审批机器人」里解绑,并联系管理员。", ch.Name()), "")
@@ -249,15 +258,24 @@ func (s *Services) UnbindChat(actor *model.User, userID int64, ch chat.Channel, 
 	}
 	for _, b := range gone {
 		name := chat.Channel(b.Channel).Name()
-		s.auditAdminAction(actor, "chat.unbind 解除审批机器人绑定 channel="+name+" user="+u.Email+" 原因:"+why)
+		s.auditAdminAction(actor, "chat.unbind 解除审批机器人绑定 channel="+name+" account="+chatAccountMark(b.AccountID)+" user="+u.Email+" 原因:"+why)
 		s.notify(userID, model.NotifChatUnbound, apimsg.T("审批机器人已解绑"),
 			apimsg.Sprintf("你的 %s 审批机器人绑定已解除:%s。", name, apimsg.Of(why)), "")
 	}
 	return nil
 }
 
-// autoUnbindChat 在账号的凭据或状态变了之后解绑。紧跟在那次写入**之后**调(理由见 NewChatBindCode);
-// 失败只记日志 —— 重置口令、停用账号本身不能因为解绑不成而失败。
+// revokeSessionsAndChat 在改完凭据之后作废会话并解绑聊天账号。
+//
+// 顺序不能换:先提升会话代次,再解绑。反过来的话,解绑之后、代次提升之前旧会话还过得了鉴权,能再
+// 生成一个码、绑上去,活过这次重置。提升失败也照样解绑(凭据已经换了),错误交给调用方。
+func (s *Services) revokeSessionsAndChat(actor *model.User, userID int64, why string) error {
+	err := s.Repo.BumpTokenVersion(userID)
+	s.autoUnbindChat(actor, userID, why)
+	return err
+}
+
+// autoUnbindChat 在账号的凭据或状态变了之后解绑。要作废会话的,排在作废之后;失败只记日志 —— 重置口令、停用账号本身不能因为解绑不成而失败。
 func (s *Services) autoUnbindChat(actor *model.User, userID int64, why string) {
 	if err := s.UnbindChat(actor, userID, "", why); err != nil {
 		slog.Error("自动解绑审批机器人失败,该账号的聊天绑定可能仍在", "user", userID, "why", why, "err", err)
@@ -312,6 +330,12 @@ func newChatCode() (string, error) {
 			return string(code), nil
 		}
 	}
+}
+
+// chatAccountMark 是聊天账号在审计里的短标记:同一个账号前后对得上,又不写出平台的账号标识。
+func chatAccountMark(accountID string) string {
+	sum := sha256.Sum256([]byte(accountID))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func chatCodeHash(code string) string {

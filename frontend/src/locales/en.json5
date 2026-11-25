@@ -2998,6 +2998,8 @@
     m37f36ca8: 'Account not found',
     // 账号状态刚刚变化,请刷新后重试
     m63792ac6: 'Your account has just changed; please refresh and try again',
+    // 账号状态变更
+    m6a5bc13e: 'the account status changed',
     // 账号被停用
     me2cae465: 'the account was disabled',
     // 超时上限(秒)

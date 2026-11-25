@@ -1729,10 +1729,10 @@ func (s *Services) AdminSetPassword(actor *model.User, id int64, newPassword str
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return err
 	}
-	s.autoUnbindChat(actor, u.ID, apimsg.Text("管理员重置了登录口令"))
-	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
 	// A password reset must invalidate the user's existing sessions (M1).
-	return s.Repo.BumpTokenVersion(u.ID)
+	err = s.revokeSessionsAndChat(actor, u.ID, apimsg.Text("管理员重置了登录口令"))
+	s.auditAdminAction(actor, "admin.password.reset user="+u.Email)
+	return err
 }
 
 // AdminResetMFA unbinds a user's OTP (disable + clear secret) so they can
@@ -1745,10 +1745,10 @@ func (s *Services) AdminResetMFA(actor *model.User, id int64) error {
 	if err := s.Repo.UpdateUserMFA(id, false, ""); err != nil {
 		return err
 	}
-	s.autoUnbindChat(actor, id, apimsg.Text("管理员重置了 MFA"))
-	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
 	// 解绑多半是因为手机丢了:丢的那台设备上开着的会话不能继续活着,与改口令同理(M1)。
-	return s.Repo.BumpTokenVersion(u.ID)
+	err = s.revokeSessionsAndChat(actor, u.ID, apimsg.Text("管理员重置了 MFA"))
+	s.auditAdminAction(actor, "admin.mfa.reset user="+u.Email)
+	return err
 }
 
 // AdminBindMFA generates a fresh OTP secret, binds it (enabled) to the user, and
@@ -1762,6 +1762,7 @@ func (s *Services) AdminBindMFA(actor *model.User, id int64) (*dto.MFASetupResp,
 	if err := s.Repo.UpdateUserMFA(u.ID, true, secret); err != nil {
 		return nil, err
 	}
+	// 这里不作废会话(一直如此):旧会话此后要绑聊天账号,得先过这个新因子,它拿不到。
 	s.autoUnbindChat(actor, u.ID, apimsg.Text("管理员重新绑定了 MFA"))
 	s.auditAdminAction(actor, "admin.mfa.bind user="+u.Email)
 	return &dto.MFASetupResp{Secret: secret, OtpauthURI: totp.URI(secret, u.Email, s.Brand().Text(BrandDefaultUI, true))}, nil

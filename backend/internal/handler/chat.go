@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -62,6 +63,7 @@ func (h *Handler) ChatBindCode(c *gin.Context) {
 		errors.Is(err, service.ErrChatHumanOnly), errors.Is(err, service.ErrChatUserChanged):
 		resp.FailErr(c, resp.CodeBadRequest, err)
 	default:
+		slog.Error("generate chat bind code failed", "channel", ch, "user", middleware.CurrentUser(c).ID, "err", err)
 		resp.Fail(c, resp.CodeInternalError, "生成失败")
 	}
 }
@@ -76,6 +78,7 @@ func (h *Handler) ChatUnbind(c *gin.Context) {
 	}
 	u := middleware.CurrentUser(c)
 	if err := h.Svc.UnbindChat(u, u.ID, ch, apimsg.Text("你在网关里解除了绑定")); err != nil {
+		slog.Error("chat unbind failed", "channel", ch, "user", u.ID, "err", err)
 		resp.Fail(c, resp.CodeInternalError, "解绑失败")
 		return
 	}
@@ -93,6 +96,7 @@ func (h *Handler) ChatUnbindUser(c *gin.Context) {
 	case errors.Is(err, service.ErrNotFound):
 		resp.Fail(c, resp.CodeBadRequest, "用户不存在")
 	default:
+		slog.Error("admin chat unbind failed", "user", pathID(c), "err", err)
 		resp.Fail(c, resp.CodeInternalError, "解绑失败")
 	}
 }

@@ -121,8 +121,12 @@ func (r *Repo) RedeemChatBindCode(hash, channel, botID, accountID, chatID string
 		if err != nil {
 			return err
 		}
-		return tx.Model(&model.ChatBinding{}).Where("id = ?", old.ID).Updates(map[string]any{
-			"bot_id": botID, "account_id": accountID, "chat_id": chatID, "created_at": now}).Error
+		res := tx.Model(&model.ChatBinding{}).Where("id = ?", old.ID).Updates(map[string]any{
+			"bot_id": botID, "account_id": accountID, "chat_id": chatID, "created_at": now})
+		if res.Error == nil && res.RowsAffected != 1 {
+			return errors.New("chat binding row vanished while being replaced") // 不能回「已绑定」而库里没有
+		}
+		return res.Error
 	})
 	if err == nil {
 		return &u, nil
