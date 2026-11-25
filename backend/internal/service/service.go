@@ -125,8 +125,11 @@ func New(repo *repository.Repo, engine *gateway.RiskEngine, jwtMgr *jwt.Manager)
 	// execute stage may have reached the database), while one still `pending`
 	// never started and is simply re-queued. `waiting` runs are untouched: they
 	// are blocked on a human and their state is fully in the database.
-	if n, err := repo.FailStuckReleases(); err == nil && n > 0 {
-		slog.Warn("reconciled interrupted releases on startup", "failed", n)
+	if n, voided, err := repo.FailStuckReleases(); err != nil {
+		slog.Error("interrupted releases could not be reconciled on startup", "err", err)
+	} else if n > 0 {
+		slog.Warn("reconciled interrupted releases on startup", "failed", n, "voidedTickets", len(voided))
+		s.afterVoided(voided)
 	}
 	// 审批单的执行同理:上一个进程在库上跑到一半的,结果无从得知,判失败并写明,不重跑。
 	// 在线变更同理:进行中的判失败(原表没切换),残留的影子表在后台尽力删掉。

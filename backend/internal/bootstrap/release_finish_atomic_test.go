@@ -68,3 +68,32 @@ func TestAbortedReleaseIsNeverHalfFinished(t *testing.T) {
 	assertNotHalfFinished(t, got)
 	eq(t, got.Status, "waiting", "终止没成,单子原样")
 }
+
+// issue #111:终止与作废审批单同一个事务 —— 作废不了就不算终止成,不许留下"已终止、单还待审批"。
+func TestAbortNeverLeavesItsTicketPending(t *testing.T) {
+	app := newTestApp(t)
+	if app.cfg.Database.Driver != "sqlite" {
+		t.Skip("触发器按 SQLite 写")
+	}
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	waiting := submitParkedRelease(t, app, admin, "作废半途")
+	ap := stageByType(waiting, "approve")
+	db, err := sql.Open("sqlite", app.cfg.Database.SQLitePath+"?_pragma=busy_timeout(5000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TRIGGER no_void BEFORE UPDATE ON tbl_approval
+		WHEN NEW.status = 'expired' BEGIN SELECT RAISE(ABORT, 'void refused'); END`)
+	db.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	app.do(http.MethodPost, "/api/v1/releases/"+itoa(waiting.ID)+"/abort", admin, nil)
+	row, err := app.repo.GetApproval(ap.ApprovalID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := app.getRelease(admin, waiting.ID); got.Status == "aborted" && row.Status == "pending" {
+		t.Fatal("发布单已终止,审批单却还待审批")
+	}
+}

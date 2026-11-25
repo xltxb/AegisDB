@@ -25,7 +25,7 @@ func interruptedApp(t *testing.T) (*Services, *gorm.DB) {
 		sqlDB.SetMaxOpenConns(1)
 		t.Cleanup(func() { sqlDB.Close() })
 	}
-	if err := db.AutoMigrate(&model.Release{}, &model.ReleaseStage{}); err != nil {
+	if err := db.AutoMigrate(&model.Release{}, &model.ReleaseStage{}, &model.Approval{}, &model.Setting{}); err != nil {
 		t.Fatal(err)
 	}
 	// 没人收的无缓冲队列 = 队列满
@@ -125,7 +125,7 @@ func TestRestartSettlesOnlyTheInterruptedReleases(t *testing.T) {
 	stuck := seedRelease(t, db, "REL-1", "running", "success", "running", "pending")
 	parked := seedRelease(t, db, "REL-2", "waiting", "waiting", "pending")
 	queued := seedRelease(t, db, "REL-3", "pending", "pending")
-	n, err := s.Repo.FailStuckReleases()
+	n, _, err := s.Repo.FailStuckReleases()
 	if err != nil || n != 1 {
 		t.Fatalf("应收尾 1 张,实际 %d %v", n, err)
 	}
