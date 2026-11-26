@@ -96,6 +96,32 @@ function riskCls(r: string) { return r === 'high' ? 'bad' : r === 'mid' ? 'warn'
 
 const PRE_FOLD = 6
 
+
+// 详情页脚本最多渲染这么多:行数与字数各一道,先到先截(单行超长的脚本也截得住)。
+const SCRIPT_VIEW_MAX_LINES = 5000
+const SCRIPT_VIEW_MAX_CHARS = 300_000
+
+function countLines(text: string): number {
+  if (!text) return 0
+  let n = 1
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) n++
+  return text.endsWith('\n') ? n - 1 : n
+}
+
+/** 脚本开头用来显示的一段。截在行尾;一行就超过字数上限时只能截在行中。 */
+function scriptHead(text: string): { text: string; truncated: boolean } {
+  let end = -1
+  for (let k = 0, i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+    if (i > SCRIPT_VIEW_MAX_CHARS) break
+    if (++k === SCRIPT_VIEW_MAX_LINES) { end = i; break }
+    end = i
+  }
+  if (text.length <= SCRIPT_VIEW_MAX_CHARS && (end < 0 || countLines(text) <= SCRIPT_VIEW_MAX_LINES)) {
+    return { text, truncated: false }
+  }
+  return { text: end > 0 ? text.slice(0, end) : text.slice(0, SCRIPT_VIEW_MAX_CHARS), truncated: true }
+}
+
 interface Props {
   open: ReleaseDetail
   openStage: number
@@ -163,7 +189,10 @@ export default function ReleaseDetailPane({ open, openStage, codeTab, onCodeTab,
 
   // ---- 脚本 / 日志查看器 ----
   const sqlText = open.sql || ''
-  const sqlHtml = useMemo(() => highlightSqlHtml(sqlText), [sqlText])
+  // 大脚本只渲染开头一段(#161):整段高亮是几百万个节点,打开就卡十几秒,执行中状态灯的动画还会
+  // 每一帧重绘整块代码。行数统计与「复制」仍用完整脚本。
+  const sqlView = useMemo(() => scriptHead(sqlText), [sqlText])
+  const sqlHtml = useMemo(() => highlightSqlHtml(sqlView.text), [sqlView])
   const logText = useMemo(
     () => (stageObj?.log ? renderRelLog(stageObj.logRefs, stageObj.log, logI18n) : ''),
     // logI18n 只依赖语言,t 随语言换引用
@@ -172,8 +201,9 @@ export default function ReleaseDetailPane({ open, openStage, codeTab, onCodeTab,
   )
   const codeText = codeTab === 'sql' ? sqlText : logText
   // 行号单独一列(不进 <pre> 的文本):复制、选中、断言拿到的都是原文,不夹行号。
-  const codeLines = useMemo(() => (codeText ? codeText.replace(/\n$/, '').split('\n').length : 0), [codeText])
-  const gutterText = useMemo(() => Array.from({ length: codeLines }, (_, i) => i + 1).join('\n'), [codeLines])
+  const codeLines = useMemo(() => countLines(codeText), [codeText])
+  const shownLines = codeTab === 'sql' && sqlView.truncated ? countLines(sqlView.text) : codeLines
+  const gutterText = useMemo(() => Array.from({ length: shownLines }, (_, i) => i + 1).join('\n'), [shownLines])
 
   // 上游单号是对端系统(发布平台)那边的编号,跨系统对账、找人时要整串报给对方 —— 给个复制。
   async function copy(text: string) {
@@ -417,7 +447,11 @@ export default function ReleaseDetailPane({ open, openStage, codeTab, onCodeTab,
                 ? <pre key="sql" className="ide-code sqlsrc" dangerouslySetInnerHTML={{ __html: sqlHtml }} />
                 : <pre key="log" className="ide-code log">{logText}</pre>}
             </div>
-          ) : (
+          ) : null}
+          {codeText && codeTab === 'sql' && sqlView.truncated && (
+            <div className="ide-trunc" data-testid="rl-sql-truncated">{t('rlSqlTruncated', { total: codeLines, shown: shownLines })}</div>
+          )}
+          {codeText ? null : (
             <div className="ide-empty">
               {codeTab === 'sql' ? t('rlScriptRef') : stageObj ? t('rlNoLog') : t('rlPickStage')}
             </div>
