@@ -34,6 +34,10 @@ func (h *Handler) BizTables(c *gin.Context) {
 func (h *Handler) BizColumns(c *gin.Context) {
 	sourceID, _ := strconv.ParseInt(c.Query("sourceId"), 10, 64)
 	out, err := h.Svc.BizColumns(middleware.CurrentUser(c), sourceID, c.Query("database"), c.Query("table"))
+	if ie, ok := service.AsInputError(err); ok { // 先于 ErrBadRequest:InputError 也算它
+		resp.FailErr(c, resp.CodeBadRequest, ie)
+		return
+	}
 	if errors.Is(err, service.ErrBadRequest) {
 		resp.Fail(c, resp.CodeBadRequest, "表名不合法")
 		return
@@ -61,6 +65,10 @@ func bizFail(c *gin.Context, err error) {
 	case errors.As(err, &f):
 		resp.OK(c, gin.H{"error": f.Msg, "errorRef": f.Ref, "timedOut": f.TimedOut})
 	default:
+		if ie, ok := service.AsInputError(err); ok { // 例如实例上的引擎已不再支持
+			resp.FailErr(c, resp.CodeBadRequest, ie)
+			return
+		}
 		resp.FailErr(c, resp.CodeInternalError, err)
 	}
 }

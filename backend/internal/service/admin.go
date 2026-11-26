@@ -261,6 +261,9 @@ func (s *Services) TableColumns(u *model.User, connID int64, database, table str
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		return nil, asInputError(err)
+	}
 	if !gateway.RealExecSupported(conn) {
 		if _, t := gateway.SplitQualified(table); t == "" {
 			return nil, gateway.ErrBadTableName
@@ -280,6 +283,10 @@ func (s *Services) ConnectionSchema(u *model.User, connID int64, database string
 	}
 	if !s.canAccessConn(u, conn) {
 		out.Error = "无权访问该连接"
+		return out
+	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		out.Error = err.Error()
 		return out
 	}
 	// A caller may target a specific database (e.g. a PostgreSQL database picked
@@ -370,6 +377,10 @@ func (s *Services) ConnectionObjects(u *model.User, connID int64, scope, databas
 		out.Error = "无权访问该连接"
 		return out
 	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		out.Error = err.Error()
+		return out
+	}
 	applyTargetDatabase(conn, database)
 	if !gateway.RealExecSupported(conn) {
 		// 生产环境不返回模拟数据 —— 见 gateway/simulation.go。
@@ -410,6 +421,9 @@ func (s *Services) ConnectionObjectSource(u *model.User, connID int64, scope, ty
 	}
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
+	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		return nil, asInputError(err)
 	}
 	applyTargetDatabase(conn, database)
 	src, err := objectSourceText(conn, scope, typ, name)

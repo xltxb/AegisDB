@@ -211,6 +211,10 @@ func (h *Handler) GetTableColumns(c *gin.Context) {
 	case errors.Is(err, gateway.ErrBadTableName):
 		resp.Fail(c, resp.CodeBadRequest, "表名不合法")
 	default:
+		if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+			resp.FailErr(c, resp.CodeBadRequest, ie)
+			return
+		}
 		resp.FailErr(c, resp.CodeBadRequest, apimsg.Errorf("取列失败: %s", err))
 	}
 }
