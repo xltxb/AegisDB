@@ -6,7 +6,7 @@ AegisDB 是面向 DBA、研发与运维团队的统一数据库访问网关。�
 - **先判定，再下发**：能力矩阵、高危命令字典、无 WHERE 拦截都按环境分层配置。
 - **审批与执行分开**：命令审批通过不会碰数据库，由有权限的人回来点「执行」，执行前再判一次。
 - **全程留痕**：每次操作写进哈希链审计表，可当场重算校验，也可经 Webhook / 飞书外推。
-- **真实执行**：支持 MySQL 系、PostgreSQL / DWS、Oracle、SQLite；单二进制交付，无 CDN 依赖。
+- **真实执行**：支持 MySQL 系、PostgreSQL / DWS、Oracle；单二进制交付，无 CDN 依赖。
 
 ## 目录
 
@@ -23,13 +23,25 @@ AegisDB 是面向 DBA、研发与运维团队的统一数据库访问网关。�
 |---|---|---|
 | Go | ≥ 1.23 | 纯 Go，不需要 cgo |
 | Node.js | ≥ 22.22 | 前端构建与测试 |
-| Docker | 可选 | 只有用 PostgreSQL / MySQL 做本地存储库时才需要 |
+| PostgreSQL | ≥ 13 | 本地开发的存储库，也是后端测试的前提（见「测试」） |
+| Docker | 可选 | 只有用容器跑 PostgreSQL / MySQL 时才需要 |
 
-### macOS / Linux（零依赖，SQLite）
+### 本地开发 · macOS / Linux（PostgreSQL 存储库）
+
+SQLite 存储库已不再支持，本地开发需要一个 PostgreSQL（≥ 13）。
 
 ```bash
-# 终端 1：后端。默认 dev 环境，写 backend/aegisdb.db，自动建表并灌入引用数据
+# 1. 安装并启动 PostgreSQL（macOS；Linux 用发行版自带的包）
+brew install postgresql@18 && brew services start postgresql@18
+
+# 2. 指向本机 PostgreSQL 并建库。brew 装的实例用当前系统用户、5432 端口、无密码；
+#    config.yaml 默认的 DSN（5437 / postgres / aegisdb_test）对应 Windows 的 Docker 容器，这里用不上。
+export AEGISDB_POSTGRES_DSN="host=127.0.0.1 port=5432 user=$USER dbname=aegisdb_dev sslmode=disable"
+createdb -h 127.0.0.1 aegisdb_dev
+
+# 3. 终端 1：后端。先迁移建表，再启动
 cd backend
+go run ./cmd/server migrate
 go run ./cmd/server          # 127.0.0.1:8080，健康检查 GET /healthz
 
 # 终端 2：前端
@@ -38,12 +50,11 @@ npm ci
 npm run dev                  # http://localhost:5173，/api 代理到 :8080
 ```
 
-### Windows
+### 本地开发 · Windows
 
 | 脚本 | 作用 |
 |---|---|
 | `start-dev.bat` | 分两个窗口启动后端（PostgreSQL 存储库）与前端 |
-| `backend\run-sqlite.bat` | 只启动后端，SQLite，零依赖 |
 | `backend\run-pg.bat` | 只启动后端，PostgreSQL 存储库 |
 | `backend\run-mysql.bat` | 以 prod 配置启动，需先 `docker compose up -d` |
 | `frontend\run-dev.bat` | 只启动前端，首次运行自动装依赖 |
@@ -124,8 +135,8 @@ AegisDB/
 |---|---|
 | 前端 | React 19 · TypeScript · Vite · Zustand · React Router · @intlify/core-base（词条构建期校验）· xterm.js |
 | 后端 | Go · Gin · GORM · gorilla/websocket · JWT · bcrypt · AES-GCM · TOTP |
-| 目标库 | MySQL · PolarDB · Aurora MySQL · TiDB · MariaDB · PostgreSQL · GaussDB (DWS) · Oracle · SQLite |
-| 自身存储 | MySQL 8 / PostgreSQL（生产）· SQLite（本地开发） |
+| 目标库 | MySQL · PolarDB · Aurora MySQL · TiDB · MariaDB · PostgreSQL · GaussDB (DWS) · Oracle |
+| 自身存储 | MySQL 8 / PostgreSQL（生产与本地开发） |
 
 MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，读不懂的命令会被误判成只读。
 
@@ -279,11 +290,11 @@ MongoDB、Redis、ClickHouse 不支持执行：判定引擎解析的是 SQL，�
 
 | `APP_ENV` / `AEGISDB_ENV` | 默认存储库 | 说明 |
 |---|---|---|
-| 未设置 / `dev` / `development` / `local` | SQLite | 本地开发，放宽部分限制 |
+| 未设置 / `dev` / `development` / `local` | PostgreSQL | 本地开发，放宽部分限制 |
 | `prod` | MySQL | 强制强 JWT 密钥 |
-| 其他值（如 `staging`、`uat`） | SQLite | 强制强 JWT 密钥；**请显式设 `AEGISDB_DB_DRIVER`** |
+| 其他值（如 `staging`、`uat`） | PostgreSQL | 强制强 JWT 密钥；**请显式设 `AEGISDB_DB_DRIVER`** |
 
-`AEGISDB_DB_DRIVER`（`mysql` / `postgres` / `sqlite`）优先级最高。用 PostgreSQL 做存储库时，把它和
+`AEGISDB_DB_DRIVER`（`mysql` / `postgres`）优先级最高；写成 `sqlite` 会直接报错，SQLite 存储库已不再支持。用 PostgreSQL 做存储库时，把它和
 `AEGISDB_POSTGRES_DSN` 写在 `aegisdb.env` 里，不要改 `config.yaml`：升级解包会覆盖那个文件。
 
 ### 关键环境变量
@@ -390,9 +401,9 @@ cd frontend && npm run test:e2e
 
 | 套件 | 规模 | 说明 |
 |---|---|---|
-| 后端 | 489 个文件、1877 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
+| 后端 | 495 个文件、1896 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
 | 前端单测 | 55 个文件、408 个用例 | `src/lib` 纯逻辑、词条一致性 |
-| 前端 e2e | 101 个文件、432 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
+| 前端 e2e | 101 个文件、431 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
 
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
 - 后端测试需要本机装有 PostgreSQL ≥ 13 的程序（`initdb` / `pg_ctl` / `postgres`）：macOS `brew install postgresql@18`，

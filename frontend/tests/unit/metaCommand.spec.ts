@@ -87,7 +87,7 @@ test('a schema-qualified relation keeps its schema filter', () => {
 // 报错了事。MySQL 家族的 DESC 本来就是合法 SQL,那里必须原样放行,别去修一个
 // 没坏的东西。
 test('DESC 在没有该语法的引擎上被翻译,在 MySQL 家族原样放行', () => {
-  for (const engine of ['oracle', 'postgres', 'dws', 'sqlite']) {
+  for (const engine of ['oracle', 'postgres', 'dws']) {
     const r = translateDescribe('desc emp', engine)
     expect(r, engine).not.toBeNull()
     expect(r!.sql.toLowerCase(), engine).not.toContain('desc emp')

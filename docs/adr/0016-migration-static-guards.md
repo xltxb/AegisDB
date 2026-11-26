@@ -1,6 +1,6 @@
 # ADR 0016:迁移的 MySQL 专属缺陷,只能靠静态闸挡住
 
-- 状态:已采纳
+- 状态:已采纳(其中关于 SQLite 的部分已被 ADR 0022 取代:dev / 测试现在跑 PostgreSQL,SQLite 已移除;MySQL 专属缺陷的静态闸结论仍然有效)
 - 日期:2026-09-10
 - 相关:`backend/internal/bootstrap/migration_tables_test.go`、
   `migration_collation_test.go`、`migration_reserved_words_test.go`、

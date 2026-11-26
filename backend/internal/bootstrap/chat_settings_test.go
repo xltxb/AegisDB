@@ -680,7 +680,7 @@ func TestChatSettings_ReadFailureIsInternal(t *testing.T) {
 }
 
 // 两次保存同时写一组库里还没有的键:都成功。先 UPDATE、落空再 INSERT 的写法在 MySQL 上会互相等死(拿真库当
-// 存储库时才看得出来,SQLite 只有一个写者)。
+// 存储库时才看得出来,单写者的库上测不出)。
 func TestSettings_ConcurrentFirstSaves(t *testing.T) {
 	app := newTestApp(t)
 	for round := range 20 {

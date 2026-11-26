@@ -11,7 +11,7 @@
 # than the host OS: building on a Windows workstation used to silently produce a
 # Windows server binary that can never be deployed.
 #
-# The backend is pure-Go (sqlite + mysql drivers need no cgo), so cross-compiling
+# The backend is pure-Go (the database drivers need no cgo), so cross-compiling
 # needs no C toolchain.
 #
 # Output (dist/):

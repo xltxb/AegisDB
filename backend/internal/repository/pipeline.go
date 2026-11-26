@@ -252,7 +252,7 @@ func (r *Repo) StagesOfRelease(id int64) ([]model.ReleaseStage, error) {
 //
 // 给发布单列表用:列表只要阶段的"形状"(几个、什么类型、走到哪),不要输出 —— 所以
 // log / log_refs / findings / config 四个大列不读,返回的这几个字段为空。要日志走详情。
-// 发布页每几秒轮询一次列表,逐单查阶段(N+1)加读整段日志曾把本地单连接 SQLite 拖到排队。
+// 发布页每几秒轮询一次列表,逐单查阶段(N+1)加读整段日志曾把存储库的连接拖到排队。
 func (r *Repo) StageShapesOfReleases(ids []int64) (map[int64][]model.ReleaseStage, error) {
 	out := make(map[int64][]model.ReleaseStage, len(ids))
 	if len(ids) == 0 {

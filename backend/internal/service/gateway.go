@@ -146,6 +146,10 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// 网关已不能驱动的引擎(不再支持的引擎留下的存量连接):明说不支持,不进判定、不落模拟结果。
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil {
+		return nil, asInputError(err)
+	}
 	// FR-CONN-04: maintenance-state instances restrict operations.
 	if conn.Status == model.ConnStatusMaint {
 		s.recordAudit(u, conn, sql, model.RiskLow, model.ResultWarn, "", "")
@@ -399,7 +403,7 @@ var rowWritingVerb = map[string]bool{"UPDATE": true, "DELETE": true, "INSERT": t
 //
 // 为什么不能把整段直接交给驱动:MySQL 的 DSN 上 AllowMultiStatements 是**故意**关掉的
 // (见 gateway.engineDriver 里的注释),关掉它正是为了让"一次判定管住的就是这些语句"
-// 没法靠 DSN 绕过。于是同一段批量在 SQLite / PostgreSQL 上能跑、在 MySQL 上直接语法错
+// 没法靠 DSN 绕过。于是同一段批量在 PostgreSQL 上能跑、在 MySQL 上直接语法错
 // —— 同一个网关、同一段 SQL,结果取决于对面是什么引擎。那是个陷阱,不是特性。
 //
 // 拆在这里的好处是两件事各归各位:**判定看到的是整批**(最严裁决、一张审批单、

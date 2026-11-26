@@ -69,7 +69,7 @@ func TestValidateForServe_NonLocalEnvRequiresStrongSecret(t *testing.T) {
 	}
 }
 
-// C6: an unrecognized environment (e.g. "staging") silently degrades to SQLite.
+// C6: an unrecognized environment (e.g. "staging") silently falls through to dev.
 // isKnownEnv lets LoadConfig warn instead of failing silently.
 func TestIsKnownEnv(t *testing.T) {
 	known := []string{"prod", "production", "dev", "development", "local", ""}

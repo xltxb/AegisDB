@@ -85,11 +85,8 @@ export default function ConnectionEditModal({ ref, reload }: { ref: Ref<EditModa
         name: draft.name.trim(), engine: draft.engine,
         host: draft.host.trim(), env: env as any,
         username: draft.username.trim(), password: draft.password, database: draft.database.trim(),
-        // SQLite 没有主从之分,不发这组字段(服务端不动)。
-        ...(/sqlite/i.test(draft.engine) ? {} : {
-          replicaHost: replica.host.trim(), replicaUsername: replica.username.trim(),
-          replicaPassword: replica.password,
-        }),
+        replicaHost: replica.host.trim(), replicaUsername: replica.username.trim(),
+        replicaPassword: replica.password,
       })
       // 同新建:改完连不上要当场说,不能只说"已保存"。
       const err = await probe(updated.id, t('connUnreachable'))
@@ -121,18 +118,16 @@ export default function ConnectionEditModal({ ref, reload }: { ref: Ref<EditModa
           {mainNeedsPw && <div className="reqmsg" data-testid="conn-need-main-pw">{t('connNeedPwAddr')}</div>}
           {replicaNeedsMainPw && <div className="reqmsg" data-testid="conn-need-main-pw-replica">{t('connNeedPwReplicaMain')}</div>}
           <div className="credhint">{t('connCredHint')}</div>
-          {!/sqlite/i.test(draft.engine) && (
-            <div className="replica" data-testid="conn-replica">
-              <div className="rp-title">{t('connReplica')}</div>
-              <div className="rp-sub">{t('connReplicaSub')}</div>
-              <div className="fgrid">
-                <div><div className="fl">{t('connReplicaAddr')}</div><input value={replica.host} onChange={(e) => patchReplica({ host: e.target.value })} placeholder={t('connReplicaAddrPh')} data-testid="conn-replica-host" /></div>
-                <div><div className="fl">{t('fUser')}</div><input value={replica.username} onChange={(e) => patchReplica({ username: e.target.value })} placeholder={t('connReplicaUserPh')} /></div>
-                <div><div className="fl">{t('fPassword')}</div><input value={replica.password} onChange={(e) => patchReplica({ password: e.target.value })} type="password" disabled={!replica.username.trim()} placeholder={replica.username.trim() ? t('fPasswordKeep') : t('connReplicaUserPh')} className={clsx(replicaNeedsOwnPw && 'invalid')} /></div>
-              </div>
-              {replicaNeedsOwnPw && <div className="reqmsg" data-testid="conn-need-replica-pw">{t('connNeedPwReplicaOwn')}</div>}
+          <div className="replica" data-testid="conn-replica">
+            <div className="rp-title">{t('connReplica')}</div>
+            <div className="rp-sub">{t('connReplicaSub')}</div>
+            <div className="fgrid">
+              <div><div className="fl">{t('connReplicaAddr')}</div><input value={replica.host} onChange={(e) => patchReplica({ host: e.target.value })} placeholder={t('connReplicaAddrPh')} data-testid="conn-replica-host" /></div>
+              <div><div className="fl">{t('fUser')}</div><input value={replica.username} onChange={(e) => patchReplica({ username: e.target.value })} placeholder={t('connReplicaUserPh')} /></div>
+              <div><div className="fl">{t('fPassword')}</div><input value={replica.password} onChange={(e) => patchReplica({ password: e.target.value })} type="password" disabled={!replica.username.trim()} placeholder={replica.username.trim() ? t('fPasswordKeep') : t('connReplicaUserPh')} className={clsx(replicaNeedsOwnPw && 'invalid')} /></div>
             </div>
-          )}
+            {replicaNeedsOwnPw && <div className="reqmsg" data-testid="conn-need-replica-pw">{t('connNeedPwReplicaOwn')}</div>}
+          </div>
         </div>
         <div className="ce-foot">
           <VButton variant="secondary" onClick={close}>{t('mCancel')}</VButton>

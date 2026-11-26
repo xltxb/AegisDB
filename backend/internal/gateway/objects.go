@@ -16,7 +16,7 @@ import (
 // DbObjects lists a database's (or schema's / owner's) programmable objects,
 // grouped by kind. Only the kinds an engine actually has are populated:
 // MySQL has functions/procedures/triggers, PostgreSQL functions/procedures,
-// Oracle functions/procedures/packages, SQLite triggers.
+// Oracle functions/procedures/packages.
 type DbObjects struct {
 	Functions  []string
 	Procedures []string
@@ -33,14 +33,12 @@ var objectIdentRe = regexp.MustCompile(`^[A-Za-z0-9_$#.-]+$`)
 const objectQueryTimeout = 15 * time.Second
 
 // RealObjects introspects the live target's programmable objects under one
-// database (MySQL), schema (PostgreSQL family) or owner (Oracle). SQLite has a
-// single namespace, so scope is ignored there. Requires real credentials.
+// database (MySQL), schema (PostgreSQL family) or owner (Oracle). Requires real
+// credentials.
 func realObjectsOnce(conn *model.Connection, scope string) (*DbObjects, error) {
 	// engineFamily, not substring checks here: it tests PostgreSQL markers before
 	// "polardb" (PolarDB for PostgreSQL is not MySQL) and knows Aurora.
 	switch engineFamily(conn.Engine) {
-	case familySQLite:
-		return sqliteObjects(conn)
 	case familyMySQL:
 		return mysqlObjects(conn, scope)
 	case familyPostgres:
@@ -54,15 +52,13 @@ func realObjectsOnce(conn *model.Connection, scope string) (*DbObjects, error) {
 // RealObjectSource returns one object's source text (its CREATE statement or
 // catalog-stored definition). What SQLcl's `ddl` does for Oracle, done here via
 // the same catalog views every client tool ultimately reads (ALL_SOURCE,
-// information_schema, pg_get_functiondef, sqlite_master) — the gateway ships as
+// information_schema, pg_get_functiondef) — the gateway ships as
 // a single Go binary and shells out to nothing.
 func realObjectSourceOnce(conn *model.Connection, scope, typ, name string) (string, error) {
 	if !objectIdentRe.MatchString(name) || (scope != "" && !objectIdentRe.MatchString(scope)) {
 		return "", apimsg.Errorf("非法的对象名")
 	}
 	switch engineFamily(conn.Engine) { // see RealObjects on why not substring checks
-	case familySQLite:
-		return sqliteObjectSource(conn, typ, name)
 	case familyMySQL:
 		return mysqlObjectSource(conn, scope, typ, name)
 	case familyPostgres:
@@ -499,72 +495,4 @@ func oracleTableDDL(conn *model.Connection, owner, name string) (string, error) 
 		return "", err
 	}
 	return renderOracleTable(t, errBrief(metaErr)), nil
-}
-
-// ---------------------------------------------------------------- SQLite
-
-func sqliteObjects(conn *model.Connection) (*DbObjects, error) {
-	db, release, err := openConn(conn)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
-	defer cancel()
-
-	out := &DbObjects{}
-	rows, err := db.QueryContext(ctx,
-		`SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return nil, err
-		}
-		out.Triggers = append(out.Triggers, name)
-	}
-	return out, rows.Err()
-}
-
-func sqliteObjectSource(conn *model.Connection, typ, name string) (string, error) {
-	if typ != "trigger" && typ != "table" {
-		return "", apimsg.Errorf("不支持的对象类型 %q", typ)
-	}
-	db, release, err := openConn(conn)
-	if err != nil {
-		return "", err
-	}
-	defer release()
-	ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
-	defer cancel()
-
-	if typ == "trigger" {
-		var src string
-		if err := db.QueryRowContext(ctx,
-			`SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?`, name).Scan(&src); err != nil {
-			return "", apimsg.Errorf("对象不存在")
-		}
-		return src, nil
-	}
-	// table (or view): the stored CREATE statement plus its named indexes.
-	var src string
-	if err := db.QueryRowContext(ctx,
-		`SELECT sql FROM sqlite_master WHERE type IN ('table','view') AND name = ?`, name).Scan(&src); err != nil {
-		return "", apimsg.Errorf("对象不存在")
-	}
-	rows, err := db.QueryContext(ctx,
-		`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = ? AND sql IS NOT NULL ORDER BY name`, name)
-	if err == nil {
-		defer rows.Close()
-		for rows.Next() {
-			var idx string
-			if rows.Scan(&idx) == nil && idx != "" {
-				src += ";\n\n" + idx
-			}
-		}
-	}
-	return src, nil
 }

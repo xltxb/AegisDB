@@ -13,8 +13,8 @@ package bootstrap
 //
 // 为什么值得单独一条测试(和隔壁 TestMigrationsDeclareCollation 同源):
 //
-//   - 开发环境**永远碰不到**。那边是 SQLite,它对保留字宽容得多(`databases` 在
-//     SQLite 上就是个合法列名),所以整套测试跑绿也说明不了什么。
+//   - 测试**永远碰不到**。测试存储库是 PostgreSQL,保留字表与 MySQL 不同(`databases` 在
+//     那边就是个合法列名),所以整套测试跑绿也说明不了什么。
 //   - 它只在**第一次 migrate 的那台真机**上炸,也就是生产。而那时人已经在部署窗口里。
 //   - 迁移中途失败是**没有事务**的:0035 的前两条建表成功了、第三条炸了,库停在一个
 //     半成品状态上。这次侥幸 —— 前两条是 CREATE TABLE IF NOT EXISTS,重跑无害。
@@ -103,7 +103,7 @@ func checkIdent(t *testing.T, path, table, ident string, quoted bool) {
 	}
 	t.Errorf("%s 的 %s 里,标识符 %q 是 MySQL 的保留字。\n"+
 		"    不加反引号时 MySQL 报 ERROR 1064,而且指向下一个 token,不告诉你是哪个词;\n"+
-		"    开发环境是 SQLite —— 它接受这个名字,所以只会在生产第一次 migrate 时炸。\n"+
+		"    测试存储库是 PostgreSQL —— 它接受这个名字,所以只会在生产第一次 migrate 时炸。\n"+
 		"    请换个名字(如 %s_count / %s_name),不要靠反引号绕过去:\n"+
 		"    此后每一处引用都得记得加引号,忘一次就又是 1064。",
 		path, table, ident, strings.ToLower(ident), strings.ToLower(ident))

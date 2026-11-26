@@ -1,7 +1,7 @@
 package bootstrap
 
-// 生产的存储库表结构只由 migrations/*.sql 决定,而测试一直跑在 SQLite 上(GORM 按模型建表,
-// SQLite 还不检查 VARCHAR 长度)—— 两份"表结构"从来没被放在一起比过。2026-11-16 改跑真 MySQL
+// 生产的存储库表结构只由 migrations/*.sql 决定,而测试从前跑在按 GORM 模型建表、
+// 不检查 VARCHAR 长度的存储库上 —— 两份"表结构"从来没被放在一起比过。2026-11-16 改跑真 MySQL
 // 评估时当场查出两处:tbl_user.mfa_secret 仍是 VARCHAR(64),装不下静态加密后的 TOTP 种子;
 // tbl_connection.env 被 0034 对齐排序规则时改回了 VARCHAR(16)(0013 才把它加宽到 32)。
 //

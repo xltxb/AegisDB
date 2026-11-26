@@ -389,7 +389,7 @@ type Connection struct {
 	Layer       string    `gorm:"size:64" json:"layer"`
 	Username    string    `gorm:"size:64" json:"username"`             // real-execution credentials
 	Password    string    `gorm:"size:255" json:"-"`                   // never serialized
-	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema / sqlite file
+	Database    string    `gorm:"column:db_name;size:128" json:"database"` // default schema
 	// 上一次连通性巡检的结论。它**不是** Status —— Status 是人为标的维护态,和连不连
 	// 得上没有关系。两者混在一起,就是"仅看异常"永远筛不出连不上的实例的原因。
 	//
@@ -822,7 +822,7 @@ type Approval struct {
 	Status       string     `gorm:"size:16;index:idx_approval_status;not null;default:pending" json:"status"`
 	AuditID      string     `gorm:"size:32" json:"auditId"`
 	// 历史列:审批魔方对接(已移除,#137)留下的两列。列名与索引不动 —— 不做破坏性迁移,
-	// SQLite 与 MySQL 的表结构保持同形 —— 代码不读不写,也不再透出到接口。
+	// 代码不读不写,也不再透出到接口。
 	ExternalTaskID     string `gorm:"size:128;index:idx_approval_ext" json:"-"`
 	ExternalDispatched bool   `gorm:"column:external_dispatched" json:"-"`
 	// ReleaseID links a ticket raised by a release pipeline's approve stage back
@@ -1164,7 +1164,7 @@ func (SchemaObject) TableName() string { return "tbl_schema_object" }
 
 // MetaTable — 远端一张表(或视图)在本地的一行。
 //
-// Schema 为空表示扁平引擎(MySQL / SQLite / Oracle 按 owner 归组时 owner 落在
+// Schema 为空表示扁平引擎(MySQL / Oracle 按 owner 归组时 owner 落在
 // DBName 上),PostgreSQL 家族才有 schema 这一层 —— 与 gateway.SchemaGroup 的形状一致。
 type MetaTable struct {
 	ID           int64  `gorm:"primaryKey;autoIncrement" json:"id"`

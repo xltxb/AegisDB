@@ -225,6 +225,10 @@ func (h *Handler) Exec(c *gin.Context) {
 		resp.FailErr(c, resp.CodeBadRequest, err)
 		return
 	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
@@ -264,6 +268,10 @@ func (h *Handler) ExecAsync(c *gin.Context) {
 	}
 	if err == service.ErrMFAInvalid {
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
+		return
+	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
 		return
 	}
 	if err != nil {
@@ -753,6 +761,10 @@ func (h *Handler) ExportData(c *gin.Context) {
 		resp.Fail(c, resp.CodeForbidden, "数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流")
 		return
 	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
+		return
+	}
 	if err != nil {
 		resp.FailErr(c, resp.CodeInternalError, apimsg.Errorf("提交失败:%s", err))
 		return
@@ -1063,6 +1075,12 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			continue
 		}
 		if errors.Is(err, service.ErrSQLTooLong) {
+			send(wsNoticeErr("error", err))
+			continue
+		}
+		if _, ok := service.AsInputError(err); ok {
+			// 校验类失败(如存量 SQLite 连接的"不支持的数据库引擎")把原话回给界面,
+			// 与 HTTP 处理器一致;不能被下面的笼统文案吞掉。
 			send(wsNoticeErr("error", err))
 			continue
 		}

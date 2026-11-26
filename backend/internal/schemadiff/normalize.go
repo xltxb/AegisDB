@@ -18,7 +18,6 @@ const (
 	famMySQL
 	famOracle
 	famPostgres
-	famSQLite // 开发 / 测试环境用
 )
 
 func familyOf(engine string) family {
@@ -30,16 +29,14 @@ func familyOf(engine string) family {
 		return famOracle
 	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
 		return famPostgres
-	case strings.Contains(e, "sqlite"):
-		return famSQLite
 	}
 	return famOther
 }
 
-// FamilyName 是引擎族的名字(mysql / oracle / postgres / sqlite);不支持对比的引擎为空串。
+// FamilyName 是引擎族的名字(mysql / oracle / postgres);不支持对比的引擎为空串。
 // 只有同一族的两个库能互比。
 func FamilyName(engine string) string {
-	return [...]string{famOther: "", famMySQL: "mysql", famOracle: "oracle", famPostgres: "postgres", famSQLite: "sqlite"}[familyOf(engine)]
+	return [...]string{famOther: "", famMySQL: "mysql", famOracle: "oracle", famPostgres: "postgres"}[familyOf(engine)]
 }
 
 // SameFamily 报告两个引擎能不能互相比较(MySQL 系之间可以,MySQL 与 Oracle 不行)。
@@ -124,7 +121,6 @@ var timeDefaults = map[family]map[string]string{
 		"sysdate": "sysdate", "systimestamp": "systimestamp", "current_timestamp": "current_timestamp",
 		"current_date": "current_date", "localtimestamp": "localtimestamp", "sys_guid()": "sys_guid()", "user": "user",
 	},
-	famSQLite: {"current_timestamp": "current_timestamp", "current_date": "current_date", "current_time": "current_time"},
 }
 
 // 类型里并进来的 on update(见 gateway.mysqlExtra),类型已经转过小写。
@@ -164,7 +160,7 @@ func normDefault(f family, c Column) (string, bool) {
 	if len(d) >= 2 && d[0] == '\'' && d[len(d)-1] == '\'' {
 		return d[1 : len(d)-1], true // 整个是字符串字面量:区分大小写
 	}
-	// 表达式 / 关键字:Oracle、PG、SQLite 的目录里引号外的大小写只是写法(Oracle 存的是建表时的原文,
+	// 表达式 / 关键字:Oracle、PG 的目录里引号外的大小写只是写法(Oracle 存的是建表时的原文,
 	// SYSTIMESTAMP(6) 与 systimestamp(6) 是同一个),引号里的仍区分。MySQL 例外 —— 它的字符串
 	// 默认值在目录里不带引号,转小写会抹掉 'New' 与 'new' 的差异。
 	if f != famMySQL {

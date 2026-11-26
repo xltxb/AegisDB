@@ -141,7 +141,12 @@ func (s *Services) produceSQLExport(ctx context.Context, u *model.User, conn *mo
 	} else {
 		// 模拟连接(无凭据):与 CSV 同样合成一份结果集
 		w.cols = exportColumns(query)
-		n := s.Executor.Run(context.Background(), conn, query, s.execTimeout()).Rows
+		// 执行层拒绝了(引擎不支持、生产不返回模拟数据):任务失败,不编一份文件出来。
+		res := s.Executor.Run(context.Background(), conn, query, s.execTimeout())
+		if res.Err != nil {
+			return fail(res.Err)
+		}
+		n := res.Rows
 		if n <= 0 {
 			n = 200
 		}
@@ -208,7 +213,7 @@ func (s *Services) sqlExportDDL(conn *model.Connection, query, target string) st
 	if i := strings.LastIndexByte(src, '.'); i >= 0 {
 		scope, name = src[:i], src[i+1:]
 	} else if gateway.EngineFamilyOf(conn.Engine) == "mysql" {
-		// 只有 MySQL 系按库名找表;PG / Oracle 用会话所在的 schema,SQLite 的"库"是文件路径
+		// 只有 MySQL 系按库名找表;PG / Oracle 用会话所在的 schema
 		scope = effectiveDatabase(conn)
 	}
 	ddl, err := gateway.RealObjectSource(conn, scope, "table", name)

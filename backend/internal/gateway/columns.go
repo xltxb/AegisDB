@@ -49,7 +49,7 @@ func plausibleIdent(s string) bool {
 }
 
 // TableColumns 返回一张表的列名(建表顺序、原始大小写)。name 可以带限定名:MySQL 系是库,
-// PostgreSQL 系是 schema,Oracle 是 owner,SQLite 是附加库(main)。没有这张表返回空切片。
+// PostgreSQL 系是 schema,Oracle 是 owner。没有这张表返回空切片。
 func tableColumnsOnce(conn *model.Connection, name string) ([]string, error) {
 	qual, table := SplitQualified(name)
 	if !plausibleIdent(table) || (qual != "" && !plausibleIdent(qual)) {
@@ -77,12 +77,6 @@ func tableColumnsOnce(conn *model.Connection, name string) ([]string, error) {
 		       AND (table_name = :2 OR table_name = UPPER(:3))
 		     ORDER BY column_id`
 		args = []any{qual, table, table}
-	case familySQLite:
-		if qual == "" {
-			qual = "main"
-		}
-		q = `SELECT name FROM pragma_table_info(?, ?) ORDER BY cid`
-		args = []any{table, qual}
 	default:
 		return nil, apimsg.Errorf("引擎 %q 暂不支持取列", conn.Engine)
 	}

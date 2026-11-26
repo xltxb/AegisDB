@@ -4,12 +4,13 @@ package gateway
 //
 // ## 为什么不能只回 (bool, string)
 //
-// 一次探测有四种结局,它们要求的下一步动作完全不同:
+// 一次探测有五种结局,它们要求的下一步动作完全不同:
 //
 //	OK             没事
 //	Unreachable    网络/地址的问题 —— 可以再试,恢复了就该知道
 //	AuthFailed     凭据的问题 —— **不能**自动再试:Oracle 默认失败 10 次锁账号
 //	NoCredentials  网关这边没配凭据 —— 根本没有远端可探,这不是远端的状况
+//	Unsupported    连接上的引擎网关已不能驱动 —— 同样不是远端的状况
 //
 // 压成一个 bool 之后,调用方只能靠猜:把"没配凭据"记成"连不上"是把我们的配置问题说成
 // 远端坏了;拿错误文本的子串去认"认证失败"会把 PostgreSQL 的 permission denied(登录
@@ -39,6 +40,9 @@ const (
 	CheckUnreachable   CheckKind = "unreachable"
 	CheckAuthFailed    CheckKind = "auth"
 	CheckNoCredentials CheckKind = "nocred"
+	// CheckUnsupported:连接上存的引擎网关已不能驱动(不再支持的引擎留下的存量连接)。
+	// 与 NoCredentials 一样不是远端的状况,不记进巡检结论。
+	CheckUnsupported CheckKind = "unsupported"
 )
 
 // CheckResult 是一次探测的结论。Msg 是给人看的原话(失败时是驱动的错误文本)。
@@ -55,6 +59,9 @@ func (r CheckResult) OK() bool { return r.Kind == CheckOK }
 // 与 RealPing 同一条路径(openConn + PingContext),只是把结局分了类。RealPing 保留
 // (bool, string) 的形状给还没改过来的调用方。
 func Check(conn *model.Connection) CheckResult {
+	if err := UnsupportedEngineErr(conn.Engine); err != nil {
+		return CheckResult{Kind: CheckUnsupported, Msg: err.Error()}
+	}
 	if !RealExecSupported(conn) {
 		// 没有远端可探。这**不是**"连不上":连不上说的是远端,而这里缺的是我们的凭据。
 		return CheckResult{Kind: CheckNoCredentials, Msg: "未配置真实执行凭据,无法验证可连性"}

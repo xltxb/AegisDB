@@ -16,7 +16,7 @@ package bootstrap
 //
 //   - 它**不报任何错**。建表成功、插入成功、查询也成功 —— 直到某天有人写下第一条
 //     跨这两批表的 JOIN。
-//   - 开发环境**永远碰不到**。那边是 SQLite,根本没有排序规则这回事,所以整套测试
+//   - 测试**永远碰不到**。测试存储库是 PostgreSQL,不读 MySQL 的表选项,所以整套测试
 //     跑绿也说明不了什么。
 //   - 炸出来的时候还很安静。这次是 CountProdInterceptions,它的错误在 handler 里被
 //     `_` 吞掉,界面上只是"拦截次数 0" —— 没有人会把一个 0 当成故障。
@@ -75,7 +75,7 @@ func TestMigrationsDeclareCollation(t *testing.T) {
 				t.Errorf("%s 的 %s 没有显式声明 COLLATE。\n"+
 					"    只写 CHARSET 时 MySQL 用的是字符集的默认排序规则(8.0 上是 utf8mb4_0900_ai_ci),\n"+
 					"    而本库其余的表是 utf8mb4_unicode_ci —— 两者一 JOIN 就是 ERROR 1267,\n"+
-					"    而且只会在生产上炸(开发环境是 SQLite,没有排序规则这回事)。\n"+
+					"    而且只会在生产上炸(测试存储库是 PostgreSQL,碰不到这条)。\n"+
 					"    请写成 `DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`。当前表选项:%s",
 					path, table, strings.TrimSpace(opts))
 			}

@@ -720,7 +720,7 @@ func isWordChar(b byte) bool {
 //
 // The distinction matters at exactly one place: deciding whether to collect a
 // result set. Every engine has keywords of its own — DWS's `EXPLAIN PERFORMANCE`,
-// SQLite's `PRAGMA`, MySQL's `CALL` returning a result set — and a verb table can
+// MySQL's `CALL` returning a result set — and a verb table can
 // only ever be behind. Where the table has an answer, use it; where it does not,
 // ASK THE DATABASE instead of guessing (see RealRun). Judgement still classifies
 // everything, because judging is the product; but "does this return rows" is a
@@ -1068,11 +1068,6 @@ func (e *RiskEngine) evaluateStatement(roleIDs []int64, engine, tier, sql string
 	if engineFamily(engine) != familyMongo && WritesServerFile(sql) {
 		return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleWritesFile))
 	}
-	// SQLite 跑在网关进程里:ATTACH 打开、VACUUM INTO 写的是**网关主机**上的任意路径。当前驱动 +
-	// 会话模型下实测用不起来(2026-11 审计 V-05),但这道闸不该靠驱动的实现细节来守。
-	if engineFamily(engine) == familySQLite && sqliteFileOpRe.MatchString(blankQuoted(StripComments(sql))) {
-		return verdict(ActionDeny, model.RiskHigh, verb, model.NewRuleRef(model.RuleSQLiteFileOp))
-	}
 	// 读维度里调用了有副作用的内置函数:按写判(见 effectful.go)。Command 换成那个函数
 	// 名,裁决和审计里看得出"为什么一条 SELECT 被当成了写"。
 	if cap == "select" && engineFamily(engine) != familyMongo {
@@ -1212,9 +1207,6 @@ func (e *RiskEngine) evaluateStatement(roleIDs []int64, engine, tier, sql string
 }
 
 var writesFileRe = regexp.MustCompile(`(?is)\binto\s+(outfile|dumpfile)\b`)
-
-// sqliteFileOpRe:ATTACH / DETACH,以及带 INTO 的 VACUUM。不带 INTO 的 VACUUM 只整理库文件本身。
-var sqliteFileOpRe = regexp.MustCompile(`(?is)^\s*(attach|detach)\b|^\s*vacuum\b.*\binto\b`)
 
 // WritesServerFile reports whether a statement makes MySQL write a file on the
 // database server (SELECT … INTO OUTFILE / DUMPFILE).

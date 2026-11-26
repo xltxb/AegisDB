@@ -58,10 +58,10 @@ func ReadSideEffect(st string) *model.RuleRef { return readSideEffect(st, nil) }
 // 按 MySQL 读法会把后面字面量里的 for update、sleep(1) 当成代码误拒(8302027 起)。engine 为空时两种都判。
 func ExportReadSideEffect(engine, st string) *model.RuleRef {
 	readings := append(sqlReadings(st), hashReadings(st)...)
-	// 只有 Oracle / SQLite 的字面量里 `\` 一定不是转义。PG 系不行:E'…' 串里 \' 是转义
+	// 只有 Oracle 的字面量里 `\` 一定不是转义。PG 系不行:E'…' 串里 \' 是转义
 	// (standard_conforming_strings=off 时普通串也是),只按标准读法判,E'a\' ', pg_sleep(30), ' '
 	// 里的 pg_sleep 就被当成了字符串内容(2026-10-26 复查)。PG 照旧两种读法都判。
-	if fam := engineFamily(engine); fam == familyOracle || fam == familySQLite {
+	if engineFamily(engine) == familyOracle {
 		readings = []string{st}
 	}
 	return readSideEffectIn(readings, exportPurePackages)

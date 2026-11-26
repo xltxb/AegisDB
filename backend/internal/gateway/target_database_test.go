@@ -17,7 +17,7 @@ func TestTargetDatabaseSwitchable(t *testing.T) {
 			t.Errorf("%s 的 Database 是服务名,不能被每请求的目标库替换", e)
 		}
 	}
-	switchable := []string{"MySQL 8.0", "TiDB 7", "PostgreSQL 15", "DWS", "SQLite", "PolarDB"}
+	switchable := []string{"MySQL 8.0", "TiDB 7", "PostgreSQL 15", "DWS", "PolarDB"}
 	for _, e := range switchable {
 		if !TargetDatabaseSwitchable(e) {
 			t.Errorf("%s 的 Database 是可切换的命名空间,应当允许替换", e)

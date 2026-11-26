@@ -258,7 +258,7 @@ func TestHarvestCorpus(t *testing.T) {
 		t.Skip("设 AEGISDB_SQLPARSE_HARVEST=1 才刷新语料")
 	}
 	sqlLike := regexp.MustCompile(`(?is)^\s*(/\*.*?\*/\s*|--[^\n]*\n\s*|#[^\n]*\n\s*)*\(?\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|MERGE|CREATE|ALTER|DROP|TRUNCATE|RENAME|GRANT|REVOKE|SHOW|DESC|DESCRIBE|EXPLAIN|WITH|CALL|SET|USE|BEGIN|DECLARE|LOAD|HANDLER|DO)\s`)
-	skipFile := regexp.MustCompile(`(?i)mongo|dws|postgres|_pg|sqlite`)
+	skipFile := regexp.MustCompile(`(?i)mongo|dws|postgres|_pg`)
 	oracleFile := regexp.MustCompile(`(?i)oracle|plsql|sqlplus`)
 	found := map[string]map[string]string{"mysql": {}, "oracle": {}}
 	fset := token.NewFileSet()

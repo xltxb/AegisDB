@@ -2,7 +2,7 @@ package gateway
 
 // 表结构对比的读取端:把一个库的系统目录翻成 schemadiff.Snapshot(见 .scratch/schema-diff/PRD.md)。
 //
-// 只读目录(information_schema / ALL_* / pg_catalog / sqlite_master),不碰业务数据。每类对象一条
+// 只读目录(information_schema / ALL_* / pg_catalog),不碰业务数据。每类对象一条
 // 查询取全库,不逐表查 —— 几千张表的库逐表查要几千次往返。
 //
 // 默认值、类型都取目录里的原文,不在这里归一化:归一化在 schemadiff 里做,报告要能显示两边的原文。
@@ -36,7 +36,7 @@ var ErrSnapshotTooLarge = apimsg.Errorf("库里超过 %d 张表,一次对比读�
 // ErrSnapshotTimeout:读目录超过时限。
 var ErrSnapshotTimeout = apimsg.Errorf("读取表结构超过 %d 秒", int(snapshotTimeout.Seconds()))
 
-// RealSchemaSnapshot 读一个库的结构快照。database:MySQL 库名 / Oracle owner / PG 库名 / SQLite 忽略。
+// RealSchemaSnapshot 读一个库的结构快照。database:MySQL 库名 / Oracle owner / PG 库名。
 // schema 只对 PG / DWS 有意义:空 = 库内全部非系统 schema(非 public 的表名带 schema 前缀);
 // 指定了就只读这一个 schema,表名不带前缀 —— 这样 app 与 app_uat 两个 schema 也能互比。
 //
@@ -66,8 +66,6 @@ func realSchemaSnapshotOnce(conn *model.Connection, database, schema string) (*s
 		err = oracleSnapshot(ctx, db, strings.ToUpper(strings.TrimSpace(database)), b)
 	case familyPostgres:
 		err = pgSnapshot(ctx, db, strings.TrimSpace(schema), b)
-	case familySQLite:
-		err = sqliteSnapshot(ctx, db, b)
 	default:
 		return nil, apimsg.Errorf("引擎 %q 暂不支持表结构对比", conn.Engine)
 	}
@@ -85,12 +83,9 @@ func realSchemaSnapshotOnce(conn *model.Connection, database, schema string) (*s
 const maxDiffDatabases = 2000
 
 // DiffDatabaseNames 列出一个实例上可以拿来做结构对比的"库",给页面的库名下拉:MySQL 系是库,
-// Oracle 是用户(schema),PG / DWS 是可连接的非模板库,SQLite 只有 main。系统库不列。
+// Oracle 是用户(schema),PG / DWS 是可连接的非模板库。系统库不列。
 func diffDatabaseNamesOnce(conn *model.Connection) ([]string, error) {
 	fam := engineFamily(conn.Engine)
-	if fam == familySQLite {
-		return []string{"main"}, nil
-	}
 	target := *conn
 	var q, fallback string
 	switch fam {
@@ -572,79 +567,4 @@ func pgSnapshot(ctx context.Context, pool *sql.DB, only string, b *snapBuilder) 
 		b.addIndexColumn(t, index, col, unique, false, primary)
 		return nil
 	})
-}
-
-// ---------------------------------------------------------------- SQLite(开发 / 测试用)
-
-func sqliteSnapshot(ctx context.Context, db *sql.DB, b *snapBuilder) error {
-	var names []string
-	if err := queryEach(ctx, db, `SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view')
-		AND name NOT LIKE 'sqlite_%' ORDER BY name`, nil, func(r *sql.Rows) error {
-		var name, typ string
-		if err := r.Scan(&name, &typ); err != nil {
-			return err
-		}
-		names = append(names, name)
-		return b.addTable(name, typ, "")
-	}); err != nil {
-		return err
-	}
-	for _, t := range names {
-		type pkcol struct {
-			name string
-			pos  int
-		}
-		var pks []pkcol
-		if err := queryEach(ctx, db, `SELECT cid, name, type, "notnull", dflt_value, pk FROM pragma_table_info(?)`, []any{t}, func(r *sql.Rows) error {
-			var cid, notNull, pk int
-			var name, typ string
-			var def sql.NullString
-			if err := r.Scan(&cid, &name, &typ, &notNull, &def, &pk); err != nil {
-				return err
-			}
-			b.addColumn(t, schemadiff.Column{Name: name, DataType: typ, Nullable: notNull == 0 && pk == 0,
-				HasDefault: def.Valid, Default: def.String, Ordinal: cid + 1})
-			if pk > 0 {
-				pks = append(pks, pkcol{name, pk})
-			}
-			return nil
-		}); err != nil {
-			return err
-		}
-		sort.Slice(pks, func(i, j int) bool { return pks[i].pos < pks[j].pos })
-		for _, p := range pks {
-			b.addPK(t, p.name)
-		}
-		type idx struct {
-			name   string
-			unique bool
-			origin string
-		}
-		var idxs []idx
-		if err := queryEach(ctx, db, `SELECT name, "unique", origin FROM pragma_index_list(?)`, []any{t}, func(r *sql.Rows) error {
-			var x idx
-			var u int
-			if err := r.Scan(&x.name, &u, &x.origin); err != nil {
-				return err
-			}
-			x.unique = u == 1
-			idxs = append(idxs, x)
-			return nil
-		}); err != nil {
-			return err
-		}
-		for _, x := range idxs {
-			if err := queryEach(ctx, db, `SELECT name FROM pragma_index_info(?) ORDER BY seqno`, []any{x.name}, func(r *sql.Rows) error {
-				var c sql.NullString
-				if err := r.Scan(&c); err != nil {
-					return err
-				}
-				b.addIndexColumn(t, x.name, c.String, x.unique, x.origin != "c", x.origin == "pk") // 自动建的 sqlite_autoindex_* 是系统命名
-				return nil
-			}); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

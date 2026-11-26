@@ -66,10 +66,10 @@ func quoteIdent(engine, name string) string {
 
 // ProbeSupported 说明这个引擎能不能跑数据探测。
 //
-// Mongo 不是 SQL;其余四个家族的探测语句是同一套标准 SQL。
+// Mongo 不是 SQL;其余三个家族的探测语句是同一套标准 SQL。
 func ProbeSupported(engine string) bool {
 	switch engineFamily(engine) {
-	case familyMySQL, familyPostgres, familyOracle, familySQLite:
+	case familyMySQL, familyPostgres, familyOracle:
 		return true
 	}
 	return false
@@ -171,11 +171,6 @@ func liveColumnQuery(conn *model.Connection, names []string) (string, []any) {
 	case familyOracle:
 		return `SELECT owner, table_name, column_name FROM all_tab_columns
 		        WHERE LOWER(table_name) IN (` + placeholders(len(names), ":") + `)`, args
-	case familySQLite:
-		// SQLite 的表值函数:一次连接查询拿到所有表的列,与元数据探查同一个写法。
-		return `SELECT '', m.name, p.name FROM sqlite_master m
-		        JOIN pragma_table_info(m.name) p
-		        WHERE m.type IN ('table','view') AND LOWER(m.name) IN (` + placeholders(len(names), "?") + `)`, args
 	}
 	return "", nil
 }

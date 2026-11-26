@@ -1323,7 +1323,7 @@ paths:
         从库(只读副本):replicaHost 不传 = 不动;传空串 = 去掉从库;`host` 或 `host:port`(不带端口沿用
         主库端口),与主库地址相同回 40001。replicaUsername 留空沿用主库账号密码;replicaPassword 留空
         保持已存的(AES 加密存储,列表不回传)。配了从库的实例,业务方数据查询(/bizquery/exec、
-        /bizquery/export、/bizquery/tables)都由从库提供,连不上时回落主库。SQLite 没有从库。
+        /bizquery/export、/bizquery/tables)都由从库提供,连不上时回落主库。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       requestBody:
         content:
@@ -1410,7 +1410,7 @@ paths:
       description: |
         判定与 /bizquery/exec 的前半段相同:实例仍是业务查询源、不在维护态、调用人对该库有此刻生效的
         查询授权 —— 没有授权的库连有哪些表都不给看(40300 + data.reasonRef)。只查这一个库的目录
-        (MySQL 系 information_schema、PG 系连到该库、Oracle 按 owner、SQLite),名字按在该库里
+        (MySQL 系 information_schema、PG 系连到该库、Oracle 按 owner),名字按在该库里
         写查询时的写法给出:PG 系非 public 的带 schema 前缀。最多 5000 个,超出时 truncated=true。
         读不到目录(连不上、账号看不到)不算拒绝:回 0,原因在 data.error,手写 SQL 照样能查。
         不占并发配额,不写审计。
@@ -1496,7 +1496,7 @@ paths:
         不引用这台实例上别的库或系统库 → 最外层 LIMIT / FETCH 的行数必须是数字 → 每人每天次数上限
         (bizQuery.maxDailyPerUser,默认 0 = 不限,次日零点恢复)→ 并发配额(默认每人 2 条、每实例 5 条)。
 
-        执行时在最外层补 LIMIT(MySQL / PG 系 / SQLite;自带的 LIMIT 比授权上限大会被改小;Oracle 靠读取截断)、在**只读事务**里执行
+        执行时在最外层补 LIMIT(MySQL / PG 系;自带的 LIMIT 比授权上限大会被改小;Oracle 靠读取截断)、在**只读事务**里执行
         (START TRANSACTION READ ONLY / BEGIN READ ONLY / SET TRANSACTION READ ONLY),库端时限用
         max_execution_time(MySQL 系)或 statement_timeout(PG 系),超时后 MySQL 系另发 KILL QUERY。
         结果服务端按【设置 · 敏感字段】脱敏,业务方没有看原值的通道;经子查询 / UNION / WITH 给敏感
@@ -1535,7 +1535,7 @@ paths:
       tags: [schemadiff]
       summary: '[schemadiff] 可以参与表结构对比的实例(调用人能访问、引擎支持、配了凭据)'
       description: |
-        family 是引擎族(mysql / oracle / postgres / sqlite),只有同一族能互比;database 是默认比的库
+        family 是引擎族(mysql / oracle / postgres),只有同一族能互比;database 是默认比的库
         (Oracle 为登录账号自己的 schema)。
       responses:
         '200':
@@ -1546,8 +1546,8 @@ paths:
       tags: [schemadiff]
       summary: '[schemadiff] 一个实例上可以比的库(页面的库名下拉)'
       description: |
-        实时列出:MySQL 系是库,Oracle 是用户(schema,总含登录账号自己),PG / DWS 是可连接的非模板库,
-        SQLite 只有 main;系统库不列,至多 2000 个。判定与对比相同:无权访问 40300,实例不存在 / 没配凭据
+        实时列出:MySQL 系是库,Oracle 是用户(schema,总含登录账号自己),PG / DWS 是可连接的非模板库;
+        系统库不列,至多 2000 个。判定与对比相同:无权访问 40300,实例不存在 / 没配凭据
         40001(均带 data.reasonRef)。读不到库列表回 0 + data.error,页面退回手填库名。不写审计。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses:

@@ -20,7 +20,7 @@ func TestSplitForJudge_MySQLDashDashIsNotAComment(t *testing.T) {
 	if got := SplitForJudge("MySQL 8.0", "SELECT 1 -- INTO OUTFILE '/tmp/p'"); !reflect.DeepEqual(got, []string{"SELECT 1"}) {
 		t.Errorf("真注释应被剥掉,实际 %#v", got)
 	}
-	// PG / SQLite 上 `--` 永远是注释 —— 不能照 MySQL 改写:`--'` 若不算注释,那个引号会
+	// PG 上 `--` 永远是注释 —— 不能照 MySQL 改写:`--'` 若不算注释,那个引号会
 	// 吞掉后面的分隔符,把下一条语句并进来。
 	if got := SplitForJudge("PostgreSQL 15", "SELECT 1 --'\n; DROP TABLE t"); !reflect.DeepEqual(got, []string{"SELECT 1", "DROP TABLE t"}) {
 		t.Errorf("PG 上 --' 是注释,实际 %#v", got)

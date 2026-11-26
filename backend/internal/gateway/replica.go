@@ -12,12 +12,11 @@ import (
 // 从库挂了的时候,多等的每一秒都是业务方在等。
 const replicaProbeTimeout = 3 * time.Second
 
-// ReplicaOf 返回一个指向该数据源从库的连接副本;没配从库(或引擎没有主从之分,如 SQLite)
-// 返回 nil。库名、引擎、目标 schema 都沿用主库;端口、账号、密码留空也沿用主库。
+// ReplicaOf 返回一个指向该数据源从库的连接副本;没配从库返回 nil。库名、引擎、目标 schema 都沿用主库;端口、账号、密码留空也沿用主库。
 //
 // 返回的是副本:调用方改它不会改到主库那份,连接池也按 DSN 各自独立。
 func ReplicaOf(conn *model.Connection) *model.Connection {
-	if conn == nil || conn.ReplicaHost == "" || engineFamily(conn.Engine) == familySQLite {
+	if conn == nil || conn.ReplicaHost == "" {
 		return nil
 	}
 	r := *conn

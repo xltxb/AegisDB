@@ -31,6 +31,11 @@ func invalidf(format string, args ...any) error {
 	return &InputError{Msg: err.Error(), ref: apimsg.RefOf(err)}
 }
 
+// asInputError 把一条 apimsg 错误包成 InputError:原话回给界面(40001),msgRef 照带。
+func asInputError(err error) error {
+	return &InputError{Msg: err.Error(), ref: apimsg.RefOf(err)}
+}
+
 // AsInputError 同 InputErrorMsg,但交出错误本身 —— resp.FailErr 要从它取 msgRef。
 func AsInputError(err error) (*InputError, bool) {
 	var ie *InputError

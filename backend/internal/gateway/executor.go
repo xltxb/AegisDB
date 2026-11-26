@@ -90,6 +90,16 @@ func (x *Executor) Run(ctx context.Context, conn *model.Connection, sql string, 
 	started := time.Now()
 	elapsed := func() int { return int(time.Since(started).Milliseconds()) }
 
+	// 网关已不能驱动的引擎(不再支持的引擎留下的存量连接):明说不支持。它没有凭据,
+	// 往下走会落进模拟分支,回一份看似真实的假结果。
+	if err := UnsupportedEngineErr(conn.Engine); err != nil {
+		ref := model.NewRuleRef(model.OutExecFailed, "err", err.Error())
+		if r := apimsg.RefOf(err); r != nil {
+			ref.Parts = []model.RuleRef{*r}
+		}
+		return ExecResult{Output: "· " + err.Error(), Err: err, Ms: elapsed(), OutputRef: ref}
+	}
+
 	// SQL*Plus 的 SET(显示设置 / SERVEROUTPUT)不是 SQL:终端在本地处理;从别的通道(发布单脚本、
 	// 开放接口)来的,回一句"已忽略",不下发 —— 一行显示设置不该让整个脚本失败。
 	// 其余不能翻译成 SQL 的 SQL*Plus 命令(见 oracle_sqlplus_cmd.go):拒绝的让这一条失败

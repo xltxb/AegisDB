@@ -38,7 +38,7 @@ func TestClipColumn_NeverExceedsWidth(t *testing.T) {
 }
 
 // clip 的宽度正好是常见列宽时,基本都是在往这个宽度的列里写,要用 clipColumn。
-// 测试库是 SQLite,不检查长度,所以用错了只有上线才报错。
+// 用错了测试不一定发现(要正好写到超宽的值),只有上线才报错。
 func TestExactColumnWidthsUseClipColumn(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {

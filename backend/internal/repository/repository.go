@@ -385,7 +385,7 @@ func (r *Repo) SetMenus(roleID int64, menus map[string]bool) error {
 func (r *Repo) CapabilityLevel(roleID int64, capability, tier string) (string, error) {
 	var row model.RoleCapability
 	// Case-insensitive on capability/tier so matching is consistent across the
-	// SQLite (dev) and MySQL (prod) drivers regardless of stored/input casing.
+	// PostgreSQL and MySQL stores regardless of stored/input casing.
 	err := r.db.Where("role_id = ? AND LOWER(capability) = ? AND LOWER(tier_code) = ?",
 		roleID, strings.ToLower(strings.TrimSpace(capability)), strings.ToLower(strings.TrimSpace(tier))).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1235,7 +1235,7 @@ func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status, typ,
 	if q != "" {
 		pat := "%" + escapeLike(q) + "%"
 		// 转义字符与 ESCAPE 子句的选择见 likeEscape:这里曾经写的是 ESCAPE '\',
-		// SQLite 上没问题,MySQL 上是语法错误 —— 生产的搜索框因此一直是坏的。
+		// MySQL 上是语法错误 —— 生产的搜索框因此一直是坏的。
 		const like = likeClause
 		const where = "ap_no" + like +
 			" OR instance" + like +
@@ -1266,8 +1266,8 @@ func (r *Repo) ListApprovalsPaged(scope string, userID int64, apNo, status, typ,
 // than what was typed.
 // likeEscape 是 LIKE 模式里的转义字符。**不用反斜杠**:MySQL 把字符串字面量里的反斜杠
 // 当转义符,ESCAPE '\' 发过去被读成"一个转义了的引号",字符串没结束,整句语法错误 ——
-// 而 SQLite 没有这套语义,同一句在开发环境跑得好好的。测试全绿、生产查不出东西,就是
-// 这个差别。换一个两边都不特殊对待的字符,两边就真的是同一句 SQL 了。
+// 而 PostgreSQL 没有这套语义,同一句在那边跑得好好的。换一个各个存储库都不特殊对待的
+// 字符,各处就真的是同一句 SQL 了。
 const likeEscape = "!"
 
 // escapeLike 把用户输入变成可以安全放进 LIKE 的字面量:% 与 _ 不再是通配符,
@@ -1279,8 +1279,8 @@ func escapeLike(s string) string {
 	return r.Replace(s)
 }
 
-// likeClause 是 " LIKE ? ESCAPE '!'":ESCAPE 必须显式写,SQLite 默认一个转义字符都
-// 没有,不写它,上面转义出来的 !_ 会被当成两个普通字符去匹配。
+// likeClause 是 " LIKE ? ESCAPE '!'":ESCAPE 必须显式写,各存储库默认的转义字符不同
+// (PostgreSQL 默认是反斜杠),不写它,上面转义出来的 !_ 会被当成两个普通字符去匹配。
 const likeClause = " LIKE ? ESCAPE '" + likeEscape + "'"
 
 // ListApprovals returns every approval the caller may see. Retained for callers
@@ -1486,7 +1486,7 @@ func (r *Repo) ListAudit(f AuditFilter, limit int) ([]model.AuditLog, error) {
 
 // EachAuditBatch 按与列表相同的顺序(时间倒序、id 倒序)分批读出全部命中的审计行,每批交给 fn。
 // 用"上一批最后一行"作游标(键集分页),不用 OFFSET —— 翻得越深越慢;也不长时间占着一个游标
-// (SQLite 只有一条连接)。导出用它流式写出,不把整表读进内存(2026-10 安全审计 M9)。
+// (占着存储库的一条连接)。导出用它流式写出,不把整表读进内存(2026-10 安全审计 M9)。
 func (r *Repo) EachAuditBatch(f AuditFilter, batch int, fn func([]model.AuditLog) error) error {
 	var lastAt time.Time
 	var lastID int64
@@ -1789,7 +1789,7 @@ func (r *Repo) SaveWebhook(w *model.WebhookConfig) error {
 // ordered for a stable tree (database, then table).
 func (r *Repo) SchemaForConnection(connID int64) ([]model.SchemaObject, error) {
 	var rows []model.SchemaObject
-	// `database` is a MySQL reserved word — quoted by GORM per dialect (MySQL/SQLite
+	// `database` is a MySQL reserved word — quoted by GORM per dialect (MySQL
 	// backticks, PostgreSQL double quotes) via clause.OrderBy.
 	err := r.db.Where("connection_id = ?", connID).
 		Order(clause.OrderBy{Columns: []clause.OrderByColumn{

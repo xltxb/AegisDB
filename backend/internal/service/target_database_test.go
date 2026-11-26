@@ -31,19 +31,6 @@ func TestApplyTargetDatabase(t *testing.T) {
 		}
 	})
 
-	// 2026-10 安全审计 H2:SQLite 的 Database 就是数据库文件路径。请求带来的"目标库"若照搬
-	// 过去,调用方就能让网关打开服务器上任意路径的文件(含网关自己的元数据库)。
-	t.Run("SQLite:请求的目标库不得改掉配置的文件路径", func(t *testing.T) {
-		conn := &model.Connection{Engine: "SQLite", Database: "/data/app.db"}
-		applyTargetDatabase(conn, "/data/other.db")
-		if conn.Database != "/data/app.db" {
-			t.Errorf("got %q, want the configured file path", conn.Database)
-		}
-		if conn.TargetSchema != "" {
-			t.Errorf("SQLite 不应设 TargetSchema,got %q", conn.TargetSchema)
-		}
-	})
-
 	t.Run("MySQL:目标库正常切换", func(t *testing.T) {
 		conn := &model.Connection{Engine: "MySQL 8.0", Database: "app"}
 		applyTargetDatabase(conn, "orders")

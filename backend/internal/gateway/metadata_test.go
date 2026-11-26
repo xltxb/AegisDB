@@ -91,9 +91,9 @@ func TestRealMetadata_PostgreSQLTablesAndColumns(t *testing.T) {
 	if got["id"].Ordinal != 1 || got["amount"].Ordinal != 2 {
 		t.Errorf("列序号应当从 1 开始按定义顺序:%+v", got)
 	}
-	// 库名与树里那份口径一致(singleDBName),否则同一台实例在树里和缓存里叫两个名字。
-	if got["id"].Database != singleDBName(conn) {
-		t.Errorf("库名口径不一致:%q vs %q", got["id"].Database, singleDBName(conn))
+	// 库名与树里那份口径一致(连接所在的库),否则同一台实例在树里和缓存里叫两个名字。
+	if got["id"].Database != conn.Database {
+		t.Errorf("库名口径不一致:%q vs %q", got["id"].Database, conn.Database)
 	}
 }
 

@@ -77,6 +77,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := bootstrap.RefuseIfUnmigrated(cfg, db); err != nil {
+		slog.Error("refusing to start on an unmigrated store", "err", err)
+		os.Exit(1)
+	}
+
 	repo := repository.New(db)
 	if cfg.Database.Seed {
 		if err := bootstrap.Seed(repo, cfg); err != nil {
@@ -250,9 +255,8 @@ func runInit(args []string) {
 		slog.Error("load config failed", "err", err)
 		os.Exit(1)
 	}
-	// `init` opens the DB without boot-time AutoMigrate, then migrates explicitly
-	// (versioned SQL on MySQL, AutoMigrate on sqlite) before seeding.
-	cfg.Database.AutoMigrate = false
+	// `init` migrates explicitly (versioned SQL) before seeding.
+	cfg.Database.AutoMigrate = false // nothing auto-migrates; just silences the auto_migrate warning
 	db, err := bootstrap.OpenDB(cfg)
 	if err != nil {
 		slog.Error("database init failed", "err", err)
@@ -294,7 +298,7 @@ func runVerifyAudit(args []string) {
 		os.Exit(1)
 	}
 	// 只读的一趟,不要在这里动表结构:校验跑在一个可疑的库上,而迁移会改写它。
-	cfg.Database.AutoMigrate = false
+	cfg.Database.AutoMigrate = false // silences the auto_migrate warning
 	db, err := bootstrap.OpenDB(cfg)
 	if err != nil {
 		slog.Error("database open failed", "err", err)

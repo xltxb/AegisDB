@@ -24,7 +24,7 @@ func TestNoWhereFor_BackslashHidesWhere(t *testing.T) {
 
 // 原有行为:别的引擎上普通字符串不认反斜杠,结尾是 \ 的值后面的 WHERE 是真的;正常语句不受影响。
 func TestNoWhereFor_BackslashKeepsRealWhere(t *testing.T) {
-	for _, engine := range []string{"PostgreSQL", "DWS", "Oracle", "SQLite", ""} {
+	for _, engine := range []string{"PostgreSQL", "DWS", "Oracle", ""} {
 		if NoWhereFor(engine, `UPDATE t SET p='C:\' WHERE id=1`) {
 			t.Errorf("%s 上这条有 WHERE", engine)
 		}

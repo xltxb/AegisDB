@@ -56,6 +56,6 @@ type SchemaDiffConn struct {
 	Name     string `json:"name"`
 	Env      string `json:"env"`
 	Engine   string `json:"engine"`
-	Family   string `json:"family"` // mysql | oracle | postgres | sqlite:只有同一族能互比
+	Family   string `json:"family"` // mysql | oracle | postgres:只有同一族能互比
 	Database string `json:"database"`
 }

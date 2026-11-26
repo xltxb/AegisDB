@@ -11,7 +11,7 @@ import (
 )
 
 // 发布单列表的阶段批量读取:一条查询、不读日志等大列、按单分组且单内有序。
-// 见 StageShapesOfReleases —— 逐单查(N+1)曾把发布页轮询拖成本地单连接 SQLite 的排队源头。
+// 见 StageShapesOfReleases —— 逐单查(N+1)曾把发布页轮询拖成存储库连接的排队源头。
 
 type sqlCounter struct {
 	n    int

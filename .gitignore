@@ -4,8 +4,7 @@
 /backend/server.exe
 *.test
 *.out
-# dev 环境的网关存储库是 SQLite(configs/config.yaml 的 sqlite_path)；
-# 从 backend/ 起服务时，相对路径的 SQLite 目标库也会建在这里。
+# 历史遗留:旧版本 dev 存储库是本地 .db 文件,保留忽略规则避免误提交。
 aegisdb.db
 /backend/*.db
 *.db-journal

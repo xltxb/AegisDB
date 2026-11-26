@@ -132,9 +132,9 @@ func TestAuditBackfill_IsIdempotent(t *testing.T) {
 
 // 它必须挂在**真实的 schema 路径**上,而不是只有测试直接调得到。
 //
-// 两条路:生产走 SQL 迁移(Migrate),dev 走 AutoMigrate。漏掉任何一条,那条路上的库
-// 就永远带着一屏短横,而且没有任何地方会报错 —— 所以这里把测试存储库(PG)真正的
-// schema 路径 Migrate 跑一遍,并对源码检查 AutoMigrate 那条确实也挂了。
+// schema 路径只有 SQL 迁移(Migrate)一条。漏掉它,库就永远带着一屏短横,而且没有
+// 任何地方会报错 —— 所以这里把测试存储库(PG)真正的 schema 路径 Migrate 跑一遍,
+// 并对源码检查它确实挂了这一步。
 func TestAuditBackfill_HangsOffTheSchemaPaths(t *testing.T) {
 	app := newTestApp(t)
 	db := app.repo.DB()
@@ -151,13 +151,13 @@ func TestAuditBackfill_HangsOffTheSchemaPaths(t *testing.T) {
 		t.Errorf("Migrate 那条路上没跑回填 —— 这一行仍是 %q", got)
 	}
 
-	// AutoMigrate 那条路(dev 上的 SQLite)这里不跑,所以在源码上确认它也挂了。
+	// 再在源码上确认 Migrate 确实挂了这一步。
 	src, err := os.ReadFile("migrate.go")
 	if err != nil {
 		t.Fatalf("读 migrate.go: %v", err)
 	}
-	if n := strings.Count(string(src), "backfillAuditClassification("); n < 2 {
+	if n := strings.Count(string(src), "backfillAuditClassification("); n < 1 {
 		t.Errorf("migrate.go 里只出现了 %d 次 backfillAuditClassification —— "+
-			"两条 schema 路径(Migrate 与 autoMigrate)都要挂,漏掉的那条上的库会永远带着一屏短横", n)
+			"Migrate 要挂上它,否则升级上来的库会永远带着一屏短横", n)
 	}
 }

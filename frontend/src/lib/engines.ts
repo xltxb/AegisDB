@@ -17,7 +17,7 @@
 // entry.
 
 /** Wire protocols the gateway can speak; '' means "not drivable". */
-export type EngineFamily = 'mysql' | 'postgres' | 'oracle' | 'sqlite' | ''
+export type EngineFamily = 'mysql' | 'postgres' | 'oracle' | ''
 
 export interface EngineOption {
   /** Canonical id stored on the connection and accepted by the CSV importer. */
@@ -45,7 +45,6 @@ export const ENGINES: EngineOption[] = [
 export function engineFamily(engine: string): EngineFamily {
   const e = (engine || '').toLowerCase().trim()
   if (!e) return ''
-  if (e.includes('sqlite')) return 'sqlite'
   if (e.includes('oracle')) return 'oracle'
   // PolarDB / Aurora 各有 PostgreSQL 版:PG 标记先认(与后端 engineFamily 同一顺序)
   if (e.includes('postgre') || e.includes('dws') || e.includes('gauss')) return 'postgres'

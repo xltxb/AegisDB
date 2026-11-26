@@ -33,7 +33,7 @@ func (c countingConnector) Connect(ctx context.Context) (driver.Conn, error) {
 
 func (c countingConnector) Driver() driver.Driver { return c.base.Driver() }
 
-// dsnConnector:驱动没有实现 DriverContext 时(比如部分 SQLite 驱动)的退路。
+// dsnConnector:驱动没有实现 DriverContext 时的退路。
 type dsnConnector struct {
 	d   driver.Driver
 	dsn string
