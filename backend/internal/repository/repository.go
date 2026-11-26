@@ -1188,7 +1188,7 @@ func (r *Repo) approvalScope(scope string, userID int64, runnableConnIDs []int64
 func applyApprovalType(q *gorm.DB, typ string) *gorm.DB {
 	switch typ {
 	case model.ApTypeCommand:
-		return q.Where("release_id = 0 AND window_id = 0 AND export_job_id = 0 AND osc_job_id = 0")
+		return q.Where("release_id = 0 AND window_id = 0 AND export_job_id = 0 AND osc_job_id = 0 AND query_grant_req_id = 0")
 	case model.ApTypeRelease:
 		return q.Where("release_id > 0")
 	case model.ApTypeWindow:
@@ -1197,6 +1197,8 @@ func applyApprovalType(q *gorm.DB, typ string) *gorm.DB {
 		return q.Where("export_job_id > 0")
 	case model.ApTypeOSC:
 		return q.Where("osc_job_id > 0")
+	case model.ApTypeGrant:
+		return q.Where("query_grant_req_id > 0")
 	}
 	return q
 }

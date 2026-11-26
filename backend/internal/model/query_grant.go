@@ -89,3 +89,23 @@ const RoleNoInstanceTag = "__no_instance__"
 
 // IsPlaceholderTag 说明一个角色标签是不是占位:它只用来表示"不开放实例",不该显示给人看。
 func IsPlaceholderTag(tag string) bool { return tag == BizQueryNoTag || tag == RoleNoInstanceTag }
+
+// QueryGrantRequest 是一次在网关里提交的数据查询权限申请(#173,迁移 0066)。
+//
+// 它不单独记状态:状态就是 ApprovalID 那张审批单的状态。撤回、超时、驳回都走审批单原有的路,
+// 不必在每条路上再同步一遍这里。批准后生成的授权记在 GrantID;批准时重新校验没通过的原因记在 Error。
+type QueryGrantRequest struct {
+	ID           int64     `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID       int64     `gorm:"index:idx_qgr_user;not null" json:"userId"`
+	ConnectionID int64     `gorm:"not null" json:"connectionId"`
+	DBName       string    `gorm:"column:db_name;size:128;not null" json:"database"`
+	Days         int       `gorm:"not null" json:"days"`
+	AllowExport  bool      `gorm:"not null;default:false" json:"allowExport"`
+	Reason       string    `gorm:"size:512;not null;default:''" json:"reason"`
+	ApprovalID   int64     `gorm:"index:idx_qgr_approval;not null;default:0" json:"approvalId"`
+	GrantID      int64     `gorm:"not null;default:0" json:"grantId"`
+	Error        string    `gorm:"size:512;not null;default:''" json:"error"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+func (QueryGrantRequest) TableName() string { return "tbl_query_grant_request" }

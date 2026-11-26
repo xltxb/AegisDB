@@ -361,6 +361,8 @@ export interface Approval {
   windowId?: number
   /** 导出申请单:批准后由后台导出任务执行。 */
   exportJobId?: number
+  /** 数据查询权限申请单:批准即生成查询授权,没有需要手动执行的命令(与 windowId 同一类)。 */
+  queryGrantReqId?: number
   /** 脚本工单:command 只是摘要,全文经 api.approvalScript 按需拉取。 */
   scriptUploadId?: number
   /**
@@ -368,7 +370,7 @@ export interface Approval {
    * 前端不照着 releaseId / windowId / exportJobId 再推一遍 —— 筛选的 WHERE 在服务端,
    * 标签若按另一份推断来画,迟早会出现"筛出来的行挂着别的标签"。
    */
-  type?: 'cmd' | 'release' | 'window' | 'export'
+  type?: 'cmd' | 'release' | 'window' | 'export' | 'grant'
   /**
    * 能不能**撤回**这张单。与 canDecide 分开:撤回不是"决定"。
    *
@@ -1289,8 +1291,29 @@ export interface BizQueryLimits {
   maxConcurrentPerSource: number
   maxDailyPerUser?: number // 0 = 不限
   exportEnabled: boolean
-  /** 申请数据查询权限的页面;空 = 不给链接 */
+  /** 申请方式:internal = 网关内提交审批单;external = 去外部系统(applyUrl)申请 */
+  applyMode?: 'internal' | 'external'
+  /** 外部申请页面(仅 external 时有意义);空 = 不给链接 */
   applyUrl?: string
+}
+
+/** 网关内申请数据查询权限时可选的业务查询源 */
+export interface BizApplySource { id: number; name: string; engine: string; env: string; status: string }
+
+/** 一张数据查询权限申请(对应一张 type=grant 的审批单) */
+export interface QueryGrantRequest {
+  id: number
+  sourceId: number
+  source: string
+  database: string
+  days: number
+  allowExport: boolean
+  reason: string
+  apNo: string
+  status: 'pending' | 'approved' | 'failed' | 'rejected' | 'cancelled' | 'expired'
+  grantId?: number
+  error?: string
+  createdAt: string
 }
 
 // AI 巡检报告(.scratch/inspection-report)

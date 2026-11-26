@@ -5,7 +5,7 @@ import type { Branding } from '@/lib/brand'
 import { bizClientTimeoutMs } from '@/lib/bizResultView'
 import type {
   APIClient, Approval, AsyncJob, AuditPage, AuditQuery, AuditRow, Connection, ConnectionSchema, DbObjects, EnvTier, Environment, ExecResp, ExecWindow,
-  ExportJob, SchemaDiffConn, SchemaDiffOptions, SchemaDiffResp, QueryGrant, BizQueryResult, BizQueryLimits, InvalidObject, LoginResp, SsoConfig, Me, Member, MetaSync, MetaSyncStatus, MetaTable, Notification, ObjectSource, Pipeline, Project, RecompileReport, Release, ReleasePage, ReviewCatalog,
+  ExportJob, SchemaDiffConn, SchemaDiffOptions, SchemaDiffResp, QueryGrant, QueryGrantRequest, BizApplySource, BizQueryResult, BizQueryLimits, InvalidObject, LoginResp, SsoConfig, Me, Member, MetaSync, MetaSyncStatus, MetaTable, Notification, ObjectSource, Pipeline, Project, RecompileReport, Release, ReleasePage, ReviewCatalog,
   SensitiveColumn, ServiceAccount,
   ReviewCheckResp, ReviewRule, RiskCheckResp, RuleRef, RiskCommandView, RoleBrief, RoleDetail,
   ScriptProgress, ScriptScanResp, ScriptUpload, SettingsResp, SnippetLimits, TerminalSnippet, UserView, WebhookConfig, WebhookDelivery, OnlineSession, OSCJobView,
@@ -226,6 +226,13 @@ export const api = {
     http.patch<any, Envelope<Connection>>(`/connections/${id}`, { tags }).then(ok),
   // 业务方数据查询:我的授权 + 执行(判定拒绝回 40300,执行失败回 0 + data.error)
   myQueryGrants: () => http.get<any, Envelope<{ grants: QueryGrant[]; limits: BizQueryLimits }>>('/bizquery/grants').then(ok),
+  // 网关内申请数据查询权限(applyMode=internal):可申请的源 → 源上的库 → 提交(生成一张 grant 审批单)
+  bizApplySources: () => http.get<any, Envelope<BizApplySource[]>>('/bizquery/apply/sources').then(ok),
+  bizApplyDatabases: (sourceId: number) => http.get<any, Envelope<string[]>>(`/bizquery/apply/sources/${sourceId}/databases`).then(ok),
+  bizApply: (body: { sourceId: number; database: string; days: number; allowExport: boolean; reason: string }) =>
+    http.post<any, Envelope<QueryGrantRequest>>('/bizquery/apply', body).then(ok),
+  myBizApplies: () => http.get<any, Envelope<QueryGrantRequest[]>>('/bizquery/apply/mine').then(ok),
+  cancelBizApply: (id: number) => http.post<any, Envelope<any>>(`/bizquery/apply/${id}/cancel`).then(ok),
   // ---- AI 巡检报告(.scratch/inspection-report)----
   inspectionLatest: () => http.get<any, Envelope<{ today: string; items: InspectionLatestRow[] }>>('/inspection-reports/latest').then(ok),
   inspectionHistory: (instanceId: number, page = 1, pageSize = 30) =>
@@ -288,6 +295,9 @@ export const api = {
     const qs = Object.entries(q).filter(([, v]) => v !== undefined && v !== '').map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&')
     return http.get<any, Envelope<{ items: QueryGrant[]; limits: BizQueryLimits }>>(`/query-grants${qs ? '?' + qs : ''}`).then(ok)
   },
+  // 管理员直接开通一条授权(权限页 · 查询授权 ·「新建授权」)
+  createQueryGrant: (body: { email: string; sourceId: number; database: string; days: number; maxRows: number; timeoutSec: number; allowExport: boolean; reason: string }) =>
+    http.post<any, Envelope<QueryGrant>>('/query-grants', body).then(ok),
   revokeQueryGrant: (id: number, reason: string) => http.post<any, Envelope<QueryGrant>>(`/query-grants/${id}/revoke`, { reason }).then(ok),
   // 业务查询源标记(查询授权只能引用打了这个标记的实例)
   setConnectionBizQuery: (id: number, bizQuery: boolean) =>

@@ -175,6 +175,10 @@ func (s *Services) canExecuteApproved(actor *model.User, ap *model.Approval) err
 	if ap.ReleaseID > 0 {
 		return apimsg.Errorf("这是升级单的审批工单,执行由发布流水线的执行阶段完成,不能在这里执行")
 	}
+	if ap.QueryGrantReqID > 0 {
+		// 权限申请单的 Command 是一句描述,批准即生成授权,没有可执行的语句。
+		return apimsg.Errorf("这是数据查询权限的申请单,批准即生效,没有需要手动执行的命令")
+	}
 	if ap.ExportJobID > 0 {
 		// 导出单的 Command 是一句描述("EXPORT [含敏感字段(原值)] …"),不是可执行的
 		// 语句。放它走这条路,网关会把那句描述当成命令发给数据库。

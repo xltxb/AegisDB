@@ -867,7 +867,16 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
 		result, title := model.ResultPending, apimsg.T("审批已通过,请前往执行")
-		if ap.WindowID > 0 {
+		if ap.QueryGrantReqID > 0 {
+			// 权限申请批的是"生成那条查询授权"。批准之前按此刻的设置重新校验一遍:校验不过就
+			// 不让批(审批人看到原因、应当驳回),不能出现"批准了、却没有授权"的单子。
+			if err := s.precheckGrantApproval(ap); err != nil {
+				return nil, err
+			}
+			res.Output = "· 已批准,查询授权已生效"
+			res.OutputRef = model.NewRuleRef(model.OutApGrantLive)
+			title = apimsg.T("数据查询权限申请已通过")
+		} else if ap.WindowID > 0 {
 			// 窗口单授权的是"让那扇门在它自己的时间表内生效",不是"执行一条命令"。
 			// 批准即生效,没有什么可等发起人去做的。
 			res.Output = "· 已批准,执行窗口已生效"
@@ -911,6 +920,8 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 			s.auditWindowDecision(ap, true)
 		} else if ap.ExportJobID > 0 {
 			s.releaseApprovedExport(ap)
+		} else if ap.QueryGrantReqID > 0 {
+			s.grantApprovedRequest(ap, d.ActorName)
 		}
 		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
 		// 没有跑。记成 exec 会让审计里出现一条查不到对应库变更的"执行",也会让只
@@ -921,7 +932,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 		// 命令就一直挂在那里,直到有人发现变更根本没生效。
 		body := apimsg.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
 			d.ActorName, safeClip(ap.Command, 60))
-		if ap.WindowID > 0 {
+		if ap.QueryGrantReqID > 0 {
+			body = apimsg.Sprintf("%s 通过了你的数据查询权限申请：%s\n授权已生效,可以到「数据查询」页查询了。",
+				d.ActorName, safeClip(ap.Command, 60))
+		} else if ap.WindowID > 0 {
 			body = apimsg.Sprintf("%s 通过了你的执行窗口申请：%s\n窗口已生效,到点自动开启、到点自动关闭。",
 				d.ActorName, safeClip(ap.Command, 60))
 		} else if ap.ExportJobID > 0 {

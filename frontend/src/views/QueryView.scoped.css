@@ -22,6 +22,8 @@
 .qblock-go { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 40px; border-radius: 9px;
   background: var(--brand-gradient); color: #fff; font: 600 13.5px var(--font-body); text-decoration: none; box-shadow: 0 6px 14px -6px rgba(59, 110, 246, 0.8); }
 .qblock-go:hover { filter: brightness(1.08); }
+button.qblock-go { border: none; cursor: pointer; }
+a.qtool { text-decoration: none; }
 .qblock-re { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: none; border-radius: 8px;
   background: transparent; color: var(--text-muted); font: 500 12.5px var(--font-body); cursor: pointer; }
 .qblock-re:hover:not(:disabled) { background: var(--surface-sunken); color: var(--text-strong); }

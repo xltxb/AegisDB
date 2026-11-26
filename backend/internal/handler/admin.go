@@ -610,7 +610,7 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	// exportJobId 推出来的(见 model.ApprovalType)。
 	typ := strings.TrimSpace(c.Query("type"))
 	switch typ {
-	case "", model.ApTypeCommand, model.ApTypeRelease, model.ApTypeWindow, model.ApTypeExport:
+	case "", model.ApTypeCommand, model.ApTypeRelease, model.ApTypeWindow, model.ApTypeExport, model.ApTypeGrant:
 	default:
 		resp.Fail(c, resp.CodeBadRequest, "type 取值无效")
 		return
@@ -815,6 +815,11 @@ func (h *Handler) ApproveApproval(c *gin.Context) {
 	}
 	if err == service.ErrAlreadyDecided {
 		resp.Fail(c, resp.CodeBadRequest, "该工单已被处理,请刷新")
+		return
+	}
+	if errors.Is(err, service.ErrGrantInvalid) {
+		// 数据查询权限申请在批准前按此刻的设置重新校验没通过:原因要给审批人看,他该驳回。
+		resp.FailErr(c, resp.CodeBadRequest, err)
 		return
 	}
 	if err != nil {

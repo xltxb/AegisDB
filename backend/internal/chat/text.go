@@ -16,6 +16,7 @@ var texts = map[string]map[string]string{
 		"kind.release": "发布",
 		"kind.window":  "执行窗口",
 		"kind.export":  "敏感导出",
+		"kind.grant":   "数据查询权限申请",
 
 		"field.no":        "单号",
 		"field.type":      "类型",
@@ -105,6 +106,7 @@ var texts = map[string]map[string]string{
 		"kind.release": "Release",
 		"kind.window":  "Execution window",
 		"kind.export":  "Sensitive export",
+		"kind.grant":   "Data query access request",
 
 		"field.no":        "Ticket",
 		"field.type":      "Type",

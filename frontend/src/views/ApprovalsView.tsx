@@ -34,8 +34,8 @@ function canDecide(a: Approval) {
 function rowState(a: Approval) {
   // 升级单和**窗口申请单**都不走手动执行:前者归流水线的执行阶段,后者批准即生效
   // (它的 Command 是一句描述,不是可执行语句)。把它们显示成"待执行",人会一直在
-  // 等一个永远不该按的按钮。
-  if (a.status === 'approved' && !a.executedAt && !a.releaseId && !a.windowId) return 'waitrun'
+  // 等一个永远不该按的按钮。数据查询权限申请单(queryGrantReqId)同理:批准即生成授权。
+  if (a.status === 'approved' && !a.executedAt && !a.releaseId && !a.windowId && !a.queryGrantReqId) return 'waitrun'
   // 最终状态以**库那边收没收下**为准。批准是人的决定,而这一列说的是那次下发的
   // 结果 —— 一条跑挂的 DROP 显示成"已通过",读的人会以为变更已经生效了。
   //
@@ -199,6 +199,7 @@ export default function ApprovalsView() {
     { v: 'release', label: t('apType_release') },
     { v: 'window', label: t('apType_window') },
     { v: 'export', label: t('apType_export') },
+    { v: 'grant', label: t('apType_grant') },
   ]
   const typeLabel = typeOpts.find((o) => o.v === typeFilter)?.label || ''
   function pickType(l: string) {
@@ -626,6 +627,7 @@ export default function ApprovalsView() {
                 </span>
               ) : detail.status === 'approved' && detail.releaseId ? <span className="waitc">{t('apExecuteByPipeline')}</span>
                 : detail.status === 'approved' && detail.windowId ? <span className="waitc">{t('apWindowLive')}</span>
+                  : detail.status === 'approved' && detail.queryGrantReqId ? <span className="waitc" data-testid="ap-grant-live">{t('apGrantLive')}</span>
                   : <span className="waitc">{detail.status === 'approved' ? t('apDone') : t('apRejected')}</span>}
             </div>
           </div>

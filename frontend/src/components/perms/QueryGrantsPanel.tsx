@@ -1,16 +1,19 @@
 // 查询授权总表:谁、哪个实例的哪个库、上限、有效期、来源(外部系统 / 审批单 / 审批人)。
 //
-// 授权由外部审批系统下发,这里不新建、不编辑 —— 只看,以及在离职、误授、安全事件时由管理员
-// 立即撤销(撤销原因写进审计)。
+// 授权有三个来处:外部审批系统经开放接口下发、用户在数据查询页提交申请并审批通过(grant 审批单)、
+// 管理员在这里「新建授权」直接开通(issue #173)。这里不编辑 —— 只看、管理员新建,以及在离职、
+// 误授、安全事件时由管理员立即撤销(开通与撤销都写进审计)。
 import { useState } from 'react'
 import clsx from 'clsx'
-import { Search, Ban } from 'lucide-react'
+import { Search, Ban, Plus } from 'lucide-react'
+import VButton from '@/components/common/VButton'
+import QueryGrantCreateModal from './QueryGrantCreateModal'
 import api from '@/api'
 import { useUIStore } from '@/stores/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { useEvent } from '@/hooks/useEvent'
 import { useMountEffect, useUpdateEffect } from '@/hooks/effects'
-import type { QueryGrant } from '@/types'
+import type { BizQueryLimits, QueryGrant } from '@/types'
 import './QueryGrantsPanel.scoped.css'
 
 const STATUSES = ['', 'active', 'pending', 'expired', 'revoked']
@@ -28,12 +31,15 @@ export default function QueryGrantsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [email, setEmail] = useState('')
   const [dept, setDept] = useState('')
   const [status, setStatus] = useState('active')
+  const [limits, setLimits] = useState<BizQueryLimits | null>(null)
+  const [creating, setCreating] = useState(false)
 
   const load = useEvent(async () => {
     setLoading(true)
     try {
       const r = await api.queryGrants({ email: email.trim(), dept: dept.trim(), status })
       setItems(r.items ?? [])
+      setLimits(r.limits ?? null)
     } catch (e) {
       useUIStore.getState().notifyError(e, t('loadFailed'))
     } finally {
@@ -69,7 +75,16 @@ export default function QueryGrantsPanel({ isAdmin }: { isAdmin: boolean }) {
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="qgsel" data-testid="qg-status">
           {STATUSES.map((s) => <option key={s} value={s}>{s ? t('qgSt_' + s) : t('qgAll')}</option>)}
         </select>
+        {isAdmin && (
+          <VButton variant="primary" height="32px" className="qgnew" data-testid="qg-new" onClick={() => setCreating(true)}>
+            <Plus size={14} />{t('qgNew')}
+          </VButton>
+        )}
       </div>
+      <QueryGrantCreateModal
+        open={creating} limits={limits} onClose={() => setCreating(false)}
+        onCreated={() => { setCreating(false); useUIStore.getState().notify(t('qgNewCreated'), 'success'); void load() }}
+      />
       <div className="qgt">
         <div className="qgh"><span>{t('qgColUser')}</span><span>{t('qgColTarget')}</span><span>{t('qgColLimit')}</span><span>{t('qgColPeriod')}</span><span>{t('qgColSource')}</span><span>{t('qgColStatus')}</span></div>
         {!loading && !items.length && <div className="qgempty">{t('qgEmpty')}</div>}
