@@ -35,6 +35,7 @@ var encryptedSettingKeys = map[string]bool{
 	"chat.lark.appSecret":              true,
 	"chat.telegram.botToken":           true,
 	"chat.telegram.proxyToken":         true,
+	"sso.clientSecret":                 true,
 }
 
 // ---------------------------------------------------------------- Connections
@@ -974,7 +975,7 @@ func (h *Handler) CreateUser(c *gin.Context) {
 	u, err := h.Svc.CreateUser(req)
 	if err != nil {
 		if errors.Is(err, service.ErrBizNoLocalPassword) {
-			resp.Fail(c, resp.CodeBadRequest, "创建失败:只有业务查询角色的账号不设本地口令 —— 它由外部审批下发授权时自动开通,业务方通过 SRD 授权登录进入网关")
+			resp.Fail(c, resp.CodeBadRequest, "创建失败:只有业务查询角色的账号不设本地口令 —— 它由外部审批下发授权时自动开通,业务方通过 SSO 登录进入网关")
 			return
 		}
 		if ie, ok := service.AsInputError(err); ok {
@@ -1026,7 +1027,7 @@ func (h *Handler) SetUserPassword(c *gin.Context) {
 	}
 	if err := h.Svc.AdminSetPassword(middleware.CurrentUser(c), pathID(c), req.Password); err != nil {
 		if errors.Is(err, service.ErrBizNoLocalPassword) {
-			resp.Fail(c, resp.CodeBadRequest, "重置失败:业务查询账号不设本地口令,业务方通过 SRD 授权登录进入网关")
+			resp.Fail(c, resp.CodeBadRequest, "重置失败:业务查询账号不设本地口令,业务方通过 SSO 登录进入网关")
 			return
 		}
 		if ie, ok := service.AsInputError(err); ok {
@@ -1449,13 +1450,22 @@ func (h *Handler) checkSSOSettings(body map[string]any) (string, error) {
 		}
 		next.Enabled = b
 	}
-	str(service.SettingSSOBaseURL, &next.BaseURL)
-	str(service.SettingSSOCookieName, &next.CookieName)
+	str(service.SettingSSOIssuer, &next.Issuer)
+	str(service.SettingSSOClientID, &next.ClientID)
+	str(service.SettingSSORedirectURL, &next.RedirectURL)
+	str(service.SettingSSOEmailClaim, &next.EmailClaim)
 	if err := service.ValidateSSOSettings(next, service.AllowInsecureSSO); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("enabled=%v baseUrl=%s cookie=%s",
-		next.Enabled, next.BaseURL, next.CookieName), nil
+	// Client Secret 不进审计,只记它在这次提交里有没有动。
+	secretNote := ""
+	if v, ok := body[service.SettingSSOClientSecret]; ok {
+		if sv, isStr := v.(string); !isStr || strings.TrimSpace(sv) != "" {
+			secretNote = " clientSecret=已修改"
+		}
+	}
+	return fmt.Sprintf("enabled=%v issuer=%s clientId=%s redirectUrl=%s emailClaim=%s%s",
+		next.Enabled, next.Issuer, next.ClientID, next.RedirectURL, next.EmailClaim, secretNote), nil
 }
 
 // chatRequired 是各渠道开着时必须有的设置。

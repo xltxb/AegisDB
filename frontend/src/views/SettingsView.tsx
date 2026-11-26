@@ -87,10 +87,14 @@ const INITIAL = {
   // IP allowlist
   ipAllowEnabled: false,
   ipAllow: '',
-  // SRD 授权登录(公司 SSO,只做认证)。存 tbl_setting 的 sso.*,即改即生效。
+  // 公司 SSO(OIDC,只做认证)。存 tbl_setting 的 sso.*,即改即生效。
   ssoEnabled: false,
-  ssoBaseUrl: '',
-  ssoCookie: 'CS-Token',
+  ssoIssuer: '',
+  ssoClientId: '',
+  ssoClientSecret: '', // 从不回显:空着 = 不改
+  ssoRedirectUrl: '',
+  ssoScopes: 'openid email profile',
+  ssoEmailClaim: 'email',
   lark: true,
   // Lark (飞书) channel config — the approval card is pushed to this bot webhook.
   larkWebhook: '',
@@ -153,7 +157,7 @@ type Form = SettingsForm
 type KeysOf<V> = { [K in keyof Form]: Form[K] extends V ? (V extends Form[K] ? K : never) : never }[keyof Form]
 
 /** 这一页上的机密:设置键 → 表单里的字段 */
-const SECRETS = { 'notify.larkSecret': 'larkSecret', ...CHAT_SECRETS } as const satisfies Record<string, KeysOf<string>>
+const SECRETS = { 'notify.larkSecret': 'larkSecret', 'sso.clientSecret': 'ssoClientSecret', ...CHAT_SECRETS } as const satisfies Record<string, KeysOf<string>>
 
 // 数值设置的读与存都过它:默认值和上下界各只写一次。以前每个数值设置把默认值写在
 // 三处(ref 初始化、读取、保存)、上下界写在两处(保存、模板的 min/max),漏改一处就
@@ -188,8 +192,12 @@ function formOf(g: Record<string, string | undefined>): Form {
     ipAllow: parse<string>(g['security.ipAllowlist'], ''),
     ipAllowEnabled: parse<boolean>(g['security.ipAllowEnabled'], false),
     ssoEnabled: parse<boolean>(g['sso.enabled'], false),
-    ssoBaseUrl: parse<string>(g['sso.baseUrl'], ''),
-    ssoCookie: parse<string>(g['sso.cookieName'], 'CS-Token') || 'CS-Token',
+    ssoIssuer: parse<string>(g['sso.issuer'], ''),
+    ssoClientId: parse<string>(g['sso.clientId'], ''),
+    ssoClientSecret: '',
+    ssoRedirectUrl: parse<string>(g['sso.redirectUrl'], ''),
+    ssoScopes: parse<string>(g['sso.scopes'], 'openid email profile') || 'openid email profile',
+    ssoEmailClaim: parse<string>(g['sso.emailClaim'], 'email') || 'email',
     scriptPath: parse<string>(g['script.savePath'], ''),
     inspectionPath: parse<string>(g['inspection.savePath'], ''),
     exportPath: parse<string>(g['export.savePath'], ''),
@@ -286,8 +294,12 @@ function settingsPayload(f: Form) {
     'security.ipAllowlist': f.ipAllow,
     'security.ipAllowEnabled': f.ipAllowEnabled,
     'sso.enabled': f.ssoEnabled,
-    'sso.baseUrl': f.ssoBaseUrl.trim(),
-    'sso.cookieName': f.ssoCookie.trim() || 'CS-Token',
+    'sso.issuer': f.ssoIssuer.trim(),
+    'sso.clientId': f.ssoClientId.trim(),
+    'sso.clientSecret': f.ssoClientSecret.trim(),
+    'sso.redirectUrl': f.ssoRedirectUrl.trim(),
+    'sso.scopes': f.ssoScopes.trim() || 'openid email profile',
+    'sso.emailClaim': f.ssoEmailClaim.trim() || 'email',
     'notify.lark': f.lark,
     'notify.larkWebhook': f.larkWebhook.trim(),
     'notify.larkSecret': f.larkSecret.trim(),
@@ -507,6 +519,9 @@ export default function SettingsView() {
 
   // 表单字段 → 控件的绑定
   const n = (k: KeysOf<Num>) => ({ value: f[k] as Num, onChange: setter(k) as (v: Num) => void })
+  // 回调地址的建议值:按这个页面所在的位置推出网关的访问地址(网关可能挂在子路径下)。
+  // 它要原样登记到身份服务的允许回调列表里。
+  const ssoCallbackSuggestion = window.location.origin + window.location.pathname.replace(/\/?$/, '/') + 'api/v1/auth/oidc/callback'
   const sw = (k: KeysOf<boolean>) => ({ value: f[k] as boolean, onChange: setter(k) as (v: boolean) => void })
   const tx = (k: KeysOf<string>) => ({ value: (f[k] as string) ?? '', onChange: (e: { target: { value: string } }) => setter(k)(e.target.value) })
 
@@ -646,8 +661,24 @@ export default function SettingsView() {
             {ssoForcedOff && <div className="ssowarn" data-testid="sso-forced-off">{t('setSsoForcedOff')}</div>}
             {f.ssoEnabled && (
               <div className="larkcfg">
-                <div className="lkrow"><label className="lkl">{t('setSsoBase')}</label><input {...tx('ssoBaseUrl')} className="lkin" placeholder="https://srd.bssrvc66.com" data-testid="sso-base" /></div>
-                <div className="lkrow"><label className="lkl">{t('setSsoCookie')}</label><input {...tx('ssoCookie')} className="lkin" placeholder="CS-Token" /></div>
+                <div className="lkrow"><label className="lkl">{t('setSsoIssuer')}</label><input {...tx('ssoIssuer')} className="lkin" placeholder="https://idp.example.com/realms/corp" data-testid="sso-issuer" /></div>
+                <div className="lkrow"><label className="lkl">Client ID</label><input {...tx('ssoClientId')} className="lkin" data-testid="sso-client-id" /></div>
+                <div className="lkrow">
+                  <label className="lkl">Client Secret</label>
+                  <input {...tx('ssoClientSecret')} type="password" autoComplete="new-password" className="lkin" data-testid="sso-client-secret"
+                    placeholder={secretsSet['sso.clientSecret'] ? t('secretConfiguredPh') : t('setSsoSecretPh')} />
+                  {secretsSet['sso.clientSecret'] && <VButton height="36px" onClick={() => clearSecret('sso.clientSecret')}>{t('secretClear')}</VButton>}
+                </div>
+                <div className="lkrow">
+                  <label className="lkl">{t('setSsoRedirect')}</label>
+                  <input {...tx('ssoRedirectUrl')} className="lkin" placeholder={ssoCallbackSuggestion} data-testid="sso-redirect" />
+                  {f.ssoRedirectUrl.trim() !== ssoCallbackSuggestion && (
+                    <VButton height="36px" data-testid="sso-redirect-fill" onClick={() => setter('ssoRedirectUrl')(ssoCallbackSuggestion)}>{t('setSsoRedirectFill')}</VButton>
+                  )}
+                </div>
+                <div className="lkrow"><label className="lkl">Scopes</label><input {...tx('ssoScopes')} className="lkin" placeholder="openid email profile" data-testid="sso-scopes" /></div>
+                <div className="lkrow"><label className="lkl">{t('setSsoEmailClaim')}</label><input {...tx('ssoEmailClaim')} className="lkin" placeholder="email" data-testid="sso-email-claim" /></div>
+                <div className="ssowarn">{t('setSsoRedirectHint')}</div>
                 <div className="ssowarn">{t('setSsoBindHint')}</div>
               </div>
             )}

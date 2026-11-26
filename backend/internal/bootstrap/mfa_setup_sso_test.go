@@ -90,11 +90,8 @@ func TestMFASetup_NonSSOSessionStillNeedsPassword(t *testing.T) {
 
 // 端到端:真走一遍 SSO 登录(POST /auth/sso),签出来的会话绑 MFA 不要求本地口令。
 func TestMFASetup_RealSSOLoginSkipsPassword(t *testing.T) {
-	srdJWT := jwtFor("chenhao")
-	fake := &fakeSRD{identity: map[string]map[string]any{
-		srdJWT: {"id": 7, "username": "chenhao", "email": "chenhao@aegisdb.io", "department": "IT", "internal_department": "DBA"},
-	}}
-	app := newSSOApp(t, fake)
-	tok := ssoToken(t, app.ssoLogin(srdJWT))
+	idp := newFakeIdP(t)
+	app := newSSOApp(t, idp)
+	tok := ssoToken(t, app.ssoLogin(idp, map[string]any{"email": "chenhao@aegisdb.io"}))
 	eq(t, app.do(http.MethodPost, "/api/v1/auth/mfa/setup", tok, nil).Code, 0, "刚经 SSO 登录:免出示本地口令")
 }

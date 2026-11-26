@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import clsx from 'clsx'
 import { Mail, Lock, Languages, ShieldCheck, KeyRound, ShieldX } from 'lucide-react'
-import { useAuthStore, SSO_SKIP_KEY } from '@/stores/auth'
+import { useAuthStore } from '@/stores/auth'
 import { useUIStore } from '@/stores/ui'
 import { CODE_MFA_REQUIRED } from '@/api/http'
 import { CODE_SSO_NO_SESSION, CODE_SSO_NO_ACCOUNT } from '@/api/codes'
-import { srdLoginHref, justReturnedFromSrd, SRD_REDIRECTED_KEY } from '@/lib/srdLogin'
+import { ssoStartHref, ssoErrorKey } from '@/lib/ssoLogin'
 import api from '@/api'
 import type { SsoConfig } from '@/types'
 import VButton from '@/components/common/VButton'
@@ -39,9 +39,12 @@ export default function LoginView() {
   // Surface the idle-lock notice when redirected here by the auto-lock.
   const [error, setError] = useState(() => (route.query.locked ? t('mfaLocked') : ''))
 
-  // ---------------------------------------------------------------- SRD 授权登录(公司 SSO)
+  // ---------------------------------------------------------------- 公司 SSO(OIDC)
   // SSO 只管"你是谁"。网关里没有这个邮箱(管理员没开通)时服务端拒绝(40302),这里弹窗
   // 拦下并说清"无权限访问、找管理员开通";有账号但还没分配角色的,提示"等管理员分配"。
+  //
+  // 授权码流程整个在服务端:按钮把浏览器送到网关的发起地址,身份服务登录完成后网关跳回
+  // #/login?sso=1(这时换会话)或 #/login?sso_error=<原因>(这时说出原因)。
   const [sso, setSso] = useState<SsoConfig | null>(null)
   const [ssoBusy, setSsoBusy] = useState(false)
   const ssoBusyRef = useRef(false)
@@ -69,29 +72,18 @@ export default function LoginView() {
     void nav.push(auth.onlyQuery ? '/query' : '/dashboard')
   }
 
-  // 跳去 SRD 授权。回来时落在本页,挂载时的静默尝试会用 SRD 写下的 CS-Token 换会话。
-  function goSRD(cfg: SsoConfig) {
+  // 去身份服务登录。回来时落在本页(#/login?sso=1)。
+  function goSSO(cfg: SsoConfig) {
     if (!cfg.loginUrl) return
-    try {
-      // 人主动要走 SSO:登出时设的"别自动登录"就该撤掉,否则授权回来什么都不发生。
-      sessionStorage.removeItem(SSO_SKIP_KEY)
-      sessionStorage.setItem(SRD_REDIRECTED_KEY, String(Date.now()))
-    } catch { /* 隐私模式 */ }
-    window.location.href = srdLoginHref(cfg.loginUrl, window.location)
+    window.location.href = ssoStartHref(cfg.loginUrl, window.location)
   }
 
-  // auto:进登录页时静默试一次。没有登录态(40101)时什么都不说,露出按钮就够了。
-  // 手动点按钮:浏览器里已有 SRD 登录态就直接进来;没有、或者已过期被 SRD 拒绝,就去 SRD 授权。
-  async function trySSO(cfg: SsoConfig | null, auto: boolean, code = '') {
+  // 用回调留下的登录结果换网关会话。code:已绑定 TOTP 的管理员第二步带上的验证码。
+  async function trySSO(cfg: SsoConfig | null, code = '') {
     if (!cfg?.enabled || ssoBusyRef.current) return
     setError('')
     ssoBusyRef.current = true
     setSsoBusy(true)
-    let returned = false
-    try {
-      returned = justReturnedFromSrd(sessionStorage.getItem(SRD_REDIRECTED_KEY), Date.now())
-      sessionStorage.removeItem(SRD_REDIRECTED_KEY)
-    } catch { /* 隐私模式 */ }
     try {
       await useAuthStore.getState().loginSSO(code)
       afterLogin(true)
@@ -108,17 +100,14 @@ export default function LoginView() {
         setNoAccount(true)
         return
       }
-      const noSession = e?.code === CODE_SSO_NO_SESSION
-      if (auto && noSession && returned) {
-        // 刚在 SRD 授权完,网关却没收到 CS-Token:再点一次只会来回跳。把原因说出来。
-        setError(t('ssoNoCookie'))
+      if (e?.code === CODE_SSO_NO_SESSION) {
+        // 刚从身份服务回来,网关却说没有登录结果:多半是停太久过期了,或浏览器没存下 Cookie。
+        // 让人再点一次按钮即可;输码阶段遇到它,说明登录结果已过期,输码框也该收起。
+        setSsoMfa(false)
+        setError(t('ssoNoResult'))
         return
       }
-      if (!auto && (noSession || e?.code === 40100)) {
-        goSRD(cfg)
-        return
-      }
-      if (!noSession) setError(e?.message || t('loginError'))
+      setError(e?.message || t('loginError'))
     } finally {
       ssoBusyRef.current = false
       setSsoBusy(false)
@@ -127,18 +116,26 @@ export default function LoginView() {
 
   useEffect(() => {
     let gone = false
+    // 回调带回来的结果只处理一次:读完就从地址栏去掉,刷新页面不会再触发。
+    const returned = route.query.sso === '1'
+    const ssoErr = ssoErrorKey(route.query.sso_error)
+    if (returned || route.query.sso_error !== undefined) {
+      const rest = { ...route.query }
+      delete rest.sso
+      delete rest.sso_error
+      void nav.replace({ path: '/login', query: rest })
+    }
     void (async () => {
       let cfg: SsoConfig | null = null
       try { cfg = await api.ssoConfig() } catch { /* 拿不到就当没启用 */ }
       if (gone) return
       setSso(cfg)
-      if (!cfg?.enabled) return
-      setShowLocal(false)
-      // 主动登出后回到这里不自动登录(否则"登出"按下去一眨眼又登进来了);
-      // 空闲锁定跳回来的也不自动 —— 锁定的意义就是要人重新确认一次。
-      let skip = false
-      try { skip = sessionStorage.getItem(SSO_SKIP_KEY) === '1' } catch { /* 隐私模式 */ }
-      if (!skip && !route.query.locked) void trySSO(cfg, true)
+      if (cfg?.enabled) setShowLocal(false)
+      if (ssoErr) {
+        setError(t(`ssoErr_${ssoErr}`))
+        return
+      }
+      if (returned && cfg?.enabled) void trySSO(cfg)
     })()
     return () => { gone = true }
     // 只在进登录页时跑一次
@@ -169,7 +166,7 @@ export default function LoginView() {
     }
   }
   const onEnter = (fn: () => void) => (e: React.KeyboardEvent) => { if (e.key === 'Enter') fn() }
-  const submitSsoMfa = () => trySSO(sso, false, ssoMfaCode.trim())
+  const submitSsoMfa = () => trySSO(sso, ssoMfaCode.trim())
 
   return (
     <div className="login">
@@ -185,10 +182,10 @@ export default function LoginView() {
         <div className="title">{t('loginTitle')}</div>
         <div className="sub">{t('loginSub')}</div>
 
-        {/* SRD 授权登录(公司 SSO):启用时它是主入口 */}
+        {/* 公司 SSO(OIDC):启用时它是主入口 */}
         {sso?.enabled && (
           <>
-            <VButton variant="primary" fullWidth disabled={ssoBusy} className="ssobtn" data-testid="sso-login" onClick={() => trySSO(sso, false)}>
+            <VButton variant="primary" fullWidth disabled={ssoBusy} className="ssobtn" data-testid="sso-login" onClick={() => goSSO(sso)}>
               <KeyRound size={15} />{ssoBusy ? t('ssoTrying') : t('ssoBtn')}
             </VButton>
             {ssoMfa && (

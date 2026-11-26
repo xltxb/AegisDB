@@ -4,7 +4,9 @@ go 1.23.0
 
 require (
 	github.com/bytebase/omni v0.0.0-00010101000000-000000000000
+	github.com/coreos/go-oidc/v3 v3.14.1
 	github.com/gin-gonic/gin v1.10.0
+	github.com/go-jose/go-jose/v4 v4.0.5
 	github.com/go-mysql-org/go-mysql v1.13.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang-jwt/jwt/v5 v5.2.1
@@ -15,7 +17,8 @@ require (
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20250421232622-526b2c79173d
 	github.com/sijms/go-ora/v2 v2.8.19
 	github.com/yeka/zip v0.0.0-20231116150916-03d6312748a9
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.36.0
+	golang.org/x/oauth2 v0.28.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/driver/postgres v1.5.9
@@ -59,9 +62,9 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.8.0 // indirect
-	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/net v0.37.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect

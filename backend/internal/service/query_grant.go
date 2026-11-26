@@ -412,7 +412,7 @@ func (s *Services) UpsertQueryGrant(client *model.APIClient, actor *model.User, 
 }
 
 // ErrBizNoLocalPassword:只挂业务查询角色的账号不设本地口令(PRD 决策 10)。
-var ErrBizNoLocalPassword = apimsg.Errorf("%w: 业务查询账号不设本地口令,业务方通过 SRD 授权登录进入网关", ErrBadRequest)
+var ErrBizNoLocalPassword = apimsg.Errorf("%w: 业务查询账号不设本地口令,业务方通过 SSO 登录进入网关", ErrBadRequest)
 
 // bizQueryOnly 报告这个账号是不是**只有**业务查询角色(业务方)。已有别的角色、因授权追加了
 // 业务查询角色的人不算 —— 他们原来怎么登录还怎么登录。
@@ -453,7 +453,7 @@ func (s *Services) grantee(email, name, dept string, actor *model.User, client *
 		u = &model.User{
 			Name: display, Email: email, Status: "active", Kind: model.UserKindHuman,
 			RoleID: role.ID,
-			// 没有本地口令,也设不上(bizQueryOnly):业务方等 SRD 授权登录(PRD 决策 10)。
+			// 没有本地口令,也设不上(bizQueryOnly):业务方经 SSO 登录(PRD 决策 10)。
 			PasswordHash: "",
 			Initials:     initials(display), Dept: fitRunes(d, 64), LastActive: "—",
 		}

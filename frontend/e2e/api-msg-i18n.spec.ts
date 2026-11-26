@@ -15,7 +15,7 @@ function fail(code: number, msg: string, msgRef?: unknown) {
 
 async function openSsoMfa(page: Page, lang: 'zh' | 'en', msgRef: unknown = MFA_WRONG) {
   await page.addInitScript((l) => localStorage.setItem('aegisdb_lang', l), lang)
-  await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: true, loginUrl: 'https://srd.example.com/auth/login' })))
+  await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: true, loginUrl: 'api/v1/auth/oidc/start' })))
   await page.route('**/api/v1/auth/sso', (r) => {
     const body = r.request().postDataJSON() ?? {}
     return r.fulfill(body.mfaCode
@@ -23,7 +23,7 @@ async function openSsoMfa(page: Page, lang: 'zh' | 'en', msgRef: unknown = MFA_W
       : fail(42800, '请输入 MFA 验证码', { code: 'm9c27b238' }))
   })
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope(ME)))
-  await page.goto('/#/login')
+  await page.goto('/#/login?sso=1') // 从 SSO 回调回来:登录页自动换会话,管理员要输码
   await page.getByTestId('sso-mfa-code').fill('000000')
   await page.getByTestId('sso-mfa-submit').click()
 }

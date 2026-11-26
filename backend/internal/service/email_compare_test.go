@@ -18,7 +18,7 @@ func TestSameEmail(t *testing.T) {
 	for _, c := range [][2]string{
 		{"josé@corp.io", "jose@corp.io"}, // 重音
 		{"linwéi@aegisdb.io", "linwei@aegisdb.io"},
-		{"K@corp.io", "k@corp.io"}, // 开尔文符号
+		{"K@corp.io", "k@corp.io"},     // 开尔文符号
 		{"ſam@corp.io", "sam@corp.io"}, // 长 s
 		{"a@corp.io", "b@corp.io"},
 	} {
@@ -28,13 +28,13 @@ func TestSameEmail(t *testing.T) {
 	}
 }
 
-func TestParseSSOIdentity_KeepsLookalikeDistinct(t *testing.T) {
-	id, ok := parseSSOIdentity([]byte("{\"username\":\"x\",\"email\":\"K@Corp.IO\"}"))
-	if !ok || id.Email != "K@corp.io" {
-		t.Fatalf("开尔文符号不能被折叠成 k,实际 %+v %v", id, ok)
+func TestIdentityFrom_KeepsLookalikeDistinct(t *testing.T) {
+	email, _, ok := identityFrom(map[string]any{"email": "\u212aa@Corp.IO", "email_verified": true}, "email")
+	if !ok || email != "\u212aa@corp.io" {
+		t.Fatalf("开尔文符号不能被折叠成 k,实际 %q %v", email, ok)
 	}
-	id, ok = parseSSOIdentity([]byte(`{"username":"x","email":" LinWei@AegisDB.IO "}`))
-	if !ok || id.Email != "linwei@aegisdb.io" {
-		t.Fatalf("普通邮箱照旧转小写,实际 %+v %v", id, ok)
+	email, _, ok = identityFrom(map[string]any{"email": " LinWei@AegisDB.IO ", "email_verified": true}, "email")
+	if !ok || email != "linwei@aegisdb.io" {
+		t.Fatalf("普通邮箱照旧转小写,实际 %q %v", email, ok)
 	}
 }

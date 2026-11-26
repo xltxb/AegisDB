@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test'
 import { envelope, stubCommon, autoConfirm } from './helpers'
 
-// 【权限 · 用户】里的 SSO 绑定状态。绑定发生在第一次经 SRD 授权登录、邮箱对上的时候(服务端),
-// 这里只展示,并让管理员解绑;SRD 没有用户名单接口,所以不再有"与 SSO 核对绑定"按钮。
+// 【权限 · 用户】里的 SSO 绑定状态。绑定发生在第一次经 SSO 登录、邮箱对上的时候(服务端),
+// 这里只展示,并让管理员解绑;OIDC 没有通用的用户名单接口,所以没有"与 SSO 核对绑定"按钮。
 
 const USERS = [
   { id: 1, name: 'Lin Wei', email: 'linwei@aegisdb.io', initials: 'LW', dept: 'DBA', roles: ['Admin'], roleIds: [1], primaryRoleId: 1, status: 'active', kind: 'human', mfaEnabled: false, lastActive: '—', ssoBound: true, ssoUserName: 'linwei' },
@@ -12,7 +12,7 @@ const USERS = [
 test.describe('SSO 绑定状态', () => {
   test.beforeEach(async ({ page }) => {
     await stubCommon(page)
-    await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: true, loginUrl: 'https://srd.example.com/auth/login' })))
+    await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: true, loginUrl: 'api/v1/auth/oidc/start' })))
     await page.route('**/api/v1/users', (r) => r.fulfill(envelope(USERS)))
     await page.route('**/api/v1/roles', (r) => r.fulfill(envelope([])))
   })

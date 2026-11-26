@@ -299,9 +299,13 @@ var settingSchema = map[string]settingCheck{
 	"security.adminIpAllowlist":    ipList,
 
 	// SSO(启用时的整体校验另见 checkSSOSettings)
-	"sso.enabled":    boolean,
-	"sso.baseUrl":    httpURL,
-	"sso.cookieName": str,
+	"sso.enabled":      boolean,
+	"sso.issuer":       outboundURL, // 网关会去取它的发现文档与 JWKS
+	"sso.clientId":     str,
+	"sso.clientSecret": trimmedSecret,
+	"sso.redirectUrl":  httpURL,
+	"sso.scopes":       str,
+	"sso.emailClaim":   str,
 
 	// 通知
 	"notify.lark":        boolean,
