@@ -20,6 +20,7 @@ import (
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
 	"aegisdb/internal/service"
+	"aegisdb/internal/sqlmigrate"
 	"aegisdb/internal/storemigrate"
 	"aegisdb/pkg/crypto"
 )
@@ -86,7 +87,7 @@ func (p *storePair) appOnPG(t *testing.T) *testApp {
 func (p *storePair) migrate(t *testing.T, mod func(*storemigrate.Options)) (*storemigrate.Report, error) {
 	t.Helper()
 	o := storemigrate.Options{
-		MySQLDSN: p.myDSN, PostgresDSN: p.pgDSN, Workers: 3, ApplySchema: RunSQLMigrations,
+		MySQLDSN: p.myDSN, PostgresDSN: p.pgDSN, Workers: 3, ApplySchema: sqlmigrate.Run,
 		Log: func(f string, a ...any) { t.Logf(f, a...) },
 	}
 	if mod != nil {

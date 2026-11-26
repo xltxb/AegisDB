@@ -1,4 +1,4 @@
-package bootstrap
+package sqlmigrate
 
 import (
 	"path/filepath"
@@ -25,7 +25,7 @@ func openSQLite(t *testing.T) *gorm.DB {
 	return db
 }
 
-func TestRunSQLMigrations_AppliesAndIsIdempotent(t *testing.T) {
+func TestRun_AppliesAndIsIdempotent(t *testing.T) {
 	fsys := fstest.MapFS{
 		"0001_a.sql": {Data: []byte(`-- comment
 CREATE DATABASE IF NOT EXISTS ignored;
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS t_alpha (id INTEGER PRIMARY KEY);`)},
 	}
 
 	db := openSQLite(t)
-	if err := RunSQLMigrations(db, fsys); err != nil {
+	if err := Run(db, fsys); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 	// Both migrations recorded.
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS t_alpha (id INTEGER PRIMARY KEY);`)},
 	}
 
 	// Second run is a no-op (idempotent) — no error, still exactly 2 rows.
-	if err := RunSQLMigrations(db, fsys); err != nil {
+	if err := Run(db, fsys); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 	db.Table("schema_migrations").Count(&count)

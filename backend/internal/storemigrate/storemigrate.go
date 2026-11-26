@@ -53,7 +53,7 @@ type Options struct {
 	// AcceptBrokenChain 源库审计链本身验不过时仍然搬。默认拒绝:时区(--tz)填错时,内容摘要
 	// 两边照样相等(都按同一个错的时区换算),能拦住它的只有审计链。
 	AcceptBrokenChain bool
-	// ApplySchema 建表用的函数(bootstrap.RunSQLMigrations);由调用方注入,避免本包依赖 bootstrap。
+	// ApplySchema 建表用的函数(sqlmigrate.Run);由调用方注入,避免本包依赖 bootstrap。
 	ApplySchema func(db *gorm.DB, src fs.FS) error
 	Log         func(format string, args ...any)
 }
