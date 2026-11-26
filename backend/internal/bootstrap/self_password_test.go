@@ -130,3 +130,20 @@ func TestAPI_NoStoreCacheHeaders(t *testing.T) {
 		t.Errorf("unauthenticated /auth/me: Cache-Control = %q, want no-store", cc)
 	}
 }
+
+// #145:自助改密的两条审计(成功、原密码错误被拒)来源是 auth,按「登录认证」筛得到。
+func TestSelfPassword_AuditSourceIsAuth(t *testing.T) {
+	app := newTestApp(t)
+	tok := app.login("chenhao@aegisdb.io", "aegisdb123")
+	if r := app.do(http.MethodPost, "/api/v1/auth/password", tok, map[string]any{"oldPassword": "wrong-old", "newPassword": "newpass99"}); r.Code == 0 {
+		t.Fatal("wrong old password must be refused")
+	}
+	eq(t, app.do(http.MethodPost, "/api/v1/auth/password", tok, map[string]any{"oldPassword": "aegisdb123", "newPassword": "newpass99"}).Code, 0, "change password")
+
+	raw := string(app.auditItemsRaw(app.login("linwei@aegisdb.io", "aegisdb123"), "?pageSize=200&source=auth"))
+	for _, want := range []string{"password.change.rejected", "password.change 自助修改登录口令"} {
+		if !strings.Contains(raw, want) {
+			t.Errorf("source=auth 应筛得到 %q", want)
+		}
+	}
+}
