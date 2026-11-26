@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom'
 import { Link } from 'react-router'
 import clsx from 'clsx'
 import { Clock, Plus, Pencil, Trash2, X, ShieldCheck, Hourglass, Ban, Undo2, CalendarX, ScrollText, PowerOff } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import VButton from '@/components/common/VButton'
 import VSelect from '@/components/common/VSelect'
 import VTagSelect from '@/components/common/VTagSelect'
@@ -388,6 +389,7 @@ export default function ExecWindowsView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">EXECUTION WINDOWS</div>
+          <div className="v-h1">{t('t_execwindow')}</div>
           <div className="v-sub">{t('ewSub')}</div>
         </div>
         {!adminMode && <VButton variant="primary" onClick={() => openWindowForm()}><Plus size={15} />{t('ewApply')}</VButton>}
@@ -416,7 +418,7 @@ export default function ExecWindowsView() {
               <span>{t('ewColWhen')}</span><span>{t('ewColDays')}</span>
               <span>{t('ewColState')}</span><span className="ctr">{t('apActions')}</span>
             </div>
-            {!windows.length && <div className="tr empty">{allView ? t('ewAllEmpty') : t('ewEmpty')}</div>}
+            {!windows.length && <EmptyState compact icon={Clock} title={allView ? t('ewAllEmpty') : t('ewEmpty')} />}
             {windows.map((w) => {
               const st = stateOf(w)
               return (

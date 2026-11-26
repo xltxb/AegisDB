@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type DragEvent } from 'react'
 import clsx from 'clsx'
 import { useAuthStore } from '@/stores/auth'
 import { Upload, FileCode2, Download, Trash2, FolderCog } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import VButton from '@/components/common/VButton'
 import api from '@/api'
 import { confirmAction } from '@/lib/confirm'
@@ -80,6 +81,8 @@ export default function UploadView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">SCRIPT UPLOAD</div>
+          <div className="v-h1">{t('t_uploads')}</div>
+          <div className="v-sub">{t('t_uploadsSub')}</div>
         </div>
       </div>
       <div className="col">
@@ -120,7 +123,7 @@ export default function UploadView() {
             <div><div className="st">{t('uploadList')}</div><div className="ss">{t('uploadListSub')}</div></div>
           </div>
           <div className="list">
-            {!files.length && <div className="empty">{t('uploadNone')}</div>}
+            {!files.length && <EmptyState compact icon={FileCode2} title={t('uploadNone')} />}
             {files.map((u) => (
               <div key={u.id} className="row">
                 <FileCode2 size={16} className="ic" />

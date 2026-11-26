@@ -734,6 +734,7 @@ export default function ConnectionsView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">CONNECTIONS</div>
+          <div className="v-h1">{t('t_db')}</div>
           {/* 规模先用两枚轻标签交代("多少台、几种环境"),再说这一页是干嘛的。
               数字混在一句话里时,要数一眼看不出来。 */}
           <div className="hbadges">

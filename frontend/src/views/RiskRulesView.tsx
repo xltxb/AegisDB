@@ -216,6 +216,7 @@ export default function RiskRulesView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">RISK POLICIES</div>
+          <div className="v-h1">{t('t_rules')}</div>
           <div className="v-sub">{t('riskSub')}</div>
         </div>
         {!isAdmin

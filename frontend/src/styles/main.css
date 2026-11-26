@@ -31,6 +31,26 @@ select {
   font-family: inherit;
 }
 
+/* Native single-line <select>s (filters, page-size pickers, the export target
+   database) used to render the browser's own arrow, so they sat next to VSelect
+   with a different chevron and, in dark mode, a light-grey OS widget. Give them
+   VSelect's chevron. The selector is deliberately heavier than a scoped
+   `.cls[data-s-x]` rule, because every page's select class sets the `background`
+   shorthand, which would otherwise reset the image. Only the arrow and its room
+   are set here; size, border and colours stay with each page. */
+select:not([multiple]):not([size]):not([hidden]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 14px 14px;
+}
+[data-theme="dark"] select:not([multiple]):not([size]):not([hidden]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
 /* keyframes from the prototype */
 @keyframes blink {
   0%, 49% { opacity: 1; }
@@ -228,3 +248,18 @@ select {
 
 /* prefers-reduced-motion is honoured globally in tokens/motion.css — the
    catch-all there also zeroes the keyframes declared above. */
+
+/* Icon tile + compact variant for <EmptyState> (components/common/EmptyState.tsx). */
+.v-empty-ic {
+  width: 40px;
+  height: 40px;
+  margin-bottom: var(--space-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--text-faint);
+}
+.v-empty--compact { padding: var(--space-6) var(--space-4); }
+.v-empty--compact .v-empty-ic { width: 32px; height: 32px; }

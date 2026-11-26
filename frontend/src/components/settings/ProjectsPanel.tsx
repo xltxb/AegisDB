@@ -6,6 +6,7 @@
 import { useImperativeHandle, useState, type HTMLAttributes, type Ref } from 'react'
 import clsx from 'clsx'
 import { FolderKanban, Plus, Pencil, Trash2, X, Check, ArrowRight } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import VButton from '@/components/common/VButton'
 import api from '@/api'
 import { envError } from '@/api/http'
@@ -121,7 +122,7 @@ export default function ProjectsPanel({ readonly = false, onChanged, ref, classN
             )}
           </div>
         ))}
-        {!projects.length && <div className="empty">{t('prEmpty')}</div>}
+        {!projects.length && <EmptyState compact icon={FolderKanban} title={t('prEmpty')} />}
       </div>
 
       {editing && (

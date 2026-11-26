@@ -247,6 +247,13 @@ export default function SchemaDiffView() {
 
   return (
     <div className="scy page">
+      <div className="v-head">
+        <div className="v-head-l">
+          <div className="v-eyebrow">SCHEMA DIFF</div>
+          <div className="v-h1">{t('t_schemadiff')}</div>
+          <div className="v-sub">{t('t_schemadiffSub')}</div>
+        </div>
+      </div>
       {/* 选择条 */}
       <section className="card sd-pick">
         <div className="side">

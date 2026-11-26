@@ -10,7 +10,6 @@
 .hint { margin-top: 10px; font: 500 11px var(--font-body); color: var(--text-faint); line-height: 1.5; }
 .jobs { min-height: 200px; }
 .jhead { font: 600 13px var(--font-display); color: var(--text-strong); margin-bottom: 10px; }
-.empty { padding: 30px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
 .job { border: 1px solid var(--border-subtle); border-radius: 10px; margin-bottom: 8px; cursor: pointer; overflow: hidden; }
 .job.open { border-color: var(--accent-text); }
 .jrow { display: grid; grid-template-columns: 20px 44px 1.2fr 2fr 1.1fr; gap: 10px; align-items: center; padding: 10px 12px; }

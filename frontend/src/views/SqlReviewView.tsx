@@ -320,6 +320,7 @@ export default function SqlReviewView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">SQL REVIEW RULES</div>
+          <div className="v-h1">{t('t_sqlreview')}</div>
           <div className="v-sub">{t('srSub')}</div>
         </div>
         {isAdmin ? <VButton variant="primary" onClick={openForm}><Plus size={15} />{t('srNewRule')}</VButton>

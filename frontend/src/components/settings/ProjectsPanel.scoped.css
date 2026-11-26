@@ -15,7 +15,6 @@
 .act { width: 30px; height: 28px; flex-shrink: 0; border: 1px solid var(--border-default); border-radius: 7px; background: var(--surface-card); color: var(--text-body); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .act:hover { border-color: var(--accent-text); color: var(--accent-text); }
 .act.del:hover { border-color: var(--danger-text); color: var(--danger-text); }
-.empty { padding: 22px 0; text-align: center; font: 500 12px var(--font-body); color: var(--text-faint); }
 .overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; }
 .mask { position: absolute; inset: 0; background: var(--surface-overlay); backdrop-filter: blur(3px); }
 .modal { position: relative; width: 100%; max-width: 520px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-lg); overflow: hidden; }
