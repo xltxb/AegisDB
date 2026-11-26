@@ -1078,6 +1078,12 @@ func (h *Handler) TerminalWS(c *gin.Context) {
 			send(wsNoticeErr("error", err))
 			continue
 		}
+		if _, ok := service.AsInputError(err); ok {
+			// 校验类失败(如存量 SQLite 连接的"不支持的数据库引擎")把原话回给界面,
+			// 与 HTTP 处理器一致;不能被下面的笼统文案吞掉。
+			send(wsNoticeErr("error", err))
+			continue
+		}
 		if err != nil {
 			send(wsNotice("error", "连接不存在或执行失败"))
 			continue

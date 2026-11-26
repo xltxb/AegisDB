@@ -183,7 +183,12 @@ func LoadConfig(path string) (*Config, error) {
 		if isSQLiteDriver(v) {
 			return nil, errSQLiteUnsupported
 		}
-		cfg.Database.Driver = v
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "mysql", "postgres":
+			cfg.Database.Driver = strings.ToLower(strings.TrimSpace(v))
+		default:
+			return nil, fmt.Errorf("AEGISDB_DB_DRIVER=%q 无效:只支持 mysql 或 postgres", v)
+		}
 	} else if cfg.Env == "prod" {
 		cfg.Database.Driver = "mysql"
 	} else {

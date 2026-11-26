@@ -742,6 +742,10 @@ func validOpenDialect(d string) (string, error) {
 	switch d {
 	case review.DialectAll, review.DialectGeneric, "postgres", "postgresql", "pg":
 		return review.DialectGeneric, nil
+	case "sqlite":
+		// SQLite 已不是可接入的目标引擎,但这个接口是静态规范审查、不连任何库:外部 CI 脚本
+		// 一直在传 dialect=sqlite,拒掉会让它们的流水线直接 40001。按通用规则跑。
+		return review.DialectGeneric, nil
 	case "aurora":
 		// Aurora 是 MySQL 兼容引擎,引擎名里没有方言词,DialectFor 认不出(2026-10-26 回归 19)。
 		// 只在开放接口这里映射,不动共享的 DialectFor,免得改变按实例引擎选方言的既有结果。

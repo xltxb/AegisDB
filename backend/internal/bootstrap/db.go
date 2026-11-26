@@ -1,8 +1,10 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -23,13 +25,24 @@ func OpenDB(cfg *Config) (*gorm.DB, error) {
 	var err error
 	switch cfg.Database.Driver {
 	case "mysql":
+		if strings.TrimSpace(cfg.Database.MySQLDSN) == "" {
+			return nil, errors.New("MySQL 连接串为空:请设置 AEGISDB_MYSQL_DSN(或配置文件 database.mysql_dsn)")
+		}
 		db, err = gorm.Open(mysql.Open(cfg.Database.MySQLDSN), gcfg)
 		if err != nil {
 			return nil, fmt.Errorf("connect mysql (是否已启动 MySQL? 见 docker-compose.yml): %w", err)
 		}
 	case "postgres":
+		// 空串交给 pgx 会回落到 libpq 默认值(本机 socket / 当前系统用户),悄悄连到不该连的库。
+		if strings.TrimSpace(cfg.Database.PostgresDSN) == "" {
+			return nil, errors.New("PostgreSQL 连接串为空:请设置 AEGISDB_POSTGRES_DSN(见 README「本地开发」)")
+		}
 		db, err = gorm.Open(postgres.Open(cfg.Database.PostgresDSN), gcfg)
 		if err != nil {
+			if cfg.IsLocalDev() {
+				return nil, fmt.Errorf("connect postgres: 本地开发需要 PostgreSQL(SQLite 存储库已移除,见 README「本地开发」),"+
+					"请先启动 PostgreSQL 并设置 AEGISDB_POSTGRES_DSN: %w", err)
+			}
 			return nil, fmt.Errorf("connect postgres: %w", err)
 		}
 	default:
@@ -79,4 +92,14 @@ func RefuseIfStoreMoved(cfg *Config, db *gorm.DB) error {
 		"检查 aegisdb.env 里的 AEGISDB_DB_DRIVER=postgres 与 AEGISDB_POSTGRES_DSN。"+
 		"确实要回退到 MySQL 时,先在 MySQL 上 DROP TABLE %s(切到 PG 之后的数据不在这里)",
 		row.MovedAt.Format("2006-01-02 15:04:05"), row.Target, storeMovedMarker)
+}
+
+// RefuseIfUnmigrated:本地开发连上了一个从没迁移过的存储库(没有 schema_migrations)时拒绝启动。
+// 以前的 SQLite 开发库会自己建表,PG 不会 —— 不拦的话 Seed 报一串缺表错误,网关却照常监听空库。
+// 不自动迁移:建表是显式动作。生产环境行为不变。
+func RefuseIfUnmigrated(cfg *Config, db *gorm.DB) error {
+	if !cfg.IsLocalDev() || db.Migrator().HasTable("schema_migrations") {
+		return nil
+	}
+	return errors.New("存储库还没有初始化:先运行 `server migrate`(见 README「本地开发」)")
 }

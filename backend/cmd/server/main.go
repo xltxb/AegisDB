@@ -77,6 +77,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := bootstrap.RefuseIfUnmigrated(cfg, db); err != nil {
+		slog.Error("refusing to start on an unmigrated store", "err", err)
+		os.Exit(1)
+	}
+
 	repo := repository.New(db)
 	if cfg.Database.Seed {
 		if err := bootstrap.Seed(repo, cfg); err != nil {

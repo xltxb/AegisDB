@@ -43,6 +43,21 @@ func TestLegacySQLiteConnectionIsRefused(t *testing.T) {
 		t.Errorf("对存量 SQLite 连接执行查询应以「不支持」失败,got code=%d msg=%q data=%s", ex.Code, ex.Msg, ex.Data)
 	}
 
+	// WebSocket 终端(控制台优先走它):同样要把真实原因说出来,不能落成笼统的"执行失败"。
+	ws := app.dialWS(admin)
+	defer ws.Close()
+	if err := ws.WriteJSON(map[string]any{"type": "exec", "connectionId": legacy.ID, "sql": "SELECT 1"}); err != nil {
+		t.Fatalf("ws write: %v", err)
+	}
+	_ = ws.SetReadDeadline(timeNowPlus(5))
+	var wm map[string]any
+	if err := ws.ReadJSON(&wm); err != nil {
+		t.Fatalf("ws read: %v", err)
+	}
+	if wm["type"] != "error" || !strings.Contains(wm["message"].(string), "不支持") {
+		t.Errorf("WS 对存量 SQLite 连接应给出含「不支持」的 error 通知,got %v", wm)
+	}
+
 	// 后台执行:同样失败。
 	ea := app.do(http.MethodPost, "/api/v1/terminal/exec-async", admin, map[string]any{
 		"connectionId": legacy.ID, "sql": "SELECT 1",

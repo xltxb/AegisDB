@@ -161,10 +161,11 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
 
   // ---- programmable objects (functions / procedures / packages / triggers) ----
   //
-  // Loaded lazily per database (flat engines: MySQL by database, Oracle by owner) or per schema (PostgreSQL family), alongside the
-  // tables. The scope string sent to the server is the schema when there is one,
-  // else the database/owner name — which is exactly the namespace each engine
-  // keys its catalog on.
+  // Loaded lazily per database (flat engines: MySQL by database, Oracle by
+  // owner) or per schema (PostgreSQL family), alongside the tables. The scope
+  // string sent to the server is the schema when there is one, else the
+  // database/owner name — which is exactly the namespace each engine keys its
+  // catalog on.
   const [objects, setObjects, objectsRef] = useStateRef<Record<string, DbObjects | null>>({}) // key → loaded set (null = loading)
   function objFor(cid: number, db: string, sc = ''): DbObjects | null | undefined {
     return objects[objKey(cid, db, sc)]
