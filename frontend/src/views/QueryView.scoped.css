@@ -20,7 +20,7 @@
 .qblock-pend { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface-sunken); font: 500 12px/1.6 var(--font-body); color: var(--text-faint); }
 .qblock-acts { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; }
 .qblock-go { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 40px; border-radius: 9px;
-  background: var(--accent); color: #fff; font: 600 13.5px var(--font-body); text-decoration: none; }
+  background: var(--brand-gradient); color: #fff; font: 600 13.5px var(--font-body); text-decoration: none; box-shadow: 0 6px 14px -6px rgba(59, 110, 246, 0.8); }
 .qblock-go:hover { filter: brightness(1.08); }
 .qblock-re { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; border: none; border-radius: 8px;
   background: transparent; color: var(--text-muted); font: 500 12.5px var(--font-body); cursor: pointer; }

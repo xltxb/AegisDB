@@ -21,7 +21,8 @@
 .tab.active::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 3px; background: var(--accent); }
 .card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--accent-subtle), transparent 140%); }
-.sic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--accent-subtle-border); display: flex; align-items: center; justify-content: center; }
+.sic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.sic svg { stroke: #fff; }
 .st { font: 650 15px var(--font-display); color: var(--text-strong); }
 .ss { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
 .srlink { flex-shrink: 0; font: 600 12px var(--font-body); color: var(--accent-text); text-decoration: none; white-space: nowrap; }

@@ -1,6 +1,7 @@
 .sc { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .schead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
-.scic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.scic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.scic svg { stroke: #fff; }
 .grow { flex: 1; min-width: 0; }
 .sct { font: 600 14px var(--font-display); color: var(--text-strong); }
 .scs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
@@ -19,7 +20,7 @@
    按自己那行的内容各算一套,表头和行就对不齐了。说明那一列吃掉剩下的宽度:原先每行
    右边空着一大片,而说明恰恰是最该展开的一格。 */
 .th, .tr { display: grid; grid-template-columns: minmax(220px, 1.1fr) 96px minmax(160px, 1.6fr) 64px 74px; gap: 12px; align-items: center; padding: 0 20px; }
-.th { height: 34px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.th { height: 34px; background: var(--surface-head); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
 .th .c, .tr .c { text-align: center; justify-items: center; }
 .tr { min-height: 40px; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); }
 .tr:last-of-type { border-bottom: none; }

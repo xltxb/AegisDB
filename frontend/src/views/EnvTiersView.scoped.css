@@ -1,9 +1,10 @@
 .page { padding: var(--page-pad); padding-bottom: 40px; max-width: var(--page-max); margin-inline: auto; width: 100%; }
 .roflag { margin-left: auto; font: 600 11px var(--font-mono); color: var(--warning-text); }
 
-.card { margin-bottom: 22px; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); overflow: hidden; }
+.card { margin-bottom: 22px; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); overflow: hidden; box-shadow: var(--shadow-xs); }
 .chead { display: flex; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--border-subtle); }
-.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--surface-sunken); display: flex; align-items: center; justify-content: center; }
+.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.cic svg { stroke: #fff; }
 .grow { flex: 1; }
 .ct { font: 700 14px var(--font-display); color: var(--text-strong); }
 .cs { margin-top: 3px; font: 400 11.5px/1.5 var(--font-body); color: var(--text-muted); }
@@ -43,7 +44,7 @@
    生产环境"只要两百多像素。之前它被拉到六百多宽,一个带底色的控件横在行中间,看着
    像一条选中的色带而不是一个控件。多出来的宽度让给环境名那一列。 */
 .egrid .th, .egrid .tr { display: grid; grid-template-columns: minmax(190px, 2fr) minmax(220px, 340px) 96px 90px; gap: 10px; align-items: center; }
-.th { padding: 11px 18px; white-space: nowrap; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
+.th { padding: 11px 18px; white-space: nowrap; background: var(--surface-head); border-bottom: 1px solid var(--border-subtle); font: 600 11px var(--font-mono); letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
 .tr { padding: 11px 18px; border-bottom: 1px solid var(--border-subtle); }
 .tr:last-child { border-bottom: none; }
 .ctr { display: flex; justify-content: center; }

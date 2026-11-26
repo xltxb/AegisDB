@@ -3,7 +3,8 @@
 .col { max-width: 720px; display: flex; flex-direction: column; gap: 18px; }
 .card { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .shead { display: flex; align-items: center; gap: 11px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
-.sic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sic { width: 32px; height: 32px; border-radius: 9px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sic svg { stroke: #fff; }
 .st { font: 600 14px var(--font-display); color: var(--text-strong); }
 .ss { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 1px; }
 .body { padding: 16px 20px 20px; }

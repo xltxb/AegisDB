@@ -140,7 +140,9 @@ test.describe('变更发布 · 按单号 / 环境搜索', () => {
     await openReleases(page, { urls: [] })
     const head = await page.locator('.v-head-l').boundingBox()
     expect(head!.width).toBeGreaterThan(200)
-    expect(head!.height).toBeLessThan(80)
+    // eyebrow + title + a subtitle that may wrap once: ~80-110px. Squeezed to one
+    // character per line it would be several hundred.
+    expect(head!.height).toBeLessThan(120)
     const [sw, iw] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth])
     expect(sw).toBeLessThanOrEqual(iw)
   })

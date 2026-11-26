@@ -105,7 +105,7 @@
 .table.dense .ghost { width: 22px; height: 22px; }
 .table.dense .grouprow { padding: 7px 16px; }
 .table.dense .typerow { padding-top: 4px; padding-bottom: 4px; }
-.thead { padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-sunken); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; color: var(--text-faint); text-transform: uppercase; }
+.thead { padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); background: var(--surface-head); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; color: var(--text-faint); text-transform: uppercase; }
 .trow { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); align-items: center; transition: background var(--dur-fast) var(--ease-out); }
 .trow:hover { background: var(--surface-sunken); }
 /* 折叠条:中性浅底 + 上下细线,像个小节标题,而不是一条警示带。 */

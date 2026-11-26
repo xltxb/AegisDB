@@ -1,6 +1,7 @@
 .bp { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .bphead { display: flex; align-items: center; gap: 12px; padding: 18px 22px; border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--accent-subtle), transparent 140%); }
-.bpic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--accent-subtle-border); display: flex; align-items: center; justify-content: center; }
+.bpic { width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.bpic svg { stroke: #fff; }
 .bpt { font: 650 15px var(--font-display); color: var(--text-strong); }
 .bps { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
 .grow { flex: 1; min-width: 0; }
