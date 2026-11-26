@@ -213,7 +213,7 @@ func (s *Services) sqlExportDDL(conn *model.Connection, query, target string) st
 	if i := strings.LastIndexByte(src, '.'); i >= 0 {
 		scope, name = src[:i], src[i+1:]
 	} else if gateway.EngineFamilyOf(conn.Engine) == "mysql" {
-		// 只有 MySQL 系按库名找表;PG / Oracle 用会话所在的 schema
+		// MySQL 系按库名找表;PG 系 / Oracle 留空,由 gateway 按会话会落到的 schema 找
 		scope = effectiveDatabase(conn)
 	}
 	ddl, err := gateway.RealObjectSource(conn, scope, "table", name)
