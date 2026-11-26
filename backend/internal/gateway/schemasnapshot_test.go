@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -49,20 +48,14 @@ func indexOf(tb schemadiff.Table, cols ...string) *schemadiff.Index {
 	return nil
 }
 
-func TestSchemaSnapshot_SQLite(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "snap.db")
-	raw, _ := sql.Open("sqlite", file)
-	for _, s := range []string{
-		`CREATE TABLE t_order (id INTEGER PRIMARY KEY, code TEXT NOT NULL UNIQUE, status INTEGER DEFAULT 0, amount REAL)`,
+func TestSchemaSnapshot_PostgresTemp(t *testing.T) {
+	conn := pgTarget(t)
+	pgExec(t, conn,
+		`CREATE TABLE t_order (id serial PRIMARY KEY, code text NOT NULL UNIQUE, status integer DEFAULT 0, amount real)`,
 		`CREATE INDEX idx_status ON t_order (status, amount)`,
 		`CREATE VIEW v_order AS SELECT id FROM t_order`,
-	} {
-		if _, err := raw.Exec(s); err != nil {
-			t.Fatal(err)
-		}
-	}
-	raw.Close()
-	s, err := RealSchemaSnapshot(&model.Connection{Engine: "SQLite", Database: file}, "main", "")
+	)
+	s, err := RealSchemaSnapshot(conn, conn.Database, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,8 +75,8 @@ func TestSchemaSnapshot_SQLite(t *testing.T) {
 	if ix := indexOf(tb, "status", "amount"); ix == nil || ix.Unique || ix.Name != "idx_status" {
 		t.Errorf("组合索引: %+v", tb.Indexes)
 	}
-	if ix := indexOf(tb, "code"); ix == nil || !ix.Unique || !ix.SystemNamed {
-		t.Errorf("列上的 UNIQUE 是 SQLite 自动建的索引,应标系统命名: %+v", tb.Indexes)
+	if ix := indexOf(tb, "code"); ix == nil || !ix.Unique {
+		t.Errorf("列上的 UNIQUE 应读出唯一索引: %+v", tb.Indexes)
 	}
 }
 

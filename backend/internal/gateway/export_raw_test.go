@@ -22,14 +22,12 @@ func withIDCardRule(t *testing.T) {
 	t.Cleanup(func() { SensitiveRulesProvider = prev })
 }
 
-
-
 // 流式导出默认打码。
 func TestExport_StreamsMaskedByDefault(t *testing.T) {
 	withIDCardRule(t)
-	conn := sqliteConn(t)
+	conn := pgTarget(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id integer PRIMARY KEY, id_card text)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
@@ -55,9 +53,9 @@ func TestExport_StreamsMaskedByDefault(t *testing.T) {
 // 只有 Raw 那条路给原值 —— 它是整套脱敏机制唯一的旁路。
 func TestExport_RawIsTheOnlyWayToPlaintext(t *testing.T) {
 	withIDCardRule(t)
-	conn := sqliteConn(t)
+	conn := pgTarget(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id integer PRIMARY KEY, id_card text)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {
@@ -80,9 +78,9 @@ func TestExport_RawIsTheOnlyWayToPlaintext(t *testing.T) {
 // 语句里没写出列名就漏过去。
 func TestExport_StarSelectIsMaskedToo(t *testing.T) {
 	withIDCardRule(t)
-	conn := sqliteConn(t)
+	conn := pgTarget(t)
 	const plain = "310101199001011234"
-	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", 5*time.Second); err != nil {
+	if _, err := RealRun(context.Background(), conn, "CREATE TABLE t_person (id integer PRIMARY KEY, id_card text)", 5*time.Second); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, "INSERT INTO t_person (id, id_card) VALUES (1, '"+plain+"')", 5*time.Second); err != nil {

@@ -3,7 +3,6 @@ package gateway
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -33,9 +32,9 @@ func TestEngineDriver_MySQLHasNoSocketReadTimeout(t *testing.T) {
 // caller must still be able to errors.Is the timeout, so the export layer can
 // report "导出执行超时" rather than parroting "unexpected EOF".
 func TestRealQueryEach_TimeoutIsRecognisable(t *testing.T) {
-	conn := &model.Connection{Engine: "sqlite", Database: filepath.Join(t.TempDir(), "t.db")}
-	// A recursive CTE that grinds long enough for a 50ms deadline to fire first.
-	slow := "WITH RECURSIVE cnt(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM cnt WHERE x < 5000000) SELECT count(*) FROM cnt"
+	conn := pgTarget(t)
+	// A sleep long enough for a 50ms deadline to fire first.
+	slow := "SELECT pg_sleep(30)"
 	err := RealQueryEach(context.Background(), conn, slow, 50*time.Millisecond,
 		func([]string) error { return nil }, func([]string) error { return nil })
 	if err == nil {
@@ -49,10 +48,10 @@ func TestRealQueryEach_TimeoutIsRecognisable(t *testing.T) {
 // 2026-10-26 讨论 13:Web 命令行读到一半撞上执行超时,交出已读到的行并说明是被超时截断的,
 // 而不是整条报错、一行不返回。只对 Web 命令行(WithResultPaging);别的调用方、以及一行都没读到时,照旧报错。
 func TestRealRun_TerminalTimeoutReturnsRowsReadSoFar(t *testing.T) {
-	conn := &model.Connection{Engine: "sqlite", Database: filepath.Join(t.TempDir(), "t.db")}
+	conn := pgTarget(t)
 	// 每一行都要算一阵子:几百毫秒里只读得出一部分
-	slow := "WITH RECURSIVE cnt(x) AS (VALUES(1) UNION ALL SELECT x+1 FROM cnt WHERE x < 100000) " +
-		"SELECT x, (WITH RECURSIVE c(y) AS (VALUES(1) UNION ALL SELECT y+1 FROM c WHERE y < 20000 + (cnt.x % 2)) SELECT count(*) FROM c) FROM cnt"
+	// 每行带一段填充:服务端按 8KB 一批刷出行,行太小的话要等很久才有第一批到达
+	slow := "SELECT g, repeat('x', 4000), pg_sleep(0.005) FROM generate_series(1, 100000) g"
 	ctx := WithResultPaging(context.Background(), 1, 200)
 	res, err := RealRun(ctx, conn, slow, 300*time.Millisecond)
 	if err != nil {

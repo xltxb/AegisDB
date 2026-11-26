@@ -15,16 +15,12 @@ package gateway
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	"aegisdb/internal/model"
 )
 
-func sqliteConn(t *testing.T) *model.Connection {
-	t.Helper()
-	return &model.Connection{Engine: "sqlite", Database: filepath.Join(t.TempDir(), "t.db")}
-}
+func targetConn(t *testing.T) *model.Connection { return pgTarget(t) }
 
 // KnownVerb 划的是"平台认不认得这个动词"的界。认得的照旧按分类走,认不得的才去问
 // 数据库 —— 猜错只在认不得的那一格里发生,修就修在那一格。
@@ -45,21 +41,27 @@ func TestKnownVerb_MarksWhatTheClassifierActuallyKnows(t *testing.T) {
 	}
 }
 
-// 平台不认识的动词,只要数据库认、且真的返回了行,就必须把行显示出来。
-// 这条用 PRAGMA 做例子:SQLite 认它、它返回结果集,而平台的动词表里没有。
-func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
-	conn := sqliteConn(t)
-	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
-		t.Fatalf("建表: %v", err)
-	}
+// pgCallTarget 返回一个带 INOUT 过程的目标库:`CALL` 不在平台的动词表里,而 PostgreSQL 的
+// CALL 对 INOUT 参数会返回一行结果集。INOUT 过程参数自 PostgreSQL 11 起可用。
+func pgCallTarget(t *testing.T) *model.Connection {
+	t.Helper()
+	conn := targetConn(t)
+	pgExec(t, conn, `CREATE PROCEDURE t_proc(INOUT x int) LANGUAGE plpgsql AS $$ BEGIN x := x + 1; END $$`)
+	return conn
+}
 
-	// PRAGMA 不在动词表里 —— 此前会被按写处理,走 Exec,结果被丢掉。
-	if KnownVerb(ParseVerb(`PRAGMA table_info(t_demo)`)) {
-		t.Skip("PRAGMA 已进入动词表,这条用例需要换一个平台不认识的动词")
+// 平台不认识的动词,只要数据库认、且真的返回了行,就必须把行显示出来。
+// 这条用 CALL 做例子:PostgreSQL 认它、它返回结果集,而平台的动词表里没有。
+func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
+	conn := pgCallTarget(t)
+
+	// CALL 不在动词表里 —— 此前会被按写处理,走 Exec,结果被丢掉。
+	if KnownVerb(ParseVerb(`CALL t_proc(1)`)) {
+		t.Skip("CALL 已进入动词表,这条用例需要换一个平台不认识的动词")
 	}
-	res, err := RealRun(context.Background(), conn, `PRAGMA table_info(t_demo)`, 0)
+	res, err := RealRun(context.Background(), conn, `CALL t_proc(1)`, 0)
 	if err != nil {
-		t.Fatalf("PRAGMA: %v", err)
+		t.Fatalf("CALL: %v", err)
 	}
 	if len(res.Columns) == 0 || res.Rows == 0 {
 		t.Errorf("平台不认识的动词也该把结果集取回来,实际 columns=%v rows=%d —— 数据库明明返回了行",
@@ -69,13 +71,13 @@ func TestRealRun_UnknownVerbThatReturnsRowsStillShowsThem(t *testing.T) {
 
 // 反过来:平台不认识、数据库也不返回行的语句,不能因此报错,要如实说"执行成功"。
 func TestRealRun_UnknownVerbWithNoRowsReportsSuccess(t *testing.T) {
-	conn := sqliteConn(t)
-	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY)`, 0); err != nil {
-		t.Fatalf("建表: %v", err)
+	conn := targetConn(t)
+	if KnownVerb(ParseVerb(`SET datestyle = 'ISO'`)) {
+		t.Skip("SET 已进入动词表,这条用例需要换一个平台不认识的动词")
 	}
-	res, err := RealRun(context.Background(), conn, `PRAGMA foreign_keys = ON`, 0)
+	res, err := RealRun(context.Background(), conn, `SET datestyle = 'ISO'`, 0)
 	if err != nil {
-		t.Fatalf("PRAGMA 赋值不该报错: %v", err)
+		t.Fatalf("SET 赋值不该报错: %v", err)
 	}
 	if res.Output == "" {
 		t.Error("没有结果集时也要给一句话,否则用户又是对着空白发呆")
@@ -85,8 +87,8 @@ func TestRealRun_UnknownVerbWithNoRowsReportsSuccess(t *testing.T) {
 // 已知的写操作仍然走 Exec —— 那条路能拿到"影响行数",而这是写操作最该看到的东西。
 // 认不出来才去问数据库,不是把所有语句都改成问。
 func TestRealRun_KnownWritesStillReportRowsAffected(t *testing.T) {
-	conn := sqliteConn(t)
-	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	conn := targetConn(t)
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id serial PRIMARY KEY, name text)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, `INSERT INTO t_demo (name) VALUES ('a'), ('b')`, 0); err != nil {
@@ -103,8 +105,8 @@ func TestRealRun_KnownWritesStillReportRowsAffected(t *testing.T) {
 
 // 读操作原样不变。
 func TestRealRun_ReadsAreUnchanged(t *testing.T) {
-	conn := sqliteConn(t)
-	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	conn := targetConn(t)
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id serial PRIMARY KEY, name text)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, `INSERT INTO t_demo (name) VALUES ('a')`, 0); err != nil {
@@ -122,8 +124,8 @@ func TestRealRun_ReadsAreUnchanged(t *testing.T) {
 // EXPLAIN 包着写语句时,判定按里面的写动词看(风险是那条写语句的),但执行时要取结果集
 // —— 它的产出就是执行计划。曾经走了 Exec,计划被丢掉,只显示"执行成功 · 0 行受影响"。
 func TestRealRun_ExplainOfAWriteShowsThePlan(t *testing.T) {
-	conn := sqliteConn(t)
-	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id INTEGER PRIMARY KEY, name TEXT)`, 0); err != nil {
+	conn := targetConn(t)
+	if _, err := RealRun(context.Background(), conn, `CREATE TABLE t_demo (id serial PRIMARY KEY, name text)`, 0); err != nil {
 		t.Fatalf("建表: %v", err)
 	}
 	if _, err := RealRun(context.Background(), conn, `INSERT INTO t_demo VALUES (1, 'a')`, 0); err != nil {

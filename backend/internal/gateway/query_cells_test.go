@@ -9,10 +9,10 @@ import (
 // 导出成 SQL 要的是**带类型**的值:NULL 与空串要分得开,数字不加引号,二进制写十六进制。
 // 字符串那条路(cellString)把 NULL 读成了 "",在 CSV 里无所谓,在 INSERT 里就把空值改成了空串。
 func TestRealQueryEachCells_KeepsNullAndKind(t *testing.T) {
-	conn := sqliteConn(t)
+	conn := pgTarget(t)
 	for _, q := range []string{
-		"CREATE TABLE t (id INTEGER, name TEXT, note TEXT, data BLOB, id_card TEXT)",
-		"INSERT INTO t VALUES (1, '', NULL, X'01FF', '310101199001011234')",
+		"CREATE TABLE t (id integer, name text, note text, data bytea, id_card text)",
+		"INSERT INTO t VALUES (1, '', NULL, '\\x01ff'::bytea, '310101199001011234')",
 	} {
 		if _, err := RealRun(context.Background(), conn, q, 5*time.Second); err != nil {
 			t.Fatalf("%s: %v", q, err)

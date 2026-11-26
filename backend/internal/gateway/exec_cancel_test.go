@@ -11,7 +11,7 @@ package gateway
 //     以为库里什么都没发生,然后按原样再跑一遍。
 //
 // "按下 Ctrl+C 之后库端是否真的停下"见 killquery_test.go:MySQL 驱动自己不发 KILL,
-// 由网关补发。这里用的纯 Go SQLite 驱动在一次长 step 里不响应中断,所以这组用例用
+// 由网关补发。这组用例用
 // **预先取消**的上下文,测的是语义,不是驱动的响应速度。
 
 import (
@@ -32,7 +32,7 @@ func cancelledCtx() context.Context {
 
 func TestExecCancelled_SaysCancelledNotFailed(t *testing.T) {
 	x := &Executor{}
-	conn := &model.Connection{Engine: "SQLite", Database: "file::memory:"}
+	conn := pgTarget(t)
 	res := x.Run(cancelledCtx(), conn, "SELECT 1", 5*time.Second)
 
 	if res.Err == nil || !errors.Is(res.Err, context.Canceled) {
@@ -57,7 +57,7 @@ func TestExecCancelled_SaysCancelledNotFailed(t *testing.T) {
 // 真正的数据库错误仍然走"执行失败"那条,带驱动原文 —— 两者不能混。
 func TestExecFailed_StillReportsTheDriverError(t *testing.T) {
 	x := &Executor{}
-	conn := &model.Connection{Engine: "SQLite", Database: "file::memory:"}
+	conn := pgTarget(t)
 	res := x.Run(context.Background(), conn, "SELECT * FROM no_such_table_here", 5*time.Second)
 
 	if res.Err == nil {
@@ -76,7 +76,7 @@ func TestExecFailed_StillReportsTheDriverError(t *testing.T) {
 // 报成"操作员取消",而当时根本没人按过任何键。
 func TestExecTimeout_IsNotReportedAsCancelled(t *testing.T) {
 	x := &Executor{}
-	conn := &model.Connection{Engine: "SQLite", Database: "file::memory:"}
+	conn := pgTarget(t)
 	// 用一个**已经过期**的 deadline,而不是极短的 timeout:后者靠定时器置位 ctx.Err(),
 	// 1 纳秒的预算未必在语句开始前就已经触发,那样的用例是碰运气的。
 	expired, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
