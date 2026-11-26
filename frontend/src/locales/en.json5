@@ -1251,7 +1251,7 @@
   rlFromApi: 'raised by {name}',
   rlKEnv: 'Environment', rlKTier: 'Tier', rlKInst: 'Instance', rlKDb: 'Database', rlKRef: 'Upstream ref', rlKRefShort: 'Ref',
   rlKSource: 'Source', rlKConsole: 'Console', rlKCreator: 'Submitted by', rlKExecutor: 'Executed by', rlExecAuto: 'Auto-executed', rlExecWaiting: 'Awaiting confirmation', rlExecShort: 'run by {who}', rlKProject: 'Project', rlKTime: 'Submitted → finished',
-  rlCardPipeline: 'Pipeline', rlTabSql: 'SQL script', rlTabLog: 'Execution log', rlLines: '{n} lines',
+  rlCardPipeline: 'Pipeline', rlTabSql: 'SQL script', rlTabLog: 'Execution log', rlSqlTruncated: 'The script has {total} lines; only the first {shown} are shown here. Use Copy for the full script.', rlLines: '{n} lines',
   rlFormIncomplete: 'Title, instance and change body are required', rlNeedMfa: 'This instance needs a second factor — enter the code and retry',
   plSub: 'The flow IS the policy: what each stage does, and what happens when it fails',
   plSub2: '{n} flows', plNew: 'New flow', plEdit: 'Edit flow',

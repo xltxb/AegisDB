@@ -1291,7 +1291,7 @@
   rlFromApi: '由 {name} 提交',
   rlKEnv: '环境', rlKTier: '分层', rlKInst: '实例', rlKDb: '数据库', rlKRef: '上游单号', rlKRefShort: '上游',
   rlKSource: '来源', rlKConsole: '控制台', rlKCreator: '发起人', rlKExecutor: '执行人', rlExecAuto: '自动执行', rlExecWaiting: '待确认执行', rlExecShort: '执行 {who}', rlKProject: '项目', rlKTime: '提交 → 完成',
-  rlCardPipeline: '发布流水线', rlTabSql: 'SQL 脚本', rlTabLog: '执行日志', rlLines: '{n} 行',
+  rlCardPipeline: '发布流水线', rlTabSql: 'SQL 脚本', rlTabLog: '执行日志', rlSqlTruncated: '脚本共 {total} 行，这里只显示前 {shown} 行；完整脚本请点「复制」', rlLines: '{n} 行',
   rlFormIncomplete: '请填写标题、实例与变更内容', rlNeedMfa: '该实例需要二次验证,请输入验证码后重试',
   // 发布流程模板
   plSub: '流程即规范:每个阶段做什么、失败怎么办,都在这里定',

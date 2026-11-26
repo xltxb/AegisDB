@@ -403,7 +403,7 @@ cd frontend && npm run test:e2e
 |---|---|---|
 | 后端 | 495 个文件、1896 个测试函数 | 以黑盒回归为主：启动完整应用实跑 HTTP 接口 |
 | 前端单测 | 55 个文件、408 个用例 | `src/lib` 纯逻辑、词条一致性 |
-| 前端 e2e | 101 个文件、431 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
+| 前端 e2e | 102 个文件、435 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
 
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
 - 后端测试需要本机装有 PostgreSQL ≥ 13 的程序（`initdb` / `pg_ctl` / `postgres`）：macOS `brew install postgresql@18`，
