@@ -21,7 +21,7 @@ test.describe('SSO 总闸', () => {
     await stubSsoConfig(page, true)
     await page.route((u) => u.pathname.endsWith('/api/v1/settings'), (r) => {
       if (r.request().method() !== 'GET') return r.fallback()
-      return r.fulfill(envelope({ settings: { 'sso.enabled': 'true', 'sso.baseUrl': '"https://srd.example.com"' }, secretsSet: {} }))
+      return r.fulfill(envelope({ settings: { 'sso.enabled': 'true', 'sso.issuer': '"https://idp.example.com"' }, secretsSet: {} }))
     })
     await page.goto('/#/settings')
     await page.locator('.tab', { hasText: '会话与安全' }).click()

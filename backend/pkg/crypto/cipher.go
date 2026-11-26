@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -220,4 +221,59 @@ func GzipDecrypt(enc []byte, password string) ([]byte, error) {
 	}
 	defer r.Close()
 	return io.ReadAll(r)
+}
+
+// SealFor / OpenFor encrypt short-lived values that leave the server (cookies) under
+// a key of their own: a per-purpose subkey of the at-rest key, with the purpose also
+// bound as GCM additional data.
+//
+// Why not EncryptSecret: its key also encrypts connection passwords, webhook secrets
+// and MFA seeds, several of which a user can choose the plaintext of. A ciphertext
+// minted there must never open as, say, a login ticket — so values sealed here open
+// only under the same purpose, and nothing sealed by EncryptSecret opens here at all.
+//
+// The output is unpadded base64url (cookie-safe), without the enc: prefix.
+func SealFor(purpose string, plain []byte) (string, error) {
+	gcm, err := purposeGCM(purpose)
+	if err != nil {
+		return "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+	ct := gcm.Seal(nonce, nonce, plain, []byte(purpose))
+	return base64.RawURLEncoding.EncodeToString(ct), nil
+}
+
+// OpenFor reverses SealFor for the same purpose.
+func OpenFor(purpose, token string) ([]byte, error) {
+	gcm, err := purposeGCM(purpose)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) < gcm.NonceSize() {
+		return nil, errors.New("sealed value too short")
+	}
+	return gcm.Open(nil, raw[:gcm.NonceSize()], raw[gcm.NonceSize():], []byte(purpose))
+}
+
+func purposeGCM(purpose string) (cipher.AEAD, error) {
+	if len(secretKeyV2) == 0 {
+		return nil, errors.New("secret key not initialized")
+	}
+	if purpose == "" {
+		return nil, errors.New("seal purpose required")
+	}
+	mac := hmac.New(sha256.New, secretKeyV2)
+	mac.Write([]byte("aegisdb/seal/" + purpose))
+	block, err := aes.NewCipher(mac.Sum(nil))
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }

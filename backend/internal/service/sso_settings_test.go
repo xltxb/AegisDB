@@ -1,9 +1,8 @@
 package service
 
 import (
-	"encoding/base64"
-	"errors"
-	"net/url"
+	"aegisdb/pkg/crypto"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +10,10 @@ import (
 
 // SSO 设置在**保存那一刻**校验,而不是等第一个人登录时才发现配错了。
 func TestValidateSSOSettings(t *testing.T) {
-	ok := SSOSettings{Enabled: true, BaseURL: "https://srd.bssrvc66.com", CookieName: "CS-Token"}
+	ok := SSOSettings{
+		Enabled: true, Issuer: "https://idp.example.com", ClientID: "aegisdb",
+		RedirectURL: "https://dbgw.example.com" + OIDCCallbackPath, EmailClaim: "email",
+	}
 	with := func(f func(*SSOSettings)) SSOSettings { c := ok; f(&c); return c }
 	cases := []struct {
 		name      string
@@ -20,11 +22,18 @@ func TestValidateSSOSettings(t *testing.T) {
 		wantErr   string
 	}{
 		{"正常", ok, false, ""},
-		{"部署环境不许 http:JWT 会明文过内网", with(func(c *SSOSettings) { c.BaseURL = "http://srd.bssrvc66.com" }), false, "https"},
-		{"本地开发允许 http", with(func(c *SSOSettings) { c.BaseURL = "http://127.0.0.1:9000" }), true, ""},
-		{"没填地址", with(func(c *SSOSettings) { c.BaseURL = "" }), false, "SRD 授权登录地址"},
-		{"地址不是 URL", with(func(c *SSOSettings) { c.BaseURL = "srd.bssrvc66.com" }), false, "SRD 授权登录地址"},
-		{"Cookie 名含非法字符", with(func(c *SSOSettings) { c.CookieName = "to ken;" }), false, "Cookie"},
+		{"网关挂在子路径下", with(func(c *SSOSettings) { c.RedirectURL = "https://a.example.com/gw" + OIDCCallbackPath }), false, ""},
+		{"部署环境不许 http:授权码会明文过内网", with(func(c *SSOSettings) { c.Issuer = "http://idp.example.com" }), false, "https"},
+		{"本地开发允许 http", with(func(c *SSOSettings) {
+			c.Issuer, c.RedirectURL = "http://127.0.0.1:9000", "http://localhost:5173"+OIDCCallbackPath
+		}), true, ""},
+		{"没填 Issuer", with(func(c *SSOSettings) { c.Issuer = "" }), false, "Issuer"},
+		{"Issuer 不是 URL", with(func(c *SSOSettings) { c.Issuer = "idp.example.com" }), false, "Issuer"},
+		{"没填 Client ID", with(func(c *SSOSettings) { c.ClientID = " " }), false, "Client ID"},
+		{"没填回调地址", with(func(c *SSOSettings) { c.RedirectURL = "" }), false, "回调地址"},
+		{"回调地址不是网关的回调接口", with(func(c *SSOSettings) { c.RedirectURL = "https://dbgw.example.com/callback" }), false, OIDCCallbackPath},
+		{"回调地址带查询串", with(func(c *SSOSettings) { c.RedirectURL = "https://dbgw.example.com" + OIDCCallbackPath + "?x=1" }), false, "回调地址"},
+		{"邮箱字段含空白", with(func(c *SSOSettings) { c.EmailClaim = "e mail" }), false, "邮箱字段"},
 	}
 	for _, c := range cases {
 		err := ValidateSSOSettings(c.cfg, c.allowHTTP)
@@ -36,81 +45,85 @@ func TestValidateSSOSettings(t *testing.T) {
 		}
 	}
 	// 未启用时什么都不查:允许先把地址填了、再择时打开
-	if err := ValidateSSOSettings(SSOSettings{BaseURL: "garbage"}, false); err != nil {
+	if err := ValidateSSOSettings(SSOSettings{Issuer: "garbage"}, false); err != nil {
 		t.Errorf("未启用 SSO 时不该校验,实际 %v", err)
 	}
 }
 
-// SRD 的填充符是 *,不是 =。向量同样来自 SRD 自己的编码函数:m("abcd")、m("abcde")。
-func TestSRDBase64Padding(t *testing.T) {
-	for raw, want := range map[string]string{"y_SlVG**": "abcd", "y_SlVE9*": "abcde", "y_Sl": "abc"} {
-		b, err := srdBase64.DecodeString(raw)
-		if err != nil || string(b) != want {
-			t.Errorf("%q 应解出 %q,实际 %q, %v", raw, want, b, err)
+func TestParseScopes_AlwaysCarriesOpenID(t *testing.T) {
+	for raw, want := range map[string][]string{
+		"openid email profile": {"openid", "email", "profile"},
+		"email,profile":        {"openid", "email", "profile"},
+		"":                     {"openid"},
+		" email  email openid": {"openid", "email"},
+	} {
+		if got := parseScopes(raw); !reflect.DeepEqual(got, want) {
+			t.Errorf("parseScopes(%q) = %v, want %v", raw, got, want)
 		}
 	}
 }
 
-// CS-Token 的几种可能形态都要能解出 JWT;解不出来的要明确报"格式不对",不能当成"没登录"。
-func TestDecodeSRDToken(t *testing.T) {
-	const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ6aGFuZ3NhbiJ9.c2lnbmF0dXJl"
-	payload := `{"t_time": 1710000000, "token": "` + jwt + `"}`
-	std := base64.StdEncoding.EncodeToString([]byte(payload))
-	// 同样的 JWT,在 JSON 里多放一个字段,挑一个编码后一定带 + 和 = 的。
-	var stdPlus string
-	for i := 0; ; i++ {
-		stdPlus = base64.StdEncoding.EncodeToString([]byte(`{"t_time": 1710000000, "token": "` + jwt + `", "p": "` + strings.Repeat("~", i) + `"}`))
-		if strings.Contains(stdPlus, "+") && strings.Contains(stdPlus, "=") {
-			break
-		}
+func TestGatewayBaseURL(t *testing.T) {
+	c := SSOSettings{RedirectURL: "https://a.example.com/gw" + OIDCCallbackPath}
+	if got := c.GatewayBaseURL(); got != "https://a.example.com/gw" {
+		t.Errorf("GatewayBaseURL = %q", got)
 	}
-	cases := []struct {
-		name, raw string
-		wantAt    int64
-	}{
-		{"裸 JWT", jwt, 0},
-		{"标准 base64 的 {t_time, token}", std, 1710000000},
-		{"js-cookie 做过 URL 编码", url.QueryEscape(std), 1710000000},
-		{"+ 被上游解成了空格", strings.ReplaceAll(stdPlus, "+", " "), 1710000000},
-		{"%3D 与原样的 + 混在一起", strings.ReplaceAll(stdPlus, "=", "%3D"), 1710000000},
-		{"URL 安全 base64 无填充", base64.RawURLEncoding.EncodeToString([]byte(payload)), 1710000000},
-		{"base64 包着裸 JWT", base64.StdEncoding.EncodeToString([]byte(jwt)), 0},
-		{"带引号", `"` + jwt + `"`, 0},
-	}
-	// SRD 的真实形态:下面两个值是拿 SRD 前端包(app.8db67ec2.js)里原样的编码函数跑出来的,
-	// 不是用网关自己的字母表反推的 —— 字母表抄错时这里会失败。
-	cases = append(cases,
-		struct {
-			name, raw string
-			wantAt    int64
-		}{"SRD 自定义 base64(无填充)", "2PScL4Xja_9Orl64HDG~HCG~HCGbMvX7N1oiMlgOVLZ.NESRy1Z5N9jSoLjSH9njUlYiVLZ.2zXLU_Z5N9g1y9fEfogADzWON9gn0zHPaEnOa9y~VkW.adS-", 1710000000},
-		struct {
-			name, raw string
-			wantAt    int64
-		}{"SRD 自定义 base64(多一个字段)", "2PScL4Xja_9Orl64HDG~HCG~HCGbMvX7N1oiMlgOVLZ.NESRy1Z5N9jSoLjSH9njUlYiVLZ.2zXLU_Z5N9g1y9fEfogADzWON9gn0zHPaEnOa9y~VkW.adMbMvwOrOSWyOS-", 1710000000},
-	)
-	for _, c := range cases {
-		got, at, err := DecodeSRDToken(c.raw)
-		if err != nil || got != jwt {
-			t.Errorf("%s:应解出 JWT,实际 %q, %v", c.name, got, err)
-			continue
-		}
-		if c.wantAt == 0 && !at.IsZero() || c.wantAt != 0 && !at.Equal(time.Unix(c.wantAt, 0)) {
-			t.Errorf("%s:封装时间应为 %d,实际 %v", c.name, c.wantAt, at)
-		}
-	}
+}
 
-	if _, _, err := DecodeSRDToken("   "); !errors.Is(err, ErrSSONoSession) {
-		t.Errorf("空 Cookie 是没有登录态,实际 %v", err)
+// 邮箱是网关认人的唯一依据:标准 email 字段必须是身份服务验证过的。
+func TestIdentityFrom(t *testing.T) {
+	cases := []struct {
+		name   string
+		claims map[string]any
+		claim  string
+		email  string
+		user   string
+		ok     bool
+	}{
+		{"已验证", map[string]any{"email": "LinWei@Corp.io", "email_verified": true, "name": "Lin Wei"}, "email", "linwei@corp.io", "Lin Wei", true},
+		{"字符串 true 也认", map[string]any{"email": "a@corp.io", "email_verified": "true"}, "email", "a@corp.io", "", true},
+		{"未验证不认", map[string]any{"email": "a@corp.io", "email_verified": false}, "email", "", "", false},
+		{"没说验证过不认", map[string]any{"email": "a@corp.io"}, "email", "", "", false},
+		{"不是邮箱", map[string]any{"email": "alice", "email_verified": true}, "email", "", "", false},
+		{"自定义字段由管理员担保", map[string]any{"upn": "b@corp.io", "preferred_username": "bob"}, "upn", "b@corp.io", "bob", true},
+		{"自定义字段缺失", map[string]any{"email": "b@corp.io", "email_verified": true}, "upn", "", "", false},
 	}
-	for _, bad := range []string{
-		"not-a-token",
-		base64.StdEncoding.EncodeToString([]byte(`{"t_time":1,"token":"abc"}`)), // token 不像 JWT
-		base64.StdEncoding.EncodeToString([]byte(`hello`)),
-		"eyJ.a.b\x00",
+	for _, c := range cases {
+		email, user, ok := identityFrom(c.claims, c.claim)
+		if ok != c.ok || email != c.email || user != c.user {
+			t.Errorf("%s:得到 (%q, %q, %v),期望 (%q, %q, %v)", c.name, email, user, ok, c.email, c.user, c.ok)
+		}
+	}
+}
+
+// 登录结果只认网关自己封的、没过期的、同一个 Issuer 的。
+func TestOpenSSOTicket(t *testing.T) {
+	crypto.SetSecretKey("sso-ticket-test-key")
+	s := &Services{}
+	cfg := SSOSettings{Issuer: "https://idp.example.com"}
+	good, err := seal(sealSSOTicket, ssoTicket{Email: "a@corp.io", Name: "A", Issuer: cfg.Issuer, Exp: time.Now().Add(time.Minute).Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, err := s.openSSOTicket(good, cfg); err != nil || id.Email != "a@corp.io" || id.UserName != "A" {
+		t.Fatalf("正常的登录结果应能解开:%+v %v", id, err)
+	}
+	expired, _ := seal(sealSSOTicket, ssoTicket{Email: "a@corp.io", Issuer: cfg.Issuer, Exp: time.Now().Add(-time.Second).Unix()})
+	other, _ := seal(sealSSOTicket, ssoTicket{Email: "a@corp.io", Issuer: "https://evil.example.com", Exp: time.Now().Add(time.Minute).Unix()})
+	// 同样的内容,用别的用途封的(流程 Cookie),或者用静态存储的 EncryptSecret 加密的:都打不开。
+	asFlow, _ := seal(sealOIDCFlow, ssoTicket{Email: "a@corp.io", Issuer: cfg.Issuer, Exp: time.Now().Add(time.Minute).Unix()})
+	atRest, _ := crypto.EncryptSecret(`{"m":"a@corp.io","i":"https://idp.example.com","e":9999999999}`)
+	for name, raw := range map[string]string{
+		"用途不同":      asFlow,
+		"静态存储的密文":   atRest,
+		"空":         "",
+		"过期":        expired,
+		"别的 Issuer": other,
+		"不是网关封的":    "eyJlbWFpbCI6ImFAY29ycC5pbyJ9",
+		"被改过":       good[:len(good)-4] + "AAAA",
 	} {
-		if _, _, err := DecodeSRDToken(bad); !errors.Is(err, ErrSSOTokenFormat) {
-			t.Errorf("%q 应报格式错误,实际 %v", bad, err)
+		if _, err := s.openSSOTicket(raw, cfg); err != ErrSSONoSession {
+			t.Errorf("%s:应当作没有登录态,实际 %v", name, err)
 		}
 	}
 }

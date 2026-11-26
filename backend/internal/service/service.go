@@ -27,6 +27,8 @@ type Services struct {
 	// mfaFails:MFA 验证码失败计数(按用户)。见 mfa_guard.go。
 	// 挂在实例上而不是包级变量:每个 Services 各算各的。
 	mfaFails      *failBook[int64]
+	// oidc:SSO 身份服务的发现文档与 JWKS 缓存(sso_oidc.go)。零值可用。
+	oidc oidcProviderCache
 	// 聊天渠道与绑定码的频控(chat_binding.go)
 	chatMu         sync.RWMutex
 	chatTransports map[chat.Channel]chat.Transport
@@ -509,7 +511,7 @@ func (s *Services) Login(email, password, mfaCode, clientIP string) (string, tim
 		s.auditLoginFail(email, clientIP)
 		return "", time.Time{}, nil, ErrInvalidCredentials
 	}
-	// 只挂业务查询角色的账号(业务方)不走本地口令:它们等 SRD 授权登录(PRD 决策 10)。拦在
+	// 只挂业务查询角色的账号(业务方)不走本地口令:它们经 SSO 登录(PRD 决策 10)。拦在
 	// 登录这一步而不只是"设不了口令":修复之前设过的口令、将来某条漏掉的设口令路径,都进不来。
 	// 与口令错误同样的回答,不透露这是什么账号。
 	if s.bizQueryOnly(u) {

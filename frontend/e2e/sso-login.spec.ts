@@ -1,22 +1,22 @@
 import { test, expect, type Page } from '@playwright/test'
 import { envelope, ME } from './helpers'
 
-// SRD 授权登录(公司 SSO)的登录页。钉住前端这一侧的几条约定:
-//   · 浏览器里已有 SRD 登录态(CS-Token)就静默登进去,不用点
-//   · 没有登录态(40101)不是错误:只露出「使用 SRD 授权登录」按钮,不报红字
-//   · 点按钮且没有登录态 / 登录态被 SRD 拒绝:跳 {SRD}/auth/login?redirect=<编码后的网关登录页>
-//   · 刚从 SRD 授权回来却仍没有登录态:说出原因(Cookie 没带过来),而不是让人来回跳
-//   · 网关里没开通账号(40302):弹窗拦下,提示无权限访问;有号没角色:提示"等管理员分配"
-//   · 主动登出后回到登录页不自动登录;启用 SSO 后本地表单默认收起
+// 公司 SSO(OIDC)的登录页。授权码流程整个在服务端,登录页只做这几件事,这里一一钉住:
+//   · 点「使用 SSO 登录」:浏览器去网关的发起地址(按页面位置解析,不当作站点根)
+//   · 回调成功跳回 #/login?sso=1:自动换会话进系统,并把 ?sso=1 从地址栏去掉
+//   · 回调失败跳回 #/login?sso_error=<原因>:说出原因,不自动重试
+//   · 不是从回调回来的:不自动登录(登出后回到登录页不会一眨眼又进去)
+//   · 回来了却没有登录结果(40101):说清楚,让人再点一次
+//   · 网关里没开通账号(40302):弹窗拦下;有号没角色:提示等管理员分配
+//   · 已绑定 TOTP 的管理员:亮出输码框,带码再换一次
+//   · 启用 SSO 后本地表单默认收起
 
-const LOGIN_URL = 'https://srd.example.com/auth/login'
+const START = 'api/v1/auth/oidc/start'
 const fail = (code: number, msg: string) => ({ status: 200, contentType: 'application/json', body: JSON.stringify({ code, msg, data: null }) })
 
-async function stubSso(page: Page, opts: { enabled?: boolean; sso?: 'ok' | 'none' | 'rejected' | 'norole' | 'noaccount' | 'mfa' } = {}) {
-  const calls = { sso: 0, bodies: [] as any[] }
-  await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({
-    enabled: opts.enabled ?? true, loginUrl: LOGIN_URL,
-  })))
+async function stubSso(page: Page, opts: { enabled?: boolean; sso?: 'ok' | 'none' | 'norole' | 'noaccount' | 'mfa' } = {}) {
+  const calls = { sso: 0, start: 0, bodies: [] as any[] }
+  await page.route('**/api/v1/auth/sso/config', (r) => r.fulfill(envelope({ enabled: opts.enabled ?? true, loginUrl: START })))
   await page.route('**/api/v1/auth/sso', (r) => {
     calls.sso++
     const body = r.request().postDataJSON() ?? {}
@@ -25,30 +25,76 @@ async function stubSso(page: Page, opts: { enabled?: boolean; sso?: 'ok' | 'none
     if (opts.sso === 'mfa' && body.mfaCode !== '123456') {
       return r.fulfill(fail(42800, body.mfaCode ? 'MFA 验证码错误' : '请输入 MFA 验证码'))
     }
-    if (opts.sso === 'none') return r.fulfill(fail(40101, '未检测到 SSO 登录态'))
-    if (opts.sso === 'rejected') return r.fulfill(fail(40100, 'SRD 登录态无效或已过期,请重新授权登录'))
+    if (opts.sso === 'none') return r.fulfill(fail(40101, '未检测到 SSO 登录结果'))
     if (opts.sso === 'noaccount') return r.fulfill(fail(40302, '你还没有开通网关账号,无权限访问。请联系管理员开通后再登录'))
     const user = opts.sso === 'norole' ? { ...ME, roleIds: [], roleCodes: [], menus: {} } : ME
     return r.fulfill(envelope({ session: '1.sso-jwt', expiresAt: '2099-01-01 00:00:00', user }))
   })
-  // 登录成功后总览要拉的东西:给空数据,别让它去打真后端
+  // 发起地址:真后端会 302 去身份服务,这里落地即可
+  await page.route(`**/${START}`, (r) => { calls.start++; return r.fulfill({ status: 200, contentType: 'text/html', body: '<h1>IdP</h1>' }) })
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope(opts.sso === 'norole' ? { ...ME, menus: {} } : ME)))
-  await page.route('**/api/v1/**', (r) => (r.request().url().includes('/auth/sso') ? r.fallback() : r.fulfill(envelope([]))))
-  // SRD 登录页:落地即可,记下它收到的 redirect
-  await page.route(`${LOGIN_URL}*`, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<h1>SRD</h1>' }))
+  await page.route('**/api/v1/**', (r) => {
+    const u = r.request().url()
+    return u.includes('/auth/sso') || u.includes('/auth/oidc') ? r.fallback() : r.fulfill(envelope([]))
+  })
   return calls
 }
 
-const expectRedirectToSRD = async (page: Page) => {
-  await expect(page).toHaveURL(/srd\.example\.com\/auth\/login\?redirect=/)
-  const back = new URL(page.url()).searchParams.get('redirect') || ''
-  expect(back).toMatch(/^http:\/\/[^/]+\/#\/login$/) // 回到网关登录页
-}
-
-test.describe('SRD 授权登录', () => {
-  test('已绑定 TOTP 的管理员:SSO 后亮出输码框,带码再登一次', async ({ page }) => {
-    const calls = await stubSso(page, { sso: 'mfa' })
+test.describe('SSO 登录(OIDC)', () => {
+  test('点按钮:去网关的发起地址', async ({ page }) => {
+    const calls = await stubSso(page, { sso: 'none' })
     await page.goto('/#/login')
+    await expect(page.getByTestId('sso-login')).toHaveText(/使用 SSO 登录/)
+    await page.getByTestId('sso-login').click()
+    await expect(page).toHaveURL(/\/api\/v1\/auth\/oidc\/start$/)
+    expect(calls.start).toBe(1)
+    expect(calls.sso).toBe(0) // 点按钮不先去试换会话
+  })
+
+  test('回调成功回来:自动换会话进系统', async ({ page }) => {
+    await stubSso(page, { sso: 'ok' })
+    await page.goto('/#/login?sso=1')
+    await expect(page).toHaveURL(/#\/dashboard/)
+    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBe('1.sso-jwt')
+  })
+
+  test('不是从回调回来的:不自动登录,不报错;本地表单默认收起', async ({ page }) => {
+    const calls = await stubSso(page, { sso: 'ok' })
+    await page.goto('/#/login')
+    await expect(page.getByTestId('sso-login')).toBeVisible()
+    await page.waitForTimeout(300)
+    expect(calls.sso).toBe(0)
+    await expect(page.getByTestId('login-error')).toHaveCount(0)
+    await expect(page.locator('input[type="email"]')).toHaveCount(0)
+    await page.getByTestId('sso-admin-toggle').click()
+    await expect(page.locator('input[type="email"]')).toBeVisible()
+  })
+
+  test('回调失败:说出原因,不自动重试,地址栏去掉 sso_error', async ({ page }) => {
+    const calls = await stubSso(page, { sso: 'ok' })
+    await page.goto('/#/login?sso_error=email')
+    await expect(page.getByTestId('login-error')).toContainText('已验证的邮箱')
+    expect(calls.sso).toBe(0)
+    await expect(page).toHaveURL(/#\/login$/)
+  })
+
+  test('不认识的失败原因:按"暂时不可用"说,不把地址栏里的文字显示出来', async ({ page }) => {
+    await stubSso(page, { sso: 'ok' })
+    await page.goto('/#/login?sso_error=%3Cb%3Ehi%3C%2Fb%3E')
+    await expect(page.getByTestId('login-error')).toContainText('暂时不可用')
+    await expect(page.getByTestId('login-error')).not.toContainText('hi')
+  })
+
+  test('回来了却没有登录结果:说清楚,让人再点一次', async ({ page }) => {
+    await stubSso(page, { sso: 'none' })
+    await page.goto('/#/login?sso=1')
+    await expect(page.getByTestId('login-error')).toContainText('没有拿到 SSO 登录结果')
+    await expect(page).toHaveURL(/#\/login$/)
+  })
+
+  test('已绑定 TOTP 的管理员:亮出输码框,带码再登一次', async ({ page }) => {
+    const calls = await stubSso(page, { sso: 'mfa' })
+    await page.goto('/#/login?sso=1')
     await expect(page.getByTestId('sso-mfa-code')).toBeVisible()
     await expect(page.getByTestId('login-error')).toHaveCount(0) // 第一次只是要码,不报红字
     await page.getByTestId('sso-mfa-code').fill('000000')
@@ -60,60 +106,9 @@ test.describe('SRD 授权登录', () => {
     expect(calls.bodies.at(-1)).toEqual({ mfaCode: '123456' })
   })
 
-  test('有 SRD 登录态:进登录页就自动登进去', async ({ page }) => {
-    await stubSso(page, { sso: 'ok' })
-    await page.goto('/#/login')
-    await expect(page).toHaveURL(/#\/dashboard/)
-    expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBe('1.sso-jwt')
-  })
-
-  test('没有登录态:只露出按钮,不报错;本地表单默认收起', async ({ page }) => {
-    await stubSso(page, { sso: 'none' })
-    await page.goto('/#/login')
-    await expect(page.getByTestId('sso-login')).toHaveText(/使用 SRD 授权登录/)
-    await expect(page.getByTestId('login-error')).toHaveCount(0)
-    await expect(page.locator('input[type="email"]')).toHaveCount(0)
-    await page.getByTestId('sso-admin-toggle').click()
-    await expect(page.locator('input[type="email"]')).toBeVisible()
-  })
-
-  test('点按钮且没有登录态:跳 SRD 授权登录,redirect 指回网关登录页', async ({ page }) => {
-    await stubSso(page, { sso: 'none' })
-    await page.goto('/#/login')
-    await page.getByTestId('sso-login').click()
-    await expectRedirectToSRD(page)
-  })
-
-  test('点按钮但登录态已被 SRD 拒绝(过期):同样去 SRD 重新授权', async ({ page }) => {
-    await stubSso(page, { sso: 'rejected' })
-    await page.goto('/#/login')
-    await page.getByTestId('sso-login').click()
-    await expectRedirectToSRD(page)
-  })
-
-  test('刚从 SRD 回来却没有登录态:说出 Cookie 没带过来的原因', async ({ page }) => {
-    await stubSso(page, { sso: 'none' })
-    await page.addInitScript(() => sessionStorage.setItem('aegisdb_srd_redirected_at', String(Date.now())))
-    await page.goto('/#/login')
-    await expect(page.getByTestId('login-error')).toContainText('CS-Token')
-  })
-
-  test('主动登出后:点按钮去授权时撤掉"别自动登录"', async ({ page }) => {
-    const calls = await stubSso(page, { sso: 'none' })
-    await page.addInitScript(() => { if (!sessionStorage.getItem('seen')) { sessionStorage.setItem('aegisdb_sso_skip', '1'); sessionStorage.setItem('seen', '1') } })
-    await page.goto('/#/login')
-    await expect(page.getByTestId('sso-login')).toBeVisible()
-    await page.waitForTimeout(300)
-    expect(calls.sso).toBe(0) // 登出后不自动登录
-    await page.getByTestId('sso-login').click()
-    await expectRedirectToSRD(page)
-    await page.goBack()
-    expect(await page.evaluate(() => sessionStorage.getItem('aegisdb_sso_skip'))).toBeNull()
-  })
-
   test('网关里没开通账号:弹窗拦下,提示无权限访问,不进系统', async ({ page }) => {
-    const calls = await stubSso(page, { sso: 'noaccount' })
-    await page.goto('/#/login')
+    await stubSso(page, { sso: 'noaccount' })
+    await page.goto('/#/login?sso=1')
     const dlg = page.getByTestId('sso-no-account')
     await expect(dlg).toBeVisible()
     await expect(dlg).toContainText('无权限访问')
@@ -122,16 +117,11 @@ test.describe('SRD 授权登录', () => {
     expect(await page.evaluate(() => localStorage.getItem('aegisdb_session'))).toBeNull()
     await page.getByTestId('sso-no-account-ok').click()
     await expect(dlg).toHaveCount(0)
-    // 手动再点一次 SSO:还是拦下,不会跳 SRD 来回绕
-    await page.getByTestId('sso-login').click()
-    await expect(dlg).toBeVisible()
-    await expect(page).toHaveURL(/#\/login/)
-    expect(calls.sso).toBe(2)
   })
 
   test('有账号但没分配角色:登录成功,但提示等管理员分配角色', async ({ page }) => {
     await stubSso(page, { sso: 'norole' })
-    await page.goto('/#/login')
+    await page.goto('/#/login?sso=1')
     await expect(page.getByTestId('login-error')).toContainText('分配')
     await expect(page).toHaveURL(/#\/login/)
   })

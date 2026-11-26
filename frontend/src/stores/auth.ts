@@ -22,8 +22,6 @@ const ROUTE_ORDER: { key: string; path: string; admin?: boolean; auditor?: boole
   { key: 'inspection', path: '/inspection' },
 ]
 
-// 主动登出后,本标签页不再自动 SSO 登录(见 logout)。
-export const SSO_SKIP_KEY = 'aegisdb_sso_skip'
 
 const EMPTY_TODO: ApprovalTodo = { decide: 0, execute: 0, confirm: 0, items: [] }
 
@@ -96,7 +94,6 @@ export const useAuthStore = create<AuthState>()((set, get) => {
     set({ token: data.session, loaded: true, ...setMe(data.user) })
     justLoggedIn = true
     setSessionMarker(data.session)
-    try { sessionStorage.removeItem(SSO_SKIP_KEY) } catch { /* 隐私模式 */ }
   }
 
   return {
@@ -169,9 +166,6 @@ export const useAuthStore = create<AuthState>()((set, get) => {
       try {
         for (const k of Object.keys(localStorage)) if (k.startsWith('aegisdb_query_tabs_')) localStorage.removeItem(k)
       } catch { /* 隐私模式 */ }
-      // 主动登出之后,回到登录页不要自动再用 SSO 登进来 —— SSO 的 Cookie 还在,不拦这一下,
-      // "登出"按下去的结果是一眨眼又登录了。只在本标签页内有效:关掉重开就恢复自动登录。
-      try { sessionStorage.setItem(SSO_SKIP_KEY, '1') } catch { /* 隐私模式 */ }
     },
   }
 })

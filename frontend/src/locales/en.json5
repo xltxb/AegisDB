@@ -45,12 +45,11 @@
   loginTitle: 'Database Gateway', loginSub: 'Sign in to the console', loginEmail: 'Work email', loginPassword: 'Password',
   loginBtn: 'Sign in', loginHint: "Demo: linwei{'@'}aegisdb.io · password aegisdb123", loginError: 'Wrong email or password',
   loginNoMenu: 'Signed in, but your role has no accessible menu — contact an administrator', loginMfaLabel: 'MFA code', loginMfaPh: 'Enter the 6-digit code', loginMfaError: 'Invalid MFA code',
-  ssoBtn: 'Sign in with SRD', ssoMfaSubmit: 'Verify & sign in', ssoTrying: 'Signing in with SRD…', ssoOr: 'or', ssoAdminToggle: 'Sign in with a gateway password', ssoAdminHint: 'Accounts bound to SSO must sign in via SSO (administrators excepted)',
-  ssoNoRole: 'Signed in with SRD and your account is ready, but no role is assigned yet. Ask an administrator to grant access, then refresh this page.',
+  ssoBtn: 'Sign in with SSO', ssoMfaSubmit: 'Verify & sign in', ssoTrying: 'Signing in with SSO…', ssoOr: 'or', ssoAdminToggle: 'Sign in with a gateway password', ssoAdminHint: 'Accounts bound to SSO must sign in via SSO (administrators excepted)',
+  ssoNoRole: 'Signed in with SSO and your account is ready, but no role is assigned yet. Ask an administrator to grant access, then refresh this page.',
   ssoNoAccountTitle: 'Access denied',
-  ssoNoAccountBody: 'You are signed in with SRD, but no gateway account has been opened for you yet. Ask a gateway administrator to open an account, then sign in again.',
+  ssoNoAccountBody: 'SSO confirmed who you are, but no gateway account has been opened for you yet. Ask a gateway administrator to open an account, then sign in again.',
   ssoNoAccountOk: 'Got it',
-  ssoNoCookie: 'SRD authorization finished, but the gateway did not receive the login cookie (CS-Token). Make sure the gateway domain is under the parent domain of the SRD cookie (e.g. *.bssrvc66.com) and is on the SRD redirect allowlist.',
   ssoBoundTip: 'Bound to SSO ({sso}); SSO sign-in only. Click to unbind', ssoUnboundTip: 'Not bound to SSO; password sign-in allowed', ssoUnbindConfirm: 'Unbind {name} from SSO? They will be able to sign in with a password again.', ssoUnbindDone: 'SSO binding removed',
   treeTitle: 'Database tiers', search: 'Search instance / db / table',
   schemaLoading: 'Loading schema…', schemaEmpty: '— No databases —', treeCollapse: 'Collapse database tiers', treeExpand: 'Expand database tiers',
@@ -304,10 +303,21 @@
   setAdminIdle: 'Admin console idle timeout (minutes)', setAdminIdleD: 'After this long without activity in the Admin console you are sent back to the workspace (no logout; terminals keep running). Never longer than the idle lock above.', adminLockTitle: 'Admin console idle — this page is locked', adminLockBody: 'This page has unsaved changes and they are still here. Re-enter the Admin console to pick up where you left off.', adminLockResume: 'Re-enter and keep editing', adminLockLeave: 'Discard changes and go to Overview', adminIdleBack: 'Admin console idle timeout — back to the workspace; click Admin to enter again',
   setAdminIpAllow: 'Admin console IP allowlist', setAdminIpAllowD: 'Restricts the source IP for the Admin console (admin APIs) only; the workspace is unaffected. An empty list means no restriction; direct access on the server itself (not through a reverse proxy) is always allowed.', setAdminIpForcedOff: 'The deployment config has force-disabled the Admin console IP allowlist (AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED); the settings here have no effect for now.', adminIpBlocked: 'Your IP is not on the Admin console allowlist; back to the workspace', adminIpBlockedStay: 'Your IP is not on the Admin console allowlist; cannot open the Admin console',
   setIpAllow: 'IP allowlist', setIpAllowD: 'Only listed IPs may reach the gateway', manage: 'Manage',
-  setSso: 'SRD sign-in (company SSO)', setSsoD: 'Authentication only: accounts are matched by email; permissions still come from roles. Unknown emails are refused; an administrator must create or invite the account first',
-  setSsoBase: 'SRD sign-in URL', setSsoCookie: 'Login cookie name',
+  setSso: 'SSO sign-in (OIDC)', setSsoD: 'Authentication only: accounts are matched by email; permissions still come from roles. Unknown emails are refused; an administrator must create or invite the account first',
   setSsoForcedOff: 'SSO is force-disabled by the deployment config (sso.disabled or the AEGISDB_SSO_DISABLED environment variable). This switch has no effect for now and everyone signs in with account passwords. Remove that setting and restart the service to restore it.',
-  setSsoBindHint: 'An existing account is bound the first time its owner signs in through SRD with a matching email; from then on it can only sign in via SSO (administrators excepted). Accounts that never used SRD keep password sign-in. Administrators can unbind from the SSO badge under Permissions · Users. The gateway domain must be under the SRD cookie parent domain (e.g. *.bssrvc66.com).',
+  setSsoBindHint: 'An existing account is bound the first time its owner signs in through SSO with a matching email; from then on it can only sign in via SSO (administrators excepted). Accounts that never used SSO keep password sign-in. Administrators can unbind from the SSO badge under Permissions · Users.',
+  ssoNoResult: 'No SSO sign-in result was received. It may have expired, or the browser did not keep the cookie. Click "Sign in with SSO" again.',
+  ssoErr_disabled: 'SSO sign-in is not enabled. Sign in with your account password.',
+  ssoErr_state: 'This SSO sign-in is no longer valid (it took too long, or it was not started from this page). Click "Sign in with SSO" again.',
+  ssoErr_denied: 'The identity provider did not complete the sign-in (it may have been cancelled, or you may not have access to this application).',
+  ssoErr_exchange: 'The SSO identity provider is unavailable or returned a result that could not be verified. Try again later; in an emergency, sign in with an administrator password.',
+  ssoErr_email: 'The identity provider did not supply a verified email, so the gateway cannot match your account. Ask an administrator to check the SSO email claim setting.',
+  setSsoIssuer: 'Issuer URL',
+  setSsoSecretPh: 'Leave empty for a public client (PKCE only)',
+  setSsoRedirect: 'Callback URL',
+  setSsoRedirectFill: 'Use this site',
+  setSsoEmailClaim: 'Email claim',
+  setSsoRedirectHint: 'Register the gateway as an OIDC application (authorization code flow) with your identity provider, and add the callback URL above to its allowed redirect URIs exactly as shown. The email claim defaults to email, in which case only addresses the provider marks as verified (email_verified) are accepted; naming another claim (such as upn) means you vouch that it holds the user\'s own email.',
   setMfaEnroll: 'My MFA', setMfaEnrollD: 'Bind a TOTP authenticator to your account',
   mfaBound: 'Bound', mfaUnbound: 'Not set', mfaBind: 'Set up', enabledTag: 'Enabled', disabledTag: 'Off',
   mfaModalTitle: 'Set up two-factor (MFA)', mfaScan: 'Scan the QR with an authenticator app, or enter the key',
@@ -1469,6 +1479,8 @@
   secretConfiguredPh: 'Configured · leave blank to keep',
   // 接口报错文案(apiMsg.<code>),由 go generate ./internal/apimsg 生成;en 只改值,不要手改键
   apiMsg: {
+    //  clientSecret=已修改
+    m3e96a2cd: ' clientSecret=changed',
     //  secret=已修改
     m82a58f89: ' secret=changed',
     // %s %q 不是合法的 Oracle 标识符,拒绝拼入编译语句
@@ -1565,8 +1577,8 @@
     me12efd13: '{0} "{1}" entered stage: {2}',
     // %s不是合法的 http(s) 地址:%s
     m4e151164: '{0} is not a valid http(s) address: {1}',
-    // %s必须是 https —— 网关要把用户的 SSO token 发过去,明文传输等于把会话交给内网任何一台机器
-    m2d58b3a9: '{0} must use https: the gateway sends the user\'s SSO token there, and plain HTTP hands the session to any machine on the internal network',
+    // %s必须是 https —— 授权码和 token 要经过它,明文传输等于把会话交给内网任何一台机器
+    mb0234180: '{0} must use https: authorization codes and tokens pass through it, and plain HTTP hands the session to any machine on the internal network',
     // %w(只读执行:语句经函数等方式改数据,被数据库拒绝)
     m6217631d: '{0} (read-only execution: the statement changes data through a function or similar and was refused by the database)',
     // %w: %s
@@ -1575,14 +1587,10 @@
     m722d4072: '{0}: MFA settings were just changed; refresh and try again',
     // %w: SSO 登录已超过 15 分钟,请重新通过 SSO 登录后再绑定二次验证(或输入当前登录密码)
     m1e719bdf: '{0}: your SSO sign-in is more than 15 minutes old; sign in through SSO again before binding two-factor verification (or enter your current password)',
-    // %w: 业务查询账号不设本地口令,业务方通过 SRD 授权登录进入网关
-    mb94ceec4: '{0}: business query accounts have no local password; business users sign in to the gateway through SRD authorization',
+    // %w: 业务查询账号不设本地口令,业务方通过 SSO 登录进入网关
+    mfa079c48: '{0}: business query accounts have no local password; business users sign in to the gateway through SSO',
     // %w: 原密码错误
     me17d2696: '{0}: the old password is incorrect',
-    // %w: 响应不是 JSON
-    m7f6e0379: '{0}: the response is not JSON',
-    // %w: 响应里没有可用的邮箱
-    m329d409b: '{0}: the response contains no usable email',
     // %w: 密码过于常见,请换一个
     m11cfcae0: '{0}: this password is too common, please choose another',
     // %w: 当前登录密码错误
@@ -1611,8 +1619,6 @@
     m2271f1c0: 'The Bot Token or the proxy URL is malformed. Enter it again',
     // CSRF 校验失败,请刷新页面后重试
     mecb94d0c: 'CSRF check failed. Refresh the page and try again',
-    // Cookie 名只能由字母、数字、_ . - 组成:%s
-    m15be8bb8: 'The cookie name may only contain letters, digits, _ . -: {0}',
     // DISTINCT ON 不支持下推,应改写为窗口函数或聚合
     ma8172170: 'DISTINCT ON cannot be pushed down; rewrite it with a window function or aggregation',
     // DROP %s %s 属于不可逆变更,需通过备份/回滚点流程执行
@@ -1631,6 +1637,8 @@
     m3a70b57b: 'IP allowlist entry {0} ({1}) is not a valid IP or CIDR',
     // IP 白名单过长(上限 512 字符),请合并为网段
     mdb7d6da7: 'The IP allowlist is too long (max 512 characters); merge entries into ranges',
+    // Issuer 地址
+    mce55f956: 'Issuer URL',
     // LIKE 以 %% 开头,无法命中索引,数据量大时会全表扫描
     m4214c008: 'LIKE starts with {\'%\'}, so it cannot use an index and will scan the whole table on large data',
     // LOGO 只支持 PNG、JPG、GIF、WebP、ICO、SVG 图片
@@ -1667,14 +1675,10 @@
     mf3834ae7: 'SQL format needs a target table name: no single source table could be identified from the query (join, subquery, CTE, etc.); please enter the target table name',
     // SQL 过长(%.1fMB,上限 15MB)——请改用脚本上传通道,或缩短语句(如用临时表替代超长 IN 列表): %w
     m3cc768d4: 'SQL is too long ({0} MB, limit 15 MB). Use the script upload channel instead, or shorten the statement (e.g. a temporary table instead of a huge IN list): {1}',
-    // SRD 授权服务暂不可用,请稍后重试;紧急情况请用管理员账号登录
-    mfdac9fc6: 'The SRD authorization service is temporarily unavailable; please try again later. In an emergency, sign in with an admin account',
-    // SRD 授权登录地址
-    m379a8280: 'SRD authorization sign-in URL',
-    // SRD 登录态无效或已过期,请重新授权登录
-    mf1f7bf56: 'The SRD sign-in session is invalid or expired; please authorize again',
     // SSO 开关必须是布尔值
     md5e34c8c: 'The SSO switch must be a boolean',
+    // SSO 登录失败,请重新登录
+    mb24eb982: 'SSO sign-in failed; please sign in again',
     // SSO 登录已超过 15 分钟,请退出后重新通过 SSO 登录再绑定二次验证
     mecbd0451: 'Your SSO sign-in is more than 15 minutes old. Sign out and sign in through SSO again before binding two-factor verification',
     // SVG 格式的 LOGO 不能包含脚本
@@ -1761,6 +1765,10 @@
     mcea2e003: 'score must be within 0-100; got {0}',
     // scriptBase64 不是合法的 base64
     m949389e1: 'scriptBase64 is not valid base64',
+    // sso: 发起登录失败
+    m5679ff7b: 'sso: failed to start sign-in',
+    // sso: 回调失败
+    mde848638: 'sso: callback failed',
     // status 取值无效
     mc91c3e52: 'Invalid status value',
     // timeoutSec 不能超过全局上限 %d 秒(0 或不填表示用默认值 %d)
@@ -1971,8 +1979,8 @@
     mdeb39901: 'Create failed',
     // 创建失败:%s
     mb2ab7128: 'Create failed: {0}',
-    // 创建失败:只有业务查询角色的账号不设本地口令 —— 它由外部审批下发授权时自动开通,业务方通过 SRD 授权登录进入网关
-    m20fbdb9f: 'Create failed: accounts holding only the business query role have no local password. They are opened automatically when an external approval grants access, and business users sign in through SRD authorization',
+    // 创建失败:只有业务查询角色的账号不设本地口令 —— 它由外部审批下发授权时自动开通,业务方通过 SSO 登录进入网关
+    ma26554b8: 'Create failed: accounts holding only the business query role have no local password. They are opened automatically when an external approval grants access, and business users sign in through SSO',
     // 创建审批单失败,请重试
     m16d93d09: 'Failed to create the approval ticket; please try again',
     // 创建影子表: %w
@@ -2101,6 +2109,8 @@
     mb0566601: 'The App ID is required to enable the Lark approval bot',
     // 启用 Lark 审批机器人必须填写 App Secret
     mdb4c55c5: 'The App Secret is required to enable the Lark approval bot',
+    // 启用 SSO 必须填写 Client ID
+    m7aa45992: 'Enabling SSO requires a Client ID',
     // 启用 SSO 必须填写%s
     mf395a22c: 'Enabling SSO requires {0}',
     // 启用 Telegram 审批机器人必须填写 Bot Token
@@ -2111,6 +2121,10 @@
     m19f376f6: 'Command refused: forbidden by the capability matrix',
     // 命令被拦截,需审批
     m519f19f9: 'Command intercepted; approval required',
+    // 回调地址
+    mbce6707c: 'Callback URL',
+    // 回调地址必须以 %s 结尾
+    ma89ae893: 'The callback URL must end with {0}',
     // 在 schema %s 下找不到 %s %s
     m34046b7b: 'No {1} {2} found in schema {0}',
     // 在影子表上应用变更: %w
@@ -2501,8 +2515,6 @@
     m27e059c3: 'Cannot determine the current schema: {0}',
     // 无法确认语句用到的函数是否会改数据(%s)
     m826153dd: 'Cannot confirm whether the functions used by the statement change data ({0})',
-    // 无法解析 SRD 登录态 Cookie,请联系网关管理员
-    mc871f4c5: 'Cannot parse the SRD sign-in cookie; contact the gateway administrator',
     // 无法解析主机 %q: %w
     mdd9a7d9e: 'Cannot resolve host {0}: {1}',
     // 无法识别来源 IP
@@ -2549,8 +2561,8 @@
     m55473603: 'SSO sign-in is not enabled',
     // 未指定数据库
     mfc33133c: 'No database specified',
-    // 未检测到 SSO 登录态
-    mb7835eea: 'No SSO sign-in session detected',
+    // 未检测到 SSO 登录结果
+    m2a958ba6: 'No SSO sign-in result detected',
     // 未登录
     me8041a8c: 'Not signed in',
     // 未登录 / Token 失效
@@ -3145,6 +3157,8 @@
     m2cca34ec: 'Invite failed: {0}',
     // 邮箱不能为空
     mcfe01235: 'The email cannot be empty',
+    // 邮箱字段名不能含空白:%s
+    meb4b9a06: 'The email claim name must not contain whitespace: {0}',
     // 邮箱已存在:%s
     m323f0068: 'Email already exists: {0}',
     // 邮箱或密码错误
@@ -3167,8 +3181,8 @@
     mdd9a02ea: 'Reset failed',
     // 重置失败:%s
     m552723d9: 'Reset failed: {0}',
-    // 重置失败:业务查询账号不设本地口令,业务方通过 SRD 授权登录进入网关
-    mfc8f3251: 'Reset failed: business query accounts have no local password; business users sign in to the gateway through SRD authorization',
+    // 重置失败:业务查询账号不设本地口令,业务方通过 SSO 登录进入网关
+    mfcfa9c5b: 'Reset failed: business query accounts have no local password; business users sign in to the gateway through SSO',
     // 重试次数只能是 0 ~ %d(0 = 保持原值)
     mcf082e1b: 'The retry count must be 0 ~ {0} (0 = keep the current value)',
     // 链断了:它的前驱哈希接不上上一行 —— 中间有行被删除或插入

@@ -71,9 +71,12 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 	// Login is unauthenticated but still subject to the IP allowlist so it can't
 	// be brute-forced from a non-allowlisted source when the allowlist is on (R29).
 	v1.POST("/auth/login", middleware.IPAllowlist(repo), h.Login)
-	// SSO(SRD 授权登录):config 告诉登录页要不要露出入口;sso 用父域上的 CS-Token 换网关会话。
-	// 与本地登录同样受 IP 白名单约束 —— 换了一扇门,门口的规矩不变。
+	// SSO(OIDC):config 告诉登录页要不要露出入口;oidc/start 跳去身份服务,oidc/callback 验身份,
+	// sso 用回调留下的登录结果换网关会话。后两个与本地登录同样受 IP 白名单约束 —— 换了一扇门,
+	// 门口的规矩不变。
 	v1.GET("/auth/sso/config", h.SSOConfig)
+	v1.GET("/auth/oidc/start", middleware.IPAllowlist(repo), h.OIDCStart)
+	v1.GET("/auth/oidc/callback", middleware.IPAllowlist(repo), h.OIDCCallback)
 	// 系统名称与 LOGO:登录页未登录就要显示。只读,改走 PUT /settings(管理员)。
 	v1.GET("/auth/branding", h.Branding)
 	v1.POST("/auth/sso", middleware.IPAllowlist(repo), h.SSOLogin)

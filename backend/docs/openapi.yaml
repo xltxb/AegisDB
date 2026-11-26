@@ -745,15 +745,49 @@ paths:
   /auth/sso/config:
     get:
       tags: [auth]
-      summary: 登录页要不要露出「SRD 授权登录」入口
+      summary: 登录页要不要露出「使用 SSO 登录」入口
       description: |
-        公开接口。返回 `enabled` 与 `loginUrl`(`{SRD 地址}/auth/login`)。没有登录态时,前端跳
-        `loginUrl?redirect=<encodeURIComponent(网关登录页地址)>`,在 SRD 完成 Lark 授权后回到网关。
+        公开接口。返回 `enabled` 与 `loginUrl`(网关的发起地址 `api/v1/auth/oidc/start`,相对网关根,
+        前端按当前页面位置解析 —— 网关可能挂在子路径下)。
         `forcedOff` 为 true:部署配置(`sso.disabled` / 环境变量 `AEGISDB_SSO_DISABLED`)强制关闭了 SSO,
         此时 `enabled` 恒为 false,设置页的开关不生效。
       security: []
       responses:
         '200': { $ref: '#/components/responses/Ok' }
+  /auth/oidc/start:
+    get:
+      tags: [auth]
+      summary: 发起 SSO 登录(OIDC 授权码 + PKCE),302 到身份服务(受 IP 白名单约束)
+      description: |
+        浏览器导航用,不是 XHR 接口。网关生成 state、nonce 与 PKCE 校验串,加密写入 HttpOnly Cookie
+        `aegisdb_oidc_flow`(Path `/api/v1/auth/oidc`,10 分钟),302 到身份服务的 authorization_endpoint
+        (由 Issuer 的发现文档得到)。未启用 SSO 或身份服务不可用时,302 回 `{网关}/#/login?sso_error=disabled|exchange`。
+      security: []
+      responses:
+        '302': { description: 去身份服务,或带 sso_error 回登录页 }
+  /auth/oidc/callback:
+    get:
+      tags: [auth]
+      summary: SSO 回调:换 token、验 ID Token,跳回登录页(受 IP 白名单约束)
+      description: |
+        身份服务登录完成后回到这里(这个地址即设置里的回调地址,须原样登记到身份服务)。网关核对 state
+        (流程 Cookie 一次性,用后即清),在服务端用授权码 + PKCE 校验串换 token,按 JWKS 验 ID Token
+        (签名、iss、aud、exp、nonce),按设置的邮箱字段取邮箱 —— 字段为 `email` 时要求
+        `email_verified=true`;ID Token 里没有时取 userinfo(`sub` 须一致)。
+
+        成功:验过的身份加密写入 HttpOnly Cookie `aegisdb_sso`(Path `/api/v1/auth/sso`,5 分钟),
+        302 回 `{网关}/#/login?sso=1`,由登录页调 `POST /auth/sso` 换会话。这里不查网关账号。
+
+        失败:302 回 `{网关}/#/login?sso_error=<原因>`:`disabled` 未启用 / `state` 流程失效或不是本浏览器发起 /
+        `denied` 身份服务回了 error / `exchange` 换 token 或验 ID Token 失败、身份服务不可用 /
+        `email` 没有已验证的邮箱。`state` 与 `exchange` 记登录失败审计。
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: error, in: query, schema: { type: string } }
+      responses:
+        '302': { description: 回登录页(sso=1 或 sso_error) }
   /auth/branding:
     get:
       tags: [auth]
@@ -769,27 +803,29 @@ paths:
   /auth/sso:
     post:
       tags: [auth]
-      summary: 用 SRD 授权登录态换网关会话(受 IP 白名单与登录频控约束)
+      summary: 用 SSO 登录结果换网关会话(受 IP 白名单与登录频控约束)
       description: |
-        **只做认证,不做授权。** 登录态从 SRD 写在公司父域上的 Cookie(默认名 `CS-Token`)里取,
-        不从请求体取。网关服务端解出其中的 JWT,带 `Authorization: Bearer <jwt>` 调 SRD 的
-        `GET /api/v1/user/oauth/userinfo`,按返回的**邮箱**(不分大小写)映射到网关用户:
+        **只做认证,不做授权。** 登录结果在 `GET /auth/oidc/callback` 写下的 HttpOnly Cookie `aegisdb_sso` 里,
+        浏览器随请求带上,不从请求体取。网关按其中的**邮箱**(不分大小写)映射到网关用户:
 
-        - 网关里有这个邮箱:就是这个人,原有权限不变;第一次经 SRD 登录时记为**已绑定**,
+        - 网关里有这个邮箱:就是这个人,原有权限不变;第一次经 SSO 登录时记为**已绑定**,
           此后只能经 SSO 登录(管理员除外)。
         - 网关里没有:拒绝(`40302`),不建号 —— 账号由管理员在后台开通。
 
-        停用账号、服务账号进不来;受邀账号首登即激活。部门同步自 SRD 的 internal_department(为空时退回 department)。CS-Token 里的封装时间
-        超过 24 小时视为没有登录态(与 SRD 前端一致)。
+        停用账号、服务账号进不来;受邀账号首登即激活。已绑定 TOTP 的平台管理员要在请求体带 `mfaCode`
+        (缺码或错码回 `42800`,登录结果保留以便接着输码);其余情况登录结果用后即清。
 
-        之后的请求用网关自己签的 JWT,不再回 SRD —— 所以 SRD 那边的下线不会传过来,
-        网关会话按自己的 TTL 到期。登录这一步不再要网关的 TOTP,生产操作的步进验证照常。
+        之后的请求用网关自己签的 JWT,不再回身份服务 —— 所以身份服务那边的下线不会传过来,
+        网关会话按自己的 TTL 到期。生产操作的步进验证照常。
 
-        `40101` 不是错误:请求里没有 SRD 登录态,前端据此露出入口,不计入频控。
+        `40101` 不是错误:没有(有效的)登录结果,前端据此提示再点一次「使用 SSO 登录」,不计入频控。
       security: []
+      requestBody:
+        required: false
+        content: { application/json: { schema: { type: object, properties: { mfaCode: { type: string } } } } }
       responses:
         '200':
-          description: OK / 40101 无 SRD 登录态 / 40100 JWT 被 SRD 拒绝 / 40302 网关里未开通账号 / 40300 账号已停用或未启用 SSO / 42900 过于频繁 / 50000 SRD 不可用或 CS-Token 无法解析
+          description: OK / 40101 无登录结果 / 40302 网关里未开通账号 / 40300 账号已停用或未启用 SSO / 42800 需 MFA 验证码 / 42900 过于频繁
           content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
   /auth/logout:
     post:
@@ -2060,8 +2096,8 @@ paths:
       tags: [users]
       summary: '[perms · admin] 解除一个账号的 SSO 绑定,恢复口令登录'
       description: |
-        绑定发生在这个人第一次经 SRD 授权登录、邮箱对上网关账号的时候。解绑后他可以重新用
-        口令登录;下次再经 SRD 登录会重新绑定。
+        绑定发生在这个人第一次经 SSO 登录、邮箱对上网关账号的时候。解绑后他可以重新用
+        口令登录;下次再经 SSO 登录会重新绑定。
       parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
       responses: { '200': { $ref: '#/components/responses/Ok' } }
   /users/invite:
