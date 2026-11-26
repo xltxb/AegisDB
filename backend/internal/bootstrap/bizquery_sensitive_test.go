@@ -153,8 +153,13 @@ func TestBizQuery_Columns(t *testing.T) {
 	if r, _ := get("other_db", "orders"); r.Code != 40300 {
 		t.Errorf("没有授权的库应 40300,实际 %d", r.Code)
 	}
-	if r, _ := get(b.db, "other_db.orders"); r.Code != 40300 {
-		t.Errorf("限定名指向别的库应 40300,实际 %d", r.Code)
+	// PostgreSQL 的限定名是库里面的 schema,不是"别的库"(跨库检查只做 MySQL 系 / Oracle):
+	// 指向一个不存在的 schema 不拒绝,但也不能读出别处的列。
+	if r, cols := get(b.db, "other_db.orders"); r.Code != 0 || len(cols) != 0 {
+		t.Errorf("限定名 other_db 在 PG 上只是个不存在的 schema:应 0 且无列,实际 %d %v", r.Code, cols)
+	}
+	if r, _ := get(b.db, "pg_catalog.pg_class"); r.Code != 40300 {
+		t.Errorf("系统 schema 应 40300,实际 %d", r.Code)
 	}
 	if r, _ := get(b.db, "information_schema.columns"); r.Code != 40300 {
 		t.Errorf("系统库应 40300,实际 %d", r.Code)
@@ -170,5 +175,32 @@ func TestBizQuery_Columns(t *testing.T) {
 	_ = json.Unmarshal(b.app.do(http.MethodGet, "/api/v1/bizquery/tables?sourceId="+itoa(b.source)+"&database="+b.db, b.user, nil).Data, &tl)
 	if strings.Join(tl.Tables, ",") != "notes,orders" || tl.Quote == "" {
 		t.Errorf("表下拉应照旧并带 quote,实际 %+v", tl)
+	}
+}
+
+// MySQL 系 / Oracle:限定名必须就是授权的那个库 —— 别的库连列名都不该看到。这条判定在
+// 连目标库之前,所以一个连不上的 MySQL 查询源(缓存里有库名,可授权)就够钉住它。
+func TestBizQuery_Columns_QualifierMustBeTheGrantedDatabaseOnMySQL(t *testing.T) {
+	b := newBizEnv(t, 0)
+	src := b.newRealSource(t, "mysql-down", map[string]any{
+		"engine": "MySQL 8.0", "host": "127.0.0.1", "port": 1, "username": "u", "password": "p",
+	})
+	b.seedMeta(t, src, "granted_db")
+	body := b.body("biz@corp.io", "OA-MYSQL-1")
+	body["sourceId"], body["database"] = src, "granted_db"
+	eq(t, b.put(body).Code, 0, "缓存里的库能授权(实例连不上时退回缓存)")
+
+	get := func(table string) apiResp {
+		return b.app.do(http.MethodGet, "/api/v1/bizquery/columns?sourceId="+itoa(src)+"&database=granted_db&table="+table, b.user, nil)
+	}
+	if r := get("other_db.orders"); r.Code != 40300 {
+		t.Errorf("限定名指向别的库应 40300,实际 %d %s", r.Code, r.Msg)
+	}
+	if r := get("information_schema.columns"); r.Code != 40300 {
+		t.Errorf("系统库应 40300,实际 %d", r.Code)
+	}
+	// 限定名就是授权的库:不被拒绝(连不上只回 0 + Error,不是 40300)
+	if r := get("granted_db.orders"); r.Code == 40300 {
+		t.Errorf("限定名等于授权库不该被拒,实际 %d", r.Code)
 	}
 }

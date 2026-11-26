@@ -7,15 +7,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/chat"
 	"aegisdb/internal/model"
@@ -24,17 +21,9 @@ import (
 
 func cardDB(t *testing.T) (*Services, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "cards.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		sqlDB.SetMaxOpenConns(1)
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.Approval{}, &model.ApprovalStep{}, &model.Setting{}, &model.User{},
-		&model.ChatBinding{}, &model.ChatCard{}, &model.ExecWindow{}, &model.ExecWindowDB{}); err != nil {
-		t.Fatal(err)
+	db := openStore(t)
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1) // 单连接:占住它的事务就能让"库挂住"(见 TestLarkClick_AnswersWhileStoreIsStuck)
 	}
 	return &Services{Repo: repository.New(db)}, db
 }

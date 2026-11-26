@@ -11,7 +11,7 @@ import (
 func TestApprovedScript_RunsEveryStatement(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "script-all")
+	dev, prod := app.sameDBConns(admin, "script-all")
 
 	var b strings.Builder
 	b.WriteString("DROP TABLE IF EXISTS t_old;\n\n")

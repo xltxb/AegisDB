@@ -395,8 +395,13 @@ cd frontend && npm run test:e2e
 | 前端 e2e | 101 个文件、432 个用例 | 真实浏览器，接口打桩，使用独立端口 5174 |
 
 - `-timeout 30m` 不能省：`internal/bootstrap` 整包耗时较长，慢机器会超过 Go 默认的 10 分钟。
-- 需要真实数据库的用例默认跳过，设置 `AEGISDB_TEST_MYSQL`、`AEGISDB_TEST_PG`、
-  `AEGISDB_TEST_ORACLE`、`AEGISDB_TEST_STORE_PG`、`AEGISDB_OSC_TEST_DSN` 等变量后启用。
+- 后端测试需要本机装有 PostgreSQL ≥ 13 的程序（`initdb` / `pg_ctl` / `postgres`）：macOS `brew install postgresql@18`，
+  Linux 用发行版软件包，Windows 用官方安装包。测试会自己在 127.0.0.1 上启动临时实例；找不到程序时**失败**而不是跳过，
+  `AEGISDB_TEST_PG_BIN` 可指定程序所在目录。`initdb` 不能以 root 运行（容器里常见），请用非 root 用户。
+- `AEGISDB_TEST_STORE_PG`（libpq `key=value` 串，不含 dbname）可指向一台可随意使用的 PostgreSQL，此时不再启动临时实例；
+  测试只在其上创建并删除自己的 `aegis_t_*` 库。
+- 其余需要真实外部数据库的用例仍默认跳过，设置 `AEGISDB_TEST_MYSQL`、`AEGISDB_TEST_PG`、
+  `AEGISDB_TEST_ORACLE`、`AEGISDB_OSC_TEST_DSN` 等变量后启用。
 
 ### 开发约定
 

@@ -2,33 +2,21 @@ package gateway
 
 import (
 	"context"
-	"database/sql"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"aegisdb/internal/model"
 )
 
-// RealSchema must introspect a live target's tables. We build a throwaway SQLite
-// file with two tables and assert the introspection groups them under one database.
-func TestRealSchema_SQLiteIntrospectsTables(t *testing.T) {
-	dbfile := filepath.Join(t.TempDir(), "target.db")
-	sdb, err := sql.Open("sqlite", dbfile)
-	if err != nil {
-		t.Fatalf("open target sqlite: %v", err)
-	}
-	for _, ddl := range []string{
-		"CREATE TABLE customers(id INTEGER PRIMARY KEY, name TEXT)",
-		"CREATE TABLE orders(id INTEGER PRIMARY KEY, amount REAL)",
-	} {
-		if _, err := sdb.Exec(ddl); err != nil {
-			t.Fatalf("seed target: %v", err)
-		}
-	}
-	sdb.Close()
-
-	conn := &model.Connection{Engine: "SQLite", Database: dbfile, Name: "target"}
+// RealSchema must introspect a live target's tables. We build a throwaway PostgreSQL
+// database with two tables and assert the introspection groups them under one database.
+func TestRealSchema_PostgreSQLIntrospectsTables(t *testing.T) {
+	conn := pgTarget(t)
+	conn.Name = "target"
+	pgExec(t, conn,
+		"CREATE TABLE customers(id serial PRIMARY KEY, name text)",
+		"CREATE TABLE orders(id serial PRIMARY KEY, amount real)",
+	)
 	groups, err := RealSchema(conn)
 	if err != nil {
 		t.Fatalf("RealSchema: %v", err)
@@ -37,31 +25,29 @@ func TestRealSchema_SQLiteIntrospectsTables(t *testing.T) {
 		t.Fatalf("expected 1 database group, got %d", len(groups))
 	}
 	tables := map[string]bool{}
-	for _, tb := range groups[0].Tables {
-		tables[tb] = true
+	// PostgreSQL's tree is database -> schemas -> tables; the seeded tables live in public.
+	for _, sc := range groups[0].Schemas {
+		if sc.Name != "public" {
+			continue
+		}
+		for _, tb := range sc.Tables {
+			tables[tb] = true
+		}
 	}
-	if !tables["customers"] || !tables["orders"] {
-		t.Errorf("expected customers+orders tables, got %v", groups[0].Tables)
+	if groups[0].Database != conn.Database || !tables["customers"] || !tables["orders"] {
+		t.Errorf("expected customers+orders under public of %s, got %+v", conn.Database, groups[0])
 	}
 }
 
 // RealRun must return the target's actual result set (columns + rows), not just a
 // count — that is what lets the terminal show real data instead of a synthesis.
-func TestRealRun_SQLiteReturnsResultSet(t *testing.T) {
-	dbfile := filepath.Join(t.TempDir(), "target.db")
-	sdb, err := sql.Open("sqlite", dbfile)
-	if err != nil {
-		t.Fatalf("open target sqlite: %v", err)
-	}
-	if _, err := sdb.Exec("CREATE TABLE t(id INTEGER, name TEXT)"); err != nil {
-		t.Fatalf("ddl: %v", err)
-	}
-	if _, err := sdb.Exec("INSERT INTO t VALUES (1,'alice'),(2,'bob')"); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-	sdb.Close()
-
-	conn := &model.Connection{Engine: "SQLite", Database: dbfile, Name: "t"}
+func TestRealRun_PostgreSQLReturnsResultSet(t *testing.T) {
+	conn := pgTarget(t)
+	conn.Name = "t"
+	pgExec(t, conn,
+		"CREATE TABLE t(id integer, name text)",
+		"INSERT INTO t VALUES (1,'alice'),(2,'bob')",
+	)
 	res, err := RealRun(context.Background(), conn, "SELECT id, name FROM t ORDER BY id", 30*time.Second)
 	if err != nil {
 		t.Fatalf("RealRun: %v", err)

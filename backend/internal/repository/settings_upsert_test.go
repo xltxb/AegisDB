@@ -5,17 +5,12 @@ import (
 	"testing"
 
 	"gorm.io/gorm"
-
-	"aegisdb/internal/model"
 )
 
 // 设置一句写成:先 UPDATE、落空再 INSERT 的写法,在 MySQL 上对不存在的键会各持一把间隙锁,两次保存随后的
 // INSERT 互相等待而死锁。
 func TestSetSettings_SingleUpsert(t *testing.T) {
 	r := newApprovalRepo(t)
-	if err := r.db.AutoMigrate(&model.Setting{}); err != nil {
-		t.Fatal(err)
-	}
 	updates := 0
 	if err := r.db.Callback().Update().Before("gorm:update").Register("test:count", func(*gorm.DB) { updates++ }); err != nil {
 		t.Fatal(err)

@@ -4,7 +4,8 @@ package bootstrap
 // 搬到一个空的 PG 库,网关在 PG 上起来后,接口看到的东西与在 MySQL 上一模一样。
 //
 //	AEGISDB_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
-//	AEGISDB_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
+//
+// PG 一侧是 testpg 起的临时实例(设了 AEGISDB_TEST_STORE_PG 就用那台)。
 
 import (
 	"context"
@@ -20,23 +21,23 @@ import (
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
 	"aegisdb/internal/service"
+	"aegisdb/internal/sqlmigrate"
 	"aegisdb/internal/storemigrate"
+	"aegisdb/internal/testpg"
 	"aegisdb/pkg/crypto"
 )
 
 type storePair struct {
 	myDSN, pgDSN string
 	my           *sql.DB
-	pgAdmin      *sql.DB
-	pgName       string
 }
 
 // newStorePair 建一个迁移 + 播种 + 夹具都齐了的 MySQL 存储库,和一个空的 PG 库。
 func newStorePair(t *testing.T) *storePair {
 	t.Helper()
-	myBase, pgBase := os.Getenv("AEGISDB_TEST_STORE_MYSQL"), os.Getenv("AEGISDB_TEST_STORE_PG")
-	if myBase == "" || pgBase == "" {
-		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL 与 AEGISDB_TEST_STORE_PG")
+	myBase := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
+	if myBase == "" {
+		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL")
 	}
 	p := &storePair{}
 	myName := fmt.Sprintf("vt_msrc_%d_%d", os.Getpid(), time.Now().UnixNano()%1e6)
@@ -58,16 +59,7 @@ func newStorePair(t *testing.T) *storePair {
 		s.Close()
 	}
 
-	p.pgName = fmt.Sprintf("vt_mdst_%d_%d", os.Getpid(), time.Now().UnixNano()%1e6)
-	if p.pgAdmin, err = pgAdmin(pgBase); err != nil {
-		t.Fatal(err)
-	}
-	_, _ = p.pgAdmin.Exec("DROP DATABASE IF EXISTS " + p.pgName + " WITH (FORCE)")
-	if _, err := p.pgAdmin.Exec("CREATE DATABASE " + p.pgName); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { p.pgAdmin.Exec("DROP DATABASE IF EXISTS " + p.pgName + " WITH (FORCE)"); p.pgAdmin.Close() })
-	p.pgDSN = pgBase + " dbname=" + p.pgName
+	_, p.pgDSN = testpg.NewDB(t)
 	return p
 }
 
@@ -86,7 +78,7 @@ func (p *storePair) appOnPG(t *testing.T) *testApp {
 func (p *storePair) migrate(t *testing.T, mod func(*storemigrate.Options)) (*storemigrate.Report, error) {
 	t.Helper()
 	o := storemigrate.Options{
-		MySQLDSN: p.myDSN, PostgresDSN: p.pgDSN, Workers: 3, ApplySchema: RunSQLMigrations,
+		MySQLDSN: p.myDSN, PostgresDSN: p.pgDSN, Workers: 3, ApplySchema: sqlmigrate.Run,
 		Log: func(f string, a ...any) { t.Logf(f, a...) },
 	}
 	if mod != nil {

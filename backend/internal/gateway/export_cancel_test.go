@@ -2,40 +2,24 @@ package gateway
 
 import (
 	"context"
-	"database/sql"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
-
-	"aegisdb/internal/model"
 )
 
-// 导出任务被人终止 = 调用方取消了 RealQueryEach 的 context。取消必须真的让查询停下:
-// 函数立即返回,目标库上的语句也结束 —— 否则"终止"只是界面上不再显示。
+// 导出任务被人终止 = 调用方取消了 RealQueryEach 的 context。取消必须让函数立即返回,
+// 否则"终止"只是界面上不再显示。目标库上的语句是否结束,本文件只对 MySQL 验证(processlist);
+// PostgreSQL 这条只证明客户端立即返回并报取消。
 
-// SQLite:流式读取的查询在取消后下一行就停。
-//
-// 已知边界:glebarez/go-sqlite 只在准备语句时响应 context,逐行 step 时不理会 —— 一条要先算完
-// 才出第一行的查询(如对 2 亿行的 COUNT(*))取消后仍会在库里算完。SQLite 只用于开发 / 演示;
-// 生产引擎(MySQL 系、PostgreSQL、Oracle)的取消都会让目标库上的语句停下(见本文件与 killquery_test)。
-func TestRealQueryEach_CancelStopsSQLite(t *testing.T) {
-	file := filepath.Join(t.TempDir(), "c.db")
-	db, err := sql.Open("sqlite", file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("CREATE TABLE t (n INTEGER)"); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	conn := &model.Connection{Name: "sqlite-cancel", Engine: "SQLite", Database: file}
+// PostgreSQL:取消后 RealQueryEach 立即返回 context.Canceled(不检查库端语句)。
+func TestRealQueryEach_CancelStopsPostgreSQL(t *testing.T) {
+	conn := pgTarget(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(300*time.Millisecond, cancel)
 	start := time.Now()
-	err = RealQueryEach(ctx, conn,
-		"WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 500000000) SELECT x FROM c",
+	err := RealQueryEach(ctx, conn,
+		"SELECT pg_sleep(30)",
 		10*time.Minute, func([]string) error { return nil }, func([]string) error { return nil })
 	if err == nil {
 		t.Fatal("被取消的查询应当报错")

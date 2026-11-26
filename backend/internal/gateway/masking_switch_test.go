@@ -11,10 +11,10 @@ import (
 // 不打就照旧打码。
 func TestMaskingOff_TerminalAndExportGivePlaintext(t *testing.T) {
 	withIDCardRule(t)
-	conn := sqliteConn(t)
+	conn := pgTarget(t)
 	const plain = "310101199001011234"
 	ctx := context.Background()
-	for _, s := range []string{"CREATE TABLE t_person (id INTEGER PRIMARY KEY, id_card TEXT)", "INSERT INTO t_person VALUES (1, '" + plain + "')"} {
+	for _, s := range []string{"CREATE TABLE t_person (id integer PRIMARY KEY, id_card text)", "INSERT INTO t_person VALUES (1, '" + plain + "')"} {
 		if _, err := RealRun(ctx, conn, s, 5*time.Second); err != nil {
 			t.Fatal(err)
 		}

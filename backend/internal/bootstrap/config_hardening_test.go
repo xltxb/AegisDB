@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 
 	"aegisdb/internal/repository"
@@ -94,19 +93,8 @@ func TestIsKnownEnv(t *testing.T) {
 func TestSeed_RefusesToPlantDemoDataInProduction(t *testing.T) {
 	cfg := &Config{}
 	cfg.Env = "prod"
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "prod-seed.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
-
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	repo := repository.New(db)
+	repo := repository.New(migratedStore(t, cfg))
 
 	if err := Seed(repo, cfg); err == nil {
 		t.Error("seeding a production database silently succeeded")
@@ -123,18 +111,8 @@ func TestSeed_RefusesNonLocalEnvs(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			cfg := &Config{EnvRaw: raw}
 			cfg.Env = "dev"
-			cfg.Database.Driver = "sqlite"
-			cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "seed.db")
-			cfg.Database.AutoMigrate = true
 			cfg.Database.Seed = true
-			db, err := OpenDB(cfg)
-			if err != nil {
-				t.Fatalf("open db: %v", err)
-			}
-			if sqlDB, derr := db.DB(); derr == nil {
-				t.Cleanup(func() { sqlDB.Close() })
-			}
-			repo := repository.New(db)
+			repo := repository.New(migratedStore(t, cfg))
 			if err := Seed(repo, cfg); err == nil {
 				t.Error("非本地环境种演示数据不应成功")
 			}

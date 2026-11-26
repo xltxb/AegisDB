@@ -62,7 +62,7 @@ func (a *testApp) seesApprovalRow(token string, id int64) (seen, canExec bool) {
 func TestApprovedCommand_PeerWithAccessMayExecute(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "peer-run") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "peer-run") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_run (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -97,7 +97,7 @@ func TestApprovedCommand_PeerWithAccessMayExecute(t *testing.T) {
 func TestApprovedCommand_ReadOnlyPeerStillDenied(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "peer-ro")
+	dev, conn := app.sameDBConns(admin, "peer-ro")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_ro (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -122,7 +122,7 @@ func TestApprovedCommand_ReadOnlyPeerStillDenied(t *testing.T) {
 func TestApprovedCommand_PeerWithoutAccessNeitherSeesNorRuns(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "peer-notag")
+	dev, conn := app.sameDBConns(admin, "peer-notag")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_notag (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -151,7 +151,7 @@ func TestApprovedCommand_PeerWithoutAccessNeitherSeesNorRuns(t *testing.T) {
 func TestApprovedScript_ReadOnlyPeerStillDenied(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "peer-script")
+	dev, conn := app.sameDBConns(admin, "peer-script")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_peer_script (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

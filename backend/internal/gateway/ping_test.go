@@ -13,16 +13,15 @@ package gateway
 //   连得上的当然要报可连 —— 否则上面两条可以靠"永远返回 false"作弊通过。
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"aegisdb/internal/model"
 )
 
-// 真的能连:一个真实存在的 SQLite 文件。
+// 真的能连:一个真实存在的 PostgreSQL 库。
 func TestRealPing_ReachableTargetSaysOK(t *testing.T) {
-	conn := &model.Connection{Engine: "SQLite", Database: filepath.Join(t.TempDir(), "ping.db")}
+	conn := pgTarget(t)
 	ok, msg := RealPing(conn)
 	if !ok {
 		t.Fatalf("可连的目标应当报可连:%s", msg)
@@ -71,7 +70,7 @@ func TestExecutorTest_UsesTheRealProbe(t *testing.T) {
 	if ok, _ := x.Test(bad); ok {
 		t.Error("Executor.Test 仍然在说好话")
 	}
-	good := &model.Connection{Engine: "SQLite", Database: filepath.Join(t.TempDir(), "ok.db")}
+	good := pgTarget(t)
 	if ok, msg := x.Test(good); !ok {
 		t.Errorf("可连的目标应当报可连:%s", msg)
 	}

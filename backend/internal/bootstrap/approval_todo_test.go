@@ -63,7 +63,7 @@ func TestApprovalTodo_FollowsTheTicketToWhoeverMustActNext(t *testing.T) {
 	// 各人的待办差多少。
 	base := map[string]todoView{"admin": app.todoOf(admin), "approver": app.todoOf(approver), "outsider": app.todoOf(outsider)}
 
-	dev, conn := app.sameFileConns(admin, "todo") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "todo") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_todo (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

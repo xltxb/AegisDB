@@ -12,25 +12,40 @@ package gateway
 // 发生在 ping 成功之后。树在同样的情况下会列出服务器上的库(RealSchema 的 pg 分支),
 // 只有同步这一条路把自己挡住了,而原来的注释还写着"与树的浏览口径一致"。
 //
-// 能真跑的引擎只有 SQLite,所以这里钉的不是"读到了什么",而是**它去做了哪件事**:
+// 这里用一个对任何查询都报错的桩驱动,所以钉的不是"读到了什么",而是**它去做了哪件事**:
 // 拿到一个不认识 pg_database 的库时,错必须来自那条枚举查询,而不是那句拒绝。
 // 真机验收仍然欠着(见 issue 24)—— 这条用例挡的是"有人把 guard 加回来"。
 
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"aegisdb/internal/model"
 )
 
-// 打开一个真的 SQLite 库当作"连得上、但不是 PostgreSQL"的目标。
+// notPGDriver 是"连得上、但不是 PostgreSQL"的桩:能建连接,任何查询都报"关系不存在"
+// (就像在一个没有 pg_database / pg_class 的库上那样)。
+type notPGDriver struct{}
+
+func (notPGDriver) Open(string) (driver.Conn, error) { return notPGConn{}, nil }
+
+type notPGConn struct{}
+
+func (notPGConn) Prepare(q string) (driver.Stmt, error) {
+	return nil, errors.New(`relation does not exist: ` + q)
+}
+func (notPGConn) Close() error              { return nil }
+func (notPGConn) Begin() (driver.Tx, error) { return nil, errors.New("no tx") }
+
+func init() { sql.Register("aegis-notpg", notPGDriver{}) }
+
 func notPGHandle(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "notpg.db"))
+	db, err := sql.Open("aegis-notpg", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +57,7 @@ func TestRealMetadataPG_NoDatabaseEnumeratesInsteadOfRefusing(t *testing.T) {
 	conn := &model.Connection{Engine: "dws", Database: "", Host: "10.0.0.1", Port: 8000, Username: "u", Password: "p"}
 	_, _, err := realMetadataPG(context.Background(), notPGHandle(t), conn)
 	if err == nil {
-		t.Fatal("拿 SQLite 当 PG 探查不该成功")
+		t.Fatal("拿非 PG 的库当 PG 探查不该成功")
 	}
 	if strings.Contains(err.Error(), "需要在连接上指定数据库") {
 		t.Fatalf("那道拒绝被加回来了 —— 没配库名时应当去枚举实例上的库:%v", err)
@@ -57,7 +72,7 @@ func TestRealMetadataPG_WithDatabaseProbesThatOneOnly(t *testing.T) {
 	conn := &model.Connection{Engine: "dws", Database: "appdb"}
 	_, _, err := realMetadataPG(context.Background(), notPGHandle(t), conn)
 	if err == nil {
-		t.Fatal("拿 SQLite 当 PG 探查不该成功")
+		t.Fatal("拿非 PG 的库当 PG 探查不该成功")
 	}
 	// 配了库名时不该去列库:错必须来自表清单那条查询(pg_class),不是 pg_database。
 	if strings.Contains(err.Error(), "列出实例上的库失败") {

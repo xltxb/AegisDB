@@ -10,11 +10,11 @@ import (
 //
 // 从前脚本执行不看每条的结果,失败的语句照样计数,终端显示"脚本执行成功 · N 条语句"。
 // 生产上 \i PK_AGENT.pck 报成功,包体却是 INVALID(那一例是 Oracle 编译错误,
-// 见 gateway/oracle_create_errors.go;这里用 SQLite 的普通执行错误钉住脚本这一层)。
+// 见 gateway/oracle_create_errors.go;这里用 PostgreSQL 的普通执行错误钉住脚本这一层)。
 func TestScript_StopsAtTheFirstFailingStatement(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev := app.realSQLiteConnIn(admin, "dev", "script-stop")
+	dev := app.realPGConnIn(admin, "dev", "script-stop")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", admin, map[string]any{

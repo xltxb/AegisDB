@@ -2,7 +2,7 @@ package bootstrap
 
 // 业务方数据查询 · 执行判定(第三期)。
 //
-// 用一个真实的 SQLite 实例跑端到端:业务方的查询权只来自授权,只能跑单条只读语句,结果有
+// 用一个真实的 PostgreSQL 临时库跑端到端:业务方的查询权只来自授权,只能跑单条只读语句,结果有
 // 行数上限,授权撤销 / 实例取消标记立即生效,审计写明凭的是哪条授权。跨库与超时要真实的
 // MySQL(设置 AEGISDB_TEST_MYSQL 时运行)。
 
@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -37,7 +36,7 @@ type bizEnv struct {
 	uid  int64
 }
 
-// newBizEnv 建一个真实 SQLite 业务查询源(orders 表 1500 行),下发授权给 biz@corp.io 并让他登录。
+// newBizEnv 建一个真实 PostgreSQL 业务查询源(orders 表 1500 行),下发授权给 biz@corp.io 并让他登录。
 func newBizEnv(t *testing.T, maxRows int) *bizEnv {
 	t.Helper()
 	return newBizEnvIn(t, maxRows, "prod")
@@ -46,24 +45,13 @@ func newBizEnv(t *testing.T, maxRows int) *bizEnv {
 // newBizEnvIn 是 newBizEnv,查询源挂在 env 环境上(分层开关按环境所属的分层生效)。
 func newBizEnvIn(t *testing.T, maxRows int, env string) *bizEnv {
 	t.Helper()
-	file := filepath.Join(t.TempDir(), "biz.db")
-	raw, err := sql.Open("sqlite", file)
-	if err != nil {
-		t.Fatal(err)
+	setup := []string{
+		`CREATE TABLE orders (id INTEGER PRIMARY KEY, amount INTEGER)`,
+		`CREATE TABLE notes (id INTEGER, t TEXT)`,
+		`INSERT INTO notes VALUES (1, '=HYPERLINK("http://evil","x")'), (2, 'plain')`,
+		`INSERT INTO orders SELECT i, i*10 FROM generate_series(1, 1500) AS i`,
 	}
-	if _, err := raw.Exec(`CREATE TABLE orders (id INTEGER PRIMARY KEY, amount INTEGER)`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := raw.Exec(`CREATE TABLE notes (id INTEGER, t TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	_, _ = raw.Exec(`INSERT INTO notes VALUES (1, '=HYPERLINK("http://evil","x")'), (2, 'plain')`)
-	tx, _ := raw.Begin()
-	for i := 1; i <= 1500; i++ {
-		_, _ = tx.Exec(`INSERT INTO orders VALUES (?, ?)`, i, i*10)
-	}
-	_ = tx.Commit()
-	raw.Close()
+	database := newTargetDB(t, setup...)
 
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
@@ -71,11 +59,9 @@ func newBizEnvIn(t *testing.T, maxRows int, env string) *bizEnv {
 	sa := app.createServiceAccount(admin, "审批系统", []int64{owner.ID}, nil).Email
 	e := &grantEnv{app: app, admin: admin, sa: sa}
 	e.token = app.issueClient(admin, "审批系统", sa, []string{"grant:read", "grant:write"})
-	r := app.do(http.MethodPost, "/api/v1/connections", admin, map[string]any{
-		"name": "biz-sqlite", "engine": "SQLite", "host": "localhost:0", "env": env, "policy": "audit-only", "database": file,
-	})
+	r := app.do(http.MethodPost, "/api/v1/connections", admin, targetConnBody(t, "biz-pg", env, database))
 	if r.Code != 0 {
-		t.Fatalf("create sqlite conn: %s", r.Msg)
+		t.Fatalf("create pg conn: %s", r.Msg)
 	}
 	var c struct {
 		ID int64 `json:"id"`
@@ -86,7 +72,7 @@ func newBizEnvIn(t *testing.T, maxRows int, env string) *bizEnv {
 	var dbs []string
 	_ = json.Unmarshal(app.do(http.MethodGet, "/api/v1/open/query-sources/"+itoa(e.source)+"/databases", e.token, nil).Data, &dbs)
 	if len(dbs) == 0 {
-		t.Fatal("SQLite 业务查询源应列得出库名")
+		t.Fatal("PostgreSQL 业务查询源应列得出库名")
 	}
 	e.db = dbs[0]
 
@@ -198,7 +184,7 @@ func TestBizQuery_RevokeAndUnmarkTakeEffectImmediately(t *testing.T) {
 		} `json:"grants"`
 	}
 	_ = json.Unmarshal(b.app.do(http.MethodGet, "/api/v1/bizquery/grants", b.user, nil).Data, &mine)
-	if len(mine.Grants) != 1 || mine.Grants[0].Source != "biz-sqlite" {
+	if len(mine.Grants) != 1 || mine.Grants[0].Source != "biz-pg" {
 		t.Fatalf("我的授权应列出这一条,实际 %+v", mine.Grants)
 	}
 

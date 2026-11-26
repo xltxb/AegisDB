@@ -1,12 +1,7 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
-
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 	"aegisdb/pkg/crypto"
@@ -15,16 +10,7 @@ import (
 func newUserRepo(t *testing.T) (*Repo, *model.User) {
 	t.Helper()
 	crypto.SetSecretKey("mfa-cas-test")
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "u.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.User{}); err != nil {
-		t.Fatal(err)
-	}
+	db := openStore(t)
 	u := &model.User{Email: "a@x.io", Name: "A"}
 	if err := db.Create(u).Error; err != nil {
 		t.Fatal(err)

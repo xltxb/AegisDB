@@ -10,11 +10,7 @@ import (
 
 func newChatRepo(t *testing.T) *Repo {
 	t.Helper()
-	r := newApprovalRepo(t)
-	if err := r.db.AutoMigrate(&model.ChatBinding{}, &model.ChatBindCode{}, &model.ChatCard{}); err != nil {
-		t.Fatal(err)
-	}
-	return r
+	return newApprovalRepo(t)
 }
 
 // 决定的渠道与原因和状态在同一条 UPDATE 里写:抢输的一方一个字段都碰不到赢家的行。

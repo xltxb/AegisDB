@@ -34,12 +34,12 @@ func (a *testApp) ticketByNo(token, apNo string) apOutcome {
 func TestApprovalExec_RunningWhileTheCommandIsOnTheDatabase(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "exec-running")
+	dev, prod := app.sameDBConns(admin, "exec-running")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_slow (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
-	// DROP 让这一批被拦下走审批;后面那条递归查询要在 sqlite 上跑一两秒
-	slow := `DROP TABLE t_slow; SELECT count(*) FROM (WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 3000000) SELECT x FROM c)`
+	// DROP 让这一批被拦下走审批;后面那条 pg_sleep 要在目标库上跑一两秒
+	slow := `DROP TABLE t_slow; SELECT pg_sleep(2)`
 	ap := app.interceptedTicket(admin, prod, slow)
 	approver := app.login("zhangwei@aegisdb.io", "aegisdb123")
 	if r := app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil); r.Code != 0 {

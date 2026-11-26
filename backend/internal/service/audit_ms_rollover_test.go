@@ -4,7 +4,7 @@ package service
 // 行读回来进到下一秒,秒级的哈希载荷就对不上了。这里把时钟钉在这些时刻上写审计,再用网关
 // 自己的 VerifyAuditChain 校验。
 //
-// 真 MySQL 的用例要设 AEGISDB_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑;SQLite 的用例总跑,
+// 真 MySQL 的用例要设 AEGISDB_TEST_STORE_MYSQL=user:pw@tcp(host:port)/ 才跑;PostgreSQL 的用例总跑,
 // 守住"写进去的时间已经截到毫秒"这一条。
 
 import (
@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
+	"aegisdb/internal/sqlmigrate"
+	"aegisdb/migrations"
 	"aegisdb/pkg/crypto"
 )
 
@@ -76,13 +77,7 @@ func assertRolloverChain(t *testing.T, g *gorm.DB, s *Services, want []time.Time
 
 func TestAppendAudit_SubMillisecondTruncatedBeforeHash(t *testing.T) {
 	crypto.SetSecretKey("test-secret")
-	g, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := g.AutoMigrate(&model.AuditLog{}); err != nil {
-		t.Fatal(err)
-	}
+	g := openStore(t)
 	s := NewForOps(repository.New(g))
 	assertRolloverChain(t, g, s, writeRolloverChain(t, s))
 }
@@ -113,8 +108,8 @@ func TestAppendAudit_MillisecondRolloverKeepsChain_RealMySQL(t *testing.T) {
 	if s, e := g.DB(); e == nil {
 		defer s.Close()
 	}
-	// 与迁移 0001 同列型:DATETIME(3)。
-	if err := g.AutoMigrate(&model.AuditLog{}); err != nil {
+	// 生产迁移建表:occurred_at 是 DATETIME(3)。
+	if err := sqlmigrate.Run(g, migrations.FS); err != nil {
 		t.Fatal(err)
 	}
 	var colType string
@@ -175,16 +170,10 @@ func legacyRow(t *testing.T, g *gorm.DB, prev string, hashAt, storedAt time.Time
 	return a.Hash
 }
 
-func sqliteAuditStore(t *testing.T) (*gorm.DB, *Services) {
+func pgAuditStore(t *testing.T) (*gorm.DB, *Services) {
 	t.Helper()
 	crypto.SetSecretKey("test-secret")
-	g, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := g.AutoMigrate(&model.AuditLog{}); err != nil {
-		t.Fatal(err)
-	}
+	g := openStore(t)
 	return g, NewForOps(repository.New(g))
 }
 
@@ -207,7 +196,7 @@ func TestVerifyAuditChain_RolloverTolerance(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			g, s := sqliteAuditStore(t)
+			g, s := pgAuditStore(t)
 			h := legacyRow(t, g, "", sec, sec, nil) // 一行正常的
 			h = legacyRow(t, g, h, frac, c.storedAt, c.edit)
 			legacyRow(t, g, h, sec.Add(time.Minute), sec.Add(time.Minute), nil) // 后面再接一行正常的
@@ -230,7 +219,7 @@ func TestVerifyAuditChain_RolloverTolerance(t *testing.T) {
 
 // 正常写出来的链不该动用这条放宽。
 func TestVerifyAuditChain_NoRolloverOnCleanChain(t *testing.T) {
-	g, s := sqliteAuditStore(t)
+	g, s := pgAuditStore(t)
 	writeRolloverChain(t, s)
 	rep, err := s.VerifyAuditChain(0)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"aegisdb/internal/repository"
 	"aegisdb/internal/middleware"
 	"aegisdb/internal/service"
+	"aegisdb/internal/sqlmigrate"
 	"aegisdb/internal/storemigrate"
 	"aegisdb/pkg/crypto"
 	"aegisdb/pkg/jwt"
@@ -419,7 +420,7 @@ func runMigrateStore(args []string) {
 	rep, err := storemigrate.Run(context.Background(), storemigrate.Options{
 		MySQLDSN: *from, PostgresDSN: *to, Workers: *workers, Reset: *reset, Estimate: *estimate,
 		AcceptBrokenChain: *acceptBroken,
-		ApplySchema:       bootstrap.RunSQLMigrations,
+		ApplySchema:       sqlmigrate.Run,
 		Log:         func(f string, a ...any) { fmt.Printf(f+"\n", a...) },
 	})
 	if rep != nil && !*estimate {

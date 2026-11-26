@@ -4,18 +4,17 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
+	"aegisdb/internal/sqlmigrate"
+	"aegisdb/migrations"
 )
 
 // 2026-11:带 GORM 标签 default:true 的布尔列,建行时传 false 会被 GORM 换成 true ——
@@ -23,27 +22,13 @@ import (
 // 发布流程、审查规则、Webhook 首次保存都能从界面 / 接口带着 enabled=false 建行。
 //
 // 每条建行入口都建一条停用的,读回来必须是停用的;再建一条启用的,读回来必须是启用的。
-// 存储库覆盖 SQLite,以及设了 AEGISDB_TEST_STORE_MYSQL / AEGISDB_TEST_STORE_PG 时的真库。
-
-var disabledModels = []any{
-	&model.ExecWindow{}, &model.ExecWindowDB{}, &model.WebhookConfig{}, &model.SQLReviewRule{},
-	&model.SensitiveColumn{}, &model.APIClient{}, &model.Pipeline{}, &model.PipelineStage{},
-}
+// 存储库覆盖 PostgreSQL(生产迁移建表),以及设了 AEGISDB_TEST_STORE_MYSQL 时的 MySQL。
 
 func disabledStores(t *testing.T) map[string]*Repo {
 	t.Helper()
-	gcfg := &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}
-	out := map[string]*gorm.DB{}
-	lite, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "store.db")), gcfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s, e := lite.DB(); e == nil {
-		t.Cleanup(func() { s.Close() })
-	}
-	out["sqlite"] = lite
-	name := fmt.Sprintf("vt_disabled_%d", time.Now().UnixNano()%1_000_000)
+	repos := map[string]*Repo{"pg": New(openStore(t))}
 	if base := os.Getenv("AEGISDB_TEST_STORE_MYSQL"); base != "" {
+		name := fmt.Sprintf("vt_disabled_%d", time.Now().UnixNano()%1_000_000)
 		admin, err := sql.Open("mysql", base)
 		if err != nil {
 			t.Fatal(err)
@@ -52,44 +37,18 @@ func disabledStores(t *testing.T) map[string]*Repo {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { admin.Exec("DROP DATABASE IF EXISTS " + name); admin.Close() })
-		db, err := gorm.Open(mysql.Open(base+name+"?charset=utf8mb4&parseTime=true&loc=Local"), gcfg)
+		db, err := gorm.Open(mysql.Open(base+name+"?charset=utf8mb4&parseTime=true&loc=Local"),
+			&gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if s, e := db.DB(); e == nil {
 			t.Cleanup(func() { s.Close() })
 		}
-		out["mysql"] = db
-	}
-	if base := os.Getenv("AEGISDB_TEST_STORE_PG"); base != "" {
-		admin, err := gorm.Open(postgres.Open(base+" dbname=postgres"), gcfg)
-		if err != nil {
-			t.Fatal(err)
+		if err := sqlmigrate.Run(db, migrations.FS); err != nil {
+			t.Fatalf("mysql: %v", err)
 		}
-		if err := admin.Exec("CREATE DATABASE " + name).Error; err != nil {
-			t.Fatal(err)
-		}
-		db, err := gorm.Open(postgres.Open(base+" dbname="+name), gcfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if s, e := db.DB(); e == nil {
-				s.Close()
-			}
-			admin.Exec("DROP DATABASE IF EXISTS " + name)
-			if s, e := admin.DB(); e == nil {
-				s.Close()
-			}
-		})
-		out["pg"] = db
-	}
-	repos := map[string]*Repo{}
-	for k, db := range out {
-		if err := db.AutoMigrate(disabledModels...); err != nil {
-			t.Fatalf("%s: %v", k, err)
-		}
-		repos[k] = New(db)
+		repos["mysql"] = New(db)
 	}
 	return repos
 }

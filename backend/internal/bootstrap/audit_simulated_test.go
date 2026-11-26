@@ -62,7 +62,7 @@ func TestAudit_SimulatedRunIsNotRecordedAsExecuted(t *testing.T) {
 func TestAudit_RealRunStillRecordedAsExecuted(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "audit-real") // 真实 SQLite 文件
+	dev, _ := app.sameDBConns(admin, "audit-real") // 真实 PostgreSQL 目标库
 
 	if r := app.execSQL(admin, dev, "SELECT 1"); r.Code != 0 {
 		t.Fatalf("真实执行失败: %s", r.Msg)

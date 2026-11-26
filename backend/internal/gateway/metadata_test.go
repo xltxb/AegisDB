@@ -2,52 +2,38 @@ package gateway
 
 // 元数据探查:表清单 + 每张表的每一列。
 //
-// 这组用例跑在**真实的 SQLite 上**,不是替身 —— 它是这个仓库里唯一能真跑的引擎,
-// 而这里要验的恰恰是"SQL 写对了没有"。MySQL / PostgreSQL / Oracle 那三条只能等真机
+// 这组用例跑在**真实的 PostgreSQL 上**(testpg 起的临时实例),不是替身,
+// 而这里要验的恰恰是"SQL 写对了没有"。MySQL / Oracle 那两条只能等真机
 // 验收(见 issue),但它们与这一条共用同一组返回结构和同一套上限逻辑。
 //
 // 钉住的三件事,对应三种会真正伤到人的错法:
 //   - 列的属性(类型 / 可空 / 默认值 / 主键)要对得上。错了不会报错,只会让人照着一份
 //     错的结构去改表。
 //   - 视图要标成 view。把视图当表列出来,人会去 ALTER 它。
-//   - sqlite_% 内部表不入清单。它们不是用户的数据,混进搜索结果里就是永久的噪音。
+//   - 系统目录(pg_catalog / information_schema)里的表不入清单。它们不是用户的数据,混进搜索结果里就是永久的噪音。
 
 import (
-	"database/sql"
-	"path/filepath"
 	"testing"
 
 	"aegisdb/internal/model"
 )
 
-func metaConn(t *testing.T) *model.Connection {
-	t.Helper()
-	return &model.Connection{Engine: "SQLite", Database: filepath.Join(t.TempDir(), "meta.db")}
-}
+func metaConn(t *testing.T) *model.Connection { return pgTarget(t) }
 
 func mustExec(t *testing.T, conn *model.Connection, stmts ...string) {
 	t.Helper()
-	db, err := sql.Open("sqlite", conn.Database)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	for _, s := range stmts {
-		if _, err := db.Exec(s); err != nil {
-			t.Fatalf("%s: %v", s, err)
-		}
-	}
+	pgExec(t, conn, stmts...)
 }
 
-func TestRealMetadata_SQLiteTablesAndColumns(t *testing.T) {
+func TestRealMetadata_PostgreSQLTablesAndColumns(t *testing.T) {
 	conn := metaConn(t)
 	mustExec(t, conn,
 		`CREATE TABLE t_order (
-			id      INTEGER PRIMARY KEY,
-			amount  REAL NOT NULL DEFAULT 0,
-			note    TEXT
+			id      serial PRIMARY KEY,
+			amount  numeric NOT NULL DEFAULT 0,
+			note    text
 		)`,
-		`CREATE TABLE t_customer (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`,
+		`CREATE TABLE t_customer (id serial PRIMARY KEY, name text NOT NULL)`,
 		`CREATE VIEW v_order_note AS SELECT id, note FROM t_order`,
 	)
 
@@ -72,11 +58,9 @@ func TestRealMetadata_SQLiteTablesAndColumns(t *testing.T) {
 	if byName["t_order"].Kind != "table" {
 		t.Errorf("表应当标成 table,实际 %q", byName["t_order"].Kind)
 	}
-	// sqlite 的内部表不入清单。
-	for _, tb := range tables {
-		if len(tb.Table) >= 7 && tb.Table[:7] == "sqlite_" {
-			t.Errorf("内部表不该进清单: %s", tb.Table)
-		}
+	// 系统目录(pg_catalog / information_schema)的表不入清单:清单恰好是这三个对象。
+	if len(tables) != 3 {
+		t.Errorf("表清单应恰好 3 项(系统目录不入清单),实际 %d:%+v", len(tables), tables)
 	}
 
 	got := map[string]MetaColumnRow{}
@@ -116,7 +100,7 @@ func TestRealMetadata_SQLiteTablesAndColumns(t *testing.T) {
 // 空库不是错误。返回空清单 + nil,让调用方把"同步过、确实是空的"和"没同步过"分开。
 func TestRealMetadata_EmptyDatabaseIsNotAnError(t *testing.T) {
 	conn := metaConn(t)
-	mustExec(t, conn, `CREATE TABLE t_tmp (id INTEGER)`, `DROP TABLE t_tmp`)
+	mustExec(t, conn, `CREATE TABLE t_tmp (id int)`, `DROP TABLE t_tmp`)
 
 	tables, cols, err := RealMetadata(conn)
 	if err != nil {

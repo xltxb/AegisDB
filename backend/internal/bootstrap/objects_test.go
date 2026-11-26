@@ -1,16 +1,12 @@
 package bootstrap
 
 import (
-	"database/sql"
-	"fmt"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	_ "github.com/glebarez/go-sqlite"
 )
 
 type dbObjectsResp struct {
@@ -22,73 +18,55 @@ type dbObjectsResp struct {
 }
 
 // The terminal tree's programmable-object browser must introspect a REAL target:
-// a SQLite connection with credentials lists its triggers, and the source
-// endpoint returns the stored CREATE TRIGGER text (same catalog-view approach as
+// a PostgreSQL connection with credentials lists its functions, and the source
+// endpoint returns the stored function definition (same catalog-view approach as
 // SQLcl's ddl, without shelling out to anything).
-func TestObjects_RealSqliteTriggerListedAndSourced(t *testing.T) {
-	dbfile := filepath.Join(t.TempDir(), "obj.db")
-	raw, err := sql.Open("sqlite", dbfile)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if _, err := raw.Exec(`CREATE TABLE orders (id INTEGER, status TEXT)`); err != nil {
-		t.Fatalf("create table: %v", err)
-	}
-	if _, err := raw.Exec(`CREATE TRIGGER trg_orders_touch AFTER UPDATE ON orders BEGIN SELECT 1; END`); err != nil {
-		t.Fatalf("create trigger: %v", err)
-	}
-	if _, err := raw.Exec(`CREATE INDEX idx_orders_status ON orders (status)`); err != nil {
-		t.Fatalf("create index: %v", err)
-	}
-	raw.Close()
-
+func TestObjects_RealPGFunctionListedAndSourced(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "obj-sqlite", "engine": "SQLite", "host": "localhost:0",
-		"env": "dev", "policy": "audit-only", "database": dbfile,
-	})
-	eq(t, cr.Code, 0, "create real connection")
-	var conn struct {
-		ID int64 `json:"id"`
-	}
-	_ = json.Unmarshal(cr.Data, &conn)
+	connID, _ := app.newPGConn(token, "obj-pg", "dev",
+		`CREATE TABLE orders (id INTEGER, status TEXT)`,
+		`CREATE FUNCTION fn_orders_total() RETURNS bigint LANGUAGE sql AS 'SELECT count(*) FROM orders'`,
+		`CREATE INDEX idx_orders_status ON orders (status)`,
+	)
+	conn := struct{ ID int64 }{connID}
 
-	r := app.do(http.MethodGet, fmt.Sprintf("/api/v1/connections/%d/objects", conn.ID), token, nil)
+	r := app.do(http.MethodGet, fmt.Sprintf("/api/v1/connections/%d/objects?scope=public", conn.ID), token, nil)
 	eq(t, r.Code, 0, "list objects")
 	var objs dbObjectsResp
 	_ = json.Unmarshal(r.Data, &objs)
-	if len(objs.Triggers) != 1 || objs.Triggers[0] != "trg_orders_touch" {
-		t.Fatalf("expected the real trigger listed, got %+v", objs)
+	// PostgreSQL 家族的对象浏览只有函数 / 存储过程(没有触发器这一类)。
+	if len(objs.Functions) != 1 || objs.Functions[0] != "fn_orders_total" {
+		t.Fatalf("expected the real function listed, got %+v", objs)
 	}
 
 	sr := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=trigger&name=trg_orders_touch", token, nil)
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?scope=public&type=function&name=fn_orders_total", token, nil)
 	eq(t, sr.Code, 0, "object source")
 	var src struct {
 		Source string `json:"source"`
 	}
 	_ = json.Unmarshal(sr.Data, &src)
-	if !strings.Contains(src.Source, "CREATE TRIGGER trg_orders_touch") {
+	if !strings.Contains(src.Source, "FUNCTION public.fn_orders_total") {
 		t.Errorf("source should carry the stored definition, got %q", src.Source)
 	}
 
 	// Clicking a table in the tree shows its DDL: the stored CREATE TABLE plus
 	// the table's named indexes.
 	tr := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=table&name=orders", token, nil)
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?scope=public&type=table&name=orders", token, nil)
 	eq(t, tr.Code, 0, "table ddl")
 	var tddl struct {
 		Source string `json:"source"`
 	}
 	_ = json.Unmarshal(tr.Data, &tddl)
-	if !strings.Contains(tddl.Source, "CREATE TABLE orders") || !strings.Contains(tddl.Source, "idx_orders_status") {
+	if !strings.Contains(tddl.Source, `CREATE TABLE "public"."orders"`) || !strings.Contains(tddl.Source, "idx_orders_status") {
 		t.Errorf("table DDL should carry the CREATE TABLE and its indexes, got %q", tddl.Source)
 	}
 
 	// An unsafe identifier must be refused before any SQL is built from it.
 	bad := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=trigger&name="+url.QueryEscape("x`; DROP TABLE orders --"), token, nil)
+		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=function&name="+url.QueryEscape("x`; DROP TABLE orders --"), token, nil)
 	if bad.Code == 0 {
 		t.Error("unsafe object name must be rejected")
 	}
@@ -130,61 +108,44 @@ func TestObjects_SimulatedConnectionServesDemoSet(t *testing.T) {
 	}
 }
 
-// 这条测试原先拿两个 SQLite 文件模拟 PG 的"一个连接下两个库",证明 `database` 参数
-// 一路传到了元数据读取(PG 的目录按库隔离)。但 SQLite 的 database 就是文件路径,
-// 允许请求改它 = 让网关打开服务器上任意文件(2026-10 安全审计 H2)。现在反过来证明:
-// SQLite 连接只认管理员配置的文件,传别的路径不起作用。PG 的按库切换走同一个入口
-// applyTargetDatabase,由 service 层 TestApplyTargetDatabase 覆盖。
-func TestObjects_SQLiteIgnoresDatabaseParam(t *testing.T) {
-	mk := func(file, table string) string {
-		raw, err := sql.Open("sqlite", file)
-		if err != nil {
-			t.Fatalf("open sqlite: %v", err)
-		}
-		if _, err := raw.Exec(`CREATE TABLE ` + table + ` (id INTEGER)`); err != nil {
-			t.Fatalf("create table: %v", err)
-		}
-		raw.Close()
-		return file
-	}
-	dir := t.TempDir()
-	fileA := mk(filepath.Join(dir, "a.db"), "tbl_in_a")
-	fileB := mk(filepath.Join(dir, "b.db"), "tbl_in_b")
+// `database` 参数要一路传到对象源读取:PG 的目录按库隔离,连接默认落在库 A,
+// 带 database=B 时读到的必须是 B 里的表(applyTargetDatabase 的行为由 service 层
+// TestApplyTargetDatabase 覆盖,这里证明它真的传到了读取那一步)。
+func TestObjects_PGDatabaseParamSwitchesDatabase(t *testing.T) {
+	dbA := newTargetDB(t, `CREATE TABLE tbl_in_a (id INTEGER)`)
+	dbB := newTargetDB(t, `CREATE TABLE tbl_in_b (id INTEGER)`)
 
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "dbparam-sqlite", "engine": "SQLite", "host": "localhost:0",
-		"env": "dev", "policy": "audit-only", "database": fileA,
-	})
-	eq(t, cr.Code, 0, "create connection defaulting to database A")
-	var conn struct {
-		ID int64 `json:"id"`
+	conn := struct{ ID int64 }{app.pgConnAt(token, "dev", "dbparam-pg", dbA)}
+
+	src := func(table, database string) (apiResp, string) {
+		u := fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID) + "?scope=public&type=table&name=" + table
+		if database != "" {
+			u += "&database=" + url.QueryEscape(database)
+		}
+		r := app.do(http.MethodGet, u, token, nil)
+		var out struct {
+			Source string `json:"source"`
+		}
+		_ = json.Unmarshal(r.Data, &out)
+		return r, out.Source
 	}
-	_ = json.Unmarshal(cr.Data, &conn)
 
 	// Without database: the default (A) answers.
-	ra := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+"?type=table&name=tbl_in_a", token, nil)
-	eq(t, ra.Code, 0, "table from default database")
-
-	// database=B 的路径:不得打开 B —— B 里的表查不到
-	rb := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+
-			"?type=table&name=tbl_in_b&database="+url.QueryEscape(fileB), token, nil)
-	if rb.Code == 0 {
-		t.Errorf("传别的文件路径不应打开那个文件,却读到了 tbl_in_b")
+	r, ddl := src("tbl_in_a", "")
+	eq(t, r.Code, 0, "table from default database")
+	if !strings.Contains(ddl, "tbl_in_a") {
+		t.Errorf("expected A's table DDL, got %q", ddl)
 	}
-	// 同样带着 database=B,读到的仍是配置的 A
-	ra2 := app.do(http.MethodGet,
-		fmt.Sprintf("/api/v1/connections/%d/object-source", conn.ID)+
-			"?type=table&name=tbl_in_a&database="+url.QueryEscape(fileB), token, nil)
-	eq(t, ra2.Code, 0, "仍读配置的文件 A")
-	var src struct {
-		Source string `json:"source"`
+	// B 里的表在默认库里查不到
+	if r, ddl := src("tbl_in_b", ""); r.Code == 0 && strings.Contains(ddl, "CREATE TABLE") {
+		t.Errorf("tbl_in_b lives in B, but the default database served it: %q", ddl)
 	}
-	_ = json.Unmarshal(ra2.Data, &src)
-	if !strings.Contains(src.Source, "tbl_in_a") {
-		t.Errorf("expected A's table DDL, got %q", src.Source)
+	// database=B:切到 B,读到 B 的表
+	r, ddl = src("tbl_in_b", dbB)
+	eq(t, r.Code, 0, "table from database B")
+	if !strings.Contains(ddl, "tbl_in_b") {
+		t.Errorf("expected B's table DDL, got %q", ddl)
 	}
 }

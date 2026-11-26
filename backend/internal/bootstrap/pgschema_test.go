@@ -8,8 +8,9 @@ package bootstrap
 // 比对,任何一边漏写都会在这里红。
 //
 //	AEGISDB_TEST_STORE_MYSQL=root:pw@tcp(127.0.0.1:3407)/
-//	AEGISDB_TEST_STORE_PG=host=127.0.0.1 port=5437 user=postgres password=pw sslmode=disable
 //	AEGISDB_GEN_PG_BASELINE=1   (只在要重新生成基线时设)
+//
+// PG 一侧是 testpg 起的临时实例(设了 AEGISDB_TEST_STORE_PG 就用那台)。
 //
 // 映射规则(决定了网关在 PG 上的行为与 MySQL 一致):
 //   - 字符串一律 citext:MySQL 这边全部是 *_ci 排序规则,邮箱登录、搜索的 LIKE、唯一索引
@@ -28,6 +29,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"aegisdb/internal/testpg"
 )
 
 type myCol struct {
@@ -324,25 +327,15 @@ func normDefault(d string) string {
 
 func TestPGSchemaMatchesMySQL(t *testing.T) {
 	my := os.Getenv("AEGISDB_TEST_STORE_MYSQL")
-	pg := os.Getenv("AEGISDB_TEST_STORE_PG")
-	if my == "" || pg == "" {
-		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL 与 AEGISDB_TEST_STORE_PG")
+	if my == "" {
+		t.Skip("需要 AEGISDB_TEST_STORE_MYSQL")
 	}
 	want := readMySQLStoreSchema(t, migratedMySQLStore(t, my, fmt.Sprintf("vt_pgcmp_%d", os.Getpid())))
 
-	name := fmt.Sprintf("vt_pgcmp_%d", os.Getpid())
-	admin, err := pgAdmin(pg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, _ = admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)")
-	if _, err := admin.Exec("CREATE DATABASE " + name); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { admin.Exec("DROP DATABASE IF EXISTS " + name + " WITH (FORCE)"); admin.Close() })
+	_, pgDSN := testpg.NewDB(t)
 	cfg := &Config{}
 	cfg.Database.Driver = "postgres"
-	cfg.Database.PostgresDSN = pg + " dbname=" + name
+	cfg.Database.PostgresDSN = pgDSN
 	cfg.Gateway.StrictMode = true
 	g, err := OpenDB(cfg)
 	if err != nil {

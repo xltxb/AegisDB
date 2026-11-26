@@ -2,9 +2,9 @@ package bootstrap
 
 // 收单时的语法与对象检查。
 //
-// 跑在**真的 SQLite 上**:这组用例要验的核心正是"把语法交给数据库自己判",拿一个
-// 替身来测,测的是一段永远不会跑到的代码。SQLite 的 EXPLAIN 支持 SELECT / INSERT /
-// UPDATE / DELETE,与 MySQL / PostgreSQL 走的是同一段代码路径。
+// 跑在**真的 PostgreSQL 上**:这组用例要验的核心正是"把语法交给数据库自己判",拿一个
+// 替身来测,测的是一段永远不会跑到的代码。PostgreSQL 的 EXPLAIN 支持 SELECT / INSERT /
+// UPDATE / DELETE,与 MySQL 走的是同一段代码路径。
 //
 // 钉住的是四件会真正伤到人的事:
 //
@@ -91,7 +91,7 @@ func issuesOfKind(res precheckResult, kind string) []precheckIssue {
 func TestPrecheck_SyntaxErrorCarriesTheDatabaseOwnWords(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-syntax")
+	conn := app.realPGConnIn(admin, "dev", "precheck-syntax")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -106,7 +106,7 @@ func TestPrecheck_SyntaxErrorCarriesTheDatabaseOwnWords(t *testing.T) {
 	if syn[0].Level != "error" {
 		t.Errorf("语法错应当是 error,实际 %q", syn[0].Level)
 	}
-	// 原话里有 SQLite 自己的措辞;包装成一句"语法错误"会把位置信息丢掉。
+	// 原话里有 PostgreSQL 自己的措辞;包装成一句"语法错误"会把位置信息丢掉。
 	if !strings.Contains(strings.ToLower(syn[0].Message), "syntax") {
 		t.Errorf("应当带数据库原话,实际 %q", syn[0].Message)
 	}
@@ -119,7 +119,7 @@ func TestPrecheck_SyntaxErrorCarriesTheDatabaseOwnWords(t *testing.T) {
 func TestPrecheck_ValidStatementRaisesNoSyntaxIssue(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-clean")
+	conn := app.realPGConnIn(admin, "dev", "precheck-clean")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -141,7 +141,7 @@ func TestPrecheck_ValidStatementRaisesNoSyntaxIssue(t *testing.T) {
 func TestPrecheck_MissingObjectIsReportedWithItsSource(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-object")
+	conn := app.realPGConnIn(admin, "dev", "precheck-object")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -177,7 +177,7 @@ func TestPrecheck_MissingObjectIsReportedWithItsSource(t *testing.T) {
 func TestPrecheck_ObjectCreatedEarlierInTheSameBatchIsNotMissing(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-batch")
+	conn := app.realPGConnIn(admin, "dev", "precheck-batch")
 
 	res := submitForPrecheck(t, app, admin, conn,
 		"CREATE TABLE t_fresh (id INTEGER);\nCREATE INDEX idx_fresh ON t_fresh (id);")
@@ -191,7 +191,7 @@ func TestPrecheck_ObjectCreatedEarlierInTheSameBatchIsNotMissing(t *testing.T) {
 func TestPrecheck_ObjectDroppedEarlierInTheSameBatchIsFlagged(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-dropped")
+	conn := app.realPGConnIn(admin, "dev", "precheck-dropped")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_gone (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -213,7 +213,7 @@ func TestPrecheck_ObjectDroppedEarlierInTheSameBatchIsFlagged(t *testing.T) {
 func TestPrecheck_UncheckedStatementsSaySoRatherThanLookingClean(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-ddl")
+	conn := app.realPGConnIn(admin, "dev", "precheck-ddl")
 
 	res := submitForPrecheck(t, app, admin, conn, `CREATE TABLE t_ddl (id INTEGER)`)
 
@@ -257,7 +257,7 @@ func TestPrecheck_SimulatedConnectionSaysNothingWasChecked(t *testing.T) {
 func TestPrecheck_DoesNotBlockTheRelease(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "precheck-nonblock")
+	conn := app.realPGConnIn(admin, "dev", "precheck-nonblock")
 	pid := app.createPipeline(admin, "不拦单流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},
 	})
@@ -279,7 +279,7 @@ func TestPrecheck_DoesNotBlockTheRelease(t *testing.T) {
 func TestPrecheck_OpenAPISubmissionCarriesTheResult(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	app.realSQLiteConnIn(admin, "dev", "precheck-open")
+	app.realPGConnIn(admin, "dev", "precheck-open")
 	// 流程绑在凭据上 —— 外部请求不指定流程(见 ADR 0006)。
 	pid := app.createPipeline(admin, "开放接口收单流程", "", []map[string]any{
 		{"name": "执行变更", "type": "execute"},

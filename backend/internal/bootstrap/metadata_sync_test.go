@@ -2,7 +2,7 @@ package bootstrap
 
 // 元数据缓存:同步一台实例、读回来、按表名/列名检索,以及范围收口。
 //
-// 这几条走的是真实的 HTTP + 真实的 SQLite 目标库(sameFileConns 建的那种),所以它验的
+// 这几条走的是真实的 HTTP + 真实的 PostgreSQL 目标库(sameDBConns 建的那种),所以它验的
 // 是整条链:路由 → 权限 → 探查 → 落库 → 读回。
 //
 // 最要紧的两条,都是"错了不报错"的那种:
@@ -53,7 +53,7 @@ func (a *testApp) readMeta(token string, connID int64) metaTablesResp {
 func TestMetadata_SyncThenRead(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "meta-sync")
+	dev, _ := app.sameDBConns(admin, "meta-sync")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_a (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -92,7 +92,7 @@ func TestMetadata_SyncThenRead(t *testing.T) {
 func TestMetadata_SyncReplacesInsteadOfAccumulating(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "meta-replace")
+	dev, _ := app.sameDBConns(admin, "meta-replace")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_gone (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -127,7 +127,7 @@ func hasTable(r metaTablesResp, name string) bool {
 func TestMetadata_SearchByColumnName(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "meta-search")
+	dev, _ := app.sameDBConns(admin, "meta-search")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_search (id INTEGER, id_card_no TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -165,7 +165,7 @@ func TestMetadata_SearchByColumnName(t *testing.T) {
 func TestMetadata_RespectsInstanceScope(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "meta-scope")
+	dev, conn := app.sameDBConns(admin, "meta-scope")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_secret (id INTEGER, secret_col TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -202,7 +202,7 @@ func TestMetadata_RespectsInstanceScope(t *testing.T) {
 func TestMetadata_NeverSyncedHasNoState(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "meta-nosync")
+	dev, _ := app.sameDBConns(admin, "meta-nosync")
 
 	got := app.readMeta(admin, dev)
 	if got.Sync != nil {

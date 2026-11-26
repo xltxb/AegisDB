@@ -64,14 +64,14 @@ func TestExecuteStageLogCarriesFailureText(t *testing.T) {
 		"insert into t_ok values (1)",          // 成功的那条也在
 		"第 2/2 条失败",                          // 停在哪
 		"update t_missing set n=2 where n=1",   // 出错的语句
-		"t_missing",                            // 驱动报错原文(no such table: t_missing)
+		"t_missing",                            // 驱动报错原文(relation "t_missing" does not exist)
 	} {
 		if !strings.Contains(log, want) {
 			t.Errorf("failed execute log missing %q, got:\n%s", want, log)
 		}
 	}
 	// 发布级 error 截日志开头:报错原文必须在开头,不能被前面语句的回显挤出 300 字
-	if !strings.Contains(done.Error, "no such table") {
+	if !strings.Contains(done.Error, "does not exist") {
 		t.Errorf("release error should carry the driver error, got %q", done.Error)
 	}
 }

@@ -10,36 +10,22 @@ package bootstrap
 //   - 只有提交人(或平台管理员)能终止;已经结束的任务不能终止。
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"aegisdb/internal/model"
-
-	_ "github.com/glebarez/go-sqlite"
 )
 
-// slowExportConn 建一个真实的 SQLite 实例(文件库),给需要"真的在库上跑"的导出用。
+// slowExportConn 建一个真实的 PostgreSQL 目标库连接,给需要"真的在库上跑"的导出用。
 func (a *testApp) slowExportConn(token string) int64 {
 	a.t.Helper()
-	file := filepath.Join(a.t.TempDir(), "slow.db")
-	db, err := sql.Open("sqlite", file)
-	if err != nil {
-		a.t.Fatal(err)
-	}
-	if _, err := db.Exec("CREATE TABLE t (n INTEGER)"); err != nil {
-		a.t.Fatal(err)
-	}
-	db.Close()
-	r := a.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "slow-sqlite", "engine": "SQLite", "host": "localhost:0", "env": "dev", "policy": "audit-only", "database": file,
-	})
+	r := a.do(http.MethodPost, "/api/v1/connections", token,
+		targetConnBody(a.t, "slow-pg", "dev", newTargetDB(a.t, "CREATE TABLE t (n INTEGER)")))
 	if r.Code != 0 {
-		a.t.Fatalf("create sqlite conn: %s", r.Msg)
+		a.t.Fatalf("create pg conn: %s", r.Msg)
 	}
 	var c struct {
 		ID int64 `json:"id"`
@@ -48,9 +34,9 @@ func (a *testApp) slowExportConn(token string) int64 {
 	return c.ID
 }
 
-// 流式吐出 2 亿行的递归 CTE:SQLite 上要跑好几分钟。用流式而不是 COUNT(*):SQLite 驱动逐行
-// step 时不理会取消(见 gateway/export_cancel_test.go),聚合查询取消后仍会在后台算完,拖慢整个测试。
-const slowExportSQL = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 200000000) SELECT x FROM c"
+// 流式吐出 2 亿行的 generate_series:在 PostgreSQL 上要跑好几分钟。用流式而不是 COUNT(*):
+// 聚合查询没有行可吐,取消前后都看不出"worker 在边读边写"这件事。
+const slowExportSQL = "SELECT x FROM generate_series(1, 200000000) AS x"
 
 func (a *testApp) jobStatus(token string, id int64) exportJob {
 	a.t.Helper()

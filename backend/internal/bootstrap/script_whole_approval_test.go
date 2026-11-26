@@ -15,7 +15,7 @@ import (
 func TestScript_OneStatementNeedingApprovalSendsTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "script-whole")
+	dev, prod := app.sameDBConns(admin, "script-whole")
 	script := "CREATE TABLE t_w1 (id INTEGER PRIMARY KEY);\nCREATE TABLE t_w2 (id INTEGER PRIMARY KEY);\nCREATE TABLE t_w3 (id INTEGER PRIMARY KEY);\n"
 
 	// 前提:这条 CREATE 在 prod 上是能力矩阵要审批(不是字典)
@@ -50,7 +50,7 @@ func TestScript_OneStatementNeedingApprovalSendsTheWholeScript(t *testing.T) {
 func TestScriptScan_ReportsApprovalFromTheFullJudgement(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	_, prod := app.sameFileConns(admin, "script-scan-full")
+	_, prod := app.sameDBConns(admin, "script-scan-full")
 	if !app.riskCheck(admin, prod, "CREATE TABLE t_x (id INTEGER)").RequiresApproval {
 		t.Skip("前提不成立")
 	}
@@ -73,7 +73,7 @@ func TestScriptScan_ReportsApprovalFromTheFullJudgement(t *testing.T) {
 func TestScript_OneDeniedStatementRefusesTheWholeScript(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "script-deny")
+	dev, _ := app.sameDBConns(admin, "script-deny")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_deny (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

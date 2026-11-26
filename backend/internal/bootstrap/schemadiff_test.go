@@ -1,17 +1,18 @@
 package bootstrap
 
-// 跨环境表结构对比的接口(.scratch/schema-diff/issues/03)。两台 SQLite 走完整条链路:
+// 跨环境表结构对比的接口(.scratch/schema-diff/issues/03)。两台 PostgreSQL 临时库走完整条链路:
 // 可对比的实例清单 → 对比 → 审计;以及拒绝的几种情形。
 
 import (
-	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"aegisdb/internal/model"
+	"aegisdb/internal/testpg"
 )
 
 type diffResp struct {
@@ -41,20 +42,14 @@ type diffResp struct {
 	EmptySide string `json:"emptySide"`
 }
 
-func sqliteDB(t *testing.T, stmts ...string) string {
-	t.Helper()
-	file := filepath.Join(t.TempDir(), "d.db")
-	raw, err := sql.Open("sqlite", file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer raw.Close()
-	for _, s := range stmts {
-		if _, err := raw.Exec(s); err != nil {
-			t.Fatalf("%s: %v", s, err)
-		}
-	}
-	return file
+// addPGConn registers a fresh PostgreSQL target database (seeded with stmts) as a
+// connection, going through addConn like the other engines; it returns the
+// connection id and the database name.
+func (a *testApp) addPGConn(token, name, env string, stmts ...string) (int64, string) {
+	a.t.Helper()
+	c := testpg.Server(a.t)
+	db := newTargetDB(a.t, stmts...)
+	return a.addConn(token, name, "postgresql", env, fmt.Sprintf("%s:%d", c.Host, c.Port), db, c.User, c.Password), db
 }
 
 func (a *testApp) addConn(token, name, engine, env, host, db, user, pw string) int64 {
@@ -76,15 +71,15 @@ func (a *testApp) addConn(token, name, engine, env, host, db, user, pw string) i
 func TestSchemaDiff_API(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	prod := app.addConn(admin, "orders-prod", "SQLite", "prod", "localhost:0", sqliteDB(t,
+	prod, prodDB := app.addPGConn(admin, "orders-prod", "prod",
 		"CREATE TABLE t_order (id INTEGER PRIMARY KEY, code TEXT NOT NULL, note TEXT)",
 		"CREATE TABLE t_user (id INTEGER PRIMARY KEY)",
-		"CREATE TABLE t_legacy (id INTEGER)"), "", "")
-	uat := app.addConn(admin, "orders-uat", "SQLite", "dev", "localhost:0", sqliteDB(t,
+		"CREATE TABLE t_legacy (id INTEGER)")
+	uat, uatDB := app.addPGConn(admin, "orders-uat", "dev",
 		"CREATE TABLE t_order (id INTEGER PRIMARY KEY, code TEXT NOT NULL, note TEXT, remark TEXT)",
 		"CREATE TABLE t_user (id INTEGER PRIMARY KEY)",
-		"CREATE TABLE t_new (id INTEGER)"), "", "")
-	empty := app.addConn(admin, "empty", "SQLite", "dev", "localhost:0", sqliteDB(t), "", "")
+		"CREATE TABLE t_new (id INTEGER)")
+	empty, _ := app.addPGConn(admin, "empty", "dev")
 	mysqlDown := app.addConn(admin, "mysql-down", "MySQL 8.0", "prod", "127.0.0.1:1", "orders", "u", "p")
 	mysqlDown2 := app.addConn(admin, "mysql-down-2", "MySQL 8.0", "dev", "127.0.0.1:2", "orders", "u", "p")
 
@@ -98,7 +93,7 @@ func TestSchemaDiff_API(t *testing.T) {
 	for _, c := range conns {
 		fam[c.ID] = c.Family
 	}
-	if fam[prod] != "sqlite" || fam[mysqlDown] != "mysql" {
+	if fam[prod] != "postgres" || fam[mysqlDown] != "mysql" {
 		t.Fatalf("清单应带引擎族: %+v", conns)
 	}
 
@@ -121,7 +116,7 @@ func TestSchemaDiff_API(t *testing.T) {
 	if c := out.Diff.Changed[0].Columns; len(c) != 1 || c[0].Column != "remark" || c[0].Status != "onlyRight" {
 		t.Errorf("t_order 应只差右边多一列 remark: %+v", c)
 	}
-	if out.Left.Instance != "orders-prod" || out.Left.Tables != 3 || out.Right.Database != "main" {
+	if out.Left.Instance != "orders-prod" || out.Left.Tables != 3 || out.Right.Database != uatDB {
 		t.Errorf("两边说明: %+v %+v", out.Left, out.Right)
 	}
 	// 审计:左右两个实例各一条(按实例筛都查得到);operator 留空(没有别人授权);差异计数在命令里
@@ -131,7 +126,7 @@ func TestSchemaDiff_API(t *testing.T) {
 		t.Fatalf("左右两个实例应各记一条审计: %+v", rows)
 	}
 	for _, a := range rows {
-		if a.Command != "SCHEMA-DIFF orders-prod/main <-> orders-uat/main · 仅左 1 · 仅右 1 · 不同 1 · 一致 1" ||
+		if a.Command != "SCHEMA-DIFF orders-prod/"+prodDB+" <-> orders-uat/"+uatDB+" · 仅左 1 · 仅右 1 · 不同 1 · 一致 1" ||
 			a.Result != model.ResultExecuted || a.DataAction != "read" || a.Operator != "" {
 			t.Errorf("审计: cmd=%q result=%s action=%s op=%q", a.Command, a.Result, a.DataAction, a.Operator)
 		}
@@ -183,17 +178,18 @@ func TestSchemaDiff_API(t *testing.T) {
 func TestSchemaDiff_Databases(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	lite := app.addConn(admin, "lite", "SQLite", "dev", "localhost:0", sqliteDB(t, "CREATE TABLE t (id INTEGER)"), "", "")
+	pg, pgDB := app.addPGConn(admin, "pg", "dev", "CREATE TABLE t (id INTEGER)")
 	down := app.addConn(admin, "mysql-down", "MySQL 8.0", "prod", "127.0.0.1:1", "orders", "u", "p")
 
 	var out struct {
 		Databases []string `json:"databases"`
 		Error     string   `json:"error"`
 	}
-	r := app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(lite))+"/databases", admin, nil)
+	r := app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(pg))+"/databases", admin, nil)
 	_ = json.Unmarshal(r.Data, &out)
-	if r.Code != 0 || strings.Join(out.Databases, ",") != "main" || out.Error != "" {
-		t.Fatalf("SQLite 只有 main: %d %+v", r.Code, out)
+	// PostgreSQL 列的是实例上的全部库(含 postgres 与别的测试的库),所以断言包含配置的那个库。
+	if r.Code != 0 || !slices.Contains(out.Databases, pgDB) || out.Error != "" {
+		t.Fatalf("PG 应列出实例上的库(含 %s): %d %+v", pgDB, r.Code, out)
 	}
 	out.Databases, out.Error = nil, ""
 	r = app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(down))+"/databases", admin, nil)
@@ -205,7 +201,13 @@ func TestSchemaDiff_Databases(t *testing.T) {
 	var sch struct {
 		Schemas []string `json:"schemas"`
 	}
-	r = app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(lite))+"/schemas?database=main", admin, nil)
+	r = app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(pg))+"/schemas?database="+pgDB, admin, nil)
+	_ = json.Unmarshal(r.Data, &sch)
+	if r.Code != 0 || !slices.Contains(sch.Schemas, "public") {
+		t.Errorf("PG 应列出库里的 schema(含 public): %d %s", r.Code, r.Data)
+	}
+	sch.Schemas = nil
+	r = app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(down))+"/schemas?database=orders", admin, nil)
 	_ = json.Unmarshal(r.Data, &sch)
 	if r.Code != 0 || sch.Schemas == nil || len(sch.Schemas) != 0 {
 		t.Errorf("非 PG 应回空的 schemas: %d %s", r.Code, r.Data)
@@ -218,7 +220,7 @@ func TestSchemaDiff_Databases(t *testing.T) {
 	eq(t, app.do(http.MethodPost, "/api/v1/users", admin, map[string]any{
 		"email": "ro2@aegisdb.io", "name": "只读", "password": "initpass9", "roleIds": []int64{roID}}).Code, 0, "建只读账号")
 	ro := app.login("ro2@aegisdb.io", "initpass9")
-	if r := app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(lite))+"/databases", ro, nil); r.Code != 40300 {
+	if r := app.do(http.MethodGet, "/api/v1/schema-diff/connections/"+model.Itoa(int(pg))+"/databases", ro, nil); r.Code != 40300 {
 		t.Errorf("没有 schemadiff 菜单应 40300,实际 %d", r.Code)
 	}
 }

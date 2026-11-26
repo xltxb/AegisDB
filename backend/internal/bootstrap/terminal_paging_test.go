@@ -11,7 +11,7 @@ import (
 func TestTerminal_ResultPagingOverHTTP(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev := app.realSQLiteConnIn(admin, "dev", "paging")
+	dev := app.realPGConnIn(admin, "dev", "paging")
 	const q = "WITH RECURSIVE s(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM s WHERE n < 1500) SELECT n FROM s"
 
 	type execData struct {
