@@ -415,7 +415,8 @@ components:
         projectId: { type: integer, format: int64, description: '归属项目 —— 取**目标库**的归属;0 = 未归属' }
         projectName: { type: string, description: 提交时快照 —— 库以后改挂别的项目,历史单据不改账 }
         changeType: { type: string, enum: [dml, ddl, ''], description: '变更类型:dml=数据订正,ddl=结构变更;历史单为空。提交时校验:声明与内容不符、或两类语句同单,均拒收' }
-        sql: { type: string, description: 口令已打码;列表接口里截断 }
+        sql: { type: string, description: 口令已打码;列表接口里截断;详情带 omitSql=1 时为空 }
+        sqlOmitted: { type: boolean, description: '详情按 omitSql=1 省掉了脚本(sql 为空不代表脚本为空)' }
         reason: { type: string }
         creator: { type: string }
         source: { type: string, enum: [console, api] }
@@ -2288,7 +2289,11 @@ paths:
       description: |
         详情不直接带审批人。approve 阶段跑到后,`stages[].approvalNo` 是生成的审批单号,
         再调 `GET /approvals?ap=<approvalNo>` 取 `steps`。
-      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+
+        脚本创建后不再改:轮询状态时带 `omitSql=1`,响应不带脚本(`sql` 为空、`sqlOmitted: true`)。
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: omitSql, in: query, description: '1 = 不返回脚本(轮询用)', schema: { type: integer, enum: [1] } }
       responses:
         '200':
           description: OK / 40001 或 40300 不存在或无权查看

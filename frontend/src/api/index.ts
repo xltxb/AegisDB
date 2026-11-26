@@ -470,7 +470,9 @@ export const api = {
   /** 把实例下的一个库归到项目(projectId 0 = 取消归属)。归属的单位是库,不是实例。 */
   setDatabaseProject: (id: number, database: string, projectId: number) =>
     http.put<any, Envelope<any>>(`/connections/${id}/database-project`, { database, projectId }),
-  release: (id: number) => http.get<any, Envelope<Release>>(`/releases/${id}`).then(ok),
+  // omitSql:不带脚本(轮询用,脚本创建后不再改,见后端 GetReleaseDetail)
+  release: (id: number, omitSql = false) =>
+    http.get<any, Envelope<Release>>(`/releases/${id}`, omitSql ? { params: { omitSql: 1 } } : undefined).then(ok),
   // raw envelope so the caller can detect 42800 (MFA step-up) and 40300 (denied
   // by the capability matrix), which mean different things to the operator.
   createRelease: (body: {

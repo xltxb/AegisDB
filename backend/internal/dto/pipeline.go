@@ -95,6 +95,8 @@ type ReleaseReq struct {
 type ReleaseView struct {
 	model.Release
 	Stages []model.ReleaseStage `json:"stages"`
+	// SQLOmitted:调用方要求不带脚本(轮询,见 GetReleaseDetail),SQL 是故意留空的,不是脚本为空。
+	SQLOmitted bool `json:"sqlOmitted,omitempty"`
 }
 
 type ReleasePage struct {

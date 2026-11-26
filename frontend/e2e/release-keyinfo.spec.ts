@@ -36,7 +36,7 @@ async function openReleases(page: Page) {
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, canSeeAllReleases: true })))
   await page.route('**/api/v1/releases?*', (r) =>
     r.fulfill(envelope({ items: ALL, total: ALL.length, page: 1, pageSize: 50, envs: ['fat', 'uat'] })))
-  await page.route(/\/api\/v1\/releases\/\d+$/, (r) => {
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, (r) => {
     const id = Number(new URL(r.request().url()).pathname.split('/').pop())
     return r.fulfill(envelope(ALL.find((x) => x.id === id)))
   })

@@ -21,7 +21,7 @@ async function open(page: Page, rel: typeof REL) {
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope({ ...ME, canSeeAllReleases: true })))
   await page.route('**/api/v1/releases?*', (r) =>
     r.fulfill(envelope({ items: [{ ...rel, sql: rel.sql.slice(0, 400) }], total: 1, page: 1, pageSize: 50, envs: ['uat'] })))
-  await page.route(/\/api\/v1\/releases\/\d+$/, (r) => r.fulfill(envelope(rel)))
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, (r) => r.fulfill(envelope(rel)))
   await page.goto('/#/releases')
   await page.locator('.ide-code').waitFor({ state: 'visible', timeout: 15000 })
 }

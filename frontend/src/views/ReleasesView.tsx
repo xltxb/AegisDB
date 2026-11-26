@@ -132,12 +132,19 @@ export default function ReleasesView() {
   }
   // 每次请求编号:先点 A 再点 B,A 的响应晚到也不能把 B 的详情换掉。
   const openSeq = useRef(0)
+  // 摊开那张单的完整脚本(#163):脚本创建后不再改,首次取一次,之后的轮询不带脚本(?omitSql=1),
+  // 拿回来的详情沿用这一份 —— 大脚本不再每 2.5 秒整段读出、脱敏、传输、解析。
+  const fullSql = useRef<{ id: number; sql: string } | null>(null)
   async function refreshOpen() {
-    if (!openIdRef.current) return
+    const id = openIdRef.current
+    if (!id) return
     const seq = ++openSeq.current
     try {
-      const r = await api.release(openIdRef.current)
+      const known = fullSql.current?.id === id ? fullSql.current : null
+      let r = await api.release(id, !!known)
       if (seq !== openSeq.current || r.id !== openIdRef.current) return
+      if (r.sqlOmitted && known) r = { ...r, sql: known.sql, sqlOmitted: false }
+      else if (!r.sqlOmitted) fullSql.current = { id: r.id, sql: r.sql }
       setDetail(r)
       setReleases((list) => list.map((x) => (x.id === r.id ? r : x)))
     } catch { /* the list keeps the last known state */ }

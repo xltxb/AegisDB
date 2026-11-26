@@ -89,7 +89,8 @@ func (h *Handler) ListReleases(c *gin.Context) {
 
 // GetRelease returns one run with its stages — the pipeline view's data source.
 func (h *Handler) GetRelease(c *gin.Context) {
-	v, err := h.Svc.GetReleaseDetail(middleware.CurrentUser(c), pathID(c))
+	// ?omitSql=1:不带脚本,给执行中页面的轮询用(脚本创建后不再改,首次打开已取过)
+	v, err := h.Svc.GetReleaseDetail(middleware.CurrentUser(c), pathID(c), c.Query("omitSql") == "1")
 	if err != nil {
 		resp.Fail(c, releaseErrCode(err), "发布单不存在或无权查看")
 		return

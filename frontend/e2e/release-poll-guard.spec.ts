@@ -37,7 +37,7 @@ test('后端变慢时轮询不叠加:同一时刻列表、详情各最多一个�
   }
   await stubCommon(page)
   await page.route('**/api/v1/releases?*', slow('list', { items: [release()], total: 1, page: 1, pageSize: 50 }))
-  await page.route(/\/api\/v1\/releases\/\d+$/, slow('detail', release()))
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, slow('detail', release()))
   await page.goto('/#/releases')
   await page.locator('.ritem').first().waitFor({ state: 'visible', timeout: 15000 })
 

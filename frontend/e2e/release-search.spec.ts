@@ -36,7 +36,7 @@ async function openReleases(page: Page, stub: Stub) {
       (!env || x.env === env) && (!q || x.relNo.toLowerCase() === q || x.externalRef.includes(`:${q}:`)))
     await r.fulfill(envelope({ items, total: items.length, page: 1, pageSize: 50, envs: ['fat', 'uat'] }))
   })
-  await page.route(/\/api\/v1\/releases\/\d+$/, (r) => {
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, (r) => {
     const id = Number(new URL(r.request().url()).pathname.split('/').pop())
     return r.fulfill(envelope(release(id, ALL.find((x) => x.id === id)?.env || 'fat')))
   })
