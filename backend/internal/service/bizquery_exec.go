@@ -198,6 +198,9 @@ func (s *Services) prepareBizQuery(u *model.User, req dto.BizQueryReq, forExport
 	if conn.Status == model.ConnStatusMaint {
 		return nil, bizDeny(model.BizMaintenance, "source", conn.Name)
 	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		return nil, asInputError(err)
+	}
 	lim := s.BizQueryLimits()
 	// 分层关掉了数据查询导出限制(默认 dev / uat,见 tier_switches.go):有查询授权就能导。
 	if forExport && s.tierBizExportRestricted(conn) {

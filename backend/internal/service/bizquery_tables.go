@@ -27,6 +27,9 @@ func (s *Services) bizBrowseSource(u *model.User, sourceID int64, database strin
 	if conn.Status == model.ConnStatusMaint {
 		return nil, "", bizDeny(model.BizMaintenance, "source", conn.Name)
 	}
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil { // 不再支持的引擎留下的存量连接
+		return nil, "", asInputError(err)
+	}
 	return conn, g.DBName, nil // 用授权上的库名,见 prepareBizQuery
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"aegisdb/internal/model"
 )
@@ -113,5 +114,66 @@ func TestLegacySQLiteConnectionIsRefused(t *testing.T) {
 	}
 	if !found {
 		t.Error("存量 SQLite 连接应仍出现在连接列表里")
+	}
+}
+
+// 浏览与业务查询同样要说「不支持的数据库引擎」:库表树、对象列表、对象源码、列名补全、
+// 业务查询的表 / 列 / 执行。从前这些入口按「没有凭据的演示连接」处理 —— 树里空着,或在生产上
+// 报「生产环境不返回模拟数据」,人看不出真正的原因是引擎已不再支持。
+func TestLegacyConnection_BrowseAndBizQuerySayUnsupported(t *testing.T) {
+	app := newTestApp(t)
+	admin := app.login("linwei@aegisdb.io", "aegisdb123")
+	legacy := &model.Connection{
+		Name: "legacy-sqlite-browse", Engine: "SQLite", Host: "localhost",
+		Env: "dev", Policy: "audit-only", DefaultRole: "developer", Layer: "L4 沙盒",
+		Database: "/data/legacy.db", Status: model.ConnStatusOnline, BizQuery: true,
+	}
+	if err := app.repo.CreateConnection(legacy); err != nil {
+		t.Fatalf("seed legacy connection: %v", err)
+	}
+	id := itoa(legacy.ID)
+
+	type withErr struct {
+		Error string `json:"error"`
+	}
+	for _, path := range []string{"/schema", "/objects?scope=main"} {
+		r := app.do(http.MethodGet, "/api/v1/connections/"+id+path, admin, nil)
+		var w withErr
+		_ = json.Unmarshal(r.Data, &w)
+		if !strings.Contains(w.Error, "不支持的数据库引擎") {
+			t.Errorf("%s 应说明引擎不支持,got code=%d msg=%q data=%s", path, r.Code, r.Msg, r.Data)
+		}
+	}
+	for _, path := range []string{"/object-source?type=table&name=t&scope=main", "/columns?table=t"} {
+		r := app.do(http.MethodGet, "/api/v1/connections/"+id+path, admin, nil)
+		if r.Code == 0 || !strings.Contains(r.Msg, "不支持的数据库引擎") {
+			t.Errorf("%s 应以「不支持的数据库引擎」失败,got code=%d msg=%q", path, r.Code, r.Msg)
+		}
+	}
+
+	u, err := app.repo.GetUserByEmail("linwei@aegisdb.io")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := app.repo.SaveQueryGrant(&model.QueryGrant{
+		UserID: u.ID, ConnectionID: legacy.ID, DBName: "main",
+		StartsAt: now.Add(-time.Hour), EndsAt: now.Add(time.Hour), Status: "active",
+	}); err != nil {
+		t.Fatalf("seed grant: %v", err)
+	}
+	checks := []struct {
+		method, path string
+		body         any
+	}{
+		{http.MethodGet, "/api/v1/bizquery/tables?sourceId=" + id + "&database=main", nil},
+		{http.MethodGet, "/api/v1/bizquery/columns?sourceId=" + id + "&database=main&table=t", nil},
+		{http.MethodPost, "/api/v1/bizquery/exec", map[string]any{"sourceId": legacy.ID, "database": "main", "sql": "SELECT 1"}},
+	}
+	for _, c := range checks {
+		r := app.do(c.method, c.path, admin, c.body)
+		if r.Code == 0 || !strings.Contains(r.Msg, "不支持的数据库引擎") {
+			t.Errorf("%s %s 应以「不支持的数据库引擎」失败,got code=%d msg=%q data=%s", c.method, c.path, r.Code, r.Msg, r.Data)
+		}
 	}
 }
