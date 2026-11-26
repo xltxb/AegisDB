@@ -15,11 +15,11 @@ package service
 // 动作是驳回。能撤回的只有发起人自己,以及平台管理员(清理误提交的存量)。
 
 import (
-	"log/slog"
 	"time"
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // CancelApproval 撤回一张 pending 工单。
@@ -38,26 +38,25 @@ func (s *Services) CancelApproval(actor *model.User, id int64) error {
 	// 一把同时管住"还没被决定"和"还没跑过"的原子闸(见 ClaimApprovalCancel)。
 	// 抢不到只有三种可能:已被决定、已被清扫过期、或者**执行已经先一步占住了**——
 	// 最后一种正是待执行的单子可撤之后新出现的赛跑。
-	claimed, cerr := s.Repo.ClaimApprovalCancel(ap.ID)
+	//
+	// 把还"active"着的那一步一起收掉,否则审批链上会永远留着一个等不到人的节点。窗口记成
+	// cancelled 而不是 rejected:没有人驳回过它,是申请人自己收回的 —— 对判定层两者一样
+	// (都不是 approved),对读记录的人不一样。这几笔和状态在同一个事务里(#143)。
+	now := time.Now()
+	o := repository.ApprovalOutcome{StepStatus: model.StatusCancelled, At: now}
+	if ap.WindowID > 0 {
+		o.WindowID, o.WindowStatus = ap.WindowID, model.WindowCancelled
+	}
+	claimed, cerr := s.Repo.CancelApprovalAtomic(ap.ID, o)
 	if cerr != nil {
 		return cerr
 	}
 	if !claimed {
 		return ErrAlreadyDecided
 	}
-	now := time.Now()
-	// 把还"active"着的那一步一起收掉,否则审批链上会永远留着一个等不到人的节点。
-	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusCancelled, now)
-	_ = s.Repo.SetApprovalResult(ap.ID, "", nil, 0, now)
 
 	// 这张单挂着的东西也要跟着收场,否则它会停在一个永远等不到结果的中间态。
 	switch {
-	case ap.WindowID > 0:
-		// 窗口记成 cancelled 而不是 rejected:没有人驳回过它,是申请人自己收回的。
-		// 对判定层两者一样(都不是 approved),对读记录的人不一样。
-		if e := s.Repo.SetExecWindowDecision(ap.WindowID, model.WindowCancelled, now); e != nil {
-			slog.Error("撤回窗口申请时落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "err", e)
-		}
 	case ap.ExportJobID > 0:
 		// 导出任务停在 awaiting 等这张单;撤回之后没有人会再放行它。
 		s.failExport(ap.ExportJobID, apimsg.T("发起人撤回了导出申请"))

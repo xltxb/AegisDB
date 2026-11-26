@@ -16,6 +16,7 @@ import (
 	"aegisdb/internal/dto"
 	"aegisdb/internal/gateway"
 	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 	"aegisdb/pkg/crypto"
 	"aegisdb/pkg/jwt"
 	"aegisdb/pkg/sqlutil"
@@ -169,7 +170,7 @@ func (s *Services) Exec(ctx context.Context, u *model.User, connID int64, sql, r
 	// the unknown verb fell into the read dimension, and the write ran under a
 	// read-only role (ER3). Splitting normalises the separator away.
 	stmts := gateway.SplitForJudge(conn.Engine, sql) // `--` 按目标引擎的读法(MySQL 的 1--1 不是注释)
-	if len(stmts) == 0 { // blank or comment-only input — nothing to normalise
+	if len(stmts) == 0 {                             // blank or comment-only input — nothing to normalise
 		return s.execJudged(ctx, u, conn, sql, reason)
 	}
 	v, win := s.judge(u, conn, stmts)
@@ -488,7 +489,7 @@ func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql 
 			return gateway.ExecResult{
 				Output:    fmt.Sprintf("· 已执行 %d/%d 条后失败 · 第 %d 条: %s", i, total, i+1, res.Output),
 				OutputRef: ref,
-				Rows: rows, Ms: ms, Err: res.Err,
+				Rows:      rows, Ms: ms, Err: res.Err,
 				ServerOutput: srvOut, ServerOutputTruncated: srvTrunc,
 			}
 		}
@@ -531,7 +532,7 @@ func (s *Services) execCommand(ctx context.Context, conn *model.Connection, sql 
 		// 整批的性质跟着单条走:逐条都是模拟的,整批当然也没碰过任何数据库。
 		Simulated:    simulated,
 		ServerOutput: srvOut, ServerOutputTruncated: srvTrunc,
-		Notice:       notice.Notice, NoticeRef: notice.NoticeRef,
+		Notice: notice.Notice, NoticeRef: notice.NoticeRef,
 		// WHENEVER SQLERROR CONTINUE 下有语句失败:整批跑完了,但审计要记 warn
 		Err:   firstErr,
 		Binds: flow.Binds(),
@@ -854,14 +855,10 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 		// Atomically claim the pending → approved transition. If we lose the race
 		// (already decided/rejected/expired by a concurrent caller or the timeout
 		// sweep), stop here so the command is never executed twice.
-		claimed, cerr := s.Repo.ClaimApprovalDecision(ap.ID, model.StatusApproved, d.Via, "")
-		if cerr != nil {
-			return nil, cerr
-		}
-		if !claimed {
-			return nil, ErrAlreadyDecided // someone else already decided/expired it
-		}
-		_ = s.Repo.DecideStepBy(ap.ID, d.ActorID, model.StatusApproved, now)
+		//
+		// 状态、审批步骤、结果和窗口状态在同一个事务里落库(#143):任何一笔失败就整体回滚,
+		// 单子还是待审批,决定的人拿到错误、可以再点一次。所以结果要先算好,副作用放在提交之后。
+		//
 		// 通过不再执行任何命令,两条分支的区别只是**接下来由谁执行**:
 		// 发布单归流水线,普通工单归发起人。
 		var res gateway.ExecResult
@@ -872,14 +869,12 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 			res.Output = "· 已批准,执行窗口已生效"
 			res.OutputRef = model.NewRuleRef(model.OutApWindowLive)
 			title = apimsg.T("执行窗口审批已通过")
-			s.applyWindowDecision(ap, true)
 		} else if ap.ExportJobID > 0 {
 			// 导出单授权的是"让导出 worker 去跑这次导出",不是"执行一条命令" ——
 			// 所以它不停在等发起人,批准即入队。
 			res.Output = "· 已批准,导出任务已进入队列"
 			res.OutputRef = model.NewRuleRef(model.OutApExportQueued)
 			title = apimsg.T("导出审批已通过,任务已开始")
-			s.releaseApprovedExport(ap)
 		} else if ap.ReleaseID > 0 {
 			// A release ticket authorises the pipeline; it does not run anything.
 			// The execute stage owns execution (and re-judges the statement before
@@ -900,7 +895,19 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 			res.Output = model.AwaitingExecution
 			res.OutputRef = model.NewRuleRef(model.OutApAwaitingExec)
 		}
-		_ = s.Repo.SetApprovalResult(ap.ID, res.Output, res.OutputRef, approvalRows(res), now)
+		claimed, cerr := s.Repo.DecideApprovalAtomic(ap.ID, model.StatusApproved, d.Via, "",
+			decisionOutcome(ap, d.ActorID, model.StatusApproved, model.WindowApproved, res, now))
+		if cerr != nil {
+			return nil, cerr
+		}
+		if !claimed {
+			return nil, ErrAlreadyDecided // someone else already decided/expired it
+		}
+		if ap.WindowID > 0 {
+			s.auditWindowDecision(ap, true)
+		} else if ap.ExportJobID > 0 {
+			s.releaseApprovedExport(ap)
+		}
 		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
 		// 没有跑。记成 exec 会让审计里出现一条查不到对应库变更的"执行",也会让只
 		// 订阅 exec 的 webhook 在什么都没执行时收到通知。真正的执行由
@@ -926,18 +933,17 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 	}
 	reason := d.rejectReason()
 	// Same atomic guard on the reject path.
-	claimed, cerr := s.Repo.ClaimApprovalDecision(ap.ID, model.StatusRejected, d.Via, reason)
+	// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
+	claimed, cerr := s.Repo.DecideApprovalAtomic(ap.ID, model.StatusRejected, d.Via, reason,
+		decisionOutcome(ap, d.ActorID, model.StatusRejected, model.WindowRejected, gateway.ExecResult{}, now))
 	if cerr != nil {
 		return nil, cerr
 	}
 	if !claimed {
 		return nil, ErrAlreadyDecided // someone else already decided/expired it
 	}
-	_ = s.Repo.DecideStepBy(ap.ID, d.ActorID, model.StatusRejected, now)
-	_ = s.Repo.SetApprovalResult(ap.ID, "", nil, 0, now)
 	if ap.WindowID > 0 {
-		// 驳回的窗口永久留在 rejected:判定层不认它,但列表里仍然看得见它被驳回过。
-		s.applyWindowDecision(ap, false)
+		s.auditWindowDecision(ap, false)
 	}
 	s.abortAwaitingOSC(ap.OSCJobID, "工单被驳回,未执行")
 	s.recordAuditFrom(approvalAuditSource(ap), initiator, d.auditOperator(), conn, ap.Command, ap.RiskLevel, model.ResultRejected, ap.ApNo, "approve")
@@ -948,6 +954,19 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 	}
 	s.notify(ap.InitiatorID, model.NotifApprovalRejected, apimsg.T("审批被拒绝"), body, ap.ApNo)
 	return nil, nil
+}
+
+// decisionOutcome 是一次决定要和状态一起落库的那几笔(见 Repo.DecideApprovalAtomic)。
+// 驳回时 res 为空:结果列清空,只记决定时间。
+func decisionOutcome(ap *model.Approval, actorID int64, stepStatus, windowStatus string, res gateway.ExecResult, at time.Time) repository.ApprovalOutcome {
+	o := repository.ApprovalOutcome{
+		ApproverID: actorID, StepStatus: stepStatus,
+		Output: res.Output, OutputRef: res.OutputRef, Rows: approvalRows(res), At: at,
+	}
+	if ap.WindowID > 0 {
+		o.WindowID, o.WindowStatus = ap.WindowID, windowStatus
+	}
+	return o
 }
 
 // notify records an in-app message for a user (no-op for an unknown user).
@@ -1403,7 +1422,6 @@ func (s *Services) ExecuteSafeScriptCtx(ctx context.Context, u *model.User, conn
 	return results, nil
 }
 
-
 // ScriptStmtError:脚本执行到某一条时目标库报错,后面的没有执行。
 type ScriptStmtError struct {
 	Done, Total, Pos int
@@ -1418,6 +1436,7 @@ func (e *ScriptStmtError) MsgRef() *model.RuleRef { return apimsg.RefOf(e.err())
 func (e *ScriptStmtError) err() error {
 	return apimsg.Errorf("已执行 %d/%d 条后失败 · 第 %d 条: %s", e.Done, e.Total, e.Pos, e.Msg)
 }
+
 // SweepApprovalTimeouts applies the configured timeout policy to overdue pending
 // approvals (FR-APPR-05 / backend doc §7). Called periodically from a goroutine.
 func (s *Services) SweepApprovalTimeouts() {

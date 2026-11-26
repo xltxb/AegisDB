@@ -105,17 +105,6 @@ func (r *Repo) LinkWindowApproval(id, approvalID int64, apNo string) error {
 		Updates(map[string]any{"approval_id": approvalID, "ap_no": apNo}).Error
 }
 
-// SetExecWindowDecision 写下审批结论。
-//
-// 带上 status = pending 这个条件:一张已经被决定过的窗口不该被第二次决定覆盖
-// (通过 / 驳回与撤回可能同时到达),而"谁先到算谁的"要由数据库来裁,不是由
-// 两段各自读一遍再写回去的代码来裁。
-func (r *Repo) SetExecWindowDecision(id int64, status string, at time.Time) error {
-	return r.db.Model(&model.ExecWindow{}).
-		Where("id = ? AND status = ?", id, model.WindowPending).
-		Updates(map[string]any{"status": status, "decided_at": at}).Error
-}
-
 func (r *Repo) GetExecWindow(id int64) (*model.ExecWindow, error) {
 	var w model.ExecWindow
 	if err := r.db.First(&w, id).Error; err != nil {
