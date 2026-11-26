@@ -59,7 +59,7 @@
 <p style="font:400 15px/1.6 var(--font-body); color:var(--text-muted); margin:0 0 22px; max-width:62ch">本文面向后端工程师,说明 Go + Gin 技术栈、分层架构、风险判定与网关代执行、REST / WS 接口、鉴权、审批与飞书集成、审计与 Webhook 外推，以及库表设计。内容以现有代码为准；代码注释按章号引用本文，章号不要改。配套:《前端开发文档 (React)》、《PRD》。</p>
 
 <table class="t keep"><tbody>
-  <tr><td class="id" style="width:22%">语言/框架</td><td>Go 1.23 · Gin · GORM</td><td class="id" style="width:18%">存储</td><td>MySQL 8 · PostgreSQL · SQLite</td></tr>
+  <tr><td class="id" style="width:22%">语言/框架</td><td>Go 1.23 · Gin · GORM</td><td class="id" style="width:18%">存储</td><td>MySQL 8 · PostgreSQL</td></tr>
   <tr><td class="id">鉴权</td><td>JWT Cookie + CSRF · 三层判定</td><td class="id">更新</td><td>2026-11-25</td></tr>
 </tbody></table>
 
@@ -72,9 +72,9 @@
     <tr><td>语言</td><td>Go ≥ 1.23</td><td>纯 Go，不需要 cgo；产物是单二进制，内嵌前端、迁移与 Swagger UI。</td></tr>
     <tr><td>Web 框架</td><td>Gin</td><td>路由、中间件、参数绑定。</td></tr>
     <tr><td>ORM</td><td>GORM</td><td>自身存储库的访问；目标库不经 ORM。</td></tr>
-    <tr><td>自身存储</td><td>MySQL 8 / PostgreSQL / SQLite</td><td>生产用前两者，SQLite 用于本地开发。没有 Redis。</td></tr>
+    <tr><td>自身存储</td><td>MySQL 8 / PostgreSQL</td><td>生产与本地开发都用这两者（本地开发用 PostgreSQL）。没有 Redis。</td></tr>
     <tr><td>鉴权</td><td>JWT + HttpOnly Cookie + CSRF</td><td>令牌带会话代次，登出、改密码、停用即作废；TOTP 步进验证；SSO。</td></tr>
-    <tr><td>目标库</td><td>MySQL 系 · PostgreSQL / GaussDB(DWS) · Oracle · SQLite</td><td><code class="inl">database/sql</code> + 各引擎驱动；MySQL 系含 TiDB、MariaDB、PolarDB、Aurora。MongoDB、Redis、ClickHouse 不支持。</td></tr>
+    <tr><td>目标库</td><td>MySQL 系 · PostgreSQL / GaussDB(DWS) · Oracle</td><td><code class="inl">database/sql</code> + 各引擎驱动；MySQL 系含 TiDB、MariaDB、PolarDB、Aurora。MongoDB、Redis、ClickHouse 不支持。</td></tr>
     <tr><td>SQL 解析</td><td><code class="inl">internal/sqlparse</code> + vendored omni</td><td>只作旁证：只能把判定收紧，不能放宽（ADR 0019）。</td></tr>
     <tr><td>WebSocket</td><td>gorilla/websocket</td><td>终端流式执行。</td></tr>
     <tr><td>日志</td><td>log/slog</td><td>JSON 结构化日志。</td></tr>
@@ -246,7 +246,7 @@ req.Header.Set("X-AegisDB-Pushed-At", pushedAt)
 <!-- 9 -->
 <h2 style="font:600 22px/1.3 var(--font-display); color:var(--text-strong); letter-spacing:-.02em; margin:40px 0 3px; padding-top:18px; border-top:2px solid var(--text-strong); display:flex; align-items:baseline; gap:12px"><span style="font:600 14px var(--font-mono); color:var(--accent-text)">09</span> 数据库设计</h2>
 <div style="font:600 11px var(--font-mono); letter-spacing:.14em; color:var(--text-faint); text-transform:uppercase; margin-bottom:14px">Schema</div>
-<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>表结构以迁移为准</strong>，这里不抄 DDL：MySQL 是 <code class="inl">migrations/*.sql</code> 的增量迁移，PostgreSQL 是 <code class="inl">migrations/pg</code> 的基线，SQLite 由 GORM AutoMigrate 建表。约定：表名 <code class="inl">tbl_</code> 前缀；<strong>不使用物理外键</strong>，关联由应用层维护；MySQL 时间列用 <code class="inl">DATETIME(3)</code>、字符集 utf8mb4。</p>
+<p style="font:400 14.5px/1.65 var(--font-body); color:var(--text-body); margin:0 0 6px"><strong>表结构以迁移为准</strong>，这里不抄 DDL：MySQL 是 <code class="inl">migrations/*.sql</code> 的增量迁移，PostgreSQL 是 <code class="inl">migrations/pg</code> 的基线；两边都不用 GORM AutoMigrate 建表。约定：表名 <code class="inl">tbl_</code> 前缀；<strong>不使用物理外键</strong>，关联由应用层维护；MySQL 时间列用 <code class="inl">DATETIME(3)</code>、字符集 utf8mb4。</p>
 <h3 style="font:600 16px var(--font-body); color:var(--text-strong); margin:18px 0 7px">身份与权限</h3>
 <table class="t">
   <thead><tr><th style="width:34%">表</th><th>说明</th></tr></thead>
