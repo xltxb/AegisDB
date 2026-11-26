@@ -107,7 +107,7 @@ func (a *testApp) untouched(what string, id int64, no string, cards []model.Chat
 func TestChatClick_Approve(t *testing.T) {
 	app, lark, _ := cardApp(t)
 	admin := app.login(cardAdmin, "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "chat-click")
+	dev, prod := app.sameDBConns(admin, "chat-click")
 	eq(t, app.execSQL(admin, dev, `CREATE TABLE t_victim (id INTEGER PRIMARY KEY)`).Code, 0, "建表")
 	view := app.interceptedTicket(admin, prod, `DROP TABLE t_victim`)
 	app.sweepCards()

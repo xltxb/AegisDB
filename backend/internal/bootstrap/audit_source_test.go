@@ -139,7 +139,7 @@ func TestAuditSource_ScriptExecute(t *testing.T) {
 func TestAuditSource_ApprovalFlow(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "src-ap")
+	dev, conn := app.sameDBConns(admin, "src-ap")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_src_ap (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

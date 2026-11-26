@@ -3,31 +3,25 @@ package bootstrap
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-// slowSQL is a recursive CTE that keeps SQLite busy for a couple of seconds —
-// standing in for the DDL a DBA actually runs. It only has to outlast the
-// browser's pong budget.
-const slowSQL = `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 20000000) SELECT count(*) FROM c;`
+// slowSQL keeps the target busy for a few seconds — standing in for the DDL a
+// DBA actually runs. It only has to outlast the browser's pong budget.
+const slowSQL = `SELECT pg_sleep(3);`
 
-// sqliteConnID creates a connection pointing at a throwaway SQLite file, which
-// gives the suite a target that really executes (the seeded demo instances are
+// pgConnID creates a connection to a throwaway PostgreSQL database, which gives
+// the suite a target that really executes (the seeded demo instances are
 // simulated and return instantly, so they cannot reproduce a long-running
 // command).
-func (a *testApp) sqliteConnID(token string) int64 {
+func (a *testApp) pgConnID(token string) int64 {
 	a.t.Helper()
-	dbPath := filepath.Join(a.t.TempDir(), "target.db")
-	r := a.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "slow-target", "engine": "sqlite", "host": "127.0.0.1:0",
-		"env": "dev", "policy": "audit-only", "username": "u", "password": "p",
-		"database": dbPath,
-	})
-	eq(a.t, r.Code, 0, "create sqlite target connection")
+	body := targetConnBody(a.t, "slow-target", "dev", newTargetDB(a.t))
+	r := a.do(http.MethodPost, "/api/v1/connections", token, body)
+	eq(a.t, r.Code, 0, "create PostgreSQL target connection")
 	var created struct {
 		ID int64 `json:"id"`
 	}
@@ -50,7 +44,7 @@ func (a *testApp) sqliteConnID(token string) int64 {
 func TestTerminalWS_AnswersHeartbeatWhileCommandRuns(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	connID := app.sqliteConnID(token)
+	connID := app.pgConnID(token)
 
 	c := app.dialWS(token)
 	defer c.Close()
@@ -94,16 +88,14 @@ func TestTerminalWS_AnswersHeartbeatWhileCommandRuns(t *testing.T) {
 
 	// 等这条语句真正跑完再返回。
 	//
-	// 断言在看到 pong 的那一刻就成立了,但那时 slowSQL 还在跑,SQLite 的文件句柄
-	// 还开着。t.TempDir() 的清理紧接着去删这个文件,而 Windows 删不掉正在被打开
-	// 的文件 —— 测试于是在**清理阶段**失败,报的是 "The process cannot access the
-	// file because it is being used by another process",与心跳毫无关系。这让这条
-	// 用例有约 20% 的概率无故变红,而一张会无故变红的回归网,很快就没人再信它。
+	// 断言在看到 pong 的那一刻就成立了,但那时 slowSQL 还在跑,目标库上还有
+	// 一条活着的会话。清理阶段要紧接着 DROP DATABASE,让语句先收尾,清理就不必去强杀
+	// 它 —— 一张会无故变红的回归网,很快就没人再信它。
 	drainExec(t, c, execElapsed)
 }
 
 // drainExec reads until the exec reports back (output or error), so the target
-// database is closed before the temp dir is removed. Bounded: a statement that
+// database has no live session left when it is dropped. Bounded: a statement that
 // never finishes must not hang the suite.
 func drainExec(t *testing.T, c *websocket.Conn, already time.Duration) {
 	t.Helper()

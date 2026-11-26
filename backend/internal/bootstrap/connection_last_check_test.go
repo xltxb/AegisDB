@@ -57,7 +57,7 @@ func (a *testApp) connView(token string, id int64) connCheckView {
 func TestConnCheck_SuccessIsRecorded(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "check-ok")
+	conn := app.realPGConnIn(admin, "dev", "check-ok")
 
 	if r := app.do(http.MethodPost, "/api/v1/connections/"+itoa(conn)+"/test", admin, nil); r.Code != 0 {
 		t.Fatalf("这台是真连得上的,巡检不该失败: %s", r.Msg)
@@ -136,7 +136,7 @@ func TestConnCheck_NeverCheckedIsDistinctFromHealthy(t *testing.T) {
 func TestConnCheck_RecoveryClearsThePreviousError(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "check-recover")
+	conn := app.realPGConnIn(admin, "dev", "check-recover")
 
 	// 先人为记一笔失败,再巡检一次真的(这台是连得上的)。
 	if err := app.svc.Repo.SaveConnCheck(conn, "unreachable", false, "dial tcp: i/o timeout"); err != nil {
@@ -181,7 +181,7 @@ func TestConnCheck_NoCredentialsIsNotRecordedAsUnreachable(t *testing.T) {
 func TestConnCheck_ChangingCredentialsClearsTheVerdict(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "clear-on-edit")
+	conn := app.realPGConnIn(admin, "dev", "clear-on-edit")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "Access denied"); err != nil {
 		t.Fatalf("预置: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestConnCheck_ChangingCredentialsClearsTheVerdict(t *testing.T) {
 func TestConnCheck_RenamingKeepsTheVerdict(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "keep-on-rename")
+	conn := app.realPGConnIn(admin, "dev", "keep-on-rename")
 	if err := app.svc.Repo.SaveConnCheck(conn, "unreachable", false, "i/o timeout"); err != nil {
 		t.Fatalf("预置: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestConnCheck_RenamingKeepsTheVerdict(t *testing.T) {
 func TestConnCheck_StatusToggleDoesNotOverwriteTheVerdict(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "toggle-keeps")
+	conn := app.realPGConnIn(admin, "dev", "toggle-keeps")
 
 	// 模拟"加载了旧快照 → 巡检写入 → 快照 Save"的交错:先记结论,再 Toggle。
 	// Toggle 内部 GetConnection 时结论已在,所以这里能测的是 Save 是否 Omit 了那几列 ——
@@ -263,7 +263,7 @@ func TestConnCheck_StatusToggleDoesNotOverwriteTheVerdict(t *testing.T) {
 func TestConnCheck_ErrorTextIsHiddenFromNonAdmins(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "err-hidden")
+	conn := app.realPGConnIn(admin, "dev", "err-hidden")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "Access denied for user 'gw'@'10.1.2.3'"); err != nil {
 		t.Fatalf("预置: %v", err)
 	}

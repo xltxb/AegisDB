@@ -1,15 +1,10 @@
 package bootstrap
 
 import (
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	_ "github.com/glebarez/go-sqlite"
 
 	"aegisdb/internal/service"
 	"aegisdb/pkg/crypto"
@@ -24,32 +19,15 @@ func TestExport_SplitsIntoParts(t *testing.T) {
 	defer service.SetExportPartSize(100 << 20)
 
 	const total = 60
-	dbfile := filepath.Join(t.TempDir(), "big.db")
-	raw, err := sql.Open("sqlite", dbfile)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if _, err := raw.Exec(`CREATE TABLE t (id INTEGER, note TEXT)`); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	setup := []string{`CREATE TABLE t (id INTEGER, note TEXT)`}
 	for i := 0; i < total; i++ {
-		if _, err := raw.Exec(`INSERT INTO t VALUES (?, ?)`, i, fmt.Sprintf("row-%04d-%s", i, strings.Repeat("x", 60))); err != nil {
-			t.Fatalf("insert: %v", err)
-		}
+		setup = append(setup, fmt.Sprintf(`INSERT INTO t VALUES (%d, '%s')`, i, fmt.Sprintf("row-%04d-%s", i, strings.Repeat("x", 60))))
 	}
-	raw.Close()
 
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "big-sqlite", "engine": "SQLite", "host": "localhost:0",
-		"env": "dev", "policy": "audit-only", "database": dbfile,
-	})
-	eq(t, cr.Code, 0, "create connection")
-	var conn struct {
-		ID int64 `json:"id"`
-	}
-	_ = json.Unmarshal(cr.Data, &conn)
+	connID, _ := app.newPGConn(token, "big-pg", "dev", setup...)
+	conn := struct{ ID int64 }{connID}
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
 	id := app.submitExport(token, conn.ID, "SELECT id, note FROM t", "big")

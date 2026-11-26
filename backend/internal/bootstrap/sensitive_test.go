@@ -12,7 +12,6 @@ package bootstrap
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -48,13 +47,13 @@ func (a *testApp) execSQL(token string, connID int64, sql string) apiResp {
 	})
 }
 
-// realSQLiteConn 建一个**真的能执行**的连接(种子里的实例都是模拟的,不会真去查库)。
+// realPGConn 建一个**真的能执行**的连接(种子里的实例都是模拟的,不会真去查库)。
 //
 // 脱敏发生在结果从数据库读出来的那一刻,所以这组用例必须打到一个真库上 ——
 // 拿模拟执行器测脱敏,测的是一段永远不会跑到的代码。
-func (a *testApp) realSQLiteConn(token string) int64 {
+func (a *testApp) realPGConn(token string) int64 {
 	a.setTierSwitch(token, "dev", "maskSensitive", true)
-	return a.realSQLiteConnIn(token, "dev", "sensitive-probe")
+	return a.realPGConnIn(token, "dev", "sensitive-probe")
 }
 
 // setTierSwitch 改一个分层开关(PUT /env-tiers/:code 局部更新)。
@@ -69,28 +68,24 @@ func (a *testApp) setTierSwitch(token, tier, key string, on bool) {
 	}
 }
 
-// sameFileConns 把**同一个库文件**挂成两条连接:一条在 dev(准备数据用,不被拦),
+// sameDBConns 把**同一个目标库**挂成两条连接:一条在 dev(准备数据用,不被拦),
 // 一条在 prod(分层决定规则,一条 DROP 就会被拦成审批工单)。
 //
 // 需要两条是因为生产分层上连 CREATE TABLE 都要审批 —— 用一条 prod 连接就没法
 // 先把被测的表建出来。
-func (a *testApp) sameFileConns(token, name string) (dev, prod int64) {
+func (a *testApp) sameDBConns(token, name string) (dev, prod int64) {
 	a.t.Helper()
-	path := filepath.Join(a.t.TempDir(), name+".db")
-	return a.sqliteConnAt(token, "dev", name+"-dev", path), a.sqliteConnAt(token, "prod", name+"-prod", path)
+	db := newTargetDB(a.t)
+	return a.pgConnAt(token, "dev", name+"-dev", db), a.pgConnAt(token, "prod", name+"-prod", db)
 }
 
-func (a *testApp) realSQLiteConnIn(token, env, name string) int64 {
-	return a.sqliteConnAt(token, env, name, filepath.Join(a.t.TempDir(), name+".db"))
+func (a *testApp) realPGConnIn(token, env, name string) int64 {
+	return a.pgConnAt(token, env, name, newTargetDB(a.t))
 }
 
-func (a *testApp) sqliteConnAt(token, env, name, path string) int64 {
+func (a *testApp) pgConnAt(token, env, name, database string) int64 {
 	a.t.Helper()
-	r := a.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": name, "engine": "sqlite", "host": "local", "port": 0,
-		"env": env, "policy": "audit-only", "defaultRole": "dba_l2",
-		"database": path,
-	})
+	r := a.do(http.MethodPost, "/api/v1/connections", token, targetConnBody(a.t, name, env, database))
 	if r.Code != 0 {
 		a.t.Fatalf("建连接: code=%d msg=%s", r.Code, r.Msg)
 	}
@@ -197,12 +192,12 @@ func TestSensitive_MutationsAreAdminOnly(t *testing.T) {
 func TestSensitive_ResponseCarriesMaskedDataNotPlaintext(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConn(admin)
+	conn := app.realPGConn(admin)
 
 	const plaintext = "110101199003071234"
-	// 造一张真表(dev 连接是 sqlite,能真的建表写数据)
+	// 造一张真表(dev 连接是 PostgreSQL 临时库,能真的建表写数据)
 	for _, sql := range []string{
-		`CREATE TABLE t_person (id INTEGER PRIMARY KEY, name TEXT, id_card TEXT)`,
+		`CREATE TABLE t_person (id SERIAL PRIMARY KEY, name TEXT, id_card TEXT)`,
 		`INSERT INTO t_person (name, id_card) VALUES ('张三', '` + plaintext + `')`,
 	} {
 		if r := app.execSQL(admin, conn, sql); r.Code != 0 {
@@ -239,11 +234,11 @@ func TestSensitive_ResponseCarriesMaskedDataNotPlaintext(t *testing.T) {
 func TestSensitive_DisabledRuleStopsMasking(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConn(admin)
+	conn := app.realPGConn(admin)
 
 	const plaintext = "6222021234567890123"
 	for _, sql := range []string{
-		`CREATE TABLE t_acct (id INTEGER PRIMARY KEY, bank_card_no TEXT)`,
+		`CREATE TABLE t_acct (id SERIAL PRIMARY KEY, bank_card_no TEXT)`,
 		`INSERT INTO t_acct (bank_card_no) VALUES ('` + plaintext + `')`,
 	} {
 		if r := app.execSQL(admin, conn, sql); r.Code != 0 {

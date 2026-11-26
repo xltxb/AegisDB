@@ -2,11 +2,11 @@ package bootstrap
 
 // 收单检查的第二组:字段是否存在,以及**数据会不会违反即将加上的约束**。
 //
-// 仍然跑在真的 SQLite 上,而且这三种失败在 SQLite 上都是真会发生的:
+// 仍然跑在真的 PostgreSQL 上,而且这三种失败在 PostgreSQL 上都是真会发生的:
 //
-//	ALTER TABLE t ADD COLUMN c INT NOT NULL   表里有行 → Cannot add a NOT NULL column with default value NULL
-//	CREATE UNIQUE INDEX … ON t (c)            有重复值 → UNIQUE constraint failed
-//	ALTER TABLE t DROP COLUMN nope            列不存在 → no such column
+//	ALTER TABLE t ADD COLUMN c INT NOT NULL   表里有行 → column "c" of relation "t" contains null values
+//	CREATE UNIQUE INDEX … ON t (c)            有重复值 → could not create unique index
+//	ALTER TABLE t DROP COLUMN nope            列不存在 → column "nope" of relation "t" does not exist
 //
 // 也就是说,这组用例挡的不是"我们的判断逻辑自洽",而是"这条语句真的会在目标库上失败,
 // 而我们在收单时就说出来了"。
@@ -32,7 +32,7 @@ func issuesOfKindIn(res precheckResult, kind string) []precheckIssue {
 func TestPrecheckAlter_AddingAnExistingColumnIsReported(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-dup-col")
+	conn := app.realPGConnIn(admin, "dev", "alter-dup-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER, memo TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -59,7 +59,7 @@ func TestPrecheckAlter_AddingAnExistingColumnIsReported(t *testing.T) {
 func TestPrecheckAlter_DroppingAMissingColumnIsReported(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-missing-col")
+	conn := app.realPGConnIn(admin, "dev", "alter-missing-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -74,11 +74,11 @@ func TestPrecheckAlter_DroppingAMissingColumnIsReported(t *testing.T) {
 
 // 三、数据违反约束:表里有行,加一个无默认值的非空列。
 //
-// 这条在 SQLite 上真的会失败,在 MySQL/PG 上同样 —— 它是这类检查里最常见的一种。
+// 这条在 PostgreSQL 上真的会失败,在 MySQL 上同样 —— 它是这类检查里最常见的一种。
 func TestPrecheckAlter_NotNullColumnOnANonEmptyTableIsReported(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull")
+	conn := app.realPGConnIn(admin, "dev", "alter-notnull")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -106,7 +106,7 @@ func TestPrecheckAlter_NotNullColumnOnANonEmptyTableIsReported(t *testing.T) {
 func TestPrecheckAlter_NotNullWithDefaultRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull-default")
+	conn := app.realPGConnIn(admin, "dev", "alter-notnull-default")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -128,7 +128,7 @@ func TestPrecheckAlter_NotNullWithDefaultRaisesNothing(t *testing.T) {
 func TestPrecheckAlter_NotNullOnAnEmptyTableRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-notnull-empty")
+	conn := app.realPGConnIn(admin, "dev", "alter-notnull-empty")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_empty (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -144,7 +144,7 @@ func TestPrecheckAlter_NotNullOnAnEmptyTableRaisesNothing(t *testing.T) {
 func TestPrecheckAlter_UniqueOnDuplicateDataIsReported(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-unique")
+	conn := app.realPGConnIn(admin, "dev", "alter-unique")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_user (id INTEGER, email TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -169,7 +169,7 @@ func TestPrecheckAlter_UniqueOnDuplicateDataIsReported(t *testing.T) {
 func TestPrecheckAlter_UniqueOnCleanDataRaisesNothing(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-unique-clean")
+	conn := app.realPGConnIn(admin, "dev", "alter-unique-clean")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_user (id INTEGER, email TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -190,7 +190,7 @@ func TestPrecheckAlter_UniqueOnCleanDataRaisesNothing(t *testing.T) {
 func TestPrecheckAlter_TableCreatedInTheSameBatchIsNotColumnChecked(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-batch")
+	conn := app.realPGConnIn(admin, "dev", "alter-batch")
 
 	res := submitForPrecheck(t, app, admin, conn,
 		"CREATE TABLE t_new (id INTEGER);\nALTER TABLE t_new ADD COLUMN memo TEXT;")
@@ -208,7 +208,7 @@ func TestPrecheckAlter_TableCreatedInTheSameBatchIsNotColumnChecked(t *testing.T
 func TestPrecheckAlter_ColumnAddedEarlierInTheSameBatchIsSeen(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-batch-col")
+	conn := app.realPGConnIn(admin, "dev", "alter-batch-col")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -229,7 +229,7 @@ func TestPrecheckAlter_ColumnAddedEarlierInTheSameBatchIsSeen(t *testing.T) {
 func TestPrecheckAlter_UnrecognisedShapeSaysNothingWasChecked(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "alter-unknown")
+	conn := app.realPGConnIn(admin, "dev", "alter-unknown")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_order (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

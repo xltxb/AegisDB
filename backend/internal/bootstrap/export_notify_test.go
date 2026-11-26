@@ -34,12 +34,13 @@ func (a *testApp) waitForNotif(token, typ string, within time.Duration) (notifIt
 func TestExport_NotifiesOnCompletion(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConn(admin)
-	if r := app.execSQL(admin, conn, `CREATE TABLE t_rows (id INTEGER PRIMARY KEY, v TEXT)`); r.Code != 0 {
+	conn := app.realPGConn(admin)
+	if r := app.execSQL(admin, conn, `CREATE TABLE t_rows (id SERIAL PRIMARY KEY, v TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
-	if r := app.execSQL(admin, conn, `INSERT INTO t_rows (v) VALUES ('a'), ('b')`); r.Code != 0 {
-		t.Fatalf("插入: %s", r.Msg)
+	// execSQL 的语句失败也回 code 0,所以用返回的行数确认种子数据真的写进去了
+	if r := app.execSQL(admin, conn, `INSERT INTO t_rows (v) VALUES ('a'), ('b')`); r.Code != 0 || !strings.Contains(string(r.Data), `"rows":2`) {
+		t.Fatalf("插入: code=%d msg=%s data=%s", r.Code, r.Msg, r.Data)
 	}
 
 	r := app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
@@ -64,7 +65,7 @@ func TestExport_NotifiesOnCompletion(t *testing.T) {
 func TestExport_NotifiesOnFailure(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConn(admin)
+	conn := app.realPGConn(admin)
 
 	// 查一张不存在的表:数据库会拒,任务落到失败分支。
 	r := app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{

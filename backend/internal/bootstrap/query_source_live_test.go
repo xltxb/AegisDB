@@ -3,35 +3,40 @@ package bootstrap
 import (
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"aegisdb/internal/model"
+	"aegisdb/internal/testpg"
 )
 
 // 真实实例的库列表要现查。从前只要缓存里有这台实例就直接回缓存:新库要等同步,没有表的库永远不出现,
 // 外部审批系统选不到、也授不了(2026-11-05,fat 环境)。
 func TestQuerySourceDatabases_LiveBeatsCache(t *testing.T) {
 	e := newGrantEnv(t)
-	// 接口不让建 SQLite 实例,直接写库:它是测试里唯一不用外部服务就能真连的引擎。
+	// 目标是一个真实的 PostgreSQL 临时库(不用外部服务),这里直接写库建实例。
+	pg := testpg.Server(t)
+	database := newTargetDB(t, "CREATE TABLE live_t (id INTEGER)")
 	conn := &model.Connection{
-		Name: "live-source", Engine: "SQLite", Env: "prod", Policy: "audit-only", BizQuery: true,
-		Database: filepath.Join(t.TempDir(), "live.db"),
+		Name: "live-source", Engine: "postgresql", Env: "prod", Policy: "audit-only", BizQuery: true,
+		Host: pg.Host, Port: pg.Port, Username: pg.User, Password: pg.Password, Database: database,
 	}
 	if err := e.app.repo.DB().Create(conn).Error; err != nil {
 		t.Fatal(err)
 	}
 	id := conn.ID
 	e.seedMeta(t, id, "stale_db")
-	if got := e.sourceDBs(t, id); !reflect.DeepEqual(got, []string{"main"}) {
+	// PostgreSQL 现查的是整台实例上的库(含 postgres 与别的测试的库),所以断言"现查到了、
+	// 缓存里的假库没出现",而不是整份名单相等。
+	if got := e.sourceDBs(t, id); !slices.Contains(got, database) || slices.Contains(got, "stale_db") {
 		t.Fatalf("应回现查结果,不是缓存,实际 %v", got)
 	}
 
 	// 下发授权用同一份名单:现查有的库能授,只在缓存里的库不能授。
 	body := e.body("live@example.com", "OA-LIVE-1")
-	body["sourceId"], body["database"] = id, "main"
+	body["sourceId"], body["database"] = id, database
 	eq(t, e.put(body).Code, 0, "现查到的库能授权")
 	body = e.body("live@example.com", "OA-LIVE-2")
 	body["sourceId"], body["database"] = id, "stale_db"

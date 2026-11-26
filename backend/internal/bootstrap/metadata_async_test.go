@@ -35,7 +35,7 @@ func (a *testApp) metaSyncStatus(token string, connID int64) metaSyncStatusResp 
 func TestMetadata_AsyncSyncReturnsAtOnceThenFinishes(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "meta-async")
+	dev, _ := app.sameDBConns(admin, "meta-async")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_meta_async (id INTEGER PRIMARY KEY, name TEXT)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

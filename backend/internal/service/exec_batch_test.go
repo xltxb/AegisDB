@@ -4,7 +4,7 @@ package service
 //
 // 为什么必须在网关这一侧拆开,而不是把整段交给驱动:MySQL 的 DSN 上
 // AllowMultiStatements 是**故意**关掉的(见 gateway.engineDriver),关掉它正是为了让
-// "一次判定管住的就是这些语句"没法靠 DSN 绕过。不拆的话,同一段批量在 SQLite /
+// "一次判定管住的就是这些语句"没法靠 DSN 绕过。不拆的话,同一段批量在
 // PostgreSQL 上能跑、在 MySQL 上直接语法错 —— 同一个网关、同一段 SQL,结果取决于
 // 对面是什么引擎。
 //
@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -28,11 +27,10 @@ import (
 	"aegisdb/internal/model"
 )
 
-// 用临时文件而不是 :memory: —— sqlite 的每次连接都会新开一个内存库,
-// 那样第二条语句根本看不见第一条建的表,用例会测了个寂寞。
+// 每个用例一个全新的空库(PostgreSQL 临时实例),互不看见对方建的表。
 func batchConn(t *testing.T) *model.Connection {
 	t.Helper()
-	return &model.Connection{Engine: "SQLite", Database: filepath.Join(t.TempDir(), "batch.db")}
+	return pgTarget(t)
 }
 
 func batchSvc() *Services { return &Services{Executor: &gateway.Executor{}} }
@@ -40,7 +38,7 @@ func batchSvc() *Services { return &Services{Executor: &gateway.Executor{}} }
 func tableCount(t *testing.T, s *Services, conn *model.Connection) string {
 	t.Helper()
 	res := s.Executor.Run(context.Background(), conn,
-		`select count(*) from sqlite_master where type='table' and name like 't_b%'`, 5*time.Second)
+		`select count(*) from information_schema.tables where table_schema='public' and table_name like 't\_b%'`, 5*time.Second)
 	if res.Err != nil || len(res.Data) == 0 {
 		t.Fatalf("查表数失败: %v", res.Err)
 	}

@@ -5,41 +5,30 @@ package bootstrap
 // A release's execute log used to say only "执行成功 · N 行受影响" — fine for
 // DML, useless for the SELECTs releases carry to verify their own work: the
 // operator opening the run wants to SEE what came back, not re-run the query
-// by hand in the terminal. Runs against a REAL sqlite target (the simulator
+// by hand in the terminal. Runs against a REAL PostgreSQL target (the simulator
 // invents row counts and returns no result set).
 
 import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	_ "github.com/glebarez/go-sqlite"
+	"aegisdb/internal/testpg"
 )
 
-// realConnForRelease registers a live sqlite connection seeded by prep.
+// realConnForRelease registers a live PostgreSQL connection seeded by prep.
 func realConnForRelease(t *testing.T, app *testApp, token string, prep func(*sql.DB)) int64 {
 	t.Helper()
-	dbfile := filepath.Join(t.TempDir(), "release-target.db")
-	raw, err := sql.Open("sqlite", dbfile)
+	database := newTargetDB(t)
+	raw, err := sql.Open("pgx", testpg.Server(t).DSN(database))
 	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
+		t.Fatalf("open pg: %v", err)
 	}
 	prep(raw)
 	raw.Close()
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "rel-real-sqlite", "engine": "SQLite", "host": "localhost:0",
-		"env": "dev", "policy": "audit-only", "database": dbfile,
-	})
-	eq(t, cr.Code, 0, "create real connection")
-	var conn struct {
-		ID int64 `json:"id"`
-	}
-	_ = json.Unmarshal(cr.Data, &conn)
-	return conn.ID
+	return app.pgConnAt(token, "dev", "rel-real-pg", database)
 }
 
 func runExecOnlyRelease(t *testing.T, app *testApp, token string, connID int64, name, sqlText string) string {

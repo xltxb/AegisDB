@@ -130,21 +130,15 @@ func rewritten(before, after map[string]model.MetaColumn, db string) []string {
 	return out
 }
 
-func TestMetaSync_UnchangedColumnsKept_SQLiteRemote(t *testing.T) {
-	remote := filepath.Join(t.TempDir(), "remote.db")
-	rdb, err := sql.Open("sqlite", remote)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := rdb.Exec(`CREATE TABLE orders (
+func TestMetaSync_UnchangedColumnsKept_PGRemote(t *testing.T) {
+	remote := pgTarget(t)
+	pgExec(t, remote, `CREATE TABLE orders (
 		id INTEGER NOT NULL PRIMARY KEY,
 		sn VARCHAR(32) NOT NULL DEFAULT '',
 		amount INTEGER NOT NULL DEFAULT 0,
-		note TEXT)`); err != nil {
-		t.Fatal(err)
-	}
-	rdb.Close()
-	conn := &model.Connection{ID: 7, Name: "lite", Engine: "SQLite", Database: remote}
+		note TEXT)`)
+	remote.ID, remote.Name = 7, "pgremote"
+	conn := remote
 
 	for _, st := range openMetaStores(t) {
 		t.Run(st.name, func(t *testing.T) {

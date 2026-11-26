@@ -7,23 +7,28 @@ import (
 	"testing"
 
 	"aegisdb/internal/model"
+	"aegisdb/internal/testpg"
 )
 
 // issue #92:TiDB 的 information_schema 把系统库名按大写返回,而且库名比较区分大小写,
 // 小写字面量的 NOT IN 一个也滤不掉;TiDB 还多一个 metrics_schema。
 //
-// 没有 TiDB 也要能钉住它:SQLite 的字符串比较同样区分大小写,附加一个名叫
-// information_schema 的库,跑的就是产品里那几条 SQL 原文。
+// 没有 TiDB 也要能钉住它:PostgreSQL 的字符串比较同样区分大小写。在一次性的临时库里
+// 把自带的 information_schema 删掉,换成同名、同列名的普通表,跑的就是产品里那几条 SQL 原文。
 func fakeTiDBCatalog(t *testing.T) *sql.DB {
 	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
+	conn := pgTarget(t)
+	db, err := sql.Open("pgx", testpg.Server(t).DSN(conn.Database))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	db.SetMaxOpenConns(1) // ATTACH 只对当前连接有效
+	db.SetMaxOpenConns(1)
 	for _, s := range []string{
-		`ATTACH ':memory:' AS information_schema`,
+		// MySQL 的 IFNULL,产品里的几条 SQL 在用。
+		`CREATE FUNCTION public.ifnull(text, text) RETURNS text LANGUAGE sql IMMUTABLE AS 'SELECT COALESCE($1, $2)'`,
+		`DROP SCHEMA information_schema CASCADE`,
+		`CREATE SCHEMA information_schema`,
 		`CREATE TABLE information_schema.tables (table_schema TEXT, table_name TEXT, table_type TEXT, table_comment TEXT)`,
 		`CREATE TABLE information_schema.schemata (schema_name TEXT)`,
 		`CREATE TABLE information_schema.columns (table_schema TEXT, table_name TEXT, ordinal_position INT, column_name TEXT,
@@ -38,13 +43,13 @@ func fakeTiDBCatalog(t *testing.T) *sql.DB {
 		"information_schema", "performance_schema", // MySQL
 		"Orders", // 用户库,大小写要原样保留
 	} {
-		if _, err := db.Exec(`INSERT INTO information_schema.tables VALUES (?, 't', 'BASE TABLE', '')`, schema); err != nil {
+		if _, err := db.Exec(`INSERT INTO information_schema.tables VALUES ($1, 't', 'BASE TABLE', '')`, schema); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`INSERT INTO information_schema.schemata VALUES (?)`, schema); err != nil {
+		if _, err := db.Exec(`INSERT INTO information_schema.schemata VALUES ($1)`, schema); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := db.Exec(`INSERT INTO information_schema.columns VALUES (?, 't', 1, 'id', 'int', 'NO', NULL, '', 'PRI')`, schema); err != nil {
+		if _, err := db.Exec(`INSERT INTO information_schema.columns VALUES ($1, 't', 1, 'id', 'int', 'NO', NULL, '', 'PRI')`, schema); err != nil {
 			t.Fatal(err)
 		}
 	}

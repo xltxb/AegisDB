@@ -128,7 +128,7 @@ func TestReleaseErrorRefRendersToTheStoredError(t *testing.T) {
 	if got := model.RenderRelLogLines(parseRefs(t, ex.LogRefs)); got != ex.Log {
 		t.Errorf("failed execute: refs render\n%q\nbut log is\n%q", got, ex.Log)
 	}
-	if !strings.Contains(ex.Log, "no such table") {
+	if !strings.Contains(ex.Log, "does not exist") {
 		t.Errorf("driver error should stay in the log verbatim, got %q", ex.Log)
 	}
 }

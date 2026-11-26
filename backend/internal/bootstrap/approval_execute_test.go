@@ -40,7 +40,7 @@ func (a *testApp) interceptedTicket(token string, connID int64, sql string) apWi
 
 func (a *testApp) tableExists(token string, connID int64, table string) bool {
 	a.t.Helper()
-	r := a.execSQL(token, connID, "SELECT name FROM sqlite_master WHERE type='table' AND name='"+table+"'")
+	r := a.execSQL(token, connID, "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='"+table+"'")
 	return strings.Contains(string(r.Data), table)
 }
 
@@ -48,7 +48,7 @@ func (a *testApp) tableExists(token string, connID int64, table string) bool {
 func TestApprovedCommand_IsNotExecutedUntilTheInitiatorRunsIt(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-timing") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-timing") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_victim (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -77,7 +77,7 @@ func TestApprovedCommand_IsNotExecutedUntilTheInitiatorRunsIt(t *testing.T) {
 func TestApprovedCommand_ExecutesOnlyOnce(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-once") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-once") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_once (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -99,7 +99,7 @@ func TestApprovedCommand_ExecutesOnlyOnce(t *testing.T) {
 func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-who") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-who") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_who (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -123,7 +123,7 @@ func TestApprovedCommand_ExecutorMustReachTheInstance(t *testing.T) {
 func TestApprovedCommand_RefusesWhenNotApproved(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-state") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-state") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_state (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -148,7 +148,7 @@ func TestApprovedCommand_RefusesWhenNotApproved(t *testing.T) {
 func TestApprovedCommand_NotifiesTheInitiatorToGoRunIt(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-notify") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-notify") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_notify (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -212,7 +212,7 @@ func TestReleaseTicket_IsNotExecutableThroughThisPath(t *testing.T) {
 func TestApprovedCommand_ExecutingDoesNotRewriteWhenItWasApproved(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, conn := app.sameFileConns(admin, "exec-times") // dev 备数据,prod 触发审批
+	dev, conn := app.sameDBConns(admin, "exec-times") // dev 备数据,prod 触发审批
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_times (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}

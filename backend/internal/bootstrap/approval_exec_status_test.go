@@ -6,7 +6,7 @@ package bootstrap
 // —— 但没有任何一列说那段文字是一次失败,于是列表上一条跑挂的 DROP 和一条跑成的长
 // 得一模一样,都是"已通过"。想分辨就只能去解析那段文字,而那是猜。
 //
-// 下面这一组用的是**真实的 sqlite 目标库**,不是模拟执行器:模拟执行器永远成功,
+// 下面这一组用的是**真实的 PostgreSQL 目标库**,不是模拟执行器:模拟执行器永远成功,
 // 拿它测"失败会不会被记下来"等于什么都没测。
 
 import (
@@ -51,9 +51,9 @@ func (a *testApp) runOwnTicket(initiator string, connID int64, sql string) apOut
 func TestApprovalExec_FailureIsRecordedOnTheTicket(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	_, prod := app.sameFileConns(admin, "exec-status-fail")
+	_, prod := app.sameDBConns(admin, "exec-status-fail")
 
-	// 删一张不存在的表:sqlite 会实打实地报错,而且什么也没改动。
+	// 删一张不存在的表:PostgreSQL 会实打实地报错,而且什么也没改动。
 	after := app.runOwnTicket(admin, prod, `DROP TABLE t_never_existed`)
 
 	if after.ExecStatus != "failed" {
@@ -72,7 +72,7 @@ func TestApprovalExec_FailureIsRecordedOnTheTicket(t *testing.T) {
 func TestApprovalExec_SuccessIsRecordedOnTheTicket(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "exec-status-ok")
+	dev, prod := app.sameDBConns(admin, "exec-status-ok")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_ok (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -94,7 +94,7 @@ func TestApprovalExec_SuccessIsRecordedOnTheTicket(t *testing.T) {
 func TestApprovalExec_FailureDoesNotUnapproveTheTicket(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	_, prod := app.sameFileConns(admin, "exec-status-keep")
+	_, prod := app.sameDBConns(admin, "exec-status-keep")
 
 	after := app.runOwnTicket(admin, prod, `DROP TABLE t_also_never_existed`)
 

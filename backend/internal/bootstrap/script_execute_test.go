@@ -27,7 +27,7 @@ func (a *testApp) auditRows(token string) []auditRow {
 // audit trail — every statement is recorded as executed, just like a terminal
 // command. Observable purely through GET /audit.
 //
-// 用**真实的 SQLite 连接**跑,而不是种子里那台没有凭据的演示实例。
+// 用**真实的 PostgreSQL 连接**跑,而不是种子里那台没有凭据的演示实例。
 //
 // 从前用的是后者,于是这条用例其实一条语句都没执行过,却断言审计记着 executed ——
 // 它自己就是那个谎的受害者。模拟执行现在如实记成 simulated(见 model.ResultSimulated),
@@ -36,7 +36,7 @@ func (a *testApp) auditRows(token string) []auditRow {
 func TestScriptExecute_SafeScriptLeavesAuditTrail(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	devConn, _ := app.sameFileConns(token, "script-audit")
+	devConn, _ := app.sameDBConns(token, "script-audit")
 
 	// 两张真表 —— 脚本里的 SELECT 要真能跑通,否则审计记的是 warn 而不是 executed。
 	for _, ddl := range []string{

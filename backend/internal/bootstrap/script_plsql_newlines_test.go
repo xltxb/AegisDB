@@ -15,12 +15,12 @@ import (
 // 就把后面整个包体注释掉了。Oracle 照收不误(CREATE OR REPLACE 对编译错误只是留下
 // INVALID 对象),于是脚本"成功",包是坏的。
 //
-// SQLite 上同一件事:CREATE TRIGGER … BEGIN … END; 被整块取出,body 里的 `--`
-// 在压平后吞掉后面的 INSERT 和 END,触发器要么建不出来,要么是空的。
+// PostgreSQL 上同一件事:CREATE FUNCTION … $$ … $$ 被整块取出,body 里的 `--`
+// 在压平后吞掉后面的 INSERT、RETURN 和结尾的 $$,函数要么建不出来,要么是空的。
 func TestScriptExecute_PLSQLBlockKeepsItsNewlines(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn, _ := app.sameFileConns(token, "script-plsql-nl")
+	conn, _ := app.sameDBConns(token, "script-plsql-nl")
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"script.savePath": t.TempDir()}).Code, 0, "set script path")
 
 	for _, ddl := range []string{
@@ -34,11 +34,14 @@ func TestScriptExecute_PLSQLBlockKeepsItsNewlines(t *testing.T) {
 
 	// CRLF,和从 Windows 上传的 .pck 一样。
 	script := strings.Join([]string{
-		"CREATE TRIGGER nl_sync AFTER INSERT ON nl_src",
+		"CREATE FUNCTION nl_sync_fn() RETURNS trigger LANGUAGE plpgsql AS $$",
 		"BEGIN",
 		"  -- 同步写一份到 nl_dst",
 		"  INSERT INTO nl_dst (id) VALUES (NEW.id);",
+		"  RETURN NEW;",
 		"END;",
+		"$$;",
+		"CREATE TRIGGER nl_sync AFTER INSERT ON nl_src FOR EACH ROW EXECUTE FUNCTION nl_sync_fn();",
 	}, "\r\n")
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", token, map[string]any{
 		"connectionId": conn, "filename": "nl_sync.sql", "content": script,
@@ -61,7 +64,7 @@ func TestScriptExecute_PLSQLBlockKeepsItsNewlines(t *testing.T) {
 func TestScriptScan_PLSQLBlockIsReportedVerbatim(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn, _ := app.sameFileConns(token, "script-plsql-scan")
+	conn, _ := app.sameDBConns(token, "script-plsql-scan")
 
 	body := "CREATE OR REPLACE PACKAGE pk_nl AS\n  -- 说明\n  FUNCTION f RETURN NUMBER;\nEND pk_nl;"
 	script := body + "\n/\n"

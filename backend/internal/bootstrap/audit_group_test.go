@@ -26,7 +26,7 @@ type auditGroupPage struct {
 func TestAudit_GroupedByApproval(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "audit-group")
+	dev, prod := app.sameDBConns(admin, "audit-group")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_grp (id INTEGER PRIMARY KEY)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -80,7 +80,7 @@ func TestAudit_GroupedByApproval(t *testing.T) {
 func TestAudit_GroupedRespectsVisibility(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	_, prod := app.sameFileConns(admin, "audit-group-vis")
+	_, prod := app.sameDBConns(admin, "audit-group-vis")
 	ap := app.interceptedTicket(admin, prod, `DROP TABLE nothing_here`)
 
 	l2 := app.login("chenhao@aegisdb.io", "aegisdb123")

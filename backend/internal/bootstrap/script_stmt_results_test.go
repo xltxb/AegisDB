@@ -33,7 +33,7 @@ func scriptResults(t *testing.T, raw json.RawMessage) []scriptStmtResult {
 func TestScript_ReturnsEachStatementsResult(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev := app.realSQLiteConnIn(admin, "dev", "script-results")
+	dev := app.realPGConnIn(admin, "dev", "script-results")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", admin, map[string]any{
@@ -64,7 +64,7 @@ func TestScript_ReturnsEachStatementsResult(t *testing.T) {
 func TestScript_FailureStillReturnsResultsSoFar(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev := app.realSQLiteConnIn(admin, "dev", "script-results-fail")
+	dev := app.realPGConnIn(admin, "dev", "script-results-fail")
 	app.setSettings(admin, map[string]any{"script.savePath": t.TempDir()})
 
 	r := app.do(http.MethodPost, "/api/v1/scripts/execute", admin, map[string]any{

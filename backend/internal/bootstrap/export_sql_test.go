@@ -4,12 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	_ "github.com/glebarez/go-sqlite"
-
+	"aegisdb/internal/testpg"
 	"aegisdb/pkg/crypto"
 	"aegisdb/pkg/sqlutil"
 )
@@ -18,38 +16,22 @@ import (
 // NULL 还是 NULL、空串还是空串、带引号的字符串一字不差。单表查询附带建表语句,所以空库里
 // 不用先手工建表。
 func TestExportSQL_RoundTripsIntoAnEmptyDatabase(t *testing.T) {
-	src := filepath.Join(t.TempDir(), "src.db")
-	raw, err := sql.Open("sqlite", src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, q := range []string{
+	app := newTestApp(t)
+	token := app.login("linwei@aegisdb.io", "aegisdb123")
+	connID, _ := app.newPGConn(token, "sqlexp", "dev",
 		`CREATE TABLE t_member (id INTEGER PRIMARY KEY, name TEXT, note TEXT)`,
 		`INSERT INTO t_member VALUES (1, 'O''Brien', NULL)`,
 		`INSERT INTO t_member VALUES (2, '', 'line1
 line2')`,
 		`INSERT INTO t_member VALUES (3, '张三', 'a;b -- not a comment')`,
-	} {
-		if _, err := raw.Exec(q); err != nil {
-			t.Fatalf("%s: %v", q, err)
-		}
-	}
-	raw.Close()
-
-	app := newTestApp(t)
-	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "sqlexp", "engine": "SQLite", "host": "localhost:0", "env": "dev", "policy": "audit-only", "database": src,
-	})
-	eq(t, cr.Code, 0, "create connection")
-	var conn struct {
-		ID int64 `json:"id"`
-	}
-	_ = json.Unmarshal(cr.Data, &conn)
+	)
+	conn := struct{ ID int64 }{connID}
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
+	// 查询里的表带 schema(public.t_member):PostgreSQL 上不带 schema 的单表目前导出时不附
+	// CREATE TABLE(取表结构的 scope 只为 MySQL 设置),见 https://github.com/xltxb/AegisDB/issues/150
 	r := app.do(http.MethodPost, "/api/v1/export", token, map[string]any{
-		"connectionId": conn.ID, "sql": "SELECT id, name, note FROM t_member ORDER BY id", "name": "members", "format": "sql",
+		"connectionId": conn.ID, "sql": "SELECT id, name, note FROM public.t_member ORDER BY id", "name": "members", "format": "sql",
 	})
 	eq(t, r.Code, 0, "submit sql export")
 	var j exportJob
@@ -71,8 +53,7 @@ line2')`,
 		t.Fatalf("单表导出应附建表语句:\n%s", text)
 	}
 
-	dst := filepath.Join(t.TempDir(), "dst.db")
-	out, err := sql.Open("sqlite", dst)
+	out, err := sql.Open("pgx", testpg.Server(t).DSN(newTargetDB(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

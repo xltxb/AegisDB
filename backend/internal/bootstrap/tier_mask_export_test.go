@@ -67,14 +67,14 @@ func TestTierSwitches_NewTierInheritsTemplateUnlessGiven(t *testing.T) {
 	}
 }
 
-// 同一个库文件挂在 dev 与 prod 上:同一条查询,prod 打码、dev 原值;dev 打开开关后也打码。
+// 同一个目标库挂在 dev 与 prod 上:同一条查询,prod 打码、dev 原值;dev 打开开关后也打码。
 func TestTierSwitches_TerminalMaskingFollowsTier(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, prod := app.sameFileConns(admin, "tier-mask")
+	dev, prod := app.sameDBConns(admin, "tier-mask")
 	const plaintext = "110101199003071234"
 	for _, sql := range []string{
-		`CREATE TABLE t_person (id INTEGER PRIMARY KEY, name TEXT, id_card TEXT)`,
+		`CREATE TABLE t_person (id SERIAL PRIMARY KEY, name TEXT, id_card TEXT)`,
 		`INSERT INTO t_person (name, id_card) VALUES ('张三', '` + plaintext + `')`,
 	} {
 		if r := app.execSQL(admin, dev, sql); r.Code != 0 {

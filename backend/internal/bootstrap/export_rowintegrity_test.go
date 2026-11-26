@@ -2,15 +2,11 @@ package bootstrap
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/csv"
-	"encoding/json"
+	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"testing"
-
-	_ "github.com/glebarez/go-sqlite"
 
 	"aegisdb/internal/service"
 	"aegisdb/pkg/crypto"
@@ -37,32 +33,15 @@ func TestExport_PartsPreserveCompleteRows(t *testing.T) {
 		"comma, quote \" and\nnewline " + pad,
 		"trailing quote\" " + pad,
 	}
-	dbfile := filepath.Join(t.TempDir(), "tricky.db")
-	raw, err := sql.Open("sqlite", dbfile)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if _, err := raw.Exec(`CREATE TABLE t (id INTEGER, note TEXT)`); err != nil {
-		t.Fatalf("create: %v", err)
-	}
+	setup := []string{`CREATE TABLE t (id INTEGER, note TEXT)`}
 	for i, n := range notes {
-		if _, err := raw.Exec(`INSERT INTO t VALUES (?, ?)`, i, n); err != nil {
-			t.Fatalf("insert: %v", err)
-		}
+		setup = append(setup, fmt.Sprintf(`INSERT INTO t VALUES (%d, '%s')`, i, strings.ReplaceAll(n, "'", "''")))
 	}
-	raw.Close()
 
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")
-	cr := app.do(http.MethodPost, "/api/v1/connections", token, map[string]any{
-		"name": "tricky", "engine": "SQLite", "host": "localhost:0",
-		"env": "dev", "policy": "audit-only", "database": dbfile,
-	})
-	eq(t, cr.Code, 0, "create connection")
-	var conn struct {
-		ID int64 `json:"id"`
-	}
-	_ = json.Unmarshal(cr.Data, &conn)
+	connID, _ := app.newPGConn(token, "tricky", "dev", setup...)
+	conn := struct{ ID int64 }{connID}
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
 	id := app.submitExport(token, conn.ID, "SELECT id, note FROM t ORDER BY id", "tricky")

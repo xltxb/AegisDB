@@ -20,7 +20,7 @@ import (
 func TestConnSweep_DisabledByDefault(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "sweep-off")
+	conn := app.realPGConnIn(admin, "dev", "sweep-off")
 
 	app.svc.SweepConnChecks()
 
@@ -33,7 +33,7 @@ func TestConnSweep_DisabledByDefault(t *testing.T) {
 func TestConnSweep_ChecksWhenEnabled(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "sweep-on")
+	conn := app.realPGConnIn(admin, "dev", "sweep-on")
 	app.setSettings(admin, map[string]any{"conn.check.enabled": true})
 
 	app.svc.SweepConnChecks()
@@ -51,7 +51,7 @@ func TestConnSweep_ChecksWhenEnabled(t *testing.T) {
 func TestConnSweep_SkipsMaintenance(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "sweep-maint")
+	conn := app.realPGConnIn(admin, "dev", "sweep-maint")
 	if r := app.do(http.MethodPatch, "/api/v1/connections/"+itoa(conn), admin, map[string]any{"status": "maint"}); r.Code != 0 {
 		t.Fatalf("标维护态: %s", r.Msg)
 	}
@@ -85,10 +85,10 @@ func TestConnSweep_SkipsInstancesWithoutCredentials(t *testing.T) {
 func TestConnSweep_SkipsAuthFailuresButKeepsRetryingNetworkFailures(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	authBad := app.realSQLiteConnIn(admin, "dev", "sweep-auth")
-	netBad := app.realSQLiteConnIn(admin, "dev", "sweep-net")
+	authBad := app.realPGConnIn(admin, "dev", "sweep-auth")
+	netBad := app.realPGConnIn(admin, "dev", "sweep-net")
 
-	// 预置两条不同成因的失败。两台底下都是真连得上的 SQLite,所以只要巡检真的跑了,
+	// 预置两条不同成因的失败。两台底下都是真连得上的 PostgreSQL,所以只要巡检真的跑了,
 	// 结论就会翻成"通" —— 这正好用来区分"跑了"和"跳过了"。
 	if err := app.svc.Repo.SaveConnCheck(authBad, "auth", false, "Error 1045: Access denied for user 'app'@'10.0.0.1'"); err != nil {
 		t.Fatalf("预置认证失败: %v", err)
@@ -112,7 +112,7 @@ func TestConnSweep_SkipsAuthFailuresButKeepsRetryingNetworkFailures(t *testing.T
 func TestConnSweep_ManualCheckStillRunsAfterAuthFailure(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "manual-after-auth")
+	conn := app.realPGConnIn(admin, "dev", "manual-after-auth")
 	if err := app.svc.Repo.SaveConnCheck(conn, "auth", false, "ORA-01017: invalid username/password"); err != nil {
 		t.Fatalf("预置: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestConnSweep_ManualCheckStillRunsAfterAuthFailure(t *testing.T) {
 func TestConnSweep_MetadataSweepAlsoSkipsAuthFailures(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	conn := app.realSQLiteConnIn(admin, "dev", "meta-skips-auth")
+	conn := app.realPGConnIn(admin, "dev", "meta-skips-auth")
 	if r := app.execSQL(admin, conn, `CREATE TABLE t_probe (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -143,7 +143,7 @@ func TestConnSweep_MetadataSweepAlsoSkipsAuthFailures(t *testing.T) {
 
 	app.svc.SweepMetadata()
 
-	// 底下是真连得上的 SQLite:只要同步真的跑了,就会留下同步记录。
+	// 底下是真连得上的 PostgreSQL:只要同步真的跑了,就会留下同步记录。
 	if got := app.readMeta(admin, conn); got.Sync != nil {
 		t.Errorf("上次认证失败的实例不该被元数据同步重拨(会锁账号),却同步了:%+v", got.Sync)
 	}

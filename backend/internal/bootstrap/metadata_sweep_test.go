@@ -18,7 +18,7 @@ import (
 func TestMetaSweep_DisabledByDefault(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "sweep-off")
+	dev, _ := app.sameDBConns(admin, "sweep-off")
 
 	app.svc.SweepMetadata()
 
@@ -31,7 +31,7 @@ func TestMetaSweep_DisabledByDefault(t *testing.T) {
 func TestMetaSweep_SyncsWhenEnabled(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "sweep-on")
+	dev, _ := app.sameDBConns(admin, "sweep-on")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_sweep_on (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
@@ -52,7 +52,7 @@ func TestMetaSweep_SyncsWhenEnabled(t *testing.T) {
 func TestMetaSweep_SkipsMaintenanceInstances(t *testing.T) {
 	app := newTestApp(t)
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
-	dev, _ := app.sameFileConns(admin, "sweep-maint")
+	dev, _ := app.sameDBConns(admin, "sweep-maint")
 	if r := app.execSQL(admin, dev, `CREATE TABLE t_sweep_maint (id INTEGER)`); r.Code != 0 {
 		t.Fatalf("建表: %s", r.Msg)
 	}
