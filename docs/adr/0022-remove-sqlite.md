@@ -27,12 +27,13 @@ SQLite 在这个项目里有两个角色:本地开发 / 测试的存储库,以�
 
 - 后端引擎族、驱动、缓存与风险规则里的 SQLite 分支删除,`go.mod` 去掉 `glebarez/sqlite`、`glebarez/go-sqlite`、
   `modernc.org/sqlite` 及其独占的间接依赖。前端引擎识别、界面分支与词条同步删除。
-- **存量连接不删不改。** `engine` 含 sqlite 的连接仍留在列表里,但连接、执行、导出、测试连接都以
-  「不支持的数据库引擎」被拒,不 panic;新建 / 编辑时不能再选。其它不属于 MySQL / PostgreSQL / Oracle 的引擎同理。
+- **存量连接不删不改。** `engine` 含 sqlite 的连接仍留在列表里,但连接、执行、导出、测试连接,以及库表树、
+  对象列表与源码、列名补全、数据查询(表 / 列 / 执行)都以「不支持的数据库引擎」被拒,不 panic,也不退回演示数据
+  (#155);新建 / 编辑时不能再选。其它不属于 MySQL / PostgreSQL / Oracle 的引擎同理。
 - `model.RuleSQLiteFileOp`(`sqliteFileOp`)常量及其文案**保留**,只删判定逻辑:历史审计行里存着这个规则键,
   删掉它旧记录会显示成原始键。
-- `/open/sql-review` 不再接受 `dialect=sqlite`。
-- 无法真实执行的连接(含上述存量 SQLite 连接),导出在生产环境直接失败,不再生成模拟数据行。
+- `/open/sql-review` 仍接受 `dialect=sqlite`,按通用方言审查:它是静态审查、不连库,外部 CI 一直在传。
+- 无法真实执行的连接,导出在生产环境不再生成模拟数据行:提交时就拒绝,不入队(#154)。
 
 ### 三、后端测试改跑 PostgreSQL
 
