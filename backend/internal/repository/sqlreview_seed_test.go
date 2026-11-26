@@ -12,27 +12,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
 	"aegisdb/internal/review"
+	"aegisdb/internal/testpg"
 )
 
 func seedRepo(t *testing.T) (*repository.Repo, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_pragma=busy_timeout(5000)"),
-		&gorm.Config{Logger: logger.Discard})
+	_, dsn := testpg.MigratedDB(t)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if err := db.Migrator().DropTable(&model.SQLReviewRule{}); err != nil {
-		t.Fatalf("drop: %v", err)
-	}
-	if err := db.AutoMigrate(&model.SQLReviewRule{}); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if sqlDB, derr := db.DB(); derr == nil {
+		t.Cleanup(func() { sqlDB.Close() })
 	}
 	return repository.New(db), db
 }

@@ -1,6 +1,6 @@
 package bootstrap
 
-// harness_test.go boots the entire AegisDB against a throwaway SQLite file
+// harness_test.go boots the entire AegisDB against a throwaway PostgreSQL store
 // with seed data and exposes it through an httptest server. Tests drive the real
 // /api/v1 HTTP seam end-to-end (auth -> middleware -> three-layer engine -> audit),
 // asserting only externally observable behaviour, never internal collaborators.
@@ -11,8 +11,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"aegisdb/internal/gateway"
@@ -34,7 +32,7 @@ type testApp struct {
 }
 
 // newTestApp assembles the app exactly like cmd/server/main.go, but against an
-// isolated in-temp-dir SQLite database seeded with the demo dataset. Optional
+// isolated PostgreSQL store seeded with the demo dataset. Optional
 // opts tweak the config before the router is built (e.g. to set EnvRaw for the
 // docs-exposure test).
 func newTestApp(t *testing.T, opts ...func(*Config)) *testApp {
@@ -42,9 +40,8 @@ func newTestApp(t *testing.T, opts ...func(*Config)) *testApp {
 
 	cfg := &Config{}
 	cfg.Server.Mode = "release"
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "aegisdb-test.db")
-	cfg.Database.AutoMigrate = true
+	cfg.Database.Driver = "postgres"
+	cfg.Database.AutoMigrate = false
 	cfg.Database.Seed = true
 	cfg.JWT.Secret = "test-secret"
 	cfg.JWT.TTLHours = 1
@@ -57,39 +54,21 @@ func newTestApp(t *testing.T, opts ...func(*Config)) *testApp {
 		o(cfg)
 	}
 
-	// AEGISDB_TEST_STORE_PG 设了就把存储库换成真 PostgreSQL:每个测试一个库,从迁移+播种好的
-	// 模板库 CREATE DATABASE … TEMPLATE 出来(PG 原生整库复制,远快于每次重跑迁移)。
-	// 调用方用 opts 自带了存储库(driver 不再是 sqlite)时,用它的,也不替它播种。
-	ownStore := cfg.Database.Driver == "sqlite"
-	pgStore := ""
-	if ownStore {
-		pgStore = os.Getenv("AEGISDB_TEST_STORE_PG")
-	}
-	if pgStore != "" {
-		cfg.Database.Driver = "postgres"
-		cfg.Database.AutoMigrate = false
-		cfg.Database.PostgresDSN = pgTestStore(t, pgStore, cfg)
+	// 存储库是测试 PG 实例上的一个独立库,从迁移 + 播种 + 夹具都做好的模板库
+	// CREATE DATABASE … TEMPLATE 出来(见 harness_pg_test.go)。调用方用 opts 自带了
+	// 存储库(换了 driver,或给了 PostgresDSN)时,用它的,也不替它播种。
+	if cfg.Database.Driver == "postgres" && cfg.Database.PostgresDSN == "" {
+		cfg.Database.PostgresDSN = seededStore(t)
 	}
 	db, err := OpenDB(cfg)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
-	// Close the SQLite handle before t.TempDir() removal runs (cleanups are LIFO),
-	// otherwise Windows refuses to delete the still-open database file.
+	// 连接池先于库的 DROP 关掉(cleanup 后进先出,建库的清理先注册)。
 	if sqlDB, derr := db.DB(); derr == nil {
 		t.Cleanup(func() { sqlDB.Close() })
 	}
 	repo := repository.New(db)
-	// 夹具不论模拟哪个环境都要有。Seed 只在本地开发时种(M6),所以拿一份环境名置空的副本去种;
-	// 路由仍按 cfg 里真正要测的环境名搭(例如 staging 下不暴露接口文档)。
-	seedCfg := *cfg
-	seedCfg.EnvRaw = ""
-	if ownStore && pgStore == "" { // PG 模板库里已经种过了
-		if err := Seed(repo, &seedCfg); err != nil {
-			t.Fatalf("seed: %v", err)
-		}
-		seedTestFixtures(t, repo) // demo users/connections/approvals/audit the suite asserts on
-	}
 	crypto.SetSecretKey(cfg.JWT.Secret)
 	service.AllowPrivateWebhookTargets = true // stub webhook/Lark servers run on loopback
 	service.AllowInsecureSSO = true           // stub SSO runs on plain-http loopback

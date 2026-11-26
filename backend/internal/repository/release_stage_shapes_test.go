@@ -1,14 +1,11 @@
 package repository
 
 import (
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 )
@@ -23,16 +20,7 @@ type sqlCounter struct {
 
 func newStageShapesRepo(t *testing.T) (*Repo, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "rs.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.ReleaseStage{}); err != nil {
-		t.Fatal(err)
-	}
+	db := openStore(t)
 	return New(db), db
 }
 

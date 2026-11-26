@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 
 	"aegisdb/internal/model"
@@ -17,19 +16,8 @@ import (
 func openSeededDB(t *testing.T) *repository.Repo {
 	t.Helper()
 	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "envtier-menu.db")
-	cfg.Database.AutoMigrate = true
 	cfg.Database.Seed = true
-
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	repo := repository.New(db)
+	repo := repository.New(migratedStore(t, cfg))
 	if err := Seed(repo, cfg); err != nil {
 		t.Fatalf("seed: %v", err)
 	}

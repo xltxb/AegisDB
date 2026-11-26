@@ -9,26 +9,29 @@ package bootstrap
 // 已经终结、却还有待执行阶段的单。
 
 import (
-	"database/sql"
 	"net/http"
 	"testing"
 )
 
+// refuseUpdateTo 在存储库上挂一个触发器:把 table 的 status 改成 status 的写入一律失败。
+func refuseUpdateTo(t *testing.T, app *testApp, table, status string) {
+	t.Helper()
+	db := app.repo.DB()
+	fn := "refuse_" + table + "_" + status
+	if err := db.Exec(`CREATE FUNCTION ` + fn + `() RETURNS trigger LANGUAGE plpgsql AS $$
+		BEGIN RAISE EXCEPTION '` + status + ` refused'; END $$`).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec(`CREATE TRIGGER ` + fn + ` BEFORE UPDATE ON ` + table + `
+		FOR EACH ROW WHEN (NEW.status = '` + status + `') EXECUTE FUNCTION ` + fn + `()`).Error; err != nil {
+		t.Fatal(err)
+	}
+}
+
 // breakStageSkipping 让任何把阶段改成 skipped 的写入失败。
 func breakStageSkipping(t *testing.T, app *testApp) {
 	t.Helper()
-	if app.cfg.Database.Driver != "sqlite" {
-		t.Skip("触发器按 SQLite 写")
-	}
-	db, err := sql.Open("sqlite", app.cfg.Database.SQLitePath+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.Exec(`CREATE TRIGGER no_skip BEFORE UPDATE ON tbl_release_stage
-		WHEN NEW.status = 'skipped' BEGIN SELECT RAISE(ABORT, 'skip refused'); END`); err != nil {
-		t.Fatal(err)
-	}
+	refuseUpdateTo(t, app, "tbl_release_stage", "skipped")
 }
 
 func assertNotHalfFinished(t *testing.T, v releaseView) {
@@ -72,22 +75,10 @@ func TestAbortedReleaseIsNeverHalfFinished(t *testing.T) {
 // issue #111:终止与作废审批单同一个事务 —— 作废不了就不算终止成,不许留下"已终止、单还待审批"。
 func TestAbortNeverLeavesItsTicketPending(t *testing.T) {
 	app := newTestApp(t)
-	if app.cfg.Database.Driver != "sqlite" {
-		t.Skip("触发器按 SQLite 写")
-	}
 	admin := app.login("linwei@aegisdb.io", "aegisdb123")
 	waiting := submitParkedRelease(t, app, admin, "作废半途")
 	ap := stageByType(waiting, "approve")
-	db, err := sql.Open("sqlite", app.cfg.Database.SQLitePath+"?_pragma=busy_timeout(5000)")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.Exec(`CREATE TRIGGER no_void BEFORE UPDATE ON tbl_approval
-		WHEN NEW.status = 'expired' BEGIN SELECT RAISE(ABORT, 'void refused'); END`)
-	db.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	refuseUpdateTo(t, app, "tbl_approval", "expired")
 	app.do(http.MethodPost, "/api/v1/releases/"+itoa(waiting.ID)+"/abort", admin, nil)
 	row, err := app.repo.GetApproval(ap.ApprovalID)
 	if err != nil {

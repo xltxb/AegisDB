@@ -1,12 +1,7 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
-
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 )
@@ -15,17 +10,7 @@ import (
 
 func newInspectionRepo(t *testing.T) *Repo {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "insp.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.InspectionReport{}); err != nil {
-		t.Fatal(err)
-	}
-	return New(db)
+	return New(openStore(t))
 }
 
 func rep(conn int64, date, level string) *model.InspectionReport {

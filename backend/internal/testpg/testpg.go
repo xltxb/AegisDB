@@ -28,7 +28,9 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -119,6 +121,12 @@ func run(m *testing.M) int {
 	defaultMu.Unlock()
 	defer h.shutdown()
 
+	// Template builds (migrations, seeding) log an Info line per step; keep test
+	// output readable by dropping sub-Warn records while a build runs.
+	prevLog := slog.Default()
+	slog.SetDefault(slog.New(&quietHandler{next: slog.NewTextHandler(os.Stderr, nil)}))
+	defer slog.SetDefault(prevLog)
+
 	// Best effort on Ctrl-C / SIGTERM: tear down before dying.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
@@ -172,6 +180,29 @@ func migrate(dsn string) error {
 		defer sqlDB.Close()
 	}
 	return sqlmigrate.Run(db, migrations.PGFS)
+}
+
+// building counts template builds in progress; quietHandler mutes Info/Debug
+// records meanwhile (warnings and errors still get through).
+var building atomic.Int32
+
+type quietHandler struct{ next slog.Handler }
+
+func (q *quietHandler) Enabled(ctx context.Context, l slog.Level) bool {
+	if l < slog.LevelWarn && building.Load() > 0 {
+		return false
+	}
+	return q.next.Enabled(ctx, l)
+}
+
+func (q *quietHandler) Handle(ctx context.Context, r slog.Record) error { return q.next.Handle(ctx, r) }
+
+func (q *quietHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return &quietHandler{next: q.next.WithAttrs(as)}
+}
+
+func (q *quietHandler) WithGroup(name string) slog.Handler {
+	return &quietHandler{next: q.next.WithGroup(name)}
 }
 
 func current(t testing.TB) *harness {
@@ -341,6 +372,8 @@ func (h *harness) fromTemplate(t testing.TB, key string, build func(dsn string) 
 	h.tplMu.Unlock()
 	e.once.Do(func() {
 		e.err = errors.New("template build did not complete") // stays if build panics
+		building.Add(1)
+		defer building.Add(-1)
 		e.err = h.buildTemplate(c, admin, tpl, build)
 	})
 	if e.err != nil {

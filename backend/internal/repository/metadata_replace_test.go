@@ -1,16 +1,11 @@
 package repository
 
 import (
-	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
 	"testing"
 	"time"
-
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 )
@@ -20,18 +15,7 @@ import (
 
 func newMetaRepo(t *testing.T) *Repo {
 	t.Helper()
-	// temp_store 与 bootstrap.OpenDB 一致:临时目录不可写的环境里这些用例也要能跑(issue #92)。
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "meta.db")+"?_pragma=temp_store(MEMORY)"), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.MetaTable{}, &model.MetaColumn{}); err != nil {
-		t.Fatal(err)
-	}
-	return New(db)
+	return New(openStore(t))
 }
 
 func metaTbl(db, name, comment string) model.MetaTable {
@@ -87,7 +71,8 @@ func TestReplaceMetadata_DiffEndsIdenticalToSnapshot(t *testing.T) {
 	}
 
 	time.Sleep(5 * time.Millisecond)
-	before := time.Now()
+	// 存储库的时间列只到毫秒(timestamptz(3) / DATETIME(3)),入库会舍入:比较的下限按毫秒截断。
+	before := time.Now().Truncate(time.Millisecond)
 	// gone 表消失;orders.dropped 列消失;amount 改类型;新增 note 列和 fresh 表;renamed 的注释变了
 	if err := r.ReplaceMetadata(1,
 		[]model.MetaTable{metaTbl("shop", "orders", ""), metaTbl("shop", "renamed", "new"), metaTbl("shop", "fresh", "")},

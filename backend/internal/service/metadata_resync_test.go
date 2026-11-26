@@ -4,21 +4,20 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	_ "github.com/go-sql-driver/mysql"
 	"gorm.io/driver/mysql"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
+	"aegisdb/internal/sqlmigrate"
+	"aegisdb/migrations"
 )
 
 // 2026-11 生产:元数据同步每一轮都 tables_dropped=0、tables_added=0,而 cols_dropped 与
@@ -40,14 +39,7 @@ func openMetaStores(t *testing.T) []metaStore {
 	t.Helper()
 	gcfg := &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)}
 	var out []metaStore
-	lite, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "store.db")), gcfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s, e := lite.DB(); e == nil {
-		t.Cleanup(func() { s.Close() })
-	}
-	out = append(out, metaStore{"sqlite", lite})
+	out = append(out, metaStore{"pg", openStore(t)})
 
 	// 真存储库:与生产同一种驱动,GORM 对它们生成的 INSERT 才是生产上那一条。
 	if base := os.Getenv("AEGISDB_TEST_STORE_MYSQL"); base != "" { // root:pw@tcp(127.0.0.1:3407)/
@@ -67,36 +59,10 @@ func openMetaStores(t *testing.T) []metaStore {
 		if s, e := db.DB(); e == nil {
 			t.Cleanup(func() { s.Close() })
 		}
+		if err := sqlmigrate.Run(db, migrations.FS); err != nil {
+			t.Fatalf("mysql: %v", err)
+		}
 		out = append(out, metaStore{"mysql", db})
-	}
-	if base := os.Getenv("AEGISDB_TEST_STORE_PG"); base != "" { // host=… port=… user=… password=… sslmode=disable
-		name := fmt.Sprintf("vt_metaresync_%d", time.Now().UnixNano()%1_000_000)
-		admin, err := gorm.Open(postgres.Open(base+" dbname=postgres"), gcfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := admin.Exec("CREATE DATABASE " + name).Error; err != nil {
-			t.Fatal(err)
-		}
-		db, err := gorm.Open(postgres.Open(base+" dbname="+name), gcfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if s, e := db.DB(); e == nil {
-				s.Close()
-			}
-			admin.Exec("DROP DATABASE IF EXISTS " + name)
-			if s, e := admin.DB(); e == nil {
-				s.Close()
-			}
-		})
-		out = append(out, metaStore{"pg", db})
-	}
-	for _, st := range out {
-		if err := st.db.AutoMigrate(&model.MetaTable{}, &model.MetaColumn{}, &model.MetaSync{}); err != nil {
-			t.Fatalf("%s: %v", st.name, err)
-		}
 	}
 	return out
 }
@@ -194,7 +160,7 @@ func TestMetaSync_UnchangedColumnsKept_MySQLRemote(t *testing.T) {
 	}
 	defer admin.Exec("DROP DATABASE " + schema)
 
-	longComment := strings.Repeat("长注释", 300)  // 900 字,超过缓存的 500,会被截断
+	longComment := strings.Repeat("长注释", 300)    // 900 字,超过缓存的 500,会被截断
 	midComment := strings.Repeat("备注 note ", 40) // 未截断
 	enumVals := make([]string, 60)
 	for i := range enumVals {

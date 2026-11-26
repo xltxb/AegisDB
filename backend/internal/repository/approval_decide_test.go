@@ -1,13 +1,8 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 )
@@ -16,17 +11,7 @@ import (
 
 func newApprovalRepo(t *testing.T) *Repo {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "ap.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.Approval{}, &model.ApprovalStep{}); err != nil {
-		t.Fatal(err)
-	}
-	return New(db)
+	return New(openStore(t))
 }
 
 // 链是"任一人通过即生效":第 2 步的人批了,记在第 2 步上,而不是记在当时 active 的第 1 步。

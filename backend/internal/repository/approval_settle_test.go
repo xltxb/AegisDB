@@ -17,10 +17,11 @@ func newSettleFixture(t *testing.T, withWindowTable bool) (*Repo, *model.Approva
 		t.Fatal(err)
 	}
 	if !withWindowTable {
+		// 让后面那笔窗口写必然失败:把窗口表拿掉。
+		if err := r.db.Migrator().DropTable(&model.ExecWindow{}); err != nil {
+			t.Fatal(err)
+		}
 		return r, ap, nil
-	}
-	if err := r.db.AutoMigrate(&model.ExecWindow{}); err != nil {
-		t.Fatal(err)
 	}
 	w := &model.ExecWindow{Name: "nightly", Status: model.WindowPending, ApprovalID: ap.ID}
 	if err := r.db.Create(w).Error; err != nil {

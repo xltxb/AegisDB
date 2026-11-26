@@ -132,9 +132,9 @@ func TestAuditBackfill_IsIdempotent(t *testing.T) {
 
 // 它必须挂在**真实的 schema 路径**上,而不是只有测试直接调得到。
 //
-// 两条路:生产走 SQL 迁移(Migrate),dev/测试走 AutoMigrate。漏掉任何一条,那条路上的库
-// 就永远带着一屏短横,而且没有任何地方会报错 —— 所以这里把 AutoMigrate 那条跑一遍,
-// 并对源码检查另一条确实也挂了。
+// 两条路:生产走 SQL 迁移(Migrate),dev 走 AutoMigrate。漏掉任何一条,那条路上的库
+// 就永远带着一屏短横,而且没有任何地方会报错 —— 所以这里把测试存储库(PG)真正的
+// schema 路径 Migrate 跑一遍,并对源码检查 AutoMigrate 那条确实也挂了。
 func TestAuditBackfill_HangsOffTheSchemaPaths(t *testing.T) {
 	app := newTestApp(t)
 	db := app.repo.DB()
@@ -143,19 +143,15 @@ func TestAuditBackfill_HangsOffTheSchemaPaths(t *testing.T) {
 	if got := auditRowByID(t, db, id).DataAction; got != "" {
 		t.Fatalf("前置:这一行应当是空的,实际 %q", got)
 	}
-	// 跑当前存储库驱动真正的 schema 路径:SQLite 是 AutoMigrate,PG 是 SQL 迁移(Migrate)。
-	schemaPath := autoMigrate
-	if app.cfg.Database.Driver == "postgres" {
-		schemaPath = func(db *gorm.DB) error { return Migrate(app.cfg, db) }
-	}
-	if err := schemaPath(db); err != nil {
-		t.Fatalf("auto-migrate: %v", err)
+	// 跑测试存储库(PG)真正的 schema 路径:SQL 迁移(Migrate)。
+	if err := Migrate(app.cfg, db); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	if got := auditRowByID(t, db, id).DataAction; got != "delete" {
-		t.Errorf("AutoMigrate 那条路上没跑回填 —— 这一行仍是 %q", got)
+		t.Errorf("Migrate 那条路上没跑回填 —— 这一行仍是 %q", got)
 	}
 
-	// SQL 迁移那条路跑不起来(要一个真的 MySQL),所以在源码上确认它也挂了。
+	// AutoMigrate 那条路(dev 上的 SQLite)这里不跑,所以在源码上确认它也挂了。
 	src, err := os.ReadFile("migrate.go")
 	if err != nil {
 		t.Fatalf("读 migrate.go: %v", err)

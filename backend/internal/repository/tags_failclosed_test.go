@@ -1,12 +1,7 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
-
-	"github.com/glebarez/sqlite"
-	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 )
@@ -16,14 +11,7 @@ import (
 // swallowing a query error turns a tag-restricted role into one that can reach
 // every connection in the estate — exactly backwards for a transient fault.
 func TestTagsForRoles_QueryFailureIsNotUnrestricted(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tags.db")
-	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	if err := db.AutoMigrate(&model.RoleTag{}); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
+	db := openStore(t)
 	repo := New(db)
 
 	// A restricted role reads back its grants normally.

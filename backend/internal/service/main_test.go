@@ -4,11 +4,31 @@ import (
 	"database/sql"
 	"testing"
 
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
+
 	"aegisdb/internal/model"
 	"aegisdb/internal/testpg"
 )
 
 func TestMain(m *testing.M) { testpg.Main(m) }
+
+// openStore gives the test its own gateway store on the throwaway PostgreSQL
+// instance: the production schema (migrations/pg), no seed data. The pool is
+// closed before the database is dropped (cleanups run LIFO).
+func openStore(t *testing.T) *gorm.DB {
+	t.Helper()
+	_, dsn := testpg.MigratedDB(t)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	if sqlDB, derr := db.DB(); derr == nil {
+		t.Cleanup(func() { sqlDB.Close() })
+	}
+	return db
+}
 
 // pgTarget returns a connection to a fresh, empty database on the throwaway
 // PostgreSQL instance; the database is dropped when the test ends. Every call

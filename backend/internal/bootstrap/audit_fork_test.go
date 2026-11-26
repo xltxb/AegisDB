@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,19 +14,7 @@ import (
 // or processes. Here we drive the repository directly: a second row reusing an
 // existing prev_hash must be rejected.
 func TestAudit_PrevHashUniquePreventsFork(t *testing.T) {
-	cfg := &Config{}
-	cfg.Database.Driver = "sqlite"
-	cfg.Database.SQLitePath = filepath.Join(t.TempDir(), "audit.db")
-	cfg.Database.AutoMigrate = true
-
-	db, err := OpenDB(cfg)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	repo := repository.New(db)
+	repo := repository.New(migratedStore(t, &Config{}))
 
 	mk := func(cmd, prev, hash string) *model.AuditLog {
 		return &model.AuditLog{

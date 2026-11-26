@@ -4,12 +4,9 @@ package service
 // 没跑到的阶段 skipped,中断的阶段 failed。留着「待执行」读起来像是还会跑。
 
 import (
-	"path/filepath"
 	"testing"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 
 	"aegisdb/internal/model"
 	"aegisdb/internal/repository"
@@ -17,16 +14,9 @@ import (
 
 func interruptedApp(t *testing.T) (*Services, *gorm.DB) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "rel.db")), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sqlDB, derr := db.DB(); derr == nil {
+	db := openStore(t)
+	if sqlDB, err := db.DB(); err == nil {
 		sqlDB.SetMaxOpenConns(1)
-		t.Cleanup(func() { sqlDB.Close() })
-	}
-	if err := db.AutoMigrate(&model.Release{}, &model.ReleaseStage{}, &model.Approval{}, &model.Setting{}); err != nil {
-		t.Fatal(err)
 	}
 	// 没人收的无缓冲队列 = 队列满
 	return &Services{Repo: repository.New(db), releaseQueue: make(chan int64)}, db
