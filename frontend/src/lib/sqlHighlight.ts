@@ -11,7 +11,7 @@ import { ANSI } from './sqlResult'
 type Kind = 'kw' | 'str' | 'num' | 'cmt' | 'meta' | 'plain'
 interface Token { text: string; kind: Kind }
 
-// Keywords across the engines the gateway speaks (MySQL/PG/Oracle/SQLite).
+// Keywords across the engines the gateway speaks (MySQL/PG/Oracle).
 // Uppercased lookup; matching is case-insensitive.
 // Also the keyword candidates for Tab completion (lib/termCompletion), so what
 // completes is exactly what highlights.

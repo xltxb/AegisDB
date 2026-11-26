@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { envelope, stubCommon, ME } from './helpers'
 
 // 数据源的从库:配了之后业务方的数据查询都由从库提供。钉住:
-//   · 编辑数据源时能填从库,保存发出的请求带着这组字段;SQLite 没有主从,不显示也不发
+//   · 编辑数据源时能填从库,保存发出的请求带着这组字段
 //   · 配了从库的数据源在列表上有标记
 //   · 数据查询结果注明由谁提供 —— 从库,或者从库连不上、回落了主库
 
@@ -11,7 +11,6 @@ const MYSQL = {
   policy: 'strict', defaultRole: 'ro', layer: 'core', tags: '', database: 'orders', username: 'app',
   status: 'online', replicaHost: '', replicaPort: 0, replicaUsername: '',
 }
-const SQLITE = { ...MYSQL, id: 2, name: 'demo-sqlite', engine: 'SQLite', host: 'localhost', port: 0, database: '/tmp/x.db' }
 
 async function openConnections(page: Page, conns: any[]) {
   const puts: any[] = []
@@ -39,16 +38,6 @@ test('编辑数据源:填从库,保存的请求带着从库地址与账号', asy
   await page.locator('.ce-foot button').last().click()
   await expect.poll(() => puts.length).toBe(1)
   expect(puts[0]).toMatchObject({ replicaHost: '10.0.0.9:3307', replicaUsername: 'ro_user', replicaPassword: 'secret' })
-})
-
-test('SQLite 没有主从:不显示从库一栏,也不发这组字段', async ({ page }) => {
-  const puts = await openConnections(page, [SQLITE])
-  await page.locator('button[title="编辑"]').first().click()
-  await expect(page.locator('.ce-card')).toBeVisible()
-  await expect(page.getByTestId('conn-replica')).toHaveCount(0)
-  await page.locator('.ce-foot button').last().click()
-  await expect.poll(() => puts.length).toBe(1)
-  expect(puts[0]).not.toHaveProperty('replicaHost')
 })
 
 test('配了从库的数据源在列表上有标记', async ({ page }) => {

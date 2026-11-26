@@ -242,13 +242,5 @@ function describeSql(engine: string, arg: string): MetaTranslation | null {
     }
   }
 
-  if (/sqlite/i.test(engine)) {
-    // pragma_table_info(),不是 PRAGMA 语句:前者是 SELECT,会被判定层当作读;
-    // 后者的动词认不出来,会被当成写而要求审批 —— 描述一张表不该走审批。
-    return {
-      sql: `SELECT name AS "Column", type AS "Type", CASE "notnull" WHEN 1 THEN 'N' ELSE 'Y' END AS "Nullable" FROM pragma_table_info('${name}')`,
-      emptyNotice: notFound(arg),
-    }
-  }
   return null
 }

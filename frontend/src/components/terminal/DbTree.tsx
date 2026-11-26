@@ -161,8 +161,7 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
 
   // ---- programmable objects (functions / procedures / packages / triggers) ----
   //
-  // Loaded lazily per database (flat engines: MySQL by database, Oracle by owner,
-  // SQLite single namespace) or per schema (PostgreSQL family), alongside the
+  // Loaded lazily per database (flat engines: MySQL by database, Oracle by owner) or per schema (PostgreSQL family), alongside the
   // tables. The scope string sent to the server is the schema when there is one,
   // else the database/owner name — which is exactly the namespace each engine
   // keys its catalog on.
@@ -337,7 +336,7 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
    * 已探查过、但表还没加载的库。
    *
    * 只有 PostgreSQL 家族会出现:它的 information_schema 是**按库**的,实例级那一次
-   * 只能列出有哪些库,每个库的表要再连一次。MySQL / Oracle / SQLite 一次就全带回来了。
+   * 只能列出有哪些库,每个库的表要再连一次。MySQL / Oracle 一次就全带回来了。
    *
    * 所以这里不能跟着实例那一趟一起做 —— 一个有 30 个库的 PG 集群就是 30 次连接。
    * 它单独算一笔、单独一个按钮,代价写在按钮旁边,由人决定要不要付。
@@ -536,7 +535,7 @@ function DbTree({ connections, selectedId, selectedDb, onSelect, onSelectDb, onC
         )
       })
     }
-    // database → tables (MySQL / SQLite / Oracle-by-owner)
+    // database → tables (MySQL / Oracle-by-owner)
     const tables = d.tables ?? []
     return (
       <>

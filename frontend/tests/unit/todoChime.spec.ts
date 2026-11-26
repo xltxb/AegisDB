@@ -14,7 +14,7 @@ import type { ApprovalTodoItem } from '../../src/types'
 
 const row = (over: Partial<ApprovalTodoItem>): ApprovalTodoItem => ({
   id: 1, apNo: 'AP-1', kind: 'execute', initiator: 'Lin Wei', initiatorId: 1,
-  instance: 'prod-sqlite', database: 'orders', riskLevel: 'high',
+  instance: 'prod-mysql', database: 'orders', riskLevel: 'high',
   command: 'DROP TABLE t', createdAt: '2026-09-17T10:00:00Z', ...over,
 })
 

@@ -159,7 +159,7 @@ export default function ReleasesView() {
   }
 
   // 轮询:上一轮(列表 + 详情)没回来就跳过这一拍。
-  // 不加这道闸,后端一慢(2026-11-10 本地 SQLite 单连接被压住),每 2.5 秒照发一轮,
+  // 不加这道闸,后端一慢(2026-11-10 本地后端被压住),每 2.5 秒照发一轮,
   // 请求在后端排队越堆越长,连登录都排在后面等了 1 分多钟 —— 页面自己把后端拖死。
   const polling = useRef(false)
   async function pollTick() {
