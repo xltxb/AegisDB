@@ -76,6 +76,9 @@ http.interceptors.request.use((cfg) => {
 // Reset the whole auth store (not just the token) so the app doesn't linger in a
 // zombie state, then redirect to login.
 function endSession() {
+  // 标记先同步清掉,再跳登录页:store 是懒加载的(异步),只靠它清,地址会先变、标记后清,
+  // 登录页挂载时可能还读到旧标记。
+  clearSessionMarker()
   // Lazy import breaks the http ↔ auth-store dependency cycle (R21).
   import('@/stores/auth')
     .then((m) => m.useAuthStore.getState().clearSession())
