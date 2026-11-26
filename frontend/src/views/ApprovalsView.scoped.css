@@ -28,7 +28,7 @@
    定值按**英文**量,不是中文:照着中文词量出来的宽度,"Privilege P2"、"Rejected"
    一上去就顶破,徽章在定高胶囊里折行,整张表的行高参差不齐。 */
 .thead, .tr { display: grid; grid-template-columns: 208px minmax(200px, 1fr) 150px 96px 96px 116px 184px; gap: 12px; align-items: center; padding: 0 18px; }
-.thead { height: 42px; background: var(--surface-page); border-bottom: 1px solid var(--border-subtle); font: 500 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.thead { height: 42px; background: var(--surface-head); border-bottom: 1px solid var(--border-subtle); font: 500 11px var(--font-body); color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
 .thead .right { text-align: right; }
 .tr { min-height: 56px; padding-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); font: 500 12px var(--font-body); color: var(--text-body); cursor: pointer; transition: background var(--dur-fast, .15s) var(--ease-out, ease); }
 .tr:last-child { border-bottom: none; }

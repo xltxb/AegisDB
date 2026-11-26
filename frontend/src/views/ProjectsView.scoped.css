@@ -9,11 +9,12 @@
    放不下时自己换行更稳。 */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
 .stat { padding: 16px 20px; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); }
-.sv { font: 700 26px var(--font-display); color: var(--text-strong); }
+.sv { font: 700 30px var(--font-display); letter-spacing: -0.03em; color: var(--accent-text); background: var(--brand-gradient-text); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .sl { margin-top: 2px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
 .card { border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .chead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
-.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.cic svg { stroke: #fff; }
 .ct { font: 600 14px var(--font-display); color: var(--text-strong); }
 .cs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }
 /* 与上面那块面板(ProjectsPanel .list/.item)取同一套行样式:同一页里出现的是同一种

@@ -113,7 +113,7 @@
   gap: 12px; align-items: center; padding: 0 16px;
 }
 .thead {
-  height: 40px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle);
+  height: 40px; background: var(--surface-head); border-bottom: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg, 10px) var(--radius-lg, 10px) 0 0;
   /* 表头用 slate-900 + 600,不是过去那种弱灰小字:它是每一列的名字,不是注脚 */
   font: 600 11.5px var(--font-body); color: var(--text-strong); letter-spacing: .02em;

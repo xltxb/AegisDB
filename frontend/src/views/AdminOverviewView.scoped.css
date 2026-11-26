@@ -1,19 +1,22 @@
 .page { padding: 22px 26px 40px; }
-.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; box-shadow: var(--shadow-xs); }
 .ghostbtn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--surface-card); color: var(--text-body); font: 600 12.5px var(--font-body); cursor: pointer; }
 .ghostbtn:disabled { opacity: 0.6; cursor: default; }
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.stat { position: relative; padding: 14px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.stat { position: relative; overflow: hidden; padding: 18px 20px 16px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); transition: box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+.stat::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--glow-accent)); opacity: .85; }
 .stat.click { cursor: pointer; }
-.stat.click:hover { border-color: var(--border-default); }
-.stat .si { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted); }
-.stat .sv { font: 700 24px var(--font-mono); color: var(--text-strong); }
+.stat.click:hover { border-color: var(--border-default); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat .si { position: absolute; top: 16px; right: 18px; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-subtle); color: var(--accent-text); }
+.stat .sv { font: 700 30px/1.1 var(--font-mono); letter-spacing: -0.03em; color: var(--accent-text); background: var(--brand-gradient-text); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.stat .sv .of { -webkit-text-fill-color: var(--text-faint); }
 .stat .sv .of { font-size: 13px; color: var(--text-faint); font-weight: 600; }
 .stat .sl { margin-top: 2px; font: 500 12px var(--font-body); color: var(--text-muted); }
 .stat.act { border-color: var(--warning-text); }
-.stat.act .sv { color: var(--warning-text); }
+.stat.act::after, .stat.bad::after { display: none; }
+.stat.act .sv { -webkit-text-fill-color: var(--warning-text); background: none; }
 .stat.bad { border-color: var(--danger-text); }
-.stat.bad .sv { color: var(--danger-text); }
+.stat.bad .sv { -webkit-text-fill-color: var(--danger-text); background: none; }
 /* 两栏等高:一边空、一边满时,空的那张卡片也撑到同高,空状态居中 —— 不再像缺了半块。 */
 .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; align-items: stretch; }
 .grid2 > .card { display: flex; flex-direction: column; }

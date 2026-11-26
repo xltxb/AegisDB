@@ -24,7 +24,8 @@
 @media (max-width: 1080px) { .wrap { grid-template-columns: 1fr; } }
 .card { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-sm); padding: 16px 18px 18px; }
 .chead { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
-.cic { width: 32px; height: 32px; border-radius: 9px; background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.cic { width: 32px; height: 32px; border-radius: 9px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: grid; place-items: center; flex-shrink: 0; }
+.cic svg { stroke: #fff; }
 .cic.ok { background: var(--success-subtle); }
 .grow { flex: 1; min-width: 0; }
 .ct { font: 600 14px var(--font-display); color: var(--text-strong); }

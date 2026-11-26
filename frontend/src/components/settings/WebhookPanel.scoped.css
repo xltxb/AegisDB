@@ -1,6 +1,7 @@
 .wh { border: none; border-radius: var(--radius-lg); background: var(--surface-card); box-shadow: var(--shadow-xs); overflow: hidden; }
 .whhead { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); }
-.whic { width: 34px; height: 34px; border-radius: 10px; background: var(--accent-subtle); display: flex; align-items: center; justify-content: center; }
+.whic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-gradient); color: #fff; box-shadow: var(--glow-sm); display: flex; align-items: center; justify-content: center; }
+.whic svg { stroke: #fff; }
 .grow { flex: 1; }
 .wht { font: 600 14px var(--font-display); color: var(--text-strong); }
 .whs { font: 500 12px var(--font-body); color: var(--text-muted); margin-top: 2px; }

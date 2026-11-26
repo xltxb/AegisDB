@@ -7,10 +7,10 @@
 /* ---------------- 页眉 ---------------- */
 .cta {
   display: inline-flex; align-items: center; gap: 7px; padding: 0 16px; height: var(--control-md);
-  border: 0; border-radius: var(--radius-md); background: var(--accent); color: #fff; cursor: pointer;
+  border: 0; border-radius: var(--radius-md); background: var(--brand-gradient); color: #fff; cursor: pointer; box-shadow: 0 6px 14px -6px rgba(59, 110, 246, 0.8);
   font: 600 12.5px var(--font-body); transition: background var(--dur-fast) var(--ease-out);
 }
-.cta:hover { background: var(--accent-hover); }
+.cta:hover { filter: brightness(1.06); box-shadow: var(--glow-sm); }
 .ghostbtn {
   display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; height: var(--control-md);
   border: 1px solid var(--border-default); border-radius: var(--radius-md);
@@ -23,37 +23,41 @@
 /* ---------------- KPI ---------------- */
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
 .stat {
-  position: relative; padding: 15px 18px; border-radius: var(--radius-lg);
-  background: var(--surface-card); border: 1px solid var(--border-subtle);
-  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out);
+  position: relative; padding: 18px 20px 16px; border-radius: var(--radius-lg); overflow: hidden;
+  background: var(--surface-card); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
+/* Brand hairline across the top of every KPI tile. */
+.stat::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--accent), var(--glow-accent)); opacity: .85; }
 .stat.click { cursor: pointer; }
-.stat.click:hover { box-shadow: var(--shadow-sm); border-color: var(--border-default); }
+.stat.click:hover { box-shadow: var(--shadow-md); border-color: var(--border-default); transform: translateY(-2px); }
 /* 数字用等宽:五张牌并排时,比例字体下"11"和"0.7ms"的基线宽度不一样,一列数字
    扫下去会左右跳。 */
-.sv { font: 700 25px/1.1 var(--font-mono); color: var(--text-strong); letter-spacing: -0.02em; }
+.sv { font: 700 30px/1.1 var(--font-mono); letter-spacing: -0.03em; color: var(--accent-text);
+  background: var(--brand-gradient-text); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .sl { margin-top: 5px; font: 500 11.5px var(--font-body); color: var(--text-muted); }
 /* 图标坐在一小块淡底里,而不是裸挂在角上 —— 裸图标和数字抢的是同一种注意力。 */
 .si {
-  position: absolute; top: 14px; right: 16px; width: 28px; height: 28px; border-radius: 9px;
-  display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-muted);
+  position: absolute; top: 16px; right: 18px; width: 32px; height: 32px; border-radius: 10px;
+  display: grid; place-items: center; background: var(--accent-subtle); color: var(--accent-text);
 }
 /* act:要人动手的两张牌。左边一条竖条 + 一层极淡的底,数字换成强调色。
    为 0 时它和别的牌一模一样 —— 一张长期亮着的警示牌很快就没人看了。 */
 .stat.act { background: var(--accent-subtle); border-color: var(--accent-subtle-border); }
 .stat.act::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-.stat.act .sv { color: var(--accent-text); }
+.stat.act .sv { -webkit-text-fill-color: var(--accent-text); background: none; }
 .stat.act .si { background: var(--surface-card); color: var(--accent-text); }
 /* warn:门开着。它比"有活要干"更重一档,所以用琥珀。 */
 .stat.warn { background: var(--warning-subtle); border-color: transparent; }
 .stat.warn::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--warning); }
-.stat.warn .sv { color: var(--warning-text); }
+.stat.warn::after, .stat.bad::after { display: none; }
+.stat.warn .sv { -webkit-text-fill-color: var(--warning-text); background: none; }
 .stat.warn .si { background: var(--surface-card); color: var(--warning-text); }
 
 /* 巡检异常:有严重问题时整块换成红色(卡片与面板) */
 .stat.bad { background: var(--danger-subtle); border-color: transparent; }
 .stat.bad::before { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--danger-text); }
-.stat.bad .sv { color: var(--danger-text); }
+.stat.bad .sv { -webkit-text-fill-color: var(--danger-text); background: none; }
 .stat.bad .si { background: var(--surface-card); color: var(--danger-text); }
 .ipanel .picon { flex-shrink: 0; color: var(--warning-text); }
 .ipanel .grow { flex: 1; min-width: 0; }
@@ -92,9 +96,9 @@
 .cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; align-items: start; }
 /* 1366 及以下换成一栏:两栏各剩 600px 出头时,右边那条命令已经只剩几个字。 */
 @media (max-width: 1440px) { .cols { grid-template-columns: minmax(0, 1fr); } }
-.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; }
+.card { border-radius: var(--radius-lg); background: var(--surface-card); border: 1px solid var(--border-subtle); overflow: hidden; box-shadow: var(--shadow-xs); }
 .chead { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--border-subtle); }
-.cic { width: 32px; height: 32px; border-radius: 10px; background: var(--accent-subtle); display: grid; place-items: center; flex-shrink: 0; }
+.cic { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-gradient); color: #fff; display: grid; place-items: center; flex-shrink: 0; box-shadow: var(--glow-sm); }
 .ct { font: 700 13.5px var(--font-display); color: var(--text-strong); }
 .cs { font: 500 11.5px var(--font-body); color: var(--text-muted); margin-top: 2px; }
 .cnum { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-full); background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: 700 11px var(--font-mono); color: var(--text-muted); }
@@ -173,7 +177,7 @@
 /* ---------------- 空态 ---------------- */
 /* 说的是"都处理完了",不是"没有数据" —— 对读的人这是两句完全不同的话。 */
 .blank { padding: 28px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
-.bic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-sunken); color: var(--text-faint); }
+.bic { width: 44px; height: 44px; border-radius: var(--radius-lg); display: grid; place-items: center; background: linear-gradient(135deg, var(--accent-subtle), color-mix(in oklch, var(--glow-accent) 14%, var(--surface-card))); color: var(--accent-text); box-shadow: inset 0 0 0 1px var(--accent-subtle-border); }
 .bt { font: 600 12.5px var(--font-body); color: var(--text-muted); }
 .bs { font: 500 11.5px var(--font-body); color: var(--text-faint); }
 
@@ -183,3 +187,4 @@
   .rright { justify-content: flex-start; }
   .pw { grid-template-columns: minmax(0, 1fr); gap: 6px; }
 }
+.cic svg { stroke: #fff; }

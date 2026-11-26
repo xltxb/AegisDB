@@ -81,7 +81,7 @@
      depth problem: with page and card nearly the same white, every surface had
      to draw a hairline around itself, and eight hairlined blocks on a page all
      read at the same level. */
-  --surface-page:    #f8fafc; /* slate-50 */
+  --surface-page:    #f2f5fb; /* slate-50, nudged toward azure so cards lift off it */
   --surface-card:    var(--slate-0);
   --surface-sunken:  var(--slate-100);
   --surface-raised:  var(--slate-0);

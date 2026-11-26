@@ -16,7 +16,7 @@
 .segtab.on { background: var(--accent-subtle); color: var(--accent-text); }
 .allnote { margin: -4px 0 12px; font-size: 12px; color: var(--text-muted); }
 .th, .tr { display: grid; grid-template-columns: 1.5fr 1.4fr 1.6fr 1.3fr 0.9fr 110px; gap: 12px; align-items: center; }
-.th { padding: 10px 16px; background: var(--surface-sunken); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); }
+.th { padding: 10px 16px; background: var(--surface-head); border-bottom: 1px solid var(--border-subtle); font: 600 10.5px var(--font-mono); letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-faint); }
 .tr { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
 .tr:last-child { border-bottom: none; }
 .tr:hover { background: var(--surface-sunken); }

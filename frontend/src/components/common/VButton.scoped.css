@@ -22,11 +22,11 @@
   transition: transform var(--dur-instant) var(--ease-out);
 }
 .v-primary {
-  background: var(--accent);
+  background: var(--brand-gradient);
   color: #fff;
   box-shadow: 0 6px 14px -6px rgba(59, 110, 246, 0.8);
 }
-.v-primary:hover:not(:disabled) { background: var(--accent-hover); box-shadow: 0 8px 18px -6px rgba(59, 110, 246, 0.9); }
+.v-primary:hover:not(:disabled) { background: var(--brand-gradient); filter: brightness(1.06); box-shadow: var(--glow-sm); }
 .v-primary:active:not(:disabled) { background: var(--accent-pressed); box-shadow: 0 3px 8px -4px rgba(59, 110, 246, 0.9); }
 .v-secondary {
   background: var(--surface-card);

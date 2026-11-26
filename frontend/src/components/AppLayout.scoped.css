@@ -74,8 +74,9 @@
 .rail-item:hover { background: var(--surface-sunken); color: var(--text-body); }
 .rail-item:active { transform: scale(0.97); transition: transform var(--dur-instant) var(--ease-out); }
 .rail-item.active {
-  background: var(--accent-subtle);
+  background: linear-gradient(135deg, var(--accent-subtle), color-mix(in oklch, var(--glow-accent) 12%, var(--accent-subtle)));
   color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent-subtle-border);
 }
 /* The brand gradient finally does a job: it marks WHERE YOU ARE. Until now the
    azure→cyan pair appeared once, on the logo, and never again. */
@@ -88,6 +89,7 @@
   width: 2px;
   border-radius: 0 2px 2px 0;
   background: linear-gradient(180deg, var(--accent), var(--glow-accent));
+  box-shadow: 0 0 8px var(--glow-accent);
 }
 .rl { font: 600 10.5px var(--font-body); letter-spacing: 0.01em; }
 /* 紧凑宽度下侧栏收成纯图标:84 → 60px。标签隐掉,靠 title 提示。
@@ -177,7 +179,7 @@
 .shell.is-admin .rail { background: var(--gray-900, #111827); }
 .shell.is-admin .rail-item { color: rgba(255, 255, 255, 0.72); }
 .shell.is-admin .rail-item:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
-.shell.is-admin .rail-item.active { color: #fff; background: rgba(255, 255, 255, 0.14); }
+.shell.is-admin .rail-item.active { color: #fff; background: linear-gradient(135deg, color-mix(in oklch, var(--accent) 55%, transparent), color-mix(in oklch, var(--glow-accent) 30%, transparent)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12); }
 .tb-title { font: 700 17px var(--font-display); color: var(--text-strong); letter-spacing: var(--tracking-tight); }
 /* The subtitle is PROSE ("一次变更走完一条流水线"), not data — it was set in
    JetBrains Mono, which is why every page header read like a log line. Numbers
@@ -321,3 +323,19 @@
 .pt { font: 600 12px var(--font-body); color: var(--text-strong); display: flex; align-items: center; gap: 7px; }
 .pref { font: 600 10px var(--font-mono); color: #8facff; }
 .pd { margin-top: 3px; font: 400 12px/1.5 var(--font-body); color: var(--text-muted); word-break: break-word; }
+
+/* Brand glow behind the content area: the design system's azure → cyan "night
+   sky", faint in light mode and stronger in dark. It sits on the scroll
+   container, so it stays at the top of the viewport while pages scroll. */
+.content {
+  background:
+    radial-gradient(900px 320px at 12% -80px, color-mix(in oklch, var(--azure-500) 16%, transparent), transparent 70%),
+    radial-gradient(700px 280px at 92% -60px, color-mix(in oklch, var(--cyan-400) 14%, transparent), transparent 70%),
+    var(--surface-page);
+}
+:global([data-theme="dark"]) .content {
+  background:
+    radial-gradient(900px 360px at 12% -80px, color-mix(in oklch, var(--azure-500) 30%, transparent), transparent 70%),
+    radial-gradient(700px 300px at 92% -60px, color-mix(in oklch, var(--cyan-400) 14%, transparent), transparent 70%),
+    var(--surface-page);
+}
