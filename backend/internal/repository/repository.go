@@ -134,6 +134,45 @@ func (r *Repo) UpdateUserMFA(userID int64, enabled bool, secret string) error {
 		Updates(map[string]any{"mfa_enabled": enabled, "mfa_secret": enc, "mfa_last_ctr": 0}).Error
 }
 
+// UpdateUserMFAIf 是 UpdateUserMFA 的比较后写入版:只有库里的 MFA 状态仍是 (wantEnabled, wantSecret)
+// —— 也就是调用方做判断时看到的那一份 —— 才写。返回是否写成。
+//
+// 本人自助领取 / 启用 / 停用 MFA 用它。这三条路都是"先按请求开始时读到的状态判断,再整体覆盖",
+// 管理员在这中间替他绑定的新因子会被冲掉(领取密钥甚至会把刚启用的 MFA 重新关掉)。密文是随机
+// 加密的,不能拿明文去 WHERE 比,所以先读出当前这一行的密文、解开比对,再用这段密文做条件更新:
+// 读与写之间有人改过,密文或开关就变了,更新落空。
+func (r *Repo) UpdateUserMFAIf(userID int64, wantEnabled bool, wantSecret string, enabled bool, secret string) (bool, error) {
+	var cur struct {
+		MFAEnabled bool
+		MFASecret  *string // 列可为 NULL(0001 起就是)
+	}
+	if err := r.db.Table("tbl_user").Select("mfa_enabled", "mfa_secret").Where("id = ?", userID).Take(&cur).Error; err != nil {
+		return false, err
+	}
+	plain := ""
+	if cur.MFASecret != nil && *cur.MFASecret != "" {
+		// 解不开按"没有密钥"算,与 User.AfterFind 同一口径:调用方看到的也是空。
+		if p, err := crypto.DecryptSecret(*cur.MFASecret); err == nil {
+			plain = p
+		}
+	}
+	if cur.MFAEnabled != wantEnabled || plain != wantSecret {
+		return false, nil
+	}
+	enc, err := crypto.EncryptSecret(secret)
+	if err != nil {
+		return false, err
+	}
+	q := r.db.Model(&model.User{}).Where("id = ? AND mfa_enabled = ?", userID, cur.MFAEnabled)
+	if cur.MFASecret == nil {
+		q = q.Where("mfa_secret IS NULL")
+	} else {
+		q = q.Where("mfa_secret = ?", *cur.MFASecret)
+	}
+	res := q.Updates(map[string]any{"mfa_enabled": enabled, "mfa_secret": enc, "mfa_last_ctr": 0})
+	return res.RowsAffected == 1, res.Error
+}
+
 // ConsumeMFACounter records a just-used TOTP counter, but only if it advances
 // past the last one — RowsAffected==1 means this code had not been used yet.
 // This makes a captured step-up code single-use within its validity window (M3).

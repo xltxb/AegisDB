@@ -1662,7 +1662,7 @@ func (s *Services) MFASetup(u *model.User, password string) (*dto.MFASetupResp, 
 	if secret == "" {
 		secret = totp.GenerateSecret()
 	}
-	if err := s.Repo.UpdateUserMFA(u.ID, false, secret); err != nil {
+	if err := s.updateOwnMFA(u, false, secret); err != nil {
 		return nil, err
 	}
 	// 安全因子的每一次变更都要留痕。管理员侧的 mfa.reset / mfa.bind 一直有审计,自助
@@ -1697,7 +1697,7 @@ func (s *Services) MFAEnable(u *model.User, code string) error {
 	if !ok {
 		return ErrMFARequired
 	}
-	if err := s.Repo.UpdateUserMFA(u.ID, true, u.MFASecret); err != nil {
+	if err := s.updateOwnMFA(u, true, u.MFASecret); err != nil {
 		return err
 	}
 	s.Repo.ConsumeMFACounter(u.ID, int64(counter)) // spend the enrollment code
@@ -1715,11 +1715,28 @@ func (s *Services) MFADisable(u *model.User, code string) error {
 	if err := s.spendMFACode(u, code, "关闭 MFA"); err != nil {
 		return err
 	}
-	if err := s.Repo.UpdateUserMFA(u.ID, false, ""); err != nil {
+	if err := s.updateOwnMFA(u, false, ""); err != nil {
 		return err
 	}
 	// 关掉第二因子是**降低**这个账号的保护等级,比开启它更该留痕(M-8)。
 	s.auditAdminAction(u, "mfa.disable 自助停用 MFA(该账号此后仅凭口令登录)")
+	return nil
+}
+
+// ErrMFAChanged:本人改自己的 MFA 时,库里的 MFA 状态已经不是这次请求读到的那份(多半是管理员刚
+// 替他绑定或解绑过)。不覆盖,让人刷新后看清现状再决定。
+var ErrMFAChanged = apimsg.Errorf("%w: MFA 状态刚被修改过,请刷新后重试", ErrBadRequest)
+
+// updateOwnMFA 是本人自助领取 / 启用 / 停用 MFA 的写库:只在库里的状态仍是 u 上那份时才写
+// (Repo.UpdateUserMFAIf)。管理员的绑定 / 解绑是有意的覆盖,照旧无条件写。
+func (s *Services) updateOwnMFA(u *model.User, enabled bool, secret string) error {
+	ok, err := s.Repo.UpdateUserMFAIf(u.ID, u.MFAEnabled, u.MFASecret, enabled, secret)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrMFAChanged
+	}
 	return nil
 }
 

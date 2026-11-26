@@ -1571,6 +1571,8 @@
     m6217631d: '{0} (read-only execution: the statement changes data through a function or similar and was refused by the database)',
     // %w: %s
     md8a3c8f3: '{0}: {1}',
+    // %w: MFA 状态刚被修改过,请刷新后重试
+    m722d4072: '{0}: MFA settings were just changed; refresh and try again',
     // %w: SSO 登录已超过 15 分钟,请重新通过 SSO 登录后再绑定二次验证(或输入当前登录密码)
     m1e719bdf: '{0}: your SSO sign-in is more than 15 minutes old; sign in through SSO again before binding two-factor verification (or enter your current password)',
     // %w: 业务查询账号不设本地口令,业务方通过 SRD 授权登录进入网关
