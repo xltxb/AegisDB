@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"aegisdb/internal/gateway"
+	"aegisdb/internal/model"
 )
 
 // withSimulationOff 在一个用例内关掉模拟,结束后恢复 —— 夹具默认是开的(它模拟开发
@@ -110,6 +111,21 @@ func TestProductionServesNoSimulatedData(t *testing.T) {
 		}
 		if !strings.Contains(r.Msg, "凭据") {
 			t.Errorf("要说清是凭据没配:%q", r.Msg)
+		}
+	})
+
+	t.Run("export:提交时就拒,不入队", func(t *testing.T) {
+		eq(t, app.do(http.MethodPut, "/api/v1/settings", admin, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set export path")
+		r := app.do(http.MethodPost, "/api/v1/export", admin, map[string]any{
+			"connectionId": conn, "sql": "SELECT * FROM t", "name": "prod-no-sim", "format": "csv",
+		})
+		if r.Code == 0 || !strings.Contains(r.Msg, "凭据") {
+			t.Errorf("没有凭据的实例在生产上导出,提交时就该说清是凭据没配:code=%d msg=%q data=%s", r.Code, r.Msg, r.Data)
+		}
+		var queued int64
+		app.repo.DB().Model(&model.ExportJob{}).Where("connection_id = ?", conn).Count(&queued)
+		if queued != 0 {
+			t.Errorf("被拒的导出不该入队,实际 %d 条任务", queued)
 		}
 	})
 }
