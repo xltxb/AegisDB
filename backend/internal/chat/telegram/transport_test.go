@@ -1488,8 +1488,10 @@ func TestErrors_CarryNoSecrets(t *testing.T) {
 	eventually(t, "处理完", func() bool { return len(f.unconfirmed()) == 0 })
 	eventually(t, "三种失败各留一行", func() bool { return strings.Count(logs.String(), "level=WARN") >= 3 })
 	_ = stop()
-	// 连不上
+	// 连不上。池里那条 keep-alive 连接是对端刚关的:复用它拿到的是 EOF,不是「连不上」,
+	// 丢掉它,让下一次真去拨号(这里测的是拨号失败时的文字)
 	f.Close()
+	tr.http.Transport.(hostGuard).next.(*http.Transport).CloseIdleConnections()
 	_, err = tr.Send(context.Background(), "1", pendingCard())
 	all = append(all, err.Error())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
