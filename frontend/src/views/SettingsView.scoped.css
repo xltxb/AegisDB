@@ -87,6 +87,7 @@
 .sbhint { font: 500 12px var(--font-body); color: var(--text-muted); }
 .savedtag { font: 600 12px var(--font-mono); color: var(--success-text); }
 
+.loaderr { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 16px; border-radius: var(--radius-lg); font: 500 13px/1.55 var(--font-body); color: var(--danger-text); background: var(--danger-subtle); }
 .ssowarn { margin-top: 8px; padding: 8px 10px; border-radius: 8px; font: 500 12px/1.55 var(--font-body); color: var(--warning-text); background: var(--warning-subtle); }
 /* 窄屏:导航改成顶部横向滚动条,不再占一列。 */
 @media (max-width: 900px) {

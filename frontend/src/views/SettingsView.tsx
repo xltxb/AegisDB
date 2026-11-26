@@ -378,6 +378,14 @@ export default function SettingsView() {
   }
 
   const [f, setF, fRef] = useStateRef<Form>(INITIAL)
+  // 线上设置读成功之前,表单里只是默认值:这时任何保存都会拿默认值盖掉线上设置(包括 IP 白名单、
+  // 强制 MFA)。读取中与读失败一律不让存;读失败要说出来,给一个重试。
+  const [loadState, setLoadState, loadStateRef] = useStateRef<'loading' | 'ok' | 'err'>('loading')
+  function notReady() {
+    if (loadStateRef.current === 'ok') return false
+    notify(t('setNotLoadedSave'), 'error')
+    return true
+  }
   const patch = (p: Partial<Form>) => setF((v) => ({ ...v, ...p }))
   const setter = <K extends keyof Form>(k: K) => (v: Form[K]) => patch({ [k]: v } as Pick<Form, K>)
 
@@ -393,6 +401,7 @@ export default function SettingsView() {
   // 两个白名单都是**先存、存成了再改界面**。从前反过来:先把徽标改成「已启用」、关掉弹窗,再去存,
   // 存失败也不报 —— 页面说白名单开着,其实一条都没生效(2026-10 审查)。失败时弹窗留着,改动不丢。
   async function onAdminIpSave(payload: { enabled: boolean; list: string }) {
+    if (notReady()) return
     try {
       await api.saveSettings({ 'security.adminIpAllowEnabled': payload.enabled, 'security.adminIpAllowlist': payload.list })
     } catch (e) {
@@ -405,6 +414,7 @@ export default function SettingsView() {
     notify(t('settingsSaved'), 'success')
   }
   async function onIpSave(payload: { enabled: boolean; list: string }) {
+    if (notReady()) return
     try {
       await api.saveSettings({ 'security.ipAllowEnabled': payload.enabled, 'security.ipAllowlist': payload.list })
     } catch (e) {
@@ -420,6 +430,7 @@ export default function SettingsView() {
   const [larkTest, setLarkTest, larkTestRef] = useStateRef<{ state: 'idle' | 'sending' | 'ok' | 'err'; msg: string }>({ state: 'idle', msg: '' })
   async function testLark() {
     if (larkTestRef.current.state === 'sending') return
+    if (notReady()) return
     setLarkTest({ state: 'sending', msg: '' })
     try {
       await api.saveSettings({ 'notify.larkWebhook': f.larkWebhook.trim(), 'notify.larkSecret': f.larkSecret.trim(), 'notify.consoleURL': f.consoleURL.trim() })
@@ -430,6 +441,7 @@ export default function SettingsView() {
   // 清除一个已配置的密钥(工单 02 第 8 条):后端约定 null = 清除,"" = 不改。即点即存,不等底部的保存 ——
   // 清除是一个明确的动作,与"这次没填"是两回事。
   async function clearSecret(key: keyof typeof SECRETS) {
+    if (notReady()) return
     if (!(await confirmAction(t('secretClearConfirm')))) return
     try {
       await api.saveSettings({ [key]: null })
@@ -448,23 +460,32 @@ export default function SettingsView() {
   const takeBaseline = () => setBaseline(dirtyView(fRef.current))
   useUnsavedFlag(!!baseline && dirtyView(f) !== baseline)
 
+  async function load() {
+    setLoadState('loading')
+    try {
+      const s = await api.settings()
+      setF(formOf(s.settings || {}))
+      setSecretsSet(s.secretsSet ?? {})
+      setAdminIpEnabled(parse<boolean>(s.settings?.['security.adminIpAllowEnabled'], false))
+      setAdminIpList(parse<string>(s.settings?.['security.adminIpAllowlist'], ''))
+      setAdminIpForcedOff(!!(s as any).adminIpAllowlistForcedOff)
+      api.ssoConfig().then((c) => { setSsoForcedOff(!!c.forcedOff) }).catch(() => { /* 读不到就不提示 */ })
+    } catch {
+      setLoadState('err')
+      return
+    }
+    takeBaseline()
+    setLoadState('ok')
+  }
   useMountEffect(() => {
+    void load()
     void (async () => {
-      try {
-        const s = await api.settings()
-        setF(formOf(s.settings || {}))
-        setSecretsSet(s.secretsSet ?? {})
-        setAdminIpEnabled(parse<boolean>(s.settings?.['security.adminIpAllowEnabled'], false))
-        setAdminIpList(parse<string>(s.settings?.['security.adminIpAllowlist'], ''))
-        setAdminIpForcedOff(!!(s as any).adminIpAllowlistForcedOff)
-        api.ssoConfig().then((c) => { setSsoForcedOff(!!c.forcedOff) }).catch(() => { /* 读不到就不提示 */ })
-      } catch { /* ignore */ }
-      takeBaseline()
       try { setApprovers((await api.approvalChain()).chain ?? []) } catch { /* ignore */ }
     })()
   })
 
   async function save() {
+    if (notReady()) return
     try {
       const p = settingsPayload(fRef.current)
       await api.saveSettings(p)
@@ -510,6 +531,12 @@ export default function SettingsView() {
           </div>
         </nav>
         <div className="col">
+          {loadState === 'err' && (
+            <div className="loaderr" role="alert" data-testid="settings-load-failed">
+              <span className="grow">{t('setLoadFailed')}</span>
+              <VButton height="30px" onClick={() => void load()}>{t('setLoadRetry')}</VButton>
+            </div>
+          )}
 
           {/* Gateway */}
           <section style={showOn('gateway')} className="card">
@@ -667,7 +694,7 @@ export default function SettingsView() {
             <div className="savebar">
               <div className="grow sbhint">{t('setSaveHint')}</div>
               {saved && <span className="savedtag">{t('saved')}</span>}
-              <VButton variant="primary" onClick={save}>{t('saveSettings')}</VButton>
+              <VButton variant="primary" disabled={loadState !== 'ok'} onClick={save}>{t('saveSettings')}</VButton>
             </div>
           )}
         </div>
