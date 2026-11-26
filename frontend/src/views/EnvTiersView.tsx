@@ -252,6 +252,7 @@ export default function EnvTiersView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">TIERS &amp; ENVIRONMENTS</div>
+          <div className="v-h1">{t('t_envtier')}</div>
           <div className="v-sub">{t('etIntro')}</div>
         </div>
         {!isAdmin && <span className="roflag">{t('readOnlyPerms')}</span>}

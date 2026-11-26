@@ -270,6 +270,7 @@ export default function PipelinesView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">RELEASE FLOWS</div>
+          <div className="v-h1">{t('t_pipelines')}</div>
           <div className="v-sub">{t('plSub')}</div>
         </div>
         {!isAdmin

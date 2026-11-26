@@ -266,7 +266,6 @@
 .fmore { margin-top: 6px; font: 500 11px var(--font-body); color: var(--text-muted); }
 
 .hint { margin-top: 12px; font: 500 11.5px var(--font-body); color: var(--text-faint); }
-.empty { padding: 22px; text-align: center; font: 500 12.5px var(--font-body); color: var(--text-muted); }
 
 /* ---------------- 页头工具条 ---------------- */
 .pfilter { display: flex; align-items: center; }

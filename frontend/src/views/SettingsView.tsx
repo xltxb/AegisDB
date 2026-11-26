@@ -517,6 +517,7 @@ export default function SettingsView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">SETTINGS</div>
+          <div className="v-h1">{t('t_settings')}</div>
         </div>
       </div>
       <div className="layout">

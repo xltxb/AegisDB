@@ -4,7 +4,8 @@
 // 新建弹窗在 ReleaseForm(三个文件共用同一份样式作用域)。
 import { useRef, useState } from 'react'
 import clsx from 'clsx'
-import { Plus, X, Search, RefreshCw } from 'lucide-react'
+import { Plus, X, Search, RefreshCw, Rocket, GitBranch } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import VButton from '@/components/common/VButton'
 import ReleaseDetailPane, { executorText, useEnvTone } from './ReleaseDetailPane'
 import ReleaseForm from './ReleaseForm'
@@ -250,6 +251,7 @@ export default function ReleasesView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">RELEASE PIPELINE</div>
+          <div className="v-h1">{t('t_releases')}</div>
           <div className="v-sub">{t('rlSub')}</div>
         </div>
         <div className="v-head-acts">
@@ -332,7 +334,7 @@ export default function ReleasesView() {
               </div>
             )
           })}
-          {!releases.length && <div className="empty">{filtering ? t('rlNoMatch') : t('rlEmpty')}</div>}
+          {!releases.length && <EmptyState compact className="empty" icon={filtering ? Search : Rocket} title={filtering ? t('rlNoMatch') : t('rlEmpty')} />}
         </div>
 
         {/* 右栏:详情 */}
@@ -343,7 +345,7 @@ export default function ReleasesView() {
               onToggleStage={toggleStage} onAbort={abort} onContinue={continueStage}
             />
           )
-          : <div className="detail card empty">{t('rlPickRelease')}</div>}
+          : <EmptyState className="detail card empty" icon={GitBranch} title={t('rlPickRelease')} />}
       </div>
 
       {/* create modal */}

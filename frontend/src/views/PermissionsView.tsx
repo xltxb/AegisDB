@@ -508,6 +508,7 @@ export default function PermissionsView() {
       <div className="v-head pm-head">
         <div className="v-head-l">
           <div className="v-eyebrow">ROLES &amp; PERMISSIONS</div>
+          <div className="v-h1">{t('t_perms')}</div>
         </div>
       </div>
       <div className="vtabs">

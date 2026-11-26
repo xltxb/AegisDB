@@ -126,4 +126,4 @@
 .tab.active .tdb { color: var(--text-muted); }
 .close { display: flex; align-items: center; justify-content: center; width: 17px; height: 17px; border-radius: 5px; color: var(--text-faint); }
 .close:hover { background: var(--danger-subtle); color: var(--danger-text); }
-.empty { flex: 1; display: flex; align-items: center; justify-content: center; font: 500 13px var(--font-mono); color: var(--text-faint); }
+.empty { flex: 1; }

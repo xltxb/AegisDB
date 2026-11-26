@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import clsx from 'clsx'
 import { Loader, CircleCheck, CircleX, Hourglass, Play } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import VButton from '@/components/common/VButton'
 import VSelect from '@/components/common/VSelect'
 import api from '@/api'
@@ -116,7 +117,8 @@ export default function AsyncExecView() {
     <div className="scy page">
       <div className="v-head">
         <div className="v-head-l">
-          <div className="v-eyebrow">{t('asyncTitle')}</div>
+          <div className="v-eyebrow">ASYNC EXECUTION</div>
+          <div className="v-h1">{t('t_asyncjobs')}</div>
           <div className="v-sub">{t('asyncSub')}</div>
         </div>
       </div>
@@ -144,7 +146,7 @@ export default function AsyncExecView() {
         {/* job list + log */}
         <div className="card jobs">
           <div className="jhead">{t('asyncJobs')}</div>
-          {!jobs.length && <div className="empty">{t('asyncEmpty')}</div>}
+          {!jobs.length && <EmptyState compact icon={Hourglass} title={t('asyncEmpty')} />}
           {jobs.map((j) => {
             const m = statusMeta(j.status)
             return (

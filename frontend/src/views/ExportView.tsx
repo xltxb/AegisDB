@@ -354,6 +354,8 @@ export default function ExportView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">DATA EXPORT</div>
+          <div className="v-h1">{t('t_export')}</div>
+          <div className="v-sub">{t('t_exportSub')}</div>
         </div>
       </div>
       <div className="col">

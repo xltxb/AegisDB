@@ -51,6 +51,7 @@ export default function ProjectsView() {
       <div className="v-head">
         <div className="v-head-l">
           <div className="v-eyebrow">PROJECTS</div>
+          <div className="v-h1">{t('t_project')}</div>
           <div className="v-sub">{t('prPageSub', { n: totals.projects })}</div>
         </div>
       </div>

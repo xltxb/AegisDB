@@ -15,7 +15,7 @@
   selSearchPh: '输入关键词搜索', selUse: '使用「{v}」', selNoMatch: '无匹配项', selRemove: '去掉 {v}', selPickedOf: '已选 {n} / {max}',
   t_export: '数据导出', t_exportSub: 'SQL 导出 · 压缩加密', t_uploads: '脚本上传', t_uploadsSub: '上传并管理你的脚本文件',
   t_asyncjobs: '后台执行', t_asyncjobsSub: '长耗时 SQL 异步跑 · 实时日志',
-  asyncTitle: '后台执行(异步)', asyncSub: '提交长耗时 SQL(30–60分钟+),后台跑完不受请求超时影响,过程日志(RAISE NOTICE)实时回显',
+  asyncSub: '提交长耗时 SQL(30–60分钟+),后台跑完不受请求超时影响,过程日志(RAISE NOTICE)实时回显',
   asyncSubmit: '后台执行', asyncReasonPh: '执行原因(可选)', asyncHint: '提交后会返回任务号,后台执行;关闭页面也不影响。命中高危规则会转审批。',
   asyncJobs: '任务', asyncEmpty: '暂无后台任务', asyncDone: '执行完成 · 影响 {n} 行', asyncRunning: '执行中…', reason: '原因',
   uploadTitle: '上传脚本文件', uploadSub: '上传 .sql 脚本到服务器,仅你自己可见与管理',

@@ -2,8 +2,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as RPointerEvent } from 'react'
 import clsx from 'clsx'
 import {
-  X, PanelLeftOpen, PanelRightOpen, Table2, Maximize2, Minimize2, Activity, ShieldAlert, LogOut,
+  X, PanelLeftOpen, PanelRightOpen, Table2, Maximize2, Minimize2, Activity, ShieldAlert, LogOut, SquareTerminal,
 } from 'lucide-react'
+import EmptyState from '@/components/common/EmptyState'
 import { useUIStore } from '@/stores/ui'
 import { useEnvTierStore } from '@/stores/envtier'
 import { useActivated } from '@/components/KeepAlive'
@@ -451,7 +452,7 @@ export default function TerminalView() {
           </div>
         )}
 
-        {!tabs.length && <div className="empty">{t('tabEmpty')}</div>}
+        {!tabs.length && <EmptyState className="empty" icon={SquareTerminal} title={t('tabEmpty')} />}
         <div className="termsplit">
           {/* 所有标签的会话一直挂着,切标签只是不显示 —— 卸载就是断连、丢事务 */}
           {tabs.map((tab) => (
