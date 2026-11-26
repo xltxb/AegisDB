@@ -3,10 +3,8 @@ package bootstrap
 import (
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
-	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -15,7 +13,9 @@ import (
 	"aegisdb/internal/model"
 )
 
-// OpenDB connects using the configured driver and runs AutoMigrate.
+// OpenDB connects using the configured driver. It never touches the schema:
+// that is owned by migrations/*.sql (MySQL) and migrations/pg/*.sql (PostgreSQL),
+// applied by Migrate.
 func OpenDB(cfg *Config) (*gorm.DB, error) {
 	gcfg := &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Warn)}
 
@@ -32,92 +32,18 @@ func OpenDB(cfg *Config) (*gorm.DB, error) {
 		if err != nil {
 			return nil, fmt.Errorf("connect postgres: %w", err)
 		}
-	case "sqlite":
-		// busy_timeout lets writers wait instead of failing "database is locked",
-		// and WAL improves reader/writer concurrency (M6). Append with the right
-		// separator so a path that already carries query params keeps its pragmas.
-		// temp_store(MEMORY): bulk INSERT ... RETURNING needs temp tables, and the
-		// default puts them in a temp directory that may not be writable (read-only
-		// containers, sandboxes), failing with SQLITE_CANTOPEN (issue #92).
-		dsn := cfg.Database.SQLitePath
-		sep := "?"
-		if strings.Contains(dsn, "?") {
-			sep = "&"
-		}
-		dsn += sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=temp_store(MEMORY)"
-		db, err = gorm.Open(sqlite.Open(dsn), gcfg)
-		if err != nil {
-			return nil, fmt.Errorf("open sqlite: %w", err)
-		}
-		// SQLite allows a single writer; cap the pool to serialize writes and
-		// avoid lock contention across the worker pool + HTTP handlers.
-		if sqlDB, derr := db.DB(); derr == nil {
-			sqlDB.SetMaxOpenConns(1)
-		}
 	default:
 		return nil, fmt.Errorf("unknown database driver: %q", cfg.Database.Driver)
 	}
 
-	if shouldAutoMigrate(cfg.Database.Driver, cfg.Database.AutoMigrate) {
-		// Go through autoMigrate, NOT db.AutoMigrate directly. This used to call
-		// GORM itself, so there were two places that migrated the schema and any
-		// step added to the other one was silently missing here — which is exactly
-		// what happened to the env→tier_code rename: boot skipped it, AutoMigrate
-		// added an empty tier_code beside the populated env, and every rule lookup
-		// came back empty. Both lookups read empty as permission granted, so the
-		// gateway came up healthy and ungoverned.
-		if err := autoMigrate(db); err != nil {
-			// Nobody can close a handle they were never handed. Release the pool
-			// here or a failed boot leaves the connection (and, on sqlite, a lock
-			// on the database file) held for the life of the process.
-			if sqlDB, derr := db.DB(); derr == nil {
-				_ = sqlDB.Close()
-			}
-			return nil, err
-		}
-		// This path never goes through Migrate, so the fold of the retired global
-		// strict switch has to hang off it too — the same reason autoMigrate
-		// carries the other backfills.
-		if err := backfillStrictNoWhere(db, cfg.Gateway.StrictMode); err != nil {
-			if sqlDB, derr := db.DB(); derr == nil {
-				_ = sqlDB.Close()
-			}
-			return nil, err
-		}
-		// 迁移 0056 的 dev / uat 关闭,理由同上:这条路不经过 Migrate。
-		if err := backfillTierMaskExport(db); err != nil {
-			if sqlDB, derr := db.DB(); derr == nil {
-				_ = sqlDB.Close()
-			}
-			return nil, err
-		}
-		// 迁移 0058 的 dev / uat 打开「允许自动执行」,同上。
-		if err := backfillTierAutoExecute(db); err != nil {
-			if sqlDB, derr := db.DB(); derr == nil {
-				_ = sqlDB.Close()
-			}
-			return nil, err
-		}
-	} else if cfg.Database.AutoMigrate && sqlMigrated(cfg.Database.Driver) {
+	if cfg.Database.AutoMigrate {
 		slog.Warn("ignoring auto_migrate: schema is owned by SQL migrations — run `server migrate`/`server init`", "driver", cfg.Database.Driver)
 	}
 	return db, nil
 }
 
-// shouldAutoMigrate reports whether boot-time GORM AutoMigrate should run. It is
-// refused for MySQL and PostgreSQL: those schemas are authoritative in
-// migrations/*.sql and migrations/pg/*.sql, and a second AutoMigrate source would
-// drift prod tables to model inference (B6/H13).
-func shouldAutoMigrate(driver string, want bool) bool {
-	return want && !sqlMigrated(driver)
-}
-
-// sqlMigrated:这个驱动的表结构由手写 SQL 迁移决定(而不是按模型 AutoMigrate)。
-func sqlMigrated(driver string) bool { return driver == "mysql" || driver == "postgres" }
-
-// allModels is the full set of GORM models, used by AutoMigrate (dev/sqlite boot
-// and the migrator's sqlite fallback). Keep in sync with migrations/*.sql, which
-// is authoritative for MySQL/production.
+// allModels is the full set of GORM models, kept for tests that check the models
+// against the SQL migrations. migrations/*.sql is the authoritative schema.
 var allModels = []any{
 	&model.Role{}, &model.User{}, &model.RoleMenu{}, &model.RoleMember{}, &model.QueryGrant{}, &model.QueryGrantApproval{},
 	&model.RoleCapability{}, &model.Connection{}, &model.RiskCommand{},

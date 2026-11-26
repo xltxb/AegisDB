@@ -68,7 +68,7 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 //
 // Every tier, DEV included, starts with the gate ON (2026-11-16 用户定:以 MySQL 为准)。
 // 从前 DEV 在这里是刻意的 false,而生产走迁移 0030 新装 / 升级出来的 DEV 是 true ——
-// 同一个产品两种初始状态,本地 SQLite 上测出的行为在生产上对不上。现在两条路一致:
+// 同一个产品两种初始状态,本地环境测出的行为在生产上对不上。现在两条路一致:
 // 新装时所有分层都拦无 WHERE 的 DELETE / UPDATE;要放行 DEV,在【环境分层】里取消勾选,
 // 那是运维的一次显式操作,不是安装方式带来的差别。
 var builtinTiers = []model.EnvTier{

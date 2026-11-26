@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -27,7 +28,7 @@ var weakJWTSecrets = map[string]bool{
 
 // Config is the full backend configuration loaded from configs/config.yaml.
 type Config struct {
-	// Env is the deployment profile: "dev" (local, SQLite) or "prod" (MySQL).
+	// Env is the deployment profile: "dev" (local, PostgreSQL) or "prod" (MySQL).
 	// Resolved from APP_ENV/AEGISDB_ENV env vars, falling back to this yaml field
 	// then "dev". It drives the default database driver — see LoadConfig.
 	Env string `yaml:"env"`
@@ -57,13 +58,15 @@ type Config struct {
 		TrustedProxies []string `yaml:"trusted_proxies"`
 	} `yaml:"server"`
 	Database struct {
-		Driver      string `yaml:"driver"`
-		MySQLDSN    string `yaml:"mysql_dsn"`
+		Driver   string `yaml:"driver"`
+		MySQLDSN string `yaml:"mysql_dsn"`
 		// PostgresDSN 是 driver: postgres 时的连接串(libpq 键值或 URL 形式均可)。
 		PostgresDSN string `yaml:"postgres_dsn"`
-		SQLitePath  string `yaml:"sqlite_path"`
-		AutoMigrate bool   `yaml:"auto_migrate"`
-		Seed        bool   `yaml:"seed"`
+		// AutoMigrate is kept only so old config files still parse. Nothing
+		// auto-migrates any more (the schema comes from migrations/*.sql, applied
+		// by `server migrate`); OpenDB warns when it is set to true.
+		AutoMigrate bool `yaml:"auto_migrate"`
+		Seed        bool `yaml:"seed"`
 	} `yaml:"database"`
 	JWT struct {
 		Secret   string `yaml:"secret"`
@@ -74,7 +77,7 @@ type Config struct {
 	// JWT secret. Keeping it separate lets the JWT signing secret be rotated
 	// without making previously encrypted ciphertext undecryptable (A2).
 	SecretKey string `yaml:"secret_key"`
-	Gateway struct {
+	Gateway   struct {
 		DefaultPolicy      string `yaml:"default_policy"`
 		StrictMode         bool   `yaml:"strict_mode"`
 		ExecTimeoutSeconds int    `yaml:"exec_timeout_seconds"`
@@ -107,6 +110,11 @@ type Config struct {
 	} `yaml:"admin_ip"`
 }
 
+// errSQLiteUnsupported is returned when a config asks for the retired SQLite store.
+var errSQLiteUnsupported = errors.New("SQLite 存储库已不再支持,请改用 PostgreSQL(见 README「本地开发」)")
+
+func isSQLiteDriver(v string) bool { return strings.EqualFold(strings.TrimSpace(v), "sqlite") }
+
 // LoadConfig reads YAML config from path, applying env overrides for secrets/DSN.
 func LoadConfig(path string) (*Config, error) {
 	raw, err := os.ReadFile(path)
@@ -116,6 +124,9 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := &Config{}
 	if err := yaml.Unmarshal(raw, cfg); err != nil {
 		return nil, err
+	}
+	if isSQLiteDriver(cfg.Database.Driver) {
+		return nil, errSQLiteUnsupported
 	}
 	// Environment overrides (handy for docker / CI).
 	if v := os.Getenv("AEGISDB_MYSQL_DSN"); v != "" {
@@ -154,26 +165,29 @@ func LoadConfig(path string) (*Config, error) {
 
 	// Resolve the deployment profile and, from it, the database driver.
 	// Precedence for the driver (highest first):
-	//   1. AEGISDB_DB_DRIVER      — explicit manual override (mysql|postgres|sqlite)
-	//   2. APP_ENV / AEGISDB_ENV / config.env  — dev→sqlite, prod→mysql
+	//   1. AEGISDB_DB_DRIVER      — explicit manual override (mysql|postgres)
+	//   2. APP_ENV / AEGISDB_ENV / config.env  — dev→postgres, prod→mysql
 	//      存储库搬到 PG 之后用 AEGISDB_DB_DRIVER=postgres(写在 aegisdb.env)—— 不读配置文件里的
 	//      driver:升级包会覆盖 configs/config.yaml,写在那里下一次升级就悄悄连回旧 MySQL。
-	// Local dev thus needs zero dependencies (SQLite) while prod uses MySQL,
-	// switched from a single startup knob.
+	// Local dev thus uses PostgreSQL while prod uses MySQL, switched from a single
+	// startup knob. The SQLite store is no longer supported and is rejected.
 	rawEnv := firstNonEmpty(os.Getenv("APP_ENV"), os.Getenv("AEGISDB_ENV"), cfg.Env)
 	cfg.EnvRaw = strings.TrimSpace(rawEnv) // remember the requested name for the strong-secret gate (issue 33)
 	if rawEnv != "" && !isKnownEnv(rawEnv) {
-		// e.g. APP_ENV=staging → falls through to dev (SQLite). Surface it rather
-		// than silently degrading a would-be non-dev deployment to a local file (C6).
-		slog.Warn("未识别的环境名,将按 dev 处理(使用 SQLite)", "env", rawEnv)
+		// e.g. APP_ENV=staging → falls through to dev. Surface it rather than
+		// silently treating a would-be non-dev deployment as a local dev box (C6).
+		slog.Warn("未识别的环境名,将按 dev 处理", "env", rawEnv)
 	}
 	cfg.Env = normalizeEnv(firstNonEmpty(rawEnv, "dev"))
 	if v := os.Getenv("AEGISDB_DB_DRIVER"); v != "" {
+		if isSQLiteDriver(v) {
+			return nil, errSQLiteUnsupported
+		}
 		cfg.Database.Driver = v
 	} else if cfg.Env == "prod" {
 		cfg.Database.Driver = "mysql"
 	} else {
-		cfg.Database.Driver = "sqlite"
+		cfg.Database.Driver = "postgres"
 	}
 	// NOTE: the prod JWT-secret enforcement lives in ValidateForServe (called on
 	// the serve path only). `migrate`/`init` need just the DSN and must not be
@@ -249,7 +263,7 @@ func distinctBytes(s string) int {
 }
 
 // isKnownEnv reports whether s is a recognized environment alias. LoadConfig warns
-// on anything else so an env like "staging" doesn't silently degrade to SQLite.
+// on anything else so an env like "staging" doesn't silently pass as a known one.
 // isLocalDevEnv reports whether the operator's REQUESTED env name is a genuine
 // local-dev run (empty, or dev/development/local). Everything else — prod,
 // staging, uat, gli, any unrecognized name — is a real deployment that must not

@@ -206,8 +206,8 @@ GedC6kERMS.0H3r5tXUD9o_LyVNaIf2JwWOlYZzvgjs8bpi7~TPAch14QnqKx-Fu   (填充 *)
 | `AEGISDB_WEBHOOK_SECRET` | 出站审计 Webhook / 飞书签名密钥(可选) |
 | `AEGISDB_SSO_DISABLED` | `1`/`true` 时强制关闭 SSO,所有人回到账号口令登录(覆盖设置页开关,需重启;见第 7 节) |
 | `AEGISDB_ADMIN_IP_ALLOWLIST_DISABLED` | `1`/`true` 时管理后台 IP 白名单一律不生效(覆盖设置页,需重启)。白名单配错、管理员都进不了管理后台时用;本机回环本来就始终放行 |
-| `APP_ENV` / `AEGISDB_ENV` | `prod`→MySQL,`dev`→SQLite;其他值(如 `staging`)也回落 SQLite,需显式设 `AEGISDB_DB_DRIVER` |
-| `AEGISDB_DB_DRIVER` | 强制 `mysql` \| `postgres` \| `sqlite`(覆盖上面的 env 推断) |
+| `APP_ENV` / `AEGISDB_ENV` | `prod`→MySQL,`dev`→PostgreSQL;其他值(如 `staging`)按 dev 处理(同样默认 PostgreSQL),生产类部署请显式设 `AEGISDB_DB_DRIVER` |
+| `AEGISDB_DB_DRIVER` | 强制 `mysql` \| `postgres`(覆盖上面的 env 推断;`sqlite` 已不再支持,会报错) |
 | `AEGISDB_ADMIN_EMAIL` / `AEGISDB_ADMIN_PASSWORD` / `AEGISDB_ADMIN_NAME` | `init` 时的管理员凭据 |
 
-> 本地开发仍用零依赖 SQLite:`cd backend && APP_ENV=dev go run ./cmd/server`,前端 `cd frontend && npm run dev`。
+> 本地开发需要 PostgreSQL(≥ 13):装好后建库,按 `backend/configs/config.yaml` 的 `postgres_dsn` 对齐或设 `AEGISDB_POSTGRES_DSN`,然后 `cd backend && go run ./cmd/server migrate && go run ./cmd/server`,前端 `cd frontend && npm run dev`。详见 README「本地开发」。

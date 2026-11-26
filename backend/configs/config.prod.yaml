@@ -24,7 +24,6 @@ database:
   #   AEGISDB_DB_DRIVER=postgres
   #   AEGISDB_POSTGRES_DSN=host=… port=5432 user=… password=… dbname=aegisdb sslmode=disable
   # **不要**改这个文件来切换:升级包会覆盖它,下一次升级就悄悄连回旧 MySQL。
-  sqlite_path: "aegisdb.db"
   auto_migrate: false        # do NOT alter schema on every boot; `aegisdb init` migrates explicitly
   seed: false                # NO demo data in production — use `aegisdb init`
 

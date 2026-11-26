@@ -1,7 +1,7 @@
 # AegisDB 数据库管理网关 — Agent 指引
 
-全栈项目：`backend/`（Go · Gin · GORM · MySQL/SQLite）+ `frontend/`（React 19 · TS · Vite · Zustand）。
-本地零依赖启动见 `README.md`（双击根目录 `start-dev.bat`，演示登录 `linwei@aegisdb.io / aegisdb123`）。
+全栈项目：`backend/`（Go · Gin · GORM · MySQL/PostgreSQL）+ `frontend/`（React 19 · TS · Vite · Zustand）。
+本地启动见 `README.md`「本地开发」：需要 PostgreSQL（Windows 双击根目录 `start-dev.bat`；macOS/Linux 装 PG 后 `go run ./cmd/server migrate` 再启动），演示登录 `linwei@aegisdb.io / aegisdb123`。SQLite 存储库已移除；后端测试自动起临时 PG（需 PG 程序，见 README「测试」）。
 
 ## Agent skills
 

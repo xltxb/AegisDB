@@ -1,10 +1,10 @@
 # AegisDB — backend configuration
 
 # Deployment profile: dev | prod
-#   dev  → SQLite (zero-dependency local run, writes ./aegisdb.db)
-#   prod → MySQL  (see docker-compose.yml / mysql_dsn below)
+#   dev  → PostgreSQL (postgres_dsn below; run `go run ./cmd/server migrate` first)
+#   prod → MySQL      (see docker-compose.yml / mysql_dsn below)
 # Overridable at startup via APP_ENV (or AEGISDB_ENV): `APP_ENV=prod ./server`
-# flips the whole app to MySQL. AEGISDB_DB_DRIVER=mysql|postgres|sqlite forces a driver.
+# flips the whole app to MySQL. AEGISDB_DB_DRIVER=mysql|postgres forces a driver.
 env: "dev"
 
 server:
@@ -14,14 +14,14 @@ server:
     - "http://localhost:5173"
     - "http://127.0.0.1:5173"
 
-# Storage — the active driver is chosen by `env` above (dev→sqlite, prod→mysql),
+# Storage — the active driver is chosen by `env` above (dev→postgres, prod→mysql),
 # not set here directly. Both endpoints stay configured so either profile works.
 database:
   # MySQL DSN (used when env=prod; matches docker-compose.yml credentials)
   mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb?charset=utf8mb4&parseTime=true&loc=Local"
-  # SQLite file (used when env=dev)
-  sqlite_path: "aegisdb.db"
-  auto_migrate: true     # GORM AutoMigrate on boot
+  # PostgreSQL DSN (used when env=dev; matches backend/run-pg.bat). Override with AEGISDB_POSTGRES_DSN.
+  postgres_dsn: "host=127.0.0.1 port=5437 user=postgres password=aegisdb_test dbname=aegisdb_dev sslmode=disable TimeZone=Asia/Shanghai"
+  auto_migrate: false    # retired: nothing auto-migrates, run `server migrate`
   seed: true             # insert demo data (mirrors the prototype) when tables are empty
 
 jwt:

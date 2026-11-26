@@ -36,8 +36,8 @@ func (schemaMigration) TableName() string { return "schema_migrations" }
 func Run(db *gorm.DB, srcFS fs.FS) error {
 	// Serialize concurrent migrators (e.g. multi-replica deploy hooks) with a
 	// MySQL advisory lock so two processes can't apply the same version and
-	// collide on the schema_migrations primary key (R14). SQLite is single-file
-	// and needs no such lock.
+	// collide on the schema_migrations primary key (R14). PostgreSQL takes its own
+	// advisory lock below.
 	if db.Dialector.Name() == "mysql" {
 		// GET_LOCK / RELEASE_LOCK are SESSION-scoped, so they must run on the SAME
 		// physical connection, and the lock must stay held for the whole migration.

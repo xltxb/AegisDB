@@ -13,7 +13,6 @@ func writeTempConfig(t *testing.T, envLine string) string {
 	body := envLine + `
 database:
   mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb"
-  sqlite_path: "aegisdb.db"
   auto_migrate: false
   seed: false
 jwt:
@@ -37,7 +36,6 @@ func TestConfig_ProdServeRejectsCommittedDevSecretButMigrateLoads(t *testing.T) 
 	body := `env: "prod"
 database:
   mysql_dsn: "aegisdb:aegisdbpass@tcp(127.0.0.1:3306)/aegisdb"
-  sqlite_path: "aegisdb.db"
 jwt:
   secret: "change-me-aegisdb-dev-secret"
 `
@@ -78,7 +76,7 @@ jwt:
 	}
 }
 
-// TestLoadConfigDriverResolution pins the dev(sqlite)/prod(mysql) switch and the
+// TestLoadConfigDriverResolution pins the dev(postgres)/prod(mysql) switch and the
 // precedence: AEGISDB_DB_DRIVER > APP_ENV/AEGISDB_ENV > config.env > default(dev).
 func TestLoadConfigDriverResolution(t *testing.T) {
 	cases := []struct {
@@ -90,13 +88,13 @@ func TestLoadConfigDriverResolution(t *testing.T) {
 		wantEnv    string
 		wantDriver string
 	}{
-		{"default is dev/sqlite", "", "", "", "", "dev", "sqlite"},
+		{"default is dev/postgres", "", "", "", "", "dev", "postgres"},
 		{"yaml env:prod -> mysql", `env: "prod"`, "", "", "", "prod", "mysql"},
 		{"APP_ENV=prod overrides yaml dev", `env: "dev"`, "prod", "", "", "prod", "mysql"},
 		{"APP_ENV=production alias", "", "production", "", "", "prod", "mysql"},
 		{"AEGISDB_ENV=prod when APP_ENV empty", "", "", "prod", "", "prod", "mysql"},
-		{"AEGISDB_DB_DRIVER wins over prod env", `env: "prod"`, "prod", "", "sqlite", "prod", "sqlite"},
-		{"unknown env falls back to dev", "", "staging", "", "", "dev", "sqlite"},
+		{"AEGISDB_DB_DRIVER wins over prod env", `env: "prod"`, "prod", "", "postgres", "prod", "postgres"},
+		{"unknown env falls back to dev", "", "staging", "", "", "dev", "postgres"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -151,17 +149,5 @@ database:
 	}
 	if cfg.Database.Driver != "postgres" || cfg.Database.PostgresDSN != "host=from-env dbname=aegisdb" {
 		t.Errorf("环境变量切换:driver=%q dsn=%q", cfg.Database.Driver, cfg.Database.PostgresDSN)
-	}
-}
-
-// PG 的表结构同 MySQL 一样只由 SQL 迁移决定,启动时不跑 AutoMigrate。
-func TestShouldAutoMigrate_RefusedForSQLMigratedDrivers(t *testing.T) {
-	for _, d := range []string{"mysql", "postgres"} {
-		if shouldAutoMigrate(d, true) {
-			t.Errorf("%s 不该 AutoMigrate", d)
-		}
-	}
-	if !shouldAutoMigrate("sqlite", true) {
-		t.Error("sqlite 仍走 AutoMigrate")
 	}
 }
