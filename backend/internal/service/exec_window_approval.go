@@ -23,6 +23,7 @@ import (
 
 	"aegisdb/internal/apimsg"
 	"aegisdb/internal/model"
+	"aegisdb/internal/repository"
 )
 
 // windowApprovalCommand 是这张单在审批人眼前长什么样。
@@ -78,7 +79,7 @@ func (s *Services) raiseWindowApproval(u *model.User, w *model.ExecWindow) error
 		Instance: conn.Name, Database: fitWindowDBCol(w),
 		Command:    windowApprovalCommand(w, conn.Name),
 		CommandRef: windowApprovalRef(w, conn.Name),
-		Keyword:  "EXEC-WINDOW",
+		Keyword:    "EXEC-WINDOW",
 		// 申请人是发起人。审批链、超时策略、自审批开关全部复用既有那一套 ——
 		// 这里不该长出第二套"谁能批"的规则。
 		InitiatorID: u.ID, Initiator: u.Name,
@@ -145,13 +146,15 @@ func (s *Services) withdrawWindowTicket(actor *model.User, apID int64, why strin
 // cancelStaleWindowTicket 原子地把一张 pending 的窗口单改成撤回,并收掉它挂着的审批步骤。
 // 抢不到(已被决定)就什么都不做。
 func (s *Services) cancelStaleWindowTicket(actor *model.User, ap *model.Approval, why string) {
-	claimed, err := s.Repo.ClaimApproval(ap.ID, model.StatusPending, model.StatusCancelled)
-	if err != nil || !claimed {
+	claimed, err := s.Repo.CancelPendingApprovalAtomic(ap.ID,
+		repository.ApprovalOutcome{StepStatus: model.StatusCancelled, At: time.Now()})
+	if err != nil {
+		slog.Error("撤回作废的窗口单失败", "window", ap.WindowID, "apNo", ap.ApNo, "err", err)
 		return
 	}
-	now := time.Now()
-	_ = s.Repo.DecideActiveStep(ap.ID, model.StatusCancelled, now)
-	_ = s.Repo.SetApprovalResult(ap.ID, "", nil, 0, now)
+	if !claimed {
+		return
+	}
 	conn, _ := s.Repo.GetConnection(ap.ConnectionID)
 	name := "系统"
 	if actor != nil {
@@ -167,27 +170,24 @@ func (s *Services) cancelStaleWindowTicket(actor *model.User, ap *model.Approval
 	}
 }
 
-// applyWindowDecision 是一张窗口单被批准/驳回之后真正发生的事。
+// auditWindowDecision 把一张窗口单被批准/驳回之后窗口的变化记进审计。
 //
-// 批准 = 这扇门从现在起按它自己的时间表生效(还没到点就还是不开 —— 状态说的是
-// "有人签过字了",时间表说的是"现在开不开",两者都要满足)。
-// 驳回 = 永久留在 rejected:判定层不认,列表里仍然看得见它被驳回过。
-func (s *Services) applyWindowDecision(ap *model.Approval, approve bool) {
-	// 兜底:finalizeApproval 已经挡掉了旧单,这里再认一次 —— 状态只跟着当前那张单走。
-	if current, err := s.windowTicketCurrent(ap); err != nil || !current {
-		slog.Warn("执行窗口:忽略非当前单的审批结果", "window", ap.WindowID, "apNo", ap.ApNo, "err", err)
-		return
-	}
+// 窗口状态已经和单子一起落库(Repo.DecideApprovalAtomic):批准 = 这扇门从现在起按它自己的
+// 时间表生效(还没到点就还是不开 —— 状态说的是"有人签过字了",时间表说的是"现在开不开",
+// 两者都要满足);驳回 = 永久留在 rejected:判定层不认,列表里仍然看得见它被驳回过。
+//
+// 只在窗口确实跟着这张单变了时记:窗口挂的已经不是这张单(被改过),它就没有被这次决定打开。
+func (s *Services) auditWindowDecision(ap *model.Approval, approve bool) {
 	status := model.WindowRejected
 	if approve {
 		status = model.WindowApproved
 	}
-	if err := s.Repo.SetExecWindowDecision(ap.WindowID, status, time.Now()); err != nil {
-		slog.Error("执行窗口审批结果落库失败", "window", ap.WindowID, "apNo", ap.ApNo, "status", status, "err", err)
-		return
-	}
 	w, err := s.Repo.GetExecWindow(ap.WindowID)
 	if err != nil {
+		return
+	}
+	if w.ApprovalID != ap.ID || w.Status != status {
+		slog.Warn("执行窗口:忽略非当前单的审批结果", "window", ap.WindowID, "apNo", ap.ApNo)
 		return
 	}
 	conn, _ := s.Repo.GetConnection(w.ConnectionID)
