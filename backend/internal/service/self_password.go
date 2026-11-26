@@ -36,8 +36,10 @@ func (s *Services) ChangeOwnPassword(actor *model.User, oldPassword, newPassword
 	if err != nil {
 		return "", time.Time{}, ErrNotFound
 	}
+	// u 是从库里新取的,请求上的东西要从 actor 拷过来,否则审计行缺 IP / 会话 / 来源(#145)。
 	u.ClientIP = actor.ClientIP
 	u.SessionID = actor.SessionID
+	u.AuditSource = actor.AuditSource
 	if u.Kind == model.UserKindService || u.PasswordHash == "" || s.bizQueryOnly(u) {
 		return "", time.Time{}, ErrNoLocalPassword
 	}
@@ -59,7 +61,7 @@ func (s *Services) ChangeOwnPassword(actor *model.User, oldPassword, newPassword
 	if err := s.Repo.UpdateUserPassword(u.ID, hash); err != nil {
 		return "", time.Time{}, err
 	}
-	// 传 actor 而不是 u:actor 带着请求的来源,u 是新取的、没有
+	// 传 actor 而不是 u:actor 是发起这次请求的人,带着请求上的会话与来源。
 	if err := s.revokeSessionsAndChat(actor, u.ID, apimsg.Text("你修改了登录口令")); err != nil {
 		return "", time.Time{}, err
 	}
