@@ -14,7 +14,7 @@ import (
 // mirrors staging (预发布). A high-risk DDL on a GLI instance must therefore be
 // gated at the *staging* level: intercepted for approval with risk "mid" — not
 // the PROD "high" hard-block, and not DEV's free execution. This proves the
-// seedGliEnv backfill wired GLI's capability-matrix + risk-dictionary rows.
+// backfillGliEnv backfill wired GLI's capability-matrix + risk-dictionary rows.
 //
 // GLI was labelled 灰度 (grey release) until 2026-08-06; it is the 法务 (legal)
 // environment. Only the label was wrong — the tier it mirrors is unchanged, which

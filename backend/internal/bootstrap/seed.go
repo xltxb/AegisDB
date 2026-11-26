@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	"gorm.io/gorm"
 
@@ -36,9 +35,7 @@ func Seed(repo *repository.Repo, cfg *Config) error {
 			return err
 		}
 	}
-	if err := seedGliEnv(repo); err != nil {
-		return err
-	}
+	// Also mirrors the gli/uat rule rows (see backfillEnvTiers).
 	if err := backfillEnvTiers(repo.DB()); err != nil {
 		return err
 	}
@@ -126,7 +123,13 @@ func backfillEnvTiers(db *gorm.DB) error {
 		return err
 	}
 	if envs == 0 {
-		for _, t := range builtinTiers {
+		// One per tier that exists now — not per seeded tier: a tier the operator
+		// has deleted must not come back as an environment pointing at nothing.
+		var tiers []model.EnvTier
+		if err := db.Order("sort_order").Find(&tiers).Error; err != nil {
+			return err
+		}
+		for _, t := range tiers {
 			if err := db.Create(&model.Environment{
 				Code: t.Code, DisplayName: t.DisplayName, TierCode: t.Code, SortOrder: t.SortOrder,
 			}).Error; err != nil {
@@ -134,7 +137,10 @@ func backfillEnvTiers(db *gorm.DB) error {
 			}
 		}
 	}
-	if err := correctBuiltinTiers(db); err != nil {
+	// gli/uat rule rows from staging, into whichever of them exist. Before the
+	// capability backfills below: backfillReleaseCapability copies each tier's
+	// `write` level, so the tier's rows must already be there.
+	if err := backfillGliEnv(db); err != nil {
 		return err
 	}
 	if err := backfillExplainCapability(db); err != nil {
@@ -269,85 +275,6 @@ func backfillCapability(db *gorm.DB, cap string, level func(*gorm.DB, model.Role
 	return nil
 }
 
-// wrongBuiltinNames are the display names this product shipped with before the
-// five-tier correction. They are kept ONLY so an upgrade can recognise a label it
-// wrote itself and replace it — see correctBuiltinTiers.
-var wrongBuiltinNames = map[string][]string{
-	model.EnvGli:     {"灰度 · GLI"},
-	model.EnvStaging: {"演练UAT · STAGING"},
-	model.EnvDev:     {"测试 · DEV"},
-}
-
-// wrongBuiltinLayers are the matching ConnLayer strings, for the same purpose.
-var wrongBuiltinLayers = map[string][]string{
-	model.EnvGli:     {"L2 灰度"},
-	model.EnvStaging: {"L3 演练UAT"},
-}
-
-// correctBuiltinTiers repairs a database seeded before the five-tier correction:
-// it adds the missing uat tier and replaces the two mislabelled names.
-//
-// The labels were not cosmetic errors. "gli" was seeded, documented and tested as
-// 灰度 (grey release) when it is the 法务 (legal) environment, and "staging" as
-// 演练UAT when it is 预发布 — so anyone reading the console was told the wrong
-// thing about which instances they were about to touch. The CODES were right all
-// along, which is why no rule row or connection needs to move: an environment's
-// name never decided anything, the tier did.
-//
-// Only a label this code wrote itself is replaced (see wrongBuiltinNames). An
-// operator who has renamed a tier keeps their name — overwriting a deliberate
-// edit to fix our own mistake would be its own kind of wrong.
-func correctBuiltinTiers(db *gorm.DB) error {
-	for _, want := range builtinTiers {
-		var cur model.EnvTier
-		err := db.First(&cur, "code = ?", want.Code).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// A built-in that does not exist yet — uat on any pre-correction
-			// database. Create it, give it an environment, and clone its rules;
-			// a tier without rule rows is an environment nothing governs.
-			if err := db.Create(&want).Error; err != nil {
-				return err
-			}
-			if err := db.Create(&model.Environment{
-				Code: want.Code, DisplayName: want.DisplayName, TierCode: want.Code, SortOrder: want.SortOrder,
-			}).Error; err != nil {
-				return err
-			}
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		updates := map[string]any{}
-		if slices.Contains(wrongBuiltinNames[want.Code], cur.DisplayName) {
-			updates["display_name"] = want.DisplayName
-		}
-		if slices.Contains(wrongBuiltinLayers[want.Code], cur.ConnLayer) {
-			updates["conn_layer"] = want.ConnLayer
-		}
-		if len(updates) > 0 {
-			if err := db.Model(&model.EnvTier{}).Where("code = ?", want.Code).Updates(updates).Error; err != nil {
-				return err
-			}
-		}
-		// The identically-named environment carries the same label, and was
-		// created from it — correct it on the same terms.
-		var env model.Environment
-		if err := db.First(&env, "code = ?", want.Code).Error; err == nil {
-			if slices.Contains(wrongBuiltinNames[want.Code], env.DisplayName) {
-				if err := db.Model(&model.Environment{}).Where("code = ?", want.Code).
-					Update("display_name", want.DisplayName).Error; err != nil {
-					return err
-				}
-			}
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-	}
-	// uat's rule rows, whether it was just created here or on a fresh seed.
-	return mirrorTierRules(db, model.EnvStaging, model.EnvUat)
-}
-
 // backfillEnvTierMenu grants the new "envtier" menu to whoever already holds
 // "rules".
 //
@@ -412,7 +339,7 @@ func backfillExecWindowMenu(db *gorm.DB) error {
 	return nil
 }
 
-// seedGliEnv backfills the tiers whose rules are cloned from staging: GLI (法务)
+// backfillGliEnv backfills the tiers whose rules are cloned from staging: GLI (法务)
 // and, since the five-tier correction, UAT (演练). Both are later additions whose
 // capability-matrix and risk-dictionary rows mirror staging's, so their instances
 // are gated coherently from day one. Idempotent: clones a staging row only when
@@ -426,19 +353,28 @@ func backfillExecWindowMenu(db *gorm.DB) error {
 // Repo.CreateEnvTierFrom, which is this function generalised. Kept on the boot
 // path because databases older than GLI still need it — it is a no-op once those
 // rows exist, and dropping it would leave them ungoverned (ED1).
-func seedGliEnv(repo *repository.Repo) error { return backfillGliEnv(repo.DB()) }
-
-// backfillGliEnv is seedGliEnv against a raw handle, so the migration path can
-// run it too (see Migrate).
+//
+// Only into a tier that EXISTS. The seeded tiers are a starting point, not
+// fixtures: an operator may delete gli or uat, and mirroring regardless would
+// write rule rows that belong to no tier — which a later tier reusing the code
+// would silently inherit. Callers run backfillEnvTiers first, so on a fresh
+// install the tiers are there by the time this runs.
+//
+// Called from backfillEnvTiers, right after the tiers are seeded.
 func backfillGliEnv(db *gorm.DB) error {
-	if err := mirrorTierRules(db, model.EnvStaging, model.EnvGli); err != nil {
-		return err
+	for _, dst := range []string{model.EnvGli, model.EnvUat} {
+		var n int64
+		if err := db.Model(&model.EnvTier{}).Where("code = ?", dst).Count(&n).Error; err != nil {
+			return err
+		}
+		if n == 0 {
+			continue
+		}
+		if err := mirrorTierRules(db, model.EnvStaging, dst); err != nil {
+			return err
+		}
 	}
-	// UAT (演练) arrived with the five-tier correction and is seeded the same way,
-	// from the same source: staging is where the rehearsal rules already lived
-	// (it used to be LABELLED 演练UAT), so cloning it hands those rules to the tier
-	// that now carries that meaning.
-	return mirrorTierRules(db, model.EnvStaging, model.EnvUat)
+	return nil
 }
 
 // mirrorTierRules copies every capability-matrix and risk-dictionary row from one
@@ -612,8 +548,8 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		Events: "create,delete,update", RetryMax: cfg.Webhook.RetryMax, Enabled: cfg.Webhook.Enabled,
 	})
 	settings := map[string]any{
-		"gateway.defaultPolicy":   cfg.Gateway.DefaultPolicy,
-		"gateway.execTimeout":     cfg.Gateway.ExecTimeoutSeconds,
+		"gateway.defaultPolicy":    cfg.Gateway.DefaultPolicy,
+		"gateway.execTimeout":      cfg.Gateway.ExecTimeoutSeconds,
 		"gateway.asyncExecTimeout": 5400, // 后台异步执行上限(秒),默认 90min
 		// 审批单执行每条语句的时限(秒),默认 1 小时 —— 与终端的 execTimeout 分开,见 service.approvalExecTimeout
 		"gateway.approvalExecTimeout": 3600,
@@ -637,11 +573,11 @@ func seedReference(repo *repository.Repo, cfg *Config) (map[string]int64, error)
 		"security.requireMFA":     true,
 		// Off by default: turning it on blocks every PROD operation for anyone not
 		// yet enrolled, so it is an explicit rollout decision.
-		"security.mfaMandatory":   false,
+		"security.mfaMandatory": false,
 		// One PROD step-up vouches for a session on that instance for this long.
 		"security.mfaGraceMinutes": 30,
-		"security.ipAllowlist":    "",
-		"notify.larkChannel":      "",
+		"security.ipAllowlist":     "",
+		"notify.larkChannel":       "",
 
 		// 聊天审批卡片,默认关着。老库里没有这些键,读的一侧按同样的默认值(service/chat_runtime.go)。
 		"chat.cardLang":       "zh",
