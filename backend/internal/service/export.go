@@ -219,6 +219,10 @@ func (s *Services) enqueueExport(u *model.User, connID int64, sql, name, databas
 	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil {
 		return nil, asInputError(err)
 	}
+	// 没有真实凭据、又不许走模拟(生产):worker 一定会失败 —— 提交时就说清,不入队。
+	if !gateway.RealExecSupported(conn) && !gateway.SimulationAllowed() {
+		return nil, asInputError(gateway.ErrSimulationDisabled)
+	}
 	// SECURITY (gateway bypass): the export worker runs this SQL against the target
 	// DB via a query path that still EXECUTES mutations. Without this guard a
 	// terminal user (even a read-only role) could smuggle DELETE/UPDATE/DROP/… past
