@@ -34,12 +34,10 @@ func Migrate(cfg *Config, db *gorm.DB) error {
 	// dictionary row that is merely ABSENT reads as "allow", so shipping an
 	// environment without backfilling it leaves that environment unregulated
 	// (ED1). Idempotent, so it is safe on every run.
-	if err := backfillGliEnv(db); err != nil {
-		return err
-	}
-	// Same reasoning for the tier/environment split: without these rows no
-	// environment resolves to a tier, and connection edits would be refused
-	// outright on an upgraded install.
+	//
+	// The tier/environment split: without these rows no environment resolves to
+	// a tier, and connection edits would be refused outright on an upgraded
+	// install. It also mirrors the gli/uat rule rows (backfillGliEnv).
 	if err := backfillEnvTiers(db); err != nil {
 		return err
 	}

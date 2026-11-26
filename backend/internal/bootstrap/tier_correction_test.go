@@ -67,47 +67,43 @@ func TestBuiltinTiers_UatIsGovernedLikeStaging(t *testing.T) {
 	}
 }
 
-// The upgrade path: a database carrying the OLD labels and no uat tier.
-func TestBuiltinTiers_UpgradeRelabelsAndAddsUat(t *testing.T) {
+// The seeded tiers are a starting point, not fixtures: once an operator deletes
+// one it stays deleted. Both boot paths used to bring it back — the tier row
+// (re-created as a "missing built-in") and its rules (re-mirrored from staging,
+// leaving rule rows that belong to no tier).
+func TestBuiltinTiers_DeletedTierStaysDeleted(t *testing.T) {
 	app := newTestApp(t)
 	db := app.repo.DB()
 
-	// Rewind to the pre-correction state.
-	db.Model(&model.EnvTier{}).Where("code = ?", "gli").
-		Updates(map[string]any{"display_name": "灰度 · GLI", "conn_layer": "L2 灰度"})
-	db.Model(&model.EnvTier{}).Where("code = ?", "staging").
-		Updates(map[string]any{"display_name": "演练UAT · STAGING", "conn_layer": "L3 演练UAT"})
-	db.Model(&model.Environment{}).Where("code = ?", "gli").Update("display_name", "灰度 · GLI")
-	db.Where("code = ?", "uat").Delete(&model.EnvTier{})
-	db.Where("code = ?", "uat").Delete(&model.Environment{})
-	db.Where("tier_code = ?", "uat").Delete(&model.RoleCapability{})
-	db.Where("tier_code = ?", "uat").Delete(&model.RiskCommand{})
+	for _, code := range []string{"gli", "uat"} {
+		db.Where("env = ?", code).Delete(&model.Connection{})
+		db.Where("code = ?", code).Delete(&model.Environment{})
+		if err := app.repo.DeleteEnvTier(code); err != nil {
+			t.Fatalf("delete tier %s: %v", code, err)
+		}
+	}
 
 	if err := Migrate(app.cfg, db); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
+	if err := Seed(app.repo, app.cfg); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
 
-	var gli, staging, uat model.EnvTier
-	db.First(&gli, "code = ?", "gli")
-	db.First(&staging, "code = ?", "staging")
-	if err := db.First(&uat, "code = ?", "uat").Error; err != nil {
-		t.Fatalf("uat tier missing after upgrade: %v", err)
+	for _, code := range []string{"gli", "uat"} {
+		var n int64
+		db.Model(&model.EnvTier{}).Where("code = ?", code).Count(&n)
+		eq(t, n, int64(0), code+" tier after restart")
+		db.Model(&model.Environment{}).Where("code = ?", code).Count(&n)
+		eq(t, n, int64(0), code+" environment after restart")
+		caps, cmds := app.countRuleRows(code)
+		if caps != 0 || cmds != 0 {
+			t.Errorf("%s left orphan rule rows: capability=%d dictionary=%d", code, caps, cmds)
+		}
 	}
-	if !strings.Contains(gli.DisplayName, "法务") {
-		t.Errorf("gli still labelled %q", gli.DisplayName)
-	}
-	if !strings.Contains(staging.DisplayName, "预发布") {
-		t.Errorf("staging still labelled %q", staging.DisplayName)
-	}
-	// The new tier arrives WITH its rules, never bare.
-	caps, cmds := app.countRuleRows("uat")
-	if caps == 0 || cmds == 0 {
-		t.Errorf("uat arrived unregulated: capability rows=%d dictionary rows=%d", caps, cmds)
-	}
-	// And its environment exists, so instances can actually be filed under it.
-	var env model.Environment
-	if err := db.First(&env, "code = ?", "uat").Error; err != nil {
-		t.Errorf("uat environment missing: %v", err)
+	// The tiers that were not touched keep their rules.
+	if caps, cmds := app.countRuleRows("staging"); caps == 0 || cmds == 0 {
+		t.Errorf("staging lost its rules: capability=%d dictionary=%d", caps, cmds)
 	}
 }
 
