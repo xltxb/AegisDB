@@ -159,3 +159,48 @@ func (r *Repo) SetConnectionBizQuery(id int64, on bool) error {
 
 // IsNotFound 统一判断"没有这一行"。
 func IsNotFound(err error) bool { return errors.Is(err, gorm.ErrRecordNotFound) }
+
+// ---------------------------------------------------------------- 网关内申请(#173)
+
+func (r *Repo) CreateQueryGrantRequest(q *model.QueryGrantRequest) error { return r.db.Create(q).Error }
+
+func (r *Repo) DeleteQueryGrantRequest(id int64) error {
+	return r.db.Delete(&model.QueryGrantRequest{}, id).Error
+}
+
+func (r *Repo) GetQueryGrantRequest(id int64) (*model.QueryGrantRequest, error) {
+	var q model.QueryGrantRequest
+	if err := r.db.First(&q, id).Error; err != nil {
+		return nil, err
+	}
+	return &q, nil
+}
+
+func (r *Repo) UpdateQueryGrantRequest(id int64, fields map[string]any) error {
+	return r.db.Model(&model.QueryGrantRequest{}).Where("id = ?", id).Updates(fields).Error
+}
+
+// PendingQueryGrantRequest 返回这个人对这个实例这个库还在等审批的那次申请(没有返回 nil)。
+func (r *Repo) PendingQueryGrantRequest(userID, connID int64, db string) (*model.QueryGrantRequest, *model.Approval, error) {
+	var q model.QueryGrantRequest
+	err := r.db.Table("tbl_query_grant_request AS q").
+		Select("q.*").
+		Joins("JOIN tbl_approval a ON a.id = q.approval_id").
+		Where("q.user_id = ? AND q.connection_id = ? AND q.db_name = ? AND a.status = ?", userID, connID, db, model.StatusPending).
+		Order("q.id DESC").Limit(1).Scan(&q).Error
+	if err != nil || q.ID == 0 {
+		return nil, nil, err
+	}
+	ap, err := r.GetApproval(q.ApprovalID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &q, ap, nil
+}
+
+// ListQueryGrantRequests 列出一个人最近的申请(新的在前)。
+func (r *Repo) ListQueryGrantRequests(userID int64, limit int) ([]model.QueryGrantRequest, error) {
+	var out []model.QueryGrantRequest
+	err := r.db.Where("user_id = ?", userID).Order("id DESC").Limit(limit).Find(&out).Error
+	return out, err
+}

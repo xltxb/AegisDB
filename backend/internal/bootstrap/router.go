@@ -241,9 +241,16 @@ func NewRouter(cfg *Config, h *handler.Handler, repo *repository.Repo, svc *serv
 		a.GET("/bizquery/columns", menu("query"), h.BizColumns) // 自动补全:授权库里一张表的列
 		a.POST("/bizquery/exec", menu("query"), h.BizQueryExec)
 		a.POST("/bizquery/export", menu("query"), h.BizQueryExport)
+		// 在网关里申请查询权(#173):生成一张审批单,走默认审批链;批准即生成授权。
+		a.GET("/bizquery/apply/sources", menu("query"), h.ApplySources)
+		a.GET("/bizquery/apply/sources/:id/databases", menu("query"), h.ApplySourceDatabases)
+		a.GET("/bizquery/apply/mine", menu("query"), h.MyQueryGrantRequests)
+		a.POST("/bizquery/apply", menu("query"), h.ApplyQueryGrant)
+		a.POST("/bizquery/apply/:id/cancel", menu("query"), h.CancelQueryGrantRequest)
 		// 查询授权总表:看归 perms(谁能查哪个库,是权限的一部分),撤销只给管理员。
 		a.GET("/query-grants", menu("perms"), admin, h.ListQueryGrants)
 		a.POST("/query-grants/:id/revoke", menu("perms"), admin, h.RevokeQueryGrant)
+		a.POST("/query-grants", menu("perms"), admin, h.AdminCreateQueryGrant) // 控制台直接开通(#173)
 		// 跨环境表结构对比:读两个库的目录,左右两个实例都要能访问(见 service/schemadiff.go)。
 		// AI 巡检报告(.scratch/inspection-report):菜单 + 角色(平台管理员、DBA 负责人、DBA L2)
 		inspection := middleware.InspectionViewer(repo)

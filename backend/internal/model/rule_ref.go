@@ -81,6 +81,7 @@ const (
 	OutMaintenance    = "maintenance"    // · 目标实例处于维护态,操作受限
 	OutApWindowLive   = "apWindowLive"   // · 已批准,执行窗口已生效
 	OutApExportQueued = "apExportQueued" // · 已批准,导出任务已进入队列
+	OutApGrantLive    = "apGrantLive"    // · 已批准,查询授权已生效
 	OutApPipeline     = "apPipeline"     // · 已批准,由发布流水线继续执行
 	OutApAwaitingExec = "apAwaitingExec" // · 已批准,等待发起人执行
 )

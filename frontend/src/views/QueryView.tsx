@@ -1,6 +1,7 @@
 // 数据查询(业务方)。
 //
-// 能查哪些库只由查询授权决定(外部审批系统下发,见 .scratch/biz-data-query/PRD.md)。这一页
+// 能查哪些库只由查询授权决定(网关内申请审批、管理员开通或外部审批系统下发,见
+// .scratch/biz-data-query/PRD.md 与 issue #173)。这一页
 // 只做三件事:选一个我能查的库、写一条 SELECT、看结果。只读、行数上限、执行时限、脱敏都在
 // 服务端做 —— 这里只负责把服务端说的话说清楚:截断了多少、哪些列脱敏了、为什么被拒。
 //
@@ -13,14 +14,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, u
 import clsx from 'clsx'
 import {
   Database, Table2, Play, TriangleAlert, EyeOff, Info, Download, Plus, X, Wand2, Eraser, Star,
-  Copy, Check, FileCode2, History, MessageSquareText, Rows3, CircleCheck, CircleX, Trash2, Loader2, ShieldAlert, ExternalLink, RefreshCw,
+  Copy, Check, FileCode2, History, MessageSquareText, Rows3, CircleCheck, CircleX, Trash2, Loader2, ShieldAlert, ExternalLink, RefreshCw, KeyRound,
 } from 'lucide-react'
 import VButton from '@/components/common/VButton'
 import VSelect from '@/components/common/VSelect'
 import SqlEditor, { type SqlCompleter, type SqlEditorHandle } from '@/components/query/SqlEditor'
 import QueryGrid from '@/components/query/QueryGrid'
+import BizApplyModal, { BizApplyList } from '@/components/query/BizApplyModal'
 import api from '@/api'
-import type { QueryGrant, BizQueryResult, RuleRef } from '@/types'
+import type { QueryGrant, QueryGrantRequest, BizQueryResult, RuleRef } from '@/types'
 import { useMountEffect } from '@/hooks/effects'
 import { useI18n } from '@/hooks/useI18n'
 import { useStateRef } from '@/hooks/useStateRef'
@@ -32,6 +34,7 @@ import { splitVertical, ddlOf, showCreateSql } from '@/lib/bizResultView'
 import { complete, quoteIfNeeded } from '@/lib/sqlComplete'
 import { SQL_KEYWORDS } from '@/lib/sqlHighlight'
 import { copyText } from '@/lib/clipboard'
+import { confirmAction } from '@/lib/confirm'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import './QueryView.scoped.css'
@@ -109,8 +112,14 @@ export default function QueryView() {
 
   const [grants, setGrants, grantsRef] = useStateRef<QueryGrant[]>([])
   const [exportOn, setExportOn] = useState(false)
-  // 没有任何授权时拦截卡片上「去申请权限」的去处(设置项 bizQuery.applyUrl);空 = 不给链接
+  // 「去申请权限」的去处(设置项 bizQuery.applyMode):internal = 在本页弹出申请框,提交一张
+  // grant 审批单;external = 跳 bizQuery.applyUrl,空 = 不给链接
+  const [applyMode, setApplyMode] = useState<'internal' | 'external'>('internal')
   const [applyUrl, setApplyUrl] = useState('')
+  const [maxGrantDays, setMaxGrantDays] = useState(90)
+  const [applyOpen, setApplyOpen] = useState(false)
+  const [mine, setMine] = useState<QueryGrantRequest[]>([])
+  const [withdrawing, setWithdrawing] = useState(0)
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState('')
   const liveGrants = useMemo(() => grants.filter(live), [grants])
@@ -126,6 +135,10 @@ export default function QueryView() {
       setGrants(r.grants ?? [])
       setExportOn(!!r.limits?.exportEnabled)
       setApplyUrl((r.limits?.applyUrl || '').trim())
+      const mode = r.limits?.applyMode === 'external' ? 'external' : 'internal'
+      setApplyMode(mode)
+      setMaxGrantDays(r.limits?.maxGrantDays || 90)
+      if (mode === 'internal') void loadMine()
       // 页签指着的授权失效了(撤销、到期)就清掉,让人重新选;没选过的给第一个能查的库。
       const ok = liveNow()
       setTabs((xs) => xs.map((x) => (ok.some((g) => g.id === x.grantId) ? x : { ...x, grantId: ok[0]?.id ?? 0 })))
@@ -135,6 +148,31 @@ export default function QueryView() {
       setLoading(false)
     }
   }
+
+  // 我的申请:读不到不挡查询页,只是不显示
+  async function loadMine() {
+    try { setMine((await api.myBizApplies()) ?? []) } catch { /* 不影响查询 */ }
+  }
+
+  async function withdrawApply(r: QueryGrantRequest) {
+    if (!(await confirmAction(t('qaWithdrawConfirm', { ap: r.apNo, target: `${r.source}/${r.database}` })))) return
+    setWithdrawing(r.id)
+    const ui = useUIStore.getState()
+    try {
+      await api.cancelBizApply(r.id)
+      ui.notify(t('qaWithdrawn'), 'success')
+      await loadMine()
+    } catch (e) {
+      ui.notifyError(e, t('actionFailed'))
+    } finally { setWithdrawing(0) }
+  }
+
+  const applyModal = (
+    <BizApplyModal
+      open={applyOpen} maxGrantDays={maxGrantDays} exportEnabled={exportOn} mine={mine} busyId={withdrawing}
+      onWithdraw={withdrawApply} onSubmitted={() => void loadMine()} onClose={() => setApplyOpen(false)}
+    />
+  )
 
   // ---------------------------------------------------------------- 页签
 
@@ -585,10 +623,14 @@ export default function QueryView() {
           <div className="qblock-card" role="alertdialog" aria-modal="true" aria-label={t('qNoAccessTitle')}>
             <div className="qblock-ic"><ShieldAlert size={26} /></div>
             <div className="qblock-t">{t('qNoAccessTitle')}</div>
-            <div className="qblock-b">{applyUrl ? t('qNoAccessBody') : t('qNoGrants')}</div>
+            <div className="qblock-b">{applyMode === 'internal' ? t('qNoAccessBodyInternal') : applyUrl ? t('qNoAccessBody') : t('qNoGrants')}</div>
             {pendingGrants.length > 0 && <div className="qblock-pend">{pendingText}</div>}
             <div className="qblock-acts">
-              {applyUrl && (
+              {applyMode === 'internal' ? (
+                <button className="qblock-go" data-testid="q-apply" onClick={() => setApplyOpen(true)}>
+                  <KeyRound size={14} />{t('qApplyAccess')}
+                </button>
+              ) : applyUrl && (
                 <a className="qblock-go" href={applyUrl} target="_blank" rel="noopener noreferrer" data-testid="q-apply">
                   <ExternalLink size={14} />{t('qApplyAccess')}
                 </a>
@@ -597,6 +639,7 @@ export default function QueryView() {
                 <RefreshCw size={13} className={clsx(loading && 'qspin')} />{t('qRecheck')}
               </button>
             </div>
+            {applyMode === 'internal' && <BizApplyList items={mine} busyId={withdrawing} onWithdraw={withdrawApply} />}
           </div>
         </div>
       )
@@ -668,6 +711,12 @@ export default function QueryView() {
             <button className="qtool" disabled={!tab.sql.trim()} title={t('qFormatTip')} data-testid="q-format" onClick={formatTab}><Wand2 size={14} /><span>{t('qFormat')}</span></button>
             <button className="qtool" disabled={!tab.sql} title={t('qClear')} data-testid="q-clear" onClick={clearTab}><Eraser size={14} /><span>{t('qClear')}</span></button>
             <button className="qtool" disabled={!tab.sql.trim()} title={t('qSaveTip')} data-testid="q-save" onClick={saveQuery}><Star size={14} /><span>{t('qSave')}</span></button>
+            {/* 已有授权的人申请更多库:internal 弹申请框;external 有地址时给链接 */}
+            {applyMode === 'internal' ? (
+              <button className="qtool" title={t('qApplyMoreTip')} data-testid="q-apply-more" onClick={() => setApplyOpen(true)}><KeyRound size={14} /><span>{t('qApplyMore')}</span></button>
+            ) : applyUrl && (
+              <a className="qtool" href={applyUrl} target="_blank" rel="noopener noreferrer" title={t('qApplyMoreTip')} data-testid="q-apply-more"><ExternalLink size={14} /><span>{t('qApplyMore')}</span></a>
+            )}
           </div>
           <VButton variant="primary" height="30px" className="qrun" disabled={tab.running || !tab.sql.trim() || !sel} data-testid="q-run" onClick={run}>
             {tab.running ? <Loader2 size={13} className="qspin" /> : <Play size={13} fill="currentColor" />}
@@ -823,5 +872,5 @@ export default function QueryView() {
     </div>
   )
 
-  return <div className="qpage">{body()}</div>
+  return <div className="qpage">{body()}{applyModal}</div>
 }

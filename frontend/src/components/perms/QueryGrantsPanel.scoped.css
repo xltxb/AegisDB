@@ -3,6 +3,7 @@
 .qgsearch { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-faint); }
 .qgsearch input { border: 0; outline: none; background: transparent; color: var(--text-body); font: 500 12.5px var(--font-body); width: 180px; }
 .qgsel { height: 32px; padding: 0 8px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--surface-card); color: var(--text-body); font: 500 12.5px var(--font-body); }
+.qgnew { margin-left: auto; }
 .qgt { border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; background: var(--surface-card); }
 .qgh, .qgr { display: grid; grid-template-columns: minmax(160px, 1.6fr) minmax(140px, 1.4fr) 120px 170px minmax(140px, 1.3fr) 110px; gap: 10px; align-items: center; padding: 9px 14px; }
 .qgh { background: var(--surface-sunken); font: 600 11px var(--font-body); color: var(--text-faint); border-bottom: 1px solid var(--border-subtle); }

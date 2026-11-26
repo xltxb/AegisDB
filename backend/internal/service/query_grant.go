@@ -36,13 +36,19 @@ const (
 	SettingBizExportEnabled  = "bizQuery.exportEnabled"
 	// 每人每天最多执行多少次查询 / 导出(PRD 5.7);0 = 不限,也是默认值。
 	SettingBizMaxDailyPerUser = "bizQuery.maxDailyPerUser"
-	// 申请数据查询权限的页面:没有任何授权的人进数据查询页时,拦截卡片上的「去申请权限」跳到这里
-	// (2026-10-22)。没设过时用 DefaultBizApplyURL;设成空串 = 不给链接,只说去审批系统申请。
+	// 申请方式(#173):internal = 在网关里申请,走网关的审批链;external = 去外部审批系统申请,
+	// 授权由它经开放接口下发。没设过时是 internal。
+	SettingBizApplyMode = "bizQuery.applyMode"
+	// 外部申请页:申请方式为 external 时,拦截卡片上的「去申请权限」跳到这里(2026-10-22)。
+	// 空串 = 不给链接,只说去审批系统申请。
 	SettingBizApplyURL = "bizQuery.applyUrl"
 )
 
-// DefaultBizApplyURL 是 SRD 服务中心里网关查询授权的申请页。
-const DefaultBizApplyURL = "https://srd.bssrvc66.com/service-center/query/db-gateway-grant"
+// 申请方式的两个取值。
+const (
+	BizApplyInternal = "internal"
+	BizApplyExternal = "external"
+)
 
 // 全局值的硬边界:设置界面里能填的范围。再往外就不是"调参",而是换了一个功能。
 const (
@@ -65,7 +71,8 @@ type BizQueryLimits struct {
 	MaxPerSource   int  `json:"maxConcurrentPerSource"`
 	ExportEnabled  bool `json:"exportEnabled"`
 	MaxDailyPerUser int `json:"maxDailyPerUser"` // 0 = 不限
-	ApplyURL        string `json:"applyUrl"` // 申请权限的页面;空 = 不给链接
+	ApplyMode       string `json:"applyMode"` // internal | external
+	ApplyURL        string `json:"applyUrl"`  // 外部申请页;空 = 不给链接(只在 external 时有意义)
 }
 
 // BizQueryLimits 读全局上限,并把明显不合理的值拉回来:默认值不能超过上限。
@@ -80,7 +87,11 @@ func (s *Services) BizQueryLimits() BizQueryLimits {
 		MaxPerSource:   s.settingInt(SettingBizMaxPerSource, 5),
 		ExportEnabled:  s.settingBool(SettingBizExportEnabled, false),
 		MaxDailyPerUser: s.settingInt(SettingBizMaxDailyPerUser, 0),
-		ApplyURL:        strings.TrimSpace(s.settingString(SettingBizApplyURL, DefaultBizApplyURL)),
+		ApplyMode:       s.settingString(SettingBizApplyMode, BizApplyInternal),
+		ApplyURL:        strings.TrimSpace(s.settingString(SettingBizApplyURL, "")),
+	}
+	if l.ApplyMode != BizApplyExternal {
+		l.ApplyMode = BizApplyInternal // 认不出的值(被人直接改了库)按默认的网关内申请
 	}
 	if l.MaxRowsCap < 1 {
 		l.MaxRowsCap = 10000
@@ -315,12 +326,6 @@ func (s *Services) UpsertQueryGrant(client *model.APIClient, actor *model.User, 
 	}
 
 	lim := s.BizQueryLimits()
-	if req.MaxRows < 0 || req.MaxRows > lim.MaxRowsCap {
-		return nil, false, grantInvalid("maxRows 不能超过全局上限 %d(0 或不填表示用默认值 %d)", lim.MaxRowsCap, lim.DefaultMaxRows)
-	}
-	if req.TimeoutSec < 0 || req.TimeoutSec > lim.TimeoutCap {
-		return nil, false, grantInvalid("timeoutSec 不能超过全局上限 %d 秒(0 或不填表示用默认值 %d)", lim.TimeoutCap, lim.DefaultTimeout)
-	}
 	now := time.Now()
 	starts := now
 	if req.StartsAt != nil {
@@ -330,14 +335,8 @@ func (s *Services) UpsertQueryGrant(client *model.APIClient, actor *model.User, 
 		return nil, false, grantInvalid("endsAt 必填:授权必须有到期时间")
 	}
 	ends := *req.EndsAt
-	if !ends.After(starts) {
-		return nil, false, grantInvalid("endsAt 必须晚于 startsAt")
-	}
-	if !ends.After(now) {
-		return nil, false, grantInvalid("endsAt 已经过去了")
-	}
-	if ends.Sub(starts) > time.Duration(lim.MaxGrantDays)*24*time.Hour {
-		return nil, false, grantInvalid("有效期不能超过 %d 天", lim.MaxGrantDays)
+	if err := checkGrantLimits(req.MaxRows, req.TimeoutSec, starts, ends, now, lim); err != nil {
+		return nil, false, err
 	}
 
 	user, err := s.grantee(email, req.Name, req.Dept, actor, client)
@@ -411,6 +410,27 @@ func (s *Services) UpsertQueryGrant(client *model.APIClient, actor *model.User, 
 	return &v, created, nil
 }
 
+// checkGrantLimits 是一条授权的条件要过的全局上限与有效期检查。开放接口、网关内审批、控制台
+// 直接开通三条路都过它:哪条路批出来的授权,都不能比全局上限更宽。
+func checkGrantLimits(maxRows, timeoutSec int, starts, ends, now time.Time, lim BizQueryLimits) error {
+	if maxRows < 0 || maxRows > lim.MaxRowsCap {
+		return grantInvalid("maxRows 不能超过全局上限 %d(0 或不填表示用默认值 %d)", lim.MaxRowsCap, lim.DefaultMaxRows)
+	}
+	if timeoutSec < 0 || timeoutSec > lim.TimeoutCap {
+		return grantInvalid("timeoutSec 不能超过全局上限 %d 秒(0 或不填表示用默认值 %d)", lim.TimeoutCap, lim.DefaultTimeout)
+	}
+	if !ends.After(starts) {
+		return grantInvalid("endsAt 必须晚于 startsAt")
+	}
+	if !ends.After(now) {
+		return grantInvalid("endsAt 已经过去了")
+	}
+	if ends.Sub(starts) > time.Duration(lim.MaxGrantDays)*24*time.Hour {
+		return grantInvalid("有效期不能超过 %d 天", lim.MaxGrantDays)
+	}
+	return nil
+}
+
 // ErrBizNoLocalPassword:只挂业务查询角色的账号不设本地口令(PRD 决策 10)。
 var ErrBizNoLocalPassword = apimsg.Errorf("%w: 业务查询账号不设本地口令,业务方通过 SSO 登录进入网关", ErrBadRequest)
 
@@ -475,25 +495,38 @@ func (s *Services) grantee(email, name, dept string, actor *model.User, client *
 	} else if err != nil {
 		return nil, err
 	}
+	return u, s.ensureBizQueryRole(u, role, actor, apiOperator(client), "外部系统 "+client.Name)
+}
+
+// ensureBizQueryRole 确认一个已有账号可以被授予查询权,并在需要时追加业务查询角色。
+// via 写进审计,说明是谁让它追加的(外部系统 / 网关审批 / 控制台)。
+func (s *Services) ensureBizQueryRole(u *model.User, role *model.Role, actor *model.User, operator, via string) error {
 	if u.Kind == model.UserKindService {
-		return nil, grantInvalid("%s 是服务账号,不能被授予查询权", email)
+		return grantInvalid("%s 是服务账号,不能被授予查询权", u.Email)
 	}
 	if u.Status == "disabled" {
-		return nil, grantInvalid("%s 的网关账号已停用,不能授权", email)
+		return grantInvalid("%s 的网关账号已停用,不能授权", u.Email)
+	}
+	if role == nil {
+		r, err := s.Repo.GetRoleByCode(model.RoleCodeBizQuery)
+		if err != nil {
+			return apimsg.Errorf("业务查询角色不存在,请重启网关以完成初始化: %w", err)
+		}
+		role = r
 	}
 	ids := s.Repo.EffectiveRoleIDs(u)
 	for _, id := range ids {
 		if id == role.ID {
-			return u, nil
+			return nil
 		}
 	}
 	// 主角色保持不变(排在第一个),业务查询角色追加在后。
 	if err := s.Repo.SetUserRoles(u.ID, append(ids, role.ID)); err != nil {
-		return nil, err
+		return err
 	}
-	s.recordAuditBy(actor, apiOperator(client), nil, fmt.Sprintf("bizquery.role 为 %s 追加业务查询角色(因查询授权)· 外部系统 %s", email, client.Name),
+	s.recordAuditBy(actor, operator, nil, fmt.Sprintf("bizquery.role 为 %s 追加业务查询角色(因查询授权)· %s", u.Email, via),
 		model.RiskMid, model.ResultExecuted, "", "")
-	return u, nil
+	return nil
 }
 
 // RevokeQueryGrant 外部系统撤销授权。按 id,或按外部单号 —— 两种都只在这个外部系统**自己下发**

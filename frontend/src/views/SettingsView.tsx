@@ -60,8 +60,6 @@ const tabGroups: { label: string; tabs: Tab[] }[] = [
 ]
 const allTabs = tabGroups.flatMap((g) => g.tabs)
 
-// 申请数据查询权限的默认页面,与后端 service.DefaultBizApplyURL 一致(没保存过这一项时显示它)
-const BIZ_APPLY_URL = 'https://srd.bssrvc66.com/service-center/query/db-gateway-grant'
 const bizInt = (v: unknown, def: number) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? n : def }
 
 
@@ -138,7 +136,9 @@ const INITIAL = {
   bizMaxConcurrentPerSource: num(5),
   bizMaxDailyPerUser: num(0),
   bizExportEnabled: false,
-  bizApplyUrl: BIZ_APPLY_URL,
+  // 申请数据查询权限的方式:internal = 在网关里提交审批单(默认);external = 跳外部系统(bizApplyUrl)
+  bizApplyMode: 'internal' as 'internal' | 'external',
+  bizApplyUrl: '',
   // 聊天审批机器人。默认值与后端的种子、以及读不到键时的默认值一致:老库第一次整包保存只会把它们存下来,
   // 不会顺手打开。
   chatCardLang: 'zh' as string,
@@ -225,7 +225,8 @@ function formOf(g: Record<string, string | undefined>): Form {
     bizMaxConcurrentPerSource: bizInt(parse(g['bizQuery.maxConcurrentPerSource'], 5), 5),
     bizMaxDailyPerUser: bizInt(parse(g['bizQuery.maxDailyPerUser'], 0), 0),
     bizExportEnabled: parse(g['bizQuery.exportEnabled'], false),
-    bizApplyUrl: parse<string>(g['bizQuery.applyUrl'], BIZ_APPLY_URL),
+    bizApplyMode: parse<string>(g['bizQuery.applyMode'], 'internal') === 'external' ? 'external' : 'internal',
+    bizApplyUrl: parse<string>(g['bizQuery.applyUrl'], ''),
     metaConcurrency: clampInt(parse(g['meta.sync.concurrency'], 2), 2, 1, 8),
     connCheckEnabled: parse(g['conn.check.enabled'], false),
     connCheckInterval: clampInt(parse(g['conn.check.intervalMinutes'], 10), 10, 1, 1440),
@@ -279,6 +280,7 @@ function settingsPayload(f: Form) {
     'bizQuery.maxConcurrentPerSource': bizInt(f.bizMaxConcurrentPerSource, 5),
     'bizQuery.maxDailyPerUser': bizInt(f.bizMaxDailyPerUser, 0),
     'bizQuery.exportEnabled': f.bizExportEnabled,
+    'bizQuery.applyMode': f.bizApplyMode,
     'bizQuery.applyUrl': (f.bizApplyUrl || '').trim(),
     'meta.sync.concurrency': clampInt(f.metaConcurrency, 2, 1, 8),
     'conn.check.enabled': f.connCheckEnabled,
@@ -589,8 +591,17 @@ export default function SettingsView() {
               <div className="pair"><NumInput {...n('bizMaxConcurrentPerUser')} min="1" max="20" /><span>/</span><NumInput {...n('bizMaxConcurrentPerSource')} min="1" max="100" /></div></Row>
             <Row title="setBizDaily" desc="setBizDailyD"><div className="w160"><NumInput {...n('bizMaxDailyPerUser')} min="0" max="100000" data-testid="biz-daily" /></div></Row>
             <Row title="setBizExport" desc="setBizExportD"><VSwitch {...sw('bizExportEnabled')} data-testid="biz-export-switch" /></Row>
-            <Row title="setBizApply" desc="setBizApplyD" last>
-              <div className="wurl"><input {...tx('bizApplyUrl')} className="lkin" placeholder="https://…" data-testid="biz-apply-url" /></div></Row>
+            <Row title="setBizApplyMode" desc="setBizApplyModeD" last={f.bizApplyMode !== 'external'}>
+              <div className="seg" data-testid="biz-apply-mode">
+                <div className={clsx('si', f.bizApplyMode === 'internal' && 'active')} data-testid="biz-apply-mode-internal" onClick={() => patch({ bizApplyMode: 'internal' })}>{t('setBizApplyInternal')}</div>
+                <div className={clsx('si', f.bizApplyMode === 'external' && 'active')} data-testid="biz-apply-mode-external" onClick={() => patch({ bizApplyMode: 'external' })}>{t('setBizApplyExternal')}</div>
+              </div>
+            </Row>
+            {/* 外部申请页地址只在 external 时有意义;internal 时收起来,值照存不动 */}
+            {f.bizApplyMode === 'external' && (
+              <Row title="setBizApply" desc="setBizApplyD" last>
+                <div className="wurl"><input {...tx('bizApplyUrl')} className="lkin" placeholder="https://…" data-testid="biz-apply-url" /></div></Row>
+            )}
           </section>
 
           {/* 元数据同步 */}

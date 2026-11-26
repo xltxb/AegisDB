@@ -200,6 +200,8 @@ func chatKind(ap *model.Approval) string {
 		return "window"
 	case model.ApTypeExport:
 		return "export"
+	case model.ApTypeGrant:
+		return "grant"
 	}
 	return "command"
 }

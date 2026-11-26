@@ -338,6 +338,7 @@ var settingSchema = map[string]settingCheck{
 	service.SettingBizMaxPerSource:    passthrough,
 	service.SettingBizMaxDailyPerUser: passthrough,
 	service.SettingBizExportEnabled:   passthrough,
+	service.SettingBizApplyMode:       oneOf(service.BizApplyInternal, service.BizApplyExternal),
 	service.SettingBizApplyURL:        httpURL, // 空串 = 不给申请链接
 }
 

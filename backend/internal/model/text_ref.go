@@ -16,6 +16,11 @@ const (
 	// 同上,申请理由没填(args: name, scope, db;part[0]: 时间表)。
 	ApWindowOpenNoReason = "apWindowOpenNoReason"
 
+	// 申请数据查询权限(args: scope, db, days, reason)。#173
+	ApGrantApply = "apGrantApply"
+	// 同上,另外申请了导出(args: scope, db, days, reason)。
+	ApGrantApplyExport = "apGrantApplyExport"
+
 	// 执行窗口的时间表。窗口的时间表本身就是一句话,所以是审批描述的一个 part。
 	WinOnce         = "winOnce"         // 一次性(args: start, end,格式 2006-01-02 15:04)
 	WinOnceUnset    = "winOnceUnset"    // 一次性,时间未设置
@@ -26,7 +31,7 @@ const (
 
 // ApTextCodes 是全部审批描述 code。加 code 时同时加在这里:测试据此检查每个 code 都有
 // 规范中文串、前端都有词条。
-var ApTextCodes = []string{ApWindowOpen, ApWindowOpenNoReason, WinOnce, WinOnceUnset, WinDaily, WinWeekly, WinUnknownModel}
+var ApTextCodes = []string{ApWindowOpen, ApWindowOpenNoReason, ApGrantApply, ApGrantApplyExport, WinOnce, WinOnceUnset, WinDaily, WinWeekly, WinUnknownModel}
 
 // RenderApText 把审批描述渲染成规范中文串 —— 历来存进 tbl_approval.command 的那句话。
 func RenderApText(r *RuleRef) string {
@@ -43,6 +48,10 @@ func RenderApText(r *RuleRef) string {
 		return "开启执行窗口「" + a["name"] + "」· " + a["scope"] + "/" + a["db"] + " · " + inner + " · 理由:" + a["reason"]
 	case ApWindowOpenNoReason:
 		return "开启执行窗口「" + a["name"] + "」· " + a["scope"] + "/" + a["db"] + " · " + inner + " · 理由:(未填)"
+	case ApGrantApply:
+		return "申请数据查询权限 · " + a["scope"] + "/" + a["db"] + " · " + a["days"] + " 天 · 理由:" + a["reason"]
+	case ApGrantApplyExport:
+		return "申请数据查询权限(含导出)· " + a["scope"] + "/" + a["db"] + " · " + a["days"] + " 天 · 理由:" + a["reason"]
 	case WinOnce:
 		return "一次性 " + a["start"] + " → " + a["end"]
 	case WinOnceUnset:

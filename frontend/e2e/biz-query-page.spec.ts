@@ -16,11 +16,11 @@ const G = (id: number, db: string, status = 'active') => ({
   externalId: 'OA-1', client: '审批系统', approver: '李经理', reason: '对账',
 })
 
-async function open(page: Page, grants: any[], exec?: (body: any) => any, tables: Record<string, string[]> = {}) {
+async function open(page: Page, grants: any[], exec?: (body: any) => any, tables: Record<string, string[]> = {}, limits: Record<string, unknown> = {}) {
   const bodies: any[] = []
   await stubCommon(page)
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope(BIZ_ME)))
-  await page.route('**/api/v1/bizquery/grants', (r) => r.fulfill(envelope({ grants, limits: {} })))
+  await page.route('**/api/v1/bizquery/grants', (r) => r.fulfill(envelope({ grants, limits })))
   await page.route('**/api/v1/bizquery/tables**', (r) => {
     const db = new URL(r.request().url()).searchParams.get('database') || ''
     return r.fulfill(envelope({ tables: tables[db] || [], truncated: false }))
@@ -146,9 +146,12 @@ test('超时:英文界面按 errorRef 显示英文', async ({ page }) => {
   await expect(page.getByTestId('q-error')).not.toContainText('自动取消')
 })
 
-test('没有任何授权:告诉人去审批系统申请', async ({ page }) => {
-  await open(page, [])
+// 外部申请(applyMode=external)又没配申请页地址:不给链接,只告诉人去审批系统申请。
+// 网关内申请(默认)的拦截卡片见 biz-query-apply.spec.ts。
+test('外部申请且没有地址:告诉人去审批系统申请', async ({ page }) => {
+  await open(page, [], undefined, {}, { applyMode: 'external' })
   await expect(page.getByTestId('q-no-grants')).toContainText('审批系统')
+  await expect(page.getByTestId('q-apply')).toHaveCount(0)
 })
 
 test('选表:空编辑器写出查询;已有内容时把表名插到光标处', async ({ page }) => {
@@ -201,14 +204,14 @@ test('多个页签:各有各的库、SQL 与结果;刷新后页签与草稿还�
   await expect(page.getByTestId('q-sql')).toHaveValue('')
 })
 
-// 2026-10-22:没有任何生效的授权 → 拦截卡片,「去申请权限」新开标签页到申请页;
+// 2026-10-22:没有任何生效的授权 → 拦截卡片,「去申请权限」新开标签页到申请页(外部申请模式);
 // 申请批下来后点「重新检查」就进到查询页,不用刷新。左侧导航不挡(「记录」照样能进)。
 test('没有授权:拦截卡片指去申请页;获批后重新检查即可进入', async ({ page }) => {
   let grants: any[] = []
   await stubCommon(page)
   await page.route('**/api/v1/auth/me', (r) => r.fulfill(envelope(BIZ_ME)))
   await page.route('**/api/v1/bizquery/grants', (r) =>
-    r.fulfill(envelope({ grants, limits: { applyUrl: 'https://srd.bssrvc66.com/service-center/query/db-gateway-grant' } })))
+    r.fulfill(envelope({ grants, limits: { applyMode: 'external', applyUrl: 'https://srd.bssrvc66.com/service-center/query/db-gateway-grant' } })))
   await page.route('**/api/v1/bizquery/tables**', (r) => r.fulfill(envelope({ tables: [], truncated: false })))
   await page.goto('/#/query')
 

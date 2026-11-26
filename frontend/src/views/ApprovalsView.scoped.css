@@ -45,6 +45,7 @@
 .tybadge.release { background: var(--accent-subtle); color: var(--accent-text); }
 .tybadge.window { background: var(--warning-subtle); color: var(--warning-text); }
 .tybadge.export { background: var(--success-subtle); color: var(--success-text); }
+.tybadge.grant { background: var(--accent-subtle); color: var(--accent-text); }
 .badge { flex-shrink: 0; display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; font: 600 10px var(--font-mono); white-space: nowrap; border: 1px solid transparent; }
 .badge.p1 { background: var(--danger-subtle); color: var(--danger-text); }
 .badge.p2 { background: var(--surface-sunken); color: var(--text-muted); border-color: var(--border-subtle); }

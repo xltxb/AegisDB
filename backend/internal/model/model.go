@@ -848,6 +848,9 @@ type Approval struct {
 	// OSCJobID 把一张单指回它要做的那次在线加 / 删索引(.scratch/osc-product)。和上面几个一样:
 	// 通过之后"执行"= 启动那次迁移,不是把 Command 当一条 SQL 发给数据库。迁移 0049。
 	OSCJobID int64 `gorm:"column:osc_job_id;not null;default:0" json:"oscJobId,omitempty"`
+	// QueryGrantReqID 把一张单指回一次数据查询权限申请(tbl_query_grant_request,迁移 0066)。
+	// 和上面几个一样:通过之后要做的事是"生成那条查询授权",不是执行 Command(一句描述)。
+	QueryGrantReqID int64 `gorm:"column:query_grant_req_id;not null;default:0;index:idx_approval_qgr" json:"queryGrantReqId,omitempty"`
 	// Notice 是要审批人特别留意的一句话(规范中文),NoticeRef 是它的机器可读形式,界面按读者语言显示。
 	// 目前只有一种:生产大表上、在线变更做不了的 DDL ——"将直接执行,可能长时间锁表"。迁移 0049。
 	Notice    string   `gorm:"type:text" json:"notice,omitempty"`
@@ -1598,6 +1601,8 @@ const (
 	ApTypeExport  = "export"
 	// ApTypeOSC:生产大表的在线加 / 删索引。通过之后"执行"= 启动那次迁移(.scratch/osc-product)。
 	ApTypeOSC = "osc"
+	// ApTypeGrant:数据查询权限申请。通过之后生成那条查询授权(#173)。
+	ApTypeGrant = "grant"
 )
 
 // ApprovalType 按外键判定一张工单的类型。判定顺序不重要:三个外键互斥,一张单不可能
@@ -1614,6 +1619,8 @@ func ApprovalType(a *Approval) string {
 		return ApTypeExport
 	case a.OSCJobID > 0:
 		return ApTypeOSC
+	case a.QueryGrantReqID > 0:
+		return ApTypeGrant
 	}
 	return ApTypeCommand
 }

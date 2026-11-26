@@ -115,3 +115,43 @@ type BizQueryResp struct {
 	Served       string `json:"served,omitempty"`
 	ReplicaError string `json:"replicaError,omitempty"`
 }
+
+// QueryGrantApplyReq 是在网关里申请数据查询权限(#173)。
+type QueryGrantApplyReq struct {
+	SourceID    int64  `json:"sourceId"`
+	Database    string `json:"database"`
+	Days        int    `json:"days"`
+	AllowExport bool   `json:"allowExport"`
+	Reason      string `json:"reason"`
+}
+
+// QueryGrantRequestView 是一次申请,状态取自它挂着的审批单。
+//
+// Status:pending / approved(已生效,GrantID > 0)/ failed(批准了,但生成授权时没通过校验,
+// 原因在 Error)/ rejected / cancelled / expired。
+type QueryGrantRequestView struct {
+	ID          int64     `json:"id"`
+	SourceID    int64     `json:"sourceId"`
+	Source      string    `json:"source"`
+	Database    string    `json:"database"`
+	Days        int       `json:"days"`
+	AllowExport bool      `json:"allowExport"`
+	Reason      string    `json:"reason"`
+	ApNo        string    `json:"apNo"`
+	Status      string    `json:"status"`
+	GrantID     int64     `json:"grantId,omitempty"`
+	Error       string    `json:"error,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// AdminQueryGrantReq 是管理员在控制台直接开通一条授权(#173)。被授权人必须是已有账号。
+type AdminQueryGrantReq struct {
+	Email       string `json:"email"`
+	SourceID    int64  `json:"sourceId"`
+	Database    string `json:"database"`
+	Days        int    `json:"days"`
+	MaxRows     int    `json:"maxRows"`
+	TimeoutSec  int    `json:"timeoutSec"`
+	AllowExport bool   `json:"allowExport"`
+	Reason      string `json:"reason"`
+}

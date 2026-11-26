@@ -1440,6 +1440,60 @@ paths:
         '200':
           description: 'OK { grants: QueryGrant[], limits }'
           content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /bizquery/apply/sources:
+    get:
+      tags: [bizquery]
+      summary: '[query] 可申请数据查询权限的业务查询源(#173)'
+      description: 只列标记过的业务查询源;不按调用者的标签过滤(申请就是为了拿到还没有的访问权),只给 id、名称、引擎、环境。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /bizquery/apply/sources/{id}/databases:
+    get:
+      tags: [bizquery]
+      summary: '[query] 一个业务查询源上可申请的库'
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /bizquery/apply/mine:
+    get:
+      tags: [bizquery]
+      summary: '[query] 我最近的 20 次申请'
+      description: |
+        状态取自申请挂着的审批单:pending / approved(已生效,带 grantId)/ failed(批准了但生成授权失败,见 error)/
+        rejected / cancelled / expired。
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
+  /bizquery/apply:
+    post:
+      tags: [bizquery]
+      summary: '[query] 在网关里申请数据查询权限(生成一张审批单)'
+      description: |
+        只在 `bizQuery.applyMode = internal`(默认)时可用;为 external 时回 40001,应去外部审批系统申请。
+        生成一张 `grant` 类型的审批单,走默认审批链(审批人、超时、自审批规则与其它工单相同)。
+        批准前按此刻的设置重新校验(实例仍是业务查询源、库仍存在、有效期不超上限、导出仍开着),
+        不通过时批准接口回 40001 并说明原因;批准后生成 / 更新授权,来源记「网关审批」,外部单号为审批单号。
+        同一个人对同一个库已有待审批的申请时拒绝;由仍启用的外部系统下发的同一条授权不能在这里申请修改。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceId, database, days, reason]
+              properties:
+                sourceId: { type: integer }
+                database: { type: string }
+                days: { type: integer, description: '有效期(天),1 ~ bizQuery.maxGrantDays' }
+                allowExport: { type: boolean, description: '只在 bizQuery.exportEnabled 为 true 时可申请' }
+                reason: { type: string, description: '必填,不超过 500 字' }
+      responses:
+        '200':
+          description: 'OK QueryGrantRequest / 40001 校验不通过或申请方式为外部'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+  /bizquery/apply/{id}/cancel:
+    post:
+      tags: [bizquery]
+      summary: '[query] 撤回自己还在等审批的申请'
+      description: 走审批单的撤回规则;另开入口是因为审批单的撤回接口挂在终端菜单下,业务方没有那个菜单。
+      parameters: [{ name: id, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { $ref: '#/components/responses/Ok' } }
   /bizquery/tables:
     get:
       tags: [bizquery]
@@ -1507,6 +1561,34 @@ paths:
       responses:
         '200':
           description: 'OK { items: QueryGrant[], limits }'
+          content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
+    post:
+      tags: [bizquery]
+      summary: '[perms · admin] 直接给已有账号开通查询授权(#173)'
+      description: |
+        被授权人必须是网关里已有的账号(不自动建号);没有业务查询角色的会追加上(主角色不动)。
+        实例必须是业务查询源,库必须真实存在;有效期、行数、超时不能超过全局上限,导出要全局开着。
+        来源记「控制台」,外部单号为 `console-<审计号>`,审批人为操作的管理员。由仍启用的外部系统
+        下发的同一条授权(同一人、实例、库)不能在这里覆盖。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, sourceId, database, days]
+              properties:
+                email: { type: string }
+                sourceId: { type: integer }
+                database: { type: string }
+                days: { type: integer, description: '有效期(天),1 ~ bizQuery.maxGrantDays' }
+                maxRows: { type: integer, description: '0 = 用全局默认' }
+                timeoutSec: { type: integer, description: '0 = 用全局默认' }
+                allowExport: { type: boolean }
+                reason: { type: string }
+      responses:
+        '200':
+          description: 'OK QueryGrant / 40001 校验不通过'
           content: { application/json: { schema: { $ref: '#/components/schemas/R' } } }
   /query-grants/{id}/revoke:
     post:
@@ -2366,7 +2448,7 @@ paths:
             按工单类型筛。类型不是表上的一列,是由 releaseId / windowId / exportJobId 三个外键推出来的
             (三个都为 0 = 普通命令单),每一行也带着 `type` 字段回来 —— 界面照它画标签,不自己再推一遍。
             拼错的取值**报错**,不是返回空列表:空列表和"确实没有"长得一模一样。
-          schema: { type: string, enum: [cmd, release, window, export] }
+          schema: { type: string, enum: [cmd, release, window, export, grant] }
       responses:
         '200':
           description: |
@@ -2387,7 +2469,7 @@ paths:
                       properties:
                         id: { type: integer, format: int64 }
                         apNo: { type: string }
-                        type: { type: string, enum: [cmd, release, window, export] }
+                        type: { type: string, enum: [cmd, release, window, export, grant] }
                         releaseId: { type: integer, format: int64, description: 来自发布单时为其 id }
                         instance: { type: string }
                         database: { type: string }

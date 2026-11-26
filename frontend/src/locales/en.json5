@@ -503,14 +503,19 @@
   setBizDays: 'Max grant validity (days)', setBizDaysD: 'Grants issued by the approval system cannot last longer than this',
   setBizConc: 'Concurrency: per user / per instance', setBizConcD: 'Business queries running at once, to protect the replicas',
   setBizDaily: 'Queries per user per day', setBizDailyD: 'Queries and exports that actually ran count; refused ones do not. 0 means no limit. Resets at midnight',
-  setBizExport: 'Allow export', setBizExportD: 'Master switch. When on, users whose grant allows export can download CSV (always masked)', setBizApply: 'Access request page', setBizApplyD: 'Where “Request access” on the data-query blocking card leads for users without any grant; leave empty for no link',
+  setBizExport: 'Allow export', setBizExportD: 'Master switch. When on, users whose grant allows export can download CSV (always masked)', setBizApply: 'External request page', setBizApplyD: 'With external requests, “Request access” on the Data Query page leads here; leave empty for no link',
+  setBizApplyMode: 'How access is requested', setBizApplyModeD: 'In the gateway: users submit a request on the Data Query page; it goes through the approval chain and takes effect on approval. External system: users go to the external request page and grants are issued by that system via the open API',
+  setBizApplyInternal: 'In the gateway', setBizApplyExternal: 'External system',
   tabOnlineView: 'Online', olHint: 'Who is signed in right now and which terminals are open; refreshes every 15s', olSummary: '{users} online · {sessions} sessions · {terminals} terminals', olSearchPh: 'Filter by name / email / dept / IP / instance', olRefresh: 'Refresh', olNote: 'A session counts as online with a request in the last 3 minutes or an open terminal; it disappears at once on sign-out, disable or password reset. Kept in gateway memory only; cleared on restart.', olColUser: 'User', olColFrom: 'IP · browser', olColLogin: 'Signed in', olColAction: 'Last action', olColTerm: 'Open terminals', olActive: 'Active', olIdle: 'Idle', olTermRunning: 'Running', olTermIdle: 'Terminal (idle)', olEmpty: 'Nobody is online right now', olEmptyFiltered: 'No online user matches',
-  tabGrantView: 'Query grants', pmGrantsHint: 'Who can query which database — issued by the approval system; admins can revoke here immediately',
+  tabGrantView: 'Query grants', pmGrantsHint: 'Who can query which database — from in-gateway access requests, admin-created grants or the external approval system; admins can create or revoke here',
   qgFilterEmail: 'Email', qgFilterDept: 'Department', qgAll: 'All statuses', qgColUser: 'Grantee', qgColTarget: 'Instance / database',
   qgColLimit: 'Limits', qgColPeriod: 'Validity', qgColSource: 'Source', qgColStatus: 'Status', qgRevoke: 'Revoke',
   qgRevokePrompt: 'Revoke {email}’s query access to {target}? Takes effect immediately.\n\nReason (recorded in the audit log):', qgRevoked: 'Revoked',
   qgEmpty: 'No matching query grants', qgExport: 'export',
   qgSt_active: 'Active', qgSt_pending: 'Not started', qgSt_expired: 'Expired', qgSt_revoked: 'Revoked',
+  qgNew: 'New grant', qgNewTitle: 'New query grant', qgNewDesc: 'Give an existing gateway account read-only query access to one database. Takes effect immediately and is audited.',
+  qgNewEmail: 'Grantee email', qgNewNeedEmail: 'Enter the grantee email', qgNewMaxRows: 'Max rows', qgNewTimeout: 'Timeout (s)', qgNewDefault: '0 = global default ({n})',
+  qgNewExport: 'Allow export', qgNewReason: 'Note', qgNewReasonPh: 'Why this grant (optional, audited)', qgNewSubmit: 'Create grant', qgNewCreated: 'Grant created',
   navQuery: 'Data query', t_query: 'Data query', t_querySub: 'Read-only queries on the databases you are granted', m_query: 'Data query',
   qNoGrants: 'You have no databases to query yet. Request access in the approval system; approved grants appear here.',
   qUntil: 'Until {t}', qStartsAt: 'From {t}',
@@ -543,7 +548,7 @@
   qDdlTip: 'Show the CREATE statement (DDL) of {t}', qDdlPick: 'Pick a table on the left first to see its DDL', qCopyDdl: 'Copy DDL', qDb: 'Database', qPickDb: 'Pick a database…', qTable: 'Table', qPickTable: 'Pick a table…', qTableSearch: 'Search tables',
   qTablesLoading: 'Loading tables…', qNoTables: '(no tables)', qTablesFailed: 'Table list unavailable',
   qTablesErr: 'Could not read the table list: {err} (you can still write SQL by hand)', qTablesTruncated: 'Too many tables; listing the first {n}',
-  qPending: 'Not active yet: {list}', qNoAccessTitle: 'No data-query access yet', qNoAccessBody: 'You have no databases to query. Submit a data-query access request first; once it is approved, come back here to query.', qApplyAccess: 'Request access', qRecheck: 'Approved already? Check again', qInfoTitle: 'Query limits', qKeyHints: 'Ctrl + Enter runs the selection, or the statement at the cursor (split by semicolons or blank lines) · Shift + Alt + F format · Tab indent', qFormat: 'Format', qFormatTip: 'Format SQL (Shift + Alt + F)', qClear: 'Clear', qSave: 'Save', qSaveTip: 'Save to favourites (under History)', qSaved: 'Saved to favourites', qSaveTooLong: 'This SQL is longer than {n} characters and too long to save as a favourite', qReadOnlyBadge: 'Read-only', qCursor: 'Ln {l}, Col {c}', qSplitTip: 'Drag to resize · double-click to reset', qSubResult: 'Result', qSubLog: 'Messages', qSubHistory: 'History', qCopyResult: 'Copy result', qHistClear: 'Clear history', qOk: 'Succeeded', qStatRows: '{n} rows', qStatMs: '{ms} ms', qResultEmpty: 'Write a SELECT and press Ctrl + Enter', qLogEmpty: 'Nothing run yet', qLogOk: 'Succeeded · {n} rows · {ms} ms', qHistEmpty: 'Queries you run or save show up here (kept on this device only; recent runs are cleared on sign-out, favourites are kept)', qHistSaved: 'Favourites', qHistRecent: 'Recent', qHistLoad: 'Open', qHistRemove: 'Remove', qTabsFull: 'At most {n} query tabs — close one first', qCellCopied: 'Copied', qCopyCell: 'Copy', qTypeInferred: 'Inferred from values: {type}', qTypeNum: 'number', qTypeDate: 'date/time', qTypeBool: 'boolean', qTypeText: 'text', qPageSize: '{n} / page', qPageSizeLabel: 'Rows per page', qPageFirst: 'First page', qPagePrev: 'Previous page', qPageNext: 'Next page', qPageLast: 'Last page', qPageOf: '{p} / {total}',
+  qPending: 'Not active yet: {list}', qNoAccessTitle: 'No data-query access yet', qNoAccessBody: 'You have no databases to query. Submit a data-query access request first; once it is approved, come back here to query.', qApplyAccess: 'Request access', qNoAccessBodyInternal: 'You have no databases to query yet. Submit a request with the button below; once it is approved, come back here to query.', qApplyMore: 'Request access', qApplyMoreTip: 'Request access to more databases', qRecheck: 'Approved already? Check again', qInfoTitle: 'Query limits', qKeyHints: 'Ctrl + Enter runs the selection, or the statement at the cursor (split by semicolons or blank lines) · Shift + Alt + F format · Tab indent', qFormat: 'Format', qFormatTip: 'Format SQL (Shift + Alt + F)', qClear: 'Clear', qSave: 'Save', qSaveTip: 'Save to favourites (under History)', qSaved: 'Saved to favourites', qSaveTooLong: 'This SQL is longer than {n} characters and too long to save as a favourite', qReadOnlyBadge: 'Read-only', qCursor: 'Ln {l}, Col {c}', qSplitTip: 'Drag to resize · double-click to reset', qSubResult: 'Result', qSubLog: 'Messages', qSubHistory: 'History', qCopyResult: 'Copy result', qHistClear: 'Clear history', qOk: 'Succeeded', qStatRows: '{n} rows', qStatMs: '{ms} ms', qResultEmpty: 'Write a SELECT and press Ctrl + Enter', qLogEmpty: 'Nothing run yet', qLogOk: 'Succeeded · {n} rows · {ms} ms', qHistEmpty: 'Queries you run or save show up here (kept on this device only; recent runs are cleared on sign-out, favourites are kept)', qHistSaved: 'Favourites', qHistRecent: 'Recent', qHistLoad: 'Open', qHistRemove: 'Remove', qTabsFull: 'At most {n} query tabs — close one first', qCellCopied: 'Copied', qCopyCell: 'Copy', qTypeInferred: 'Inferred from values: {type}', qTypeNum: 'number', qTypeDate: 'date/time', qTypeBool: 'boolean', qTypeText: 'text', qPageSize: '{n} / page', qPageSizeLabel: 'Rows per page', qPageFirst: 'First page', qPagePrev: 'Previous page', qPageNext: 'Next page', qPageLast: 'Last page', qPageOf: '{p} / {total}',
   navExecWindow: 'Windows', t_execwindow: 'Execution windows', t_execwindowSub: 'Request an approval-free time window; it takes effect once approved',
   m_execwindow: 'Exec windows', ewPageSub: '{n} windows',
   ewApply: 'Request window', ewSubmit: 'Submit for approval',
@@ -557,6 +562,15 @@
   ewDisable: 'Disable (stops relaxing now)', ewDisableConfirm: 'Disable window "{name}"? It stops relaxing approvals immediately; re-enabling needs a new approval.', ewApplicant: 'Applicant: {name}', ewTabMine: 'My requests', ewTabAll: 'All windows', ewAllNote: 'Every window you can review (including expired ones), read-only; use the review button on a row to see what ran while it was open', ewAllEmpty: 'No windows to review',
   ewDelConfirm: 'Withdraw execution window "{name}"? The door closes immediately.',
   apWindowLive: 'Execution window is live — nothing to run by hand',
+  apGrantLive: 'Query access is live — nothing to run by hand',
+  qaTitle: 'Request data query access', qaDesc: 'Submitting creates an approval ticket that goes through the approval chain; once approved, the grant takes effect and you can query on the Data Query page.',
+  qaSource: 'Instance', qaSourcePh: 'Choose a business query instance', qaDb: 'Database', qaDbPh: 'Choose a database', qaDbNone: 'No requestable databases could be listed on this instance',
+  qaDays: 'Validity (days)', qaDaysHint: '1 – {max} days', qaDaysN: '{n} days', qaExport: 'Need export', qaExportHint: 'Exported CSV is always masked', qaExportTag: 'with export',
+  qaReason: 'Reason', qaReasonPh: 'Why you need to query this database (required; approvers will see it)', qaSubmit: 'Submit request', qaSubmitting: 'Submitting…',
+  qaNoSources: 'There are no business query instances to request right now; contact an administrator', qaNeedSource: 'Choose an instance', qaNeedDb: 'Choose a database', qaNeedReason: 'Please give a reason for the request', qaBadDays: 'The validity must be between 1 and {max} days',
+  qaSubmitted: 'Request submitted ({ap}) and awaiting approval. Once approved, click “Check again” on the Data Query page to start querying.',
+  qaMine: 'My requests', qaWithdraw: 'Withdraw', qaWithdrawConfirm: 'Withdraw request {ap} ({target})?', qaWithdrawn: 'Request withdrawn',
+  qaSt_pending: 'Pending', qaSt_approved: 'Approved', qaSt_failed: 'Not applied', qaSt_rejected: 'Rejected', qaSt_cancelled: 'Withdrawn', qaSt_expired: 'Expired',
   ewTitle: 'Execution windows', ewSub: 'Inside a window, mid/high-risk statements on the named database run without approval. It changes whether a human must approve, not whether the role is permitted — a capability-matrix deny still denies.',
   ewNew: 'New window', ewEdit: 'Edit window', ewEmpty: 'No windows yet — agree the slot before the change train, and it opens and closes on time',
   ewColName: 'Window', ewColScope: 'Scope', ewColWhen: 'When', ewColState: 'State',
@@ -623,7 +637,7 @@
   apExecTime: 'Executed',
   apStatus: 'Status',
   apTypeAll: 'All types',
-  apType_cmd: 'Command', apType_release: 'Release', apType_window: 'Window', apType_export: 'Export',
+  apType_cmd: 'Command', apType_release: 'Release', apType_window: 'Window', apType_export: 'Export', apType_grant: 'Access request',
   colEvent: 'Type', auditEvAll: 'All types',
   auditEv_intercept: 'Intercepted', auditEv_approve: 'Approval', auditEv_exec: 'Executed', auditEv_login: 'Login',
   colAction: 'Data op', auditActAll: 'All data ops',
@@ -826,6 +840,7 @@
     maintenance: '· Target instance is in maintenance — operations are restricted',
     apWindowLive: '· Approved — the execution window is now in effect',
     apExportQueued: '· Approved — the export job has been queued',
+    apGrantLive: '· Approved — the query grant is now in effect',
     apPipeline: '· Approved — the release pipeline continues from here',
     apAwaitingExec: '· Approved — waiting for the initiator to execute',
   },
@@ -961,6 +976,8 @@
   apText: {
     apWindowOpen: 'Open execution window “{name}” · {scope}/{db} · {inner} · Reason: {reason}',
     apWindowOpenNoReason: 'Open execution window “{name}” · {scope}/{db} · {inner} · Reason: (none given)',
+    apGrantApply: 'Request data query access · {scope}/{db} · {days} days · Reason: {reason}',
+    apGrantApplyExport: 'Request data query access (with export) · {scope}/{db} · {days} days · Reason: {reason}',
     winOnce: 'One-off {start} → {end}',
     winOnceUnset: 'One-off (time not set)',
     winDaily: 'Recurring daily {start}-{end} ({tz})',
@@ -1549,6 +1566,8 @@
     mb89602f1: '{0} approved your export request: {1}\nThe task is queued; you will be notified when it finishes.',
     // %s 通过了你的执行窗口申请：%s\n窗口已生效,到点自动开启、到点自动关闭。
     mdd5398c3: '{0} approved your execution window request: {1}\nThe window is active and opens and closes on schedule.',
+    // %s 通过了你的数据查询权限申请：%s\n授权已生效,可以到「数据查询」页查询了。
+    mf2ca7f4f: '{0} approved your data query access request: {1}\nThe grant is active; you can query on the Data Query page now.',
     // %s 通过了发布单里的这一步：%s\n流水线将继续执行,无需手动操作。
     m99456d1f: '{0} approved this step of the release: {1}\nThe pipeline will continue; no action needed.',
     // %s 里有写错的 IP:%s
@@ -1595,6 +1614,8 @@
     m11cfcae0: '{0}: this password is too common, please choose another',
     // %w: 当前登录密码错误
     m30424753: '{0}: your current password is incorrect',
+    // %w: 数据查询权限需在外部审批系统申请
+    me4415d40: '{0}: data query access is requested in the external approval system',
     // %w: 新密码不能与原密码相同
     m84e04a0c: '{0}: the new password must differ from the old one',
     // %w: 新密码至少 8 位
@@ -1897,6 +1918,8 @@
     me71eac1c: 'you changed your sign-in password',
     // 你在网关里解除了绑定
     m0e41d2e3: 'you removed it in the gateway',
+    // 你对 %s/%s 已有一张待审批的申请 %s,请等它处理完或先撤回
+    m002a1b7b: 'You already have a pending request {2} for {0}/{1}; wait for it to be handled or withdraw it first',
     // 你已有 5 个任务在排队或执行中,请等它们完成后再提交
     ma29c3063: 'You already have 5 tasks queued or running; wait for them to finish before submitting more',
     // 你打开的终端标签占用的数据库连接已达上限(%d 条),请关闭不用的标签后重试
@@ -2175,12 +2198,20 @@
     m2bd239e2: 'Character set {0} does not meet the standard; it should be {1}',
     // 存储引擎 %s 不符合规范,应为 %s
     m226a5294: 'Storage engine {0} does not meet the standard; it should be {1}',
+    // 实例 %s 上已没有库 %s,请驳回
+    m64176447: 'Database {1} no longer exists on instance {0}; please reject',
+    // 实例 %s 上没有库 %s
+    m1f155e68: 'Instance {0} has no database {1}',
     // 实例 %s 上没有库 %s(以 GET /open/query-sources/%d/databases 为准,区分大小写)
     m845ba8a2: 'Instance {0} has no database {1} (GET /open/query-sources/{2}/databases is authoritative; case-sensitive)',
     // 实例 %s 不是业务查询源,不能授权(业务查询只开放标记过的从库)
     m009700ba: 'Instance {0} is not a business query source and cannot be granted (business queries are only open on marked replicas)',
+    // 实例 %s 不是业务查询源,不能申请
+    m3d61a178: 'Instance {0} is not a business query source and cannot be requested',
     // 实例 %s 未配置真实执行凭据
     m099b0c08: 'Instance {0} has no real execution credentials configured',
+    // 实例不存在
+    m96f3807d: 'Instance not found',
     // 实例不存在: %d
     m36bbbde8: 'Instance not found: {0}',
     // 实例不存在: %s
@@ -2461,6 +2492,16 @@
     maf9b4ddf: 'Data export accepts one statement at a time, but {0} were found; keep only the one you want to export',
     // 数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流
     m4bfd190d: 'Data export only allows a single read-only query (SELECT/SHOW, etc.); modifying statements must go through the terminal approval flow',
+    // 数据查询权限未能生效
+    mcc7273cd: 'Data query access did not take effect',
+    // 数据查询权限申请已通过
+    mb96e6863: 'Data query access request approved',
+    // 数据查询的导出功能已关闭,这张含导出的申请不能批准,请驳回
+    m92b0bd80: 'Data query export has been turned off, so this request including export cannot be approved; please reject',
+    // 数据查询的导出功能未开启,不能开通导出
+    m1f1e9af1: 'Data query export is not enabled, so export cannot be granted',
+    // 数据查询的导出功能未开启,不能申请导出
+    m7ce39218: 'Data query export is not enabled, so export cannot be requested',
     // 文件不可用
     m17837c8d: 'File unavailable',
     // 文件名太长,最多 64 个字
@@ -2503,6 +2544,8 @@
     m5ce70902: 'You may not view this ticket\'s script',
     // 无权校验:审计链校验限监督角色(管理员 / 负责人 / 审计员)
     mfe35d0e7: 'Not allowed to verify: audit chain verification is limited to supervisory roles (admin / lead / auditor)',
+    // 无权申请
+    m0e910d52: 'Not allowed to request',
     // 无权访问该实例
     ma5d8f039: 'You do not have access to this instance',
     // 无权访问该数据库
@@ -2541,6 +2584,8 @@
     ma8a81a4e: 'a newer approval',
     // 有效期不能超过 %d 天
     md05455f4: 'The validity cannot exceed {0} days',
+    // 有效期须在 1 到 %d 天之间
+    mc5a454c8: 'The validity must be between 1 and {0} days',
     // 服务器内部错误
     mf7b95322: 'Internal server error',
     // 服务账号 %s 不能带平台管理员角色:它的唯一入口是 API 凭据
@@ -2649,6 +2694,14 @@
     mef5687fd: '{0} uses an autonomous transaction (PRAGMA AUTONOMOUS_TRANSACTION) and really changes data even when called in a query',
     // 用户不存在
     m1b2a3e6b: 'User not found',
+    // 申请 %s 已批准,但生成授权时失败:%s
+    mfc459b96: 'Request {0} was approved, but creating the grant failed: {1}',
+    // 申请不存在
+    mccaece79: 'Request not found',
+    // 申请理由不能超过 500 个字
+    m28bcc281: 'The reason must not exceed 500 characters',
+    // 申请的有效期 %d 天已超过当前上限 %d 天,请驳回后让申请人重新申请
+    m1ee2d2f7: 'The requested validity of {0} days exceeds the current limit of {1} days; reject it and ask the applicant to apply again',
     // 登录尝试过多,请稍后再试
     m31cbb9a2: 'Too many sign-in attempts; please try again later',
     // 目标实例处于维护态,暂不能发起发布
@@ -2775,6 +2828,8 @@
     m974c3884: 'Invalid gateway policy',
     // 网关策略无效:%s(只能是 strict / approve-1 / audit-only)
     mcdf006ae: 'Invalid gateway policy: {0} (must be strict / approve-1 / audit-only)',
+    // 网关里没有账号 %s,请先在【权限 · 用户】新建或邀请
+    ma7253c9d: 'There is no gateway account {0}; create or invite it under Permissions · Users first',
     // 网关重启,迁移中断,原表未切换
     m20d2f3b7: 'The gateway restarted and interrupted the migration; the original table was not switched',
     // 网关重启,迁移中断,原表未切换;%s
@@ -2963,6 +3018,8 @@
     me7472333: 'The instance of this release is outside this service account scope',
     // 该用户仅剩此一个角色,请先分配其他角色再移除
     m491466d9: 'This is the user\'s only role; assign another role before removing it',
+    // 该申请已被处理,请刷新
+    m55c1c8fd: 'This request has already been handled; please refresh',
     // 该脚本已被审批单或发布单引用,作为执行证据保留,不能删除
     mac6fa71f: 'This script is referenced by an approval ticket or a release and is kept as execution evidence; it cannot be deleted',
     // 该语句无法在不执行的前提下校验语法
@@ -2993,6 +3050,8 @@
     m8edce81a: 'Configure the data export save path under [Settings · Gateway] first',
     // 请填写文件名
     m19618623: 'Please enter a file name',
+    // 请填写申请理由
+    mb836db0c: 'Please give a reason for the request',
     // 请指定授权 id 或 externalId
     mf61d5801: 'Specify a grant id or externalId',
     // 请提供 instance(实例名)或 connectionId
@@ -3013,6 +3072,8 @@
     m9c27b238: 'Please enter the MFA code',
     // 请输入当前登录密码
     md4673d2b: 'Please enter your current password',
+    // 请选择库
+    m5b357ac3: 'Please choose a database',
     // 请选择目标数据库(该连接未配置默认库)
     m81569c98: 'Select the target database (this connection has no default database)',
     // 请选择要下载的程序包
@@ -3129,8 +3190,12 @@
     mc76bfd43: 'This is the approval ticket of an export request; once approved, the export task runs in the background, not here',
     // 这是执行窗口的申请单,批准即生效,没有需要手动执行的命令
     m032ba1c8: 'This is an execution window request; it takes effect on approval and has no command to execute manually',
+    // 这是数据查询权限的申请单,批准即生效,没有需要手动执行的命令
+    me4fa6bf6: 'This is a data query access request; approval takes effect immediately and there is no command to run by hand',
     // 这条 EXPLAIN 会真实执行语句,网关无法把它改成只取执行计划;请去掉 ANALYZE / PERFORMANCE 后重试
     m503706c1: 'This EXPLAIN would really execute the statement and the gateway cannot turn it into a plan-only request; remove ANALYZE / PERFORMANCE and try again',
+    // 这条授权(#%d)由外部系统 %s 下发,只能在那里申请修改
+    m8af827c3: 'This grant (#{0}) was issued by external system {1} and can only be changed there',
     // 进度不存在或已过期
     mce4611b2: 'Progress not found or expired',
     // 连不上目标库,影子表 _%s_gho 未清理,请 DBA 处理
