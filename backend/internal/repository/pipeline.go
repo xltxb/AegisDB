@@ -143,6 +143,15 @@ func (r *Repo) GetRelease(id int64) (*model.Release, error) {
 	return &rel, nil
 }
 
+// GetReleaseWithoutSQL 同 GetRelease,但不读脚本列(SQL 留空):轮询状态用,大脚本不必每次整段读出来。
+func (r *Repo) GetReleaseWithoutSQL(id int64) (*model.Release, error) {
+	var rel model.Release
+	if err := r.db.Omit("sql").First(&rel, id).Error; err != nil {
+		return nil, err
+	}
+	return &rel, nil
+}
+
 func (r *Repo) GetReleaseByNo(no string) (*model.Release, error) {
 	var rel model.Release
 	if err := r.db.Where("rel_no = ?", no).First(&rel).Error; err != nil {

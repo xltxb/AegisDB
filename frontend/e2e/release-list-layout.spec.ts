@@ -22,7 +22,7 @@ test('30 张单:卡片完整显示标题和环境,列表自己滚动', async ({ 
   const all = Array.from({ length: 30 }, (_, i) => release(30 - i))
   await stubCommon(page)
   await page.route('**/api/v1/releases?*', (r) => r.fulfill(envelope({ items: all, total: all.length, page: 1, pageSize: 50 })))
-  await page.route(/\/api\/v1\/releases\/\d+$/, (r) => {
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, (r) => {
     const id = Number(new URL(r.request().url()).pathname.split('/').pop())
     return r.fulfill(envelope(all.find((x) => x.id === id)))
   })

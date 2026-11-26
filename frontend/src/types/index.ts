@@ -1137,6 +1137,8 @@ export interface Release {
   stages: ReleaseStage[]
   /** 收单检查结果(JSON 文本)。空 = 老单子或这次一条都没检查成,都不是「通过」 */
   precheck?: string
+  /** 详情接口按要求省掉了脚本(轮询);sql 为空不代表脚本为空 */
+  sqlOmitted?: boolean
 }
 
 /** 发布单 / 阶段的运行状态(与 RunStatus 同一套值,发布页按这个名字读)。 */

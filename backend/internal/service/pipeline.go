@@ -1618,8 +1618,15 @@ func headRunes(s string, n int) string {
 }
 
 // GetReleaseDetail returns one run with its stages.
-func (s *Services) GetReleaseDetail(u *model.User, id int64) (*dto.ReleaseView, error) {
-	rel, err := s.Repo.GetRelease(id)
+//
+// omitSQL:不读、不回脚本(#163)。脚本创建后不再改,执行中页面每 2.5 秒轮询一次,大脚本每次整段读出、
+// 全文脱敏、整段回传都是白费;页面首次打开取一次完整的,之后轮询带上它。
+func (s *Services) GetReleaseDetail(u *model.User, id int64, omitSQL bool) (*dto.ReleaseView, error) {
+	get := s.Repo.GetRelease
+	if omitSQL {
+		get = s.Repo.GetReleaseWithoutSQL
+	}
+	rel, err := get(id)
 	if err != nil {
 		return nil, ErrNotFound
 	}
@@ -1629,6 +1636,7 @@ func (s *Services) GetReleaseDetail(u *model.User, id int64) (*dto.ReleaseView, 
 		return nil, ErrForbidden
 	}
 	v := s.releaseView(*rel)
+	v.SQLOmitted = omitSQL
 	return &v, nil
 }
 

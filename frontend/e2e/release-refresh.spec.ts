@@ -34,7 +34,7 @@ async function openReleases(page: Page, counts: { list: number; detail: Record<n
     if (gate && counts.list > 1) await gate
     await r.fulfill(envelope({ items: [release(2, false), release(1, false)], total: 2, page: 1, pageSize: 50 }))
   })
-  await page.route(/\/api\/v1\/releases\/\d+$/, async (r) => {
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, async (r) => {
     const id = Number(new URL(r.request().url()).pathname.split('/').pop())
     counts.detail[id] = (counts.detail[id] || 0) + 1
     if (gate && counts.detail[id] > 1) await gate

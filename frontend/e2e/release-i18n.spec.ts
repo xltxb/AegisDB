@@ -37,7 +37,7 @@ async function openReleases(page: Page, lang: 'zh' | 'en', rel = release(STAGES)
   await stubCommon(page)
   await page.route('**/api/v1/connections', (r) => r.fulfill(envelope([])))
   await page.route('**/api/v1/releases?*', (r) => r.fulfill(envelope({ items: [rel], total: 1, page: 1, pageSize: 50 })))
-  await page.route(/\/api\/v1\/releases\/\d+$/, (r) => r.fulfill(envelope(rel)))
+  await page.route(/\/api\/v1\/releases\/\d+(\?.*)?$/, (r) => r.fulfill(envelope(rel)))
   await page.goto('/#/releases')
   await page.locator('.node').first().waitFor({ state: 'visible', timeout: 15000 })
 }
