@@ -64,23 +64,17 @@ func bizShowCreate(ctx context.Context, conn *model.Connection, schema, name str
 	var ddl string
 	var err error
 	switch engineFamily(conn.Engine) {
-	case familyPostgres:
+	case familyPostgres, familyOracle:
 		if schema == "" {
-			if schema, err = pgVisibleSchema(ctx, conn, name); err != nil {
+			if schema, err = defaultTableScope(ctx, conn, name); err != nil {
 				return out, err
 			}
 		}
-		ddl, err = pgTableDDL(conn, schema, name)
-	case familyOracle:
-		if schema == "" {
-			schema = oracleTargetSchema(conn)
+		if engineFamily(conn.Engine) == familyPostgres {
+			ddl, err = pgTableDDL(conn, schema, name)
+		} else {
+			ddl, err = oracleTableDDL(conn, schema, name)
 		}
-		if schema == "" {
-			if schema, err = oracleCurrentSchema(ctx, conn); err != nil {
-				return out, err
-			}
-		}
-		ddl, err = oracleTableDDL(conn, schema, name)
 	default:
 		return out, apimsg.Errorf("不支持的对象类型 %q", "table")
 	}
@@ -90,6 +84,22 @@ func bizShowCreate(ctx context.Context, conn *model.Connection, schema, name str
 	out.Columns = []string{"Table", "Create Table"}
 	out.Data = [][]string{{name, ddl}}
 	return out, nil
+}
+
+// defaultTableScope:不带 schema 的表名在 PG 系 / Oracle 上落在哪个 schema —— 和这条连接上
+// 执行 SELECT * FROM 表 找到的是同一张。PG 系按 search_path;Oracle 先看连接上配的目标 schema,
+// 没配就用账号自己的当前 schema。
+func defaultTableScope(ctx context.Context, conn *model.Connection, name string) (string, error) {
+	switch engineFamily(conn.Engine) {
+	case familyPostgres:
+		return pgVisibleSchema(ctx, conn, name)
+	case familyOracle:
+		if s := oracleTargetSchema(conn); s != "" {
+			return s, nil
+		}
+		return oracleCurrentSchema(ctx, conn)
+	}
+	return "", nil
 }
 
 // pgVisibleSchema:不带 schema 的表名按 search_path 落在哪个 schema(和 SELECT * FROM 表 找到的是同一张)。

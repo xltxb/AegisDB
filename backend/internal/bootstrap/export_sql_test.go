@@ -28,10 +28,9 @@ line2')`,
 	conn := struct{ ID int64 }{connID}
 	eq(t, app.do(http.MethodPut, "/api/v1/settings", token, map[string]any{"export.savePath": t.TempDir()}).Code, 0, "set path")
 
-	// 查询里的表带 schema(public.t_member):PostgreSQL 上不带 schema 的单表目前导出时不附
-	// CREATE TABLE(取表结构的 scope 只为 MySQL 设置),见 https://github.com/xltxb/AegisDB/issues/150
+	// 表名不带 schema:PostgreSQL 按 search_path 找到它所在的 schema 去取建表语句(#150)
 	r := app.do(http.MethodPost, "/api/v1/export", token, map[string]any{
-		"connectionId": conn.ID, "sql": "SELECT id, name, note FROM public.t_member ORDER BY id", "name": "members", "format": "sql",
+		"connectionId": conn.ID, "sql": "SELECT id, name, note FROM t_member ORDER BY id", "name": "members", "format": "sql",
 	})
 	eq(t, r.Code, 0, "submit sql export")
 	var j exportJob

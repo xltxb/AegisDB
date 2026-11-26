@@ -58,6 +58,16 @@ func realObjectSourceOnce(conn *model.Connection, scope, typ, name string) (stri
 	if !objectIdentRe.MatchString(name) || (scope != "" && !objectIdentRe.MatchString(scope)) {
 		return "", apimsg.Errorf("非法的对象名")
 	}
+	if typ == "table" && scope == "" {
+		// 不带 schema 的表名(导出的单表查询):按连接执行时会落到的 schema 找(#150)。
+		ctx, cancel := context.WithTimeout(context.Background(), objectQueryTimeout)
+		s, err := defaultTableScope(ctx, conn, name)
+		cancel()
+		if err != nil {
+			return "", err
+		}
+		scope = s
+	}
 	switch engineFamily(conn.Engine) { // see RealObjects on why not substring checks
 	case familyMySQL:
 		return mysqlObjectSource(conn, scope, typ, name)
