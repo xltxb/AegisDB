@@ -21,14 +21,18 @@
 // testpg then only ever creates and drops databases carrying its own
 // per-process prefix (aegis_t_<pid>_ / aegis_tpl_<pid>_).
 //
+// Windows has no crash watchdog: after a crash or a -timeout panic the
+// postmaster keeps running, and the stale-directory sweep skips its directory
+// because that postmaster is alive. Stop it by hand with
+// `pg_ctl -D <dir> stop` (the aegis-testpg-* directory under the temp dir).
+//
 // This is a test-only helper: import it only from _test.go files.
 package testpg
 
 import (
-	"bytes"
+	"context"
 	"database/sql"
 	"errors"
-	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -115,6 +119,11 @@ var (
 func Main(m *testing.M) { os.Exit(run(m)) }
 
 func run(m *testing.M) int {
+	// No server to start and none to use: say so once instead of failing every test.
+	if err := preflight(os.Getenv(envStorePG), os.Getenv(envPGBin), os.Getenv("PATH"), defaultGlobs()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
 	h := newHarness(os.Getenv(envStorePG), os.TempDir())
 	defaultMu.Lock()
 	defaultH = h
@@ -270,6 +279,17 @@ func (h *harness) server() (Conn, *sql.DB, error) {
 		h.err = h.start()
 	}
 	return h.conn, h.admin, h.err
+}
+
+// preflight reports whether the tests can get a server at all: nothing to
+// check when an override server is named, otherwise the PostgreSQL programs
+// must be findable.
+func preflight(override, binEnv, pathEnv string, globs []string) error {
+	if override != "" {
+		return nil
+	}
+	_, err := findBinDir(binEnv, pathEnv, globs)
+	return err
 }
 
 func (h *harness) start() error {
@@ -588,6 +608,7 @@ func defaultGlobs() []string {
 var globVersionRe = regexp.MustCompile(`(?i)postgresql(?:@|[/\\])(\d+)`)
 
 const installHint = "install PostgreSQL >= 13 (macOS: `brew install postgresql@18`; Linux/Windows: the official PostgreSQL packages from postgresql.org), " +
+	"(initdb/pg_ctl refuse to run as root, common in containers: run the tests as a non-root user or point " + envStorePG + " at a server), " +
 	"or set " + envPGBin + " to the directory holding initdb/pg_ctl/postgres, " +
 	"or set " + envStorePG + " to a libpq key=value string (no dbname) of a disposable server tests may use"
 
@@ -725,8 +746,18 @@ func startInstance(bin, root string, firstPort int) (*instance, error) {
 			}
 		}
 		inst.attempts = attempt
-		startOut, err := command(inst.pgCtl(), "start", "-w", "-t", "60", "-D", dir, "-l", logFile,
-			"-o", fmt.Sprintf("-p %d", port)).CombinedOutput()
+		// pg_ctl's output goes to a file, not a pipe: on Windows the postmaster
+		// inherits pg_ctl's handles, so a pipe would never reach EOF.
+		startLog := filepath.Join(dir, "pg_ctl-start.log")
+		sf, err := os.Create(startLog)
+		if err != nil {
+			return nil, fmt.Errorf("testpg: %w", err)
+		}
+		cmd := command(inst.pgCtl(), "start", "-w", "-t", "60", "-D", dir, "-l", logFile,
+			"-o", fmt.Sprintf("-p %d", port))
+		cmd.Stdout, cmd.Stderr = sf, sf
+		err = cmd.Run()
+		sf.Close()
 		if err == nil {
 			inst.conn = Conn{Host: "127.0.0.1", Port: port, User: superuser}
 			inst.watchdog = startWatchdog(inst.pgCtl(), dir)
@@ -734,7 +765,7 @@ func startInstance(bin, root string, firstPort int) (*instance, error) {
 			return inst, nil
 		}
 		_ = command(inst.pgCtl(), "stop", "-D", dir, "-m", "immediate", "-w").Run()
-		lastErr = fmt.Errorf("pg_ctl start on port %d: %w\n%s\n%s", port, err, bytes.TrimSpace(startOut), tail(logFile, 20))
+		lastErr = fmt.Errorf("pg_ctl start on port %d: %w\n%s\n%s", port, err, tail(startLog, 20), tail(logFile, 20))
 	}
 	return nil, fmt.Errorf("testpg: could not start PostgreSQL after %d attempts: %v", startTries, lastErr)
 }

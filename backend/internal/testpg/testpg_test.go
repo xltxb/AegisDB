@@ -317,3 +317,19 @@ func TestParseOverride(t *testing.T) {
 		t.Fatalf("round trip: %+v %v", back, err)
 	}
 }
+
+func TestPreflight(t *testing.T) {
+	empty := t.TempDir()
+	if err := preflight("host=127.0.0.1", "", "", nil); err != nil {
+		t.Errorf("override set: want no error, got %v", err)
+	}
+	err := preflight("", "", empty, nil)
+	if err == nil {
+		t.Fatal("no override and no binaries: want an error")
+	}
+	for _, want := range []string{"brew install postgresql@18", "root"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error %q lacks %q", err, want)
+		}
+	}
+}
