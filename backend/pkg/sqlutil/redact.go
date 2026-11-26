@@ -8,8 +8,8 @@ import (
 // Credential masking for command text that is stored, displayed, or sent
 // somewhere. See RedactSecrets.
 //
-// The gateway drives four engine families (see internal/gateway/realdb.go:
-// mysql, postgres, oracle, sqlite), and each spells "here is the password"
+// The gateway drives three engine families (see internal/gateway/realdb.go:
+// mysql, postgres, oracle), and each spells "here is the password"
 // differently. Every form below is one of them; the tests name the engine each
 // belongs to, because a rule with no engine behind it is a rule nobody can check.
 

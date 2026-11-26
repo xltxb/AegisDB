@@ -87,11 +87,11 @@ func (s *Services) SweepConnChecks() {
 // 在此之前 Test 和 SaveConnCheck 是在两个调用方手工配对的;下一个探测连接的调用方
 // (导入、开放接口的健康检查)会再次把结论扔掉,重现 0037 要修的那个 bug。
 //
-// 没配凭据**不记**:那不是远端的状况,写成"连不上"会让它永久挂红,而定时巡检又刻意
+// 没配凭据(以及引擎已不再支持)**不记**:那不是远端的状况,写成"连不上"会让它永久挂红,而定时巡检又刻意
 // 跳过它,于是那条假的"连不上"永远不会被刷新。
 func (s *Services) CheckConnection(conn *model.Connection) gateway.CheckResult {
 	r := gateway.Check(conn)
-	if r.Kind == gateway.CheckNoCredentials {
+	if r.Kind == gateway.CheckNoCredentials || r.Kind == gateway.CheckUnsupported {
 		return r
 	}
 	if err := s.Repo.SaveConnCheck(conn.ID, string(r.Kind), r.OK(), r.Msg); err != nil {

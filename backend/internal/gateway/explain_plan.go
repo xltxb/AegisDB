@@ -11,7 +11,6 @@ package gateway
 //	                                                          →  去掉执行类选项
 //	Oracle                   EXPLAIN PLAN FOR …:本身就不执行,但只把计划写进 PLAN_TABLE、
 //	                         不返回结果 —— 在同一会话里接着用 DBMS_XPLAN.DISPLAY 读出来
-//	SQLite                   EXPLAIN / EXPLAIN QUERY PLAN 本来就不执行
 //
 // 改写完再用判定层核一遍:改写后的语句必须是"只出计划"(PlanOnly),否则拒绝执行 ——
 // 改写漏掉某种写法时,宁可报错,也不让它真的执行。

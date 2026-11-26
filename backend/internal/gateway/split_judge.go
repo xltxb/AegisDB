@@ -22,7 +22,7 @@ import (
 // comment. Only the judged text changes; what is executed and audited is still
 // the caller's original.
 //
-// Other engines are left alone ON PURPOSE. On PostgreSQL / SQLite `--` is always a
+// Other engines are left alone ON PURPOSE. On PostgreSQL `--` is always a
 // comment, and treating `--'` as code there would let that quote open a literal
 // that swallows the next separator — merging a stacked statement into this one,
 // the one direction the splitter must never err in (see SplitStatements).

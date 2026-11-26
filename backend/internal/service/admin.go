@@ -80,8 +80,8 @@ func (s *Services) CreateConnection(req dto.ConnectionCreateReq) (*model.Connect
 // createHostPort 把新建表单的 host(可带 :port)与单独的 port 合成一份。两处都给且不一致时
 // 拒绝 —— 猜哪个是对的,猜错了就是连到另一台库上。
 //
-// 没给 port(或给的是 0,即"没填")时完全照旧走 splitHostPort(SQLite 的 "localhost:0"
-// 之类存量写法不受影响)。
+// 没给 port(或给的是 0,即"没填")时完全照旧走 splitHostPort("localhost:0" 之类存量写法
+// 不受影响)。
 // checkConnHost 校验连接地址的格式(2026-11 审计 V-07):连接串是拼出来的,地址里混进 / ? # 就能带上
 // 驱动选项。空地址不在这里管,原有的必填校验会说清楚。
 func checkConnHost(engine, host string) error {
@@ -454,8 +454,6 @@ func simulatedObjects(engine string) dto.DbObjectsResp {
 		out.Triggers = []string{}
 	case strings.Contains(e, "postgre"), strings.Contains(e, "dws"), strings.Contains(e, "gauss"):
 		out.Triggers = []string{}
-	case strings.Contains(e, "sqlite"):
-		out = dto.DbObjectsResp{Functions: []string{}, Procedures: []string{}, Packages: []string{}, Triggers: []string{"trg_orders_audit"}}
 	}
 	return out
 }

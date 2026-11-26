@@ -36,13 +36,11 @@ func (s *Services) SchemaDiffConnections(u *model.User) ([]dto.SchemaDiffConn, e
 }
 
 // defaultDiffDB 是一个实例默认比的库:配置的默认库;Oracle 的"数据库"字段是服务名,默认比登录账号
-// 自己的 schema;SQLite 只有 main。
+// 自己的 schema。
 func defaultDiffDB(c *model.Connection) string {
 	switch schemadiff.FamilyName(c.Engine) {
 	case "oracle":
 		return strings.ToUpper(c.Username)
-	case "sqlite":
-		return "main"
 	}
 	return c.Database
 }

@@ -29,7 +29,7 @@ func buildSeededStore(t *testing.T, dsn string) error {
 	c.Database.Driver = "postgres"
 	c.Database.PostgresDSN = dsn
 	// 迁移后的一次性回填不把"全局严格模式关"折进分层 —— 夹具一直是按"没有显式关掉
-	// 严格模式"的安装来断言的(从前的 SQLite 走 AutoMigrate,根本不跑那一步)。
+	// 严格模式"的安装来断言的(从前的测试存储库走 AutoMigrate,根本不跑那一步)。
 	c.Gateway.StrictMode = true
 	db, err := OpenDB(c)
 	if err != nil {

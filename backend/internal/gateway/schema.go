@@ -13,7 +13,7 @@ import (
 
 // SchemaGroup is one database and its contents, introspected from a live target.
 // Engines with a schema layer (PostgreSQL/GaussDB) populate Schemas; flat engines
-// (MySQL/SQLite/Oracle-by-owner) populate Tables directly.
+// (MySQL/Oracle-by-owner) populate Tables directly.
 type SchemaGroup struct {
 	Database string
 	Schemas  []SchemaEntry // database → schema → tables (PostgreSQL)
@@ -33,8 +33,7 @@ const maxSchemaRows = 5000
 // RealSchema introspects the live target's databases/schemas and their tables.
 // Engine-specific: MySQL/TiDB list every user schema via information_schema;
 // PostgreSQL/GaussDB(DWS) list the schemas within the connected database; Oracle
-// groups by owner via all_tables; SQLite reads sqlite_master (a single database
-// named after the file). Requires real credentials (see RealExecSupported).
+// groups by owner via all_tables. Requires real credentials (see RealExecSupported).
 func realSchemaOnce(conn *model.Connection) ([]SchemaGroup, error) {
 	// PostgreSQL/GaussDB is scoped to a single database and information_schema is
 	// per-database, so it can't be introspected in one pass like MySQL. Without a
@@ -48,7 +47,7 @@ func realSchemaOnce(conn *model.Connection) ([]SchemaGroup, error) {
 		return pgListTables(conn)
 	}
 
-	query, singleDB := schemaIntrospectQuery(conn)
+	query := schemaIntrospectQuery(conn)
 	if query == "" {
 		return nil, apimsg.Errorf("引擎 %q 暂不支持库表加载", conn.Engine)
 	}
@@ -80,12 +79,7 @@ func realSchemaOnce(conn *model.Connection) ([]SchemaGroup, error) {
 	n := 0
 	for rows.Next() {
 		var dbName, tbl string
-		if singleDB {
-			if err := rows.Scan(&tbl); err != nil {
-				return nil, err
-			}
-			dbName = singleDBName(conn)
-		} else if err := rows.Scan(&dbName, &tbl); err != nil {
+		if err := rows.Scan(&dbName, &tbl); err != nil {
 			return nil, err
 		}
 		if _, seen := byDB[dbName]; !seen {
@@ -221,43 +215,25 @@ func pgListTables(conn *model.Connection) ([]SchemaGroup, error) {
 	return []SchemaGroup{{Database: conn.Database, Schemas: schemas}}, nil
 }
 
-// schemaIntrospectQuery returns the engine-appropriate introspection SQL and
-// whether it yields a single-column (table-only) result set.
-func schemaIntrospectQuery(conn *model.Connection) (query string, singleDB bool) {
+// schemaIntrospectQuery returns the engine-appropriate introspection SQL; every
+// query yields (database-or-owner, table) rows.
+func schemaIntrospectQuery(conn *model.Connection) string {
 	e := strings.ToLower(conn.Engine)
 	switch {
-	case strings.Contains(e, "sqlite"):
-		return `SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`, true
 	case strings.Contains(e, "tidb") || strings.Contains(e, "mysql") || strings.Contains(e, "mariadb"):
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
 			`WHERE table_type IN ('BASE TABLE','VIEW') ` +
 			`AND LOWER(table_schema) NOT IN ` + mysqlSystemSchemas + ` ` +
-			`ORDER BY table_schema, table_name`, false
+			`ORDER BY table_schema, table_name`
 	case strings.Contains(e, "postgre") || strings.Contains(e, "dws") || strings.Contains(e, "gauss"):
 		return `SELECT table_schema, table_name FROM information_schema.tables ` +
 			`WHERE table_type IN ('BASE TABLE','VIEW') ` +
 			`AND table_schema NOT IN ('pg_catalog','information_schema') ` +
-			`ORDER BY table_schema, table_name`, false
+			`ORDER BY table_schema, table_name`
 	case strings.Contains(e, "oracle"):
 		return `SELECT owner, table_name FROM all_tables ` +
 			`WHERE owner NOT IN ('SYS','SYSTEM','OUTLN','XDB','MDSYS','CTXSYS','DBSNMP','APPQOSSYS','ORDSYS','WMSYS','LBACSYS','DVSYS','GSMADMIN_INTERNAL') ` +
-			`ORDER BY owner, table_name`, false
+			`ORDER BY owner, table_name`
 	}
-	return "", false
-}
-
-// singleDBName is the display name for engines with a single database (SQLite):
-// the file's base name, else the connection name, else "main".
-func singleDBName(conn *model.Connection) string {
-	if conn.Database != "" {
-		base := conn.Database
-		if i := strings.LastIndexAny(base, `/\`); i >= 0 {
-			base = base[i+1:]
-		}
-		return base
-	}
-	if conn.Name != "" {
-		return conn.Name
-	}
-	return "main"
+	return ""
 }

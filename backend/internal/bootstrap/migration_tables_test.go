@@ -14,7 +14,7 @@ var (
 	alterTableRe  = regexp.MustCompile(`(?i)ALTER TABLE\s+` + "`?" + `(\w+)`)
 )
 
-// Migrations run only against MySQL, so the sqlite-backed suite never executes
+// Migrations run only against MySQL, so the PostgreSQL-backed suite never executes
 // them — a typo'd table name ships silently and dies on the operator's box
 // ("Table 'aegisdb.tbl_audit' doesn't exist", migration 0018: the audit
 // table is tbl_audit_log). Cheap static guard: every ALTER TABLE target across

@@ -8,7 +8,7 @@ package gateway
 //     不能再走"每格一个字符串"那条路的原因(见 Cell)。
 //   - MySQL 默认把反斜杠当转义符:'C:\new' 读回来是 C:<换行>ew,所以反斜杠要写成 \\。
 //     PostgreSQL(standard_conforming_strings 默认开)恰好相反,反斜杠是普通字符;含反斜杠
-//     时改用 E'' 形式,两种设置下都读回原值。Oracle 与 SQLite 只认 '' 一种转义。
+//     时改用 E'' 形式,两种设置下都读回原值。Oracle 只认 '' 一种转义。
 //   - 数字不加引号;时间在 Oracle 上写 TIMESTAMP '…'(按 NLS 格式隐式转换的字符串在
 //     另一台库上可能读不回来);二进制写十六进制。
 //

@@ -253,10 +253,7 @@ func (s *Services) prepareBizQuery(u *model.User, req dto.BizQueryReq, forExport
 	if busy != nil {
 		return nil, &BizQueryDenial{Ref: busy, busy: true}
 	}
-	// SQLite 只有一个库(main),它的"数据库"字段是文件路径 —— 换成库名就打开了一个空文件。
-	if !strings.Contains(strings.ToLower(conn.Engine), "sqlite") {
-		applyTargetDatabase(conn, db)
-	}
+	applyTargetDatabase(conn, db)
 	return &bizPrep{
 		conn: conn, grant: g, query: query, run: run,
 		maxRows: maxRows, timeoutSec: timeoutSec, operator: operator, release: release,

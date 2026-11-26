@@ -30,6 +30,10 @@ func (s *Services) ExecAsync(u *model.User, connID int64, sql, reason, mfaCode, 
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// 网关已不能驱动的引擎(不再支持的引擎留下的存量连接):明说不支持,不进判定、不落模拟结果。
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil {
+		return nil, asInputError(err)
+	}
 	// Same stored-SQL bound as the export channel (MEDIUMTEXT job row).
 	if len(sql) > maxStoredSQLBytes {
 		return nil, storedSQLTooLong(len(sql))

@@ -84,7 +84,7 @@ func TestLiveTableQueryMySQL_SkipsSystemSchemasInAnyCase(t *testing.T) {
 // 对象树也是同一个口径:表清单。
 func TestSchemaIntrospectMySQL_SkipsSystemSchemasInAnyCase(t *testing.T) {
 	for _, engine := range []string{"TiDB 7.5", "MySQL 8.0", "MariaDB 11"} {
-		query, _ := schemaIntrospectQuery(&model.Connection{Engine: engine})
+		query := schemaIntrospectQuery(&model.Connection{Engine: engine})
 		assertOnlyUserSchema(t, query)
 	}
 }

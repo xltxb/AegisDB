@@ -107,7 +107,7 @@ func TestPlanOnlySQL_RewritesExecutingExplainPerEngine(t *testing.T) {
 			t.Errorf("%s %q: 改写后必须只出计划,实际 %q", c.engine, c.in, got)
 		}
 	}
-	// 不该动的:只出计划的 EXPLAIN、看表结构、收集统计信息、普通语句、Oracle / SQLite 的计划语句,
+	// 不该动的:只出计划的 EXPLAIN、看表结构、收集统计信息、普通语句、Oracle 的计划语句,
 	// 以及解释纯只读查询的 EXPLAIN ANALYZE
 	for _, c := range []struct{ engine, in string }{
 		{"MySQL 8.0", "EXPLAIN UPDATE t SET v = 1"},
@@ -116,7 +116,6 @@ func TestPlanOnlySQL_RewritesExecutingExplainPerEngine(t *testing.T) {
 		{"PostgreSQL 16", "EXPLAIN (FORMAT JSON) SELECT 1"},
 		{"PostgreSQL 16", "SELECT 1"},
 		{"Oracle 23ai", "EXPLAIN PLAN FOR DELETE FROM t"},
-		{"SQLite", "EXPLAIN QUERY PLAN DELETE FROM t"},
 		// 解释的是纯只读查询:保留 ANALYZE,让它真跑出实际执行数据(2026-10 用户要求)
 		{"MySQL 8.0", "EXPLAIN ANALYZE SELECT * FROM t"},
 		{"TiDB", "explain analyze select /*+ USE_INDEX(t, idx_a) */ id from t where a = 1 limit 100"},

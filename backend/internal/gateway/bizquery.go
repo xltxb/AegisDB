@@ -207,7 +207,7 @@ var (
 	bizFetchClauseRe = regexp.MustCompile(`(?is)^FETCH\s+(?:FIRST|NEXT)\s+(\d+\s+)?ROWS?\s+(?:ONLY|WITH\s+TIES)\s*$`)
 )
 
-// ApplyRowLimit 让查询的最外层行数不超过 n(MySQL / TiDB / PostgreSQL 系 / SQLite)。
+// ApplyRowLimit 让查询的最外层行数不超过 n(MySQL / TiDB / PostgreSQL 系)。
 // 返回改写后的语句;第二个返回值非 nil 时表示不能执行、以及原因。
 //
 //   - 最外层没有限制:末尾补 LIMIT n(先换一行,免得落进末尾那行 -- 注释里)。
@@ -222,7 +222,7 @@ func ApplyRowLimit(engine, query string, n int) (string, *model.RuleRef) {
 		return query, nil
 	}
 	fam := engineFamily(engine)
-	if fam != familyMySQL && fam != familyPostgres && fam != familySQLite {
+	if fam != familyMySQL && fam != familyPostgres {
 		return query, nil
 	}
 	st := strings.TrimSpace(query)
@@ -275,7 +275,7 @@ func CrossDatabaseChecked(engine string) bool {
 // 表多了还会被 maxSchemaRows 截断 —— 漏掉的库就不算"别的库",跨库检查对它失效。这里查的是
 // 库本身(MySQL 系 SCHEMATA、Oracle 的 ALL_USERS),账号看不到的库它本来也查不了。
 //
-// PostgreSQL 系与 SQLite 不做跨库检查,返回 nil。断连重试的入口 RealDatabaseNames 在 brokenconn.go。
+// PostgreSQL 系不做跨库检查,返回 nil。断连重试的入口 RealDatabaseNames 在 brokenconn.go。
 func realDatabaseNamesOnce(conn *model.Connection) ([]string, error) {
 	var q string
 	switch engineFamily(conn.Engine) {
@@ -466,11 +466,6 @@ func realBizQuery(ctx context.Context, db *sql.DB, conn *model.Connection, query
 				}()
 			}
 		}
-	case familySQLite:
-		if _, err := sc.ExecContext(ctx, "PRAGMA query_only = ON"); err != nil {
-			return out, err
-		}
-		defer func() { _, _ = sc.ExecContext(context.Background(), "PRAGMA query_only = OFF") }()
 	}
 
 	// Oracle 的 EXPLAIN PLAN:不走只读事务,由网关代为写计划、读计划、回滚。

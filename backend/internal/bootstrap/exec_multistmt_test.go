@@ -32,8 +32,8 @@ func TestExec_StackedStatementTailIsJudged(t *testing.T) {
 // ER3: a statement may begin with a stray separator (`;UPDATE …`). ParseVerb
 // finds no leading keyword there, and an unrecognised verb used to map to the
 // `select` capability — so a write landed in the read dimension and ran under a
-// role that is only allowed to read. PostgreSQL and SQLite both accept the
-// leading separator, so this executed for real.
+// role that is only allowed to read. PostgreSQL accepts the leading
+// separator, so this executed for real.
 func TestExec_LeadingSeparatorDoesNotDowngradeCapability(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")

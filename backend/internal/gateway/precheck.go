@@ -16,7 +16,7 @@ package gateway
 //	SELECT / INSERT / UPDATE / DELETE   EXPLAIN,由目标库定夺
 //	其它(DDL、存储过程、会话设置 …)      不检查,并如实说明
 //
-// 动词限定在这四个上是有意的:它们在 MySQL 5.6+ / PostgreSQL / SQLite 上都支持
+// 动词限定在这四个上是有意的:它们在 MySQL 5.6+ / PostgreSQL 上都支持
 // EXPLAIN。范围再宽一点,就会遇到"这个引擎的 EXPLAIN 不支持这种语句"的报错,而那句
 // 报错和"你的语句语法错了"在文本上分不开 —— 把前者报成后者,就是拿一个假的语法错误
 // 去拦一条正确的变更。
@@ -57,7 +57,7 @@ var explainableVerbs = map[string]bool{
 // 调用方拿它来区分"检查通过"和"没检查" —— 这两件事在结果里必须分得开。
 func SyntaxCheckable(engine, sql string) bool {
 	switch engineFamily(engine) {
-	case familyMySQL, familyPostgres, familySQLite:
+	case familyMySQL, familyPostgres:
 	default:
 		return false // Oracle 的 EXPLAIN PLAN 要写 PLAN_TABLE;Mongo 不是 SQL
 	}
@@ -188,9 +188,6 @@ func liveTableQuery(conn *model.Connection) string {
 	case familyOracle:
 		return `SELECT owner, table_name FROM all_tables
 		        UNION ALL SELECT owner, view_name FROM all_views`
-	case familySQLite:
-		return `SELECT '', name FROM sqlite_master WHERE type IN ('table','view')
-		        AND name NOT LIKE 'sqlite_%'`
 	}
 	return ""
 }

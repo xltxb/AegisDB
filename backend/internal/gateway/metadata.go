@@ -7,8 +7,7 @@ package gateway
 // 定时任务这么跑,等于周期性地对生产库发起一轮扫描。
 //
 // 所以这里的原则是:**一台实例尽可能少的查询**。MySQL / Oracle 的数据字典本来就是
-// 全库一张视图,两条查询(表 + 列)就能覆盖整台实例;SQLite 用表值函数把 pragma 展开
-// 成一次连接查询。PostgreSQL 家族是唯一的例外,理由见 realMetadataPG。
+// 全库一张视图,两条查询(表 + 列)就能覆盖整台实例。PostgreSQL 家族是唯一的例外,理由见 realMetadataPG。
 //
 // 取回来的东西是**只读副本**。判定、执行、导出一律仍然走实时的目标库 —— 一份可能
 // 过期的结构如果被拿去做判断,它就从"快"变成了"错"。
@@ -89,8 +88,6 @@ func realMetadataOnce(conn *model.Connection) ([]MetaTableRow, []MetaColumnRow, 
 		return realMetadataPG(ctx, db, conn)
 	case familyOracle:
 		return realMetadataOracle(ctx, db, conn)
-	case familySQLite:
-		return realMetadataSQLite(ctx, db, conn)
 	}
 	return nil, nil, apimsg.Errorf("引擎 %q 暂不支持元数据探查", conn.Engine)
 }
@@ -504,72 +501,6 @@ func realMetadataOracle(ctx context.Context, db *sql.DB, conn *model.Connection)
 		if err != nil {
 			return nil, nil, err
 		}
-	}
-	if truncated {
-		return tables, cols, ErrMetaTruncated
-	}
-	return tables, cols, nil
-}
-
-// ---------------------------------------------------------------- SQLite
-
-// realMetadataSQLite 用表值函数 pragma_table_info 把 pragma 展开成一次连接查询 ——
-// 逐表发 `PRAGMA table_info(x)` 也能work,但那又回到了"一张表一次往返"。
-func realMetadataSQLite(ctx context.Context, db *sql.DB, conn *model.Connection) ([]MetaTableRow, []MetaColumnRow, error) {
-	// SQLite 一个文件就是一个库,名字取文件名 —— 复用 RealSchema 的那一份口径,
-	// 而不是在这里再写一遍:两份取名规则会让同一台实例在树里和缓存里叫两个名字。
-	dbName := singleDBName(conn)
-
-	trows, err := db.QueryContext(ctx,
-		`SELECT name, type FROM sqlite_master
-		 WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'
-		 ORDER BY name`)
-	if err != nil {
-		return nil, nil, err
-	}
-	tables := []MetaTableRow{}
-	for trows.Next() {
-		var name, typ string
-		if err := trows.Scan(&name, &typ); err != nil {
-			trows.Close()
-			return nil, nil, err
-		}
-		tables = append(tables, MetaTableRow{Database: dbName, Table: name, Kind: typ})
-	}
-	if err := trows.Err(); err != nil {
-		trows.Close()
-		return nil, nil, err
-	}
-	trows.Close()
-
-	crows, err := db.QueryContext(ctx,
-		`SELECT m.name, p.cid, p.name, p.type, p."notnull", IFNULL(p.dflt_value,''), p.pk
-		 FROM sqlite_master m JOIN pragma_table_info(m.name) p
-		 WHERE m.type IN ('table','view') AND m.name NOT LIKE 'sqlite_%'
-		 ORDER BY m.name, p.cid`)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer crows.Close()
-	cols := []MetaColumnRow{}
-	truncated := false
-	for crows.Next() {
-		if len(cols) >= maxMetaRows {
-			truncated = true
-			break
-		}
-		var table, name, typ, def string
-		var cid, notNull, pk int
-		if err := crows.Scan(&table, &cid, &name, &typ, &notNull, &def, &pk); err != nil {
-			return nil, nil, err
-		}
-		cols = append(cols, MetaColumnRow{
-			Database: dbName, Table: table, Ordinal: cid + 1, Name: name, DataType: typ,
-			Nullable: notNull == 0, Default: def, IsPK: pk > 0,
-		})
-	}
-	if err := crows.Err(); err != nil {
-		return nil, nil, err
 	}
 	if truncated {
 		return tables, cols, ErrMetaTruncated

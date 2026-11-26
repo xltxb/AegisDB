@@ -65,7 +65,7 @@ func (s *Services) isProductionTier(conn *model.Connection) bool {
 
 // oscEngine:在线变更只用于 MySQL 与 PolarDB(MySQL 版)(2026-10 用户定)。MySQL 系里的 TiDB、MariaDB
 // 协议相同,但 binlog / 在线 DDL 的语义不同,照原路径 —— 送进来只会被前置检查拦下,DDL 反而执行不了。
-// PolarDB(PostgreSQL 版)在引擎族里已归 PostgreSQL;其它引擎(DWS / Oracle / SQLite / MongoDB)
+// PolarDB(PostgreSQL 版)在引擎族里已归 PostgreSQL;其它引擎(DWS / Oracle / MongoDB)
 // 本来就不在此列。
 func oscEngine(engine string) bool {
 	e := strings.ToLower(engine)

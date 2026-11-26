@@ -136,9 +136,6 @@ func IsOracleEngine(engine string) bool { return engineFamily(engine) == familyO
 // schema-qualified name never leaves the connected database.
 func IsPostgresEngine(engine string) bool { return engineFamily(engine) == familyPostgres }
 
-// IsSQLiteEngine:SQLite 的 Database 字段是数据库文件路径,不是可切换的库名。
-func IsSQLiteEngine(engine string) bool { return engineFamily(engine) == familySQLite }
-
 // TargetDatabaseSwitchable reports whether a per-request "target database" may
 // replace Connection.Database.
 //

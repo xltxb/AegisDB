@@ -22,7 +22,6 @@ func TestEngineFamily(t *testing.T) {
 		"GaussDB (DWS)": familyPostgres, "dws": familyPostgres, "gaussdb": familyPostgres,
 		// others
 		"Oracle": familyOracle, "oracle 19c": familyOracle,
-		"SQLite": familySQLite, "sqlite3": familySQLite,
 		// MongoDB has its own judgement dialect, so it resolves to a family — but
 		// no driver, which TestEngineDriver_MongoIsJudgedButNotExecutable covers.
 		"MongoDB": familyMongo, "mongo": familyMongo,

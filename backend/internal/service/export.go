@@ -214,6 +214,11 @@ func (s *Services) enqueueExport(u *model.User, connID int64, sql, name, databas
 	if !s.canAccessConn(u, conn) {
 		return nil, ErrForbidden
 	}
+	// 网关已不能驱动的引擎(不再支持的引擎留下的存量连接):提交时就明说不支持,不入队 ——
+	// 否则 worker 会走模拟分支,产出一份编出来的文件。
+	if err := gateway.UnsupportedEngineErr(conn.Engine); err != nil {
+		return nil, asInputError(err)
+	}
 	// SECURITY (gateway bypass): the export worker runs this SQL against the target
 	// DB via a query path that still EXECUTES mutations. Without this guard a
 	// terminal user (even a read-only role) could smuggle DELETE/UPDATE/DROP/… past
@@ -504,8 +509,8 @@ func (s *Services) produceExport(ctx context.Context, u *model.User, conn *model
 	// Execute the single NORMALISED statement, never the raw text. The raw form
 	// may end with a semicolon (finger habit from the terminal, which strips it
 	// client-side before submitting) or a trailing comment line, and some
-	// drivers refuse that outright — sqlite fails with "not an error (21)", the
-	// PostgreSQL extended protocol is similarly strict. Submission already
+	// drivers refuse that outright — the PostgreSQL extended protocol is strict
+	// about it. Submission already
 	// proved the split yields exactly one statement (exportSQLReadOnly).
 	if stmts := sqlutil.SplitStatements(sql); len(stmts) == 1 {
 		sql = stmts[0]
@@ -558,7 +563,12 @@ func (s *Services) produceExport(ctx context.Context, u *model.User, conn *model
 		// simulated demo data (no real target): synthesize a result set
 		cols := exportColumns(sql)
 		pw.header = cols
-		n := s.Executor.Run(context.Background(), conn, sql, s.execTimeout()).Rows
+		// 执行层拒绝了(引擎不支持、生产不返回模拟数据):任务失败,不编一份文件出来。
+		res := s.Executor.Run(context.Background(), conn, sql, s.execTimeout())
+		if res.Err != nil {
+			return fail(res.Err)
+		}
+		n := res.Rows
 		if n <= 0 {
 			n = 200
 		}

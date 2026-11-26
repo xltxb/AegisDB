@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/glebarez/go-sqlite" // sqlite (dev / tests)
 	mysqldrv "github.com/go-sql-driver/mysql"
 	"github.com/lib/pq"                // postgres / GaussDB(DWS) — named for NoticeHandler
 	goora "github.com/sijms/go-ora/v2" // oracle (pure Go, no instant client)
@@ -25,7 +24,7 @@ import (
 
 // dbNameRe restricts a target database/schema name to a safe identifier so it
 // can never smuggle extra DSN parameters (e.g. `db?multiStatements=true` to
-// bypass the single-statement approval gate). SQLite file paths are exempt.
+// bypass the single-statement approval gate).
 var dbNameRe = regexp.MustCompile(`^[A-Za-z0-9_$.-]*$`)
 
 // pqEscape quotes a value for a libpq key=value DSN: wrap in single quotes and
@@ -37,8 +36,8 @@ func pqEscape(v string) string {
 }
 
 // engineDriver maps a connection's engine to a database/sql driver + DSN, and
-// reports whether real execution is configured (credentials present, or a
-// sqlite file). Supported: MySQL, TiDB, PostgreSQL/GaussDB(DWS), Oracle, SQLite.
+// reports whether real execution is configured (credentials present).
+// Supported: MySQL, TiDB, PostgreSQL/GaussDB(DWS), Oracle.
 // The stored password is decrypted here (it is AES-encrypted at rest).
 // Engine families: the wire protocols this gateway can actually speak. The
 // Engine field on a connection is free text (chosen in the console, or imported
@@ -47,7 +46,6 @@ const (
 	familyMySQL    = "mysql"
 	familyPostgres = "postgres"
 	familyOracle   = "oracle"
-	familySQLite   = "sqlite"
 	// MongoDB is judged by its own dialect (see dialect.go). It has no driver
 	// here yet, so it resolves to a family without being executable — a
 	// connection is refused rather than silently simulated.
@@ -73,8 +71,6 @@ func engineFamily(engine string) string {
 	switch {
 	case e == "":
 		return ""
-	case strings.Contains(e, "sqlite"):
-		return familySQLite
 	case strings.Contains(e, "oracle"):
 		return familyOracle
 	case strings.Contains(e, "mongo"):
@@ -93,15 +89,27 @@ func engineFamily(engine string) string {
 	return ""
 }
 
-// IsSupportedEngine:网关能驱动的引擎(MySQL / PostgreSQL / Oracle / SQLite 四个家族)。
+// IsSupportedEngine:网关能驱动的引擎(MySQL / PostgreSQL / Oracle 三个家族)。
 // 新建连接按它把关(工单 02 第 10 条):认不出的引擎存进去不会报错,而是悄悄变成一台模拟
 // 连接 —— 管理员以为挂上了一台库,其实什么都没连上。MongoDB 不在其列:判定层读的是 SQL。
 func IsSupportedEngine(engine string) bool {
 	switch engineFamily(engine) {
-	case familyMySQL, familyPostgres, familyOracle, familySQLite:
+	case familyMySQL, familyPostgres, familyOracle:
 		return true
 	}
 	return false
+}
+
+// UnsupportedEngineErr:连接上存的引擎网关已不能驱动时(不再支持的引擎留下的存量连接,或校验
+// 加上之前存进来的标签)返回"不支持的数据库引擎";能驱动、或没填引擎时返回 nil。
+//
+// 这类连接不删不改,列表里照样看得到;但执行与测试连接必须明说"不支持" —— 不能因为它
+// 没有凭据就退化成模拟结果,让人以为语句真的跑过了。
+func UnsupportedEngineErr(engine string) error {
+	if strings.TrimSpace(engine) == "" || IsSupportedEngine(engine) {
+		return nil
+	}
+	return apimsg.Errorf("不支持的数据库引擎:%s", engine)
 }
 
 // IsAurora:Aurora MySQL —— 只读副本走存储层复制,从库延迟的读法不同(见 osc.AuroraReplicaLagOf)。
@@ -115,14 +123,12 @@ func engineDriver(conn *model.Connection) (driver, dsn string, ok bool) {
 	if err != nil {
 		return "", "", false
 	}
-	// Reject a malformed database name for the networked engines (not SQLite, and
-	// not Oracle whose field may carry a "sid/…" prefix — validated in its branch).
-	if !strings.Contains(e, "sqlite") && !strings.Contains(e, "oracle") && !dbNameRe.MatchString(conn.Database) {
+	// Reject a malformed database name (not for Oracle, whose field may carry a
+	// "sid/…" prefix — validated in its branch).
+	if !strings.Contains(e, "oracle") && !dbNameRe.MatchString(conn.Database) {
 		return "", "", false
 	}
 	switch engineFamily(e) {
-	case familySQLite:
-		return "sqlite", conn.Database, conn.Database != ""
 	case familyMySQL:
 		cfg := mysqldrv.NewConfig()
 		cfg.User = conn.Username
@@ -187,11 +193,10 @@ var validHostRe = regexp.MustCompile(`^[A-Za-z0-9._\-:\[\]]+$`)
 // docker-compose / k8s 的服务名常带下划线。
 func ValidHost(host string) bool { return validHostRe.MatchString(host) }
 
-// HostChecked 说明这个引擎的 Host 字段要不要做地址校验。SQLite 不连网络(字段不用),
-// Mongo 的 Host 可以是逗号分隔的副本集地址。
+// HostChecked 说明这个引擎的 Host 字段要不要做地址校验。Mongo 的 Host 可以是逗号分隔的
+// 副本集地址。
 func HostChecked(engine string) bool {
-	f := engineFamily(engine)
-	return f != familySQLite && f != familyMongo
+	return engineFamily(engine) != familyMongo
 }
 
 // oracleTarget parses the Oracle "数据库名" field into go-ora connection params.
@@ -222,30 +227,23 @@ func RealExecSupported(conn *model.Connection) bool {
 	return ok
 }
 
-// dbPoolCache holds one *sql.DB per (driver, dsn) for the networked engines, so
-// repeated executions reuse an established pool instead of paying a fresh
-// connect + ping every time (L3). SQLite is intentionally NOT cached — opening a
-// file is cheap, and a cached handle would keep the file open (breaking temp-dir
-// cleanup on Windows and delaying releases).
+// dbPoolCache holds one *sql.DB per (driver, dsn), so repeated executions reuse
+// an established pool instead of paying a fresh connect + ping every time (L3).
 var (
 	dbPoolMu    sync.Mutex
 	dbPoolCache = map[string]*sql.DB{}
 )
 
 // openConn returns a ready *sql.DB plus a release func the caller must defer.
-// For pooled (networked) connections release is a no-op (the pool lives on); for
-// SQLite it closes the one-off handle.
+// The pool is cached and lives on, so release is a no-op today; callers keep
+// deferring it so a non-pooled handle can be introduced without touching them.
 func openConn(conn *model.Connection) (*sql.DB, func(), error) {
+	if err := UnsupportedEngineErr(conn.Engine); err != nil {
+		return nil, nil, err
+	}
 	driver, dsn, ok := engineDriver(conn)
 	if !ok {
 		return nil, nil, apimsg.Errorf("引擎 %q 未配置真实执行(需填写连接凭据)", conn.Engine)
-	}
-	if driver == "sqlite" {
-		db, err := dialPool(driver, dsn)
-		if err != nil {
-			return nil, nil, err
-		}
-		return db, func() { db.Close() }, nil
 	}
 
 	key := driver + "\x00" + dsn
@@ -279,8 +277,8 @@ func openConn(conn *model.Connection) (*sql.DB, func(), error) {
 // 一次刚被别人 ping 过的池,可以接受。
 func poolCached(conn *model.Connection) bool {
 	driver, dsn, ok := engineDriver(conn)
-	if !ok || driver == "sqlite" {
-		return false // SQLite 不进缓存,每次都是新开
+	if !ok {
+		return false
 	}
 	dbPoolMu.Lock()
 	defer dbPoolMu.Unlock()
@@ -650,7 +648,7 @@ func runStatement(ctx context.Context, runner sqlRunner, conn *model.Connection,
 	//               就如实说"执行成功"
 	//
 	// 第三条是这次加的。每个引擎都有自己的方言关键字(DWS 的 EXPLAIN PERFORMANCE、
-	// SQLite 的 PRAGMA、MySQL 里能返回结果集的 CALL),动词表永远补不完 —— 而"这条
+	// MySQL 里能返回结果集的 CALL),动词表永远补不完 —— 而"这条
 	// 语句返回不返回行"根本不必猜:执行一次就知道了。此前认不出来一律按写处理,
 	// 语句照样在服务端跑了,结果集却被丢掉,用户看到的就是"命令没有反应"。
 	//
@@ -933,7 +931,7 @@ func realQueryEach(parent context.Context, conn *model.Connection, query string,
 		cells := make([]Cell, len(cols))
 		for rows.Next() {
 			// 每一行都看一眼取消信号:导出被人终止时,流式读取在下一行就停,不必等驱动 ——
-			// 有的驱动(glebarez/go-sqlite)只在准备语句时响应 context,逐行读取时不理会。
+			// 有的驱动只在准备语句时响应 context,逐行读取时不理会。
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -985,6 +983,9 @@ func RealRunAsync(conn *model.Connection, query string, timeout time.Duration, o
 // RealRunAsyncGuarded 是 RealRunAsync,readOnly 时在数据库层面只读执行(只读用户提交的后台任务,
 // 见 readonly_guard.go)。
 func RealRunAsyncGuarded(conn *model.Connection, query string, timeout time.Duration, onNotice func(string), readOnly bool) (int64, error) {
+	if err := UnsupportedEngineErr(conn.Engine); err != nil {
+		return 0, err
+	}
 	drv, dsn, ok := engineDriver(conn)
 	if !ok {
 		return 0, apimsg.Errorf("引擎 %q 未配置真实执行(需填写连接凭据)", conn.Engine)
@@ -993,8 +994,8 @@ func RealRunAsyncGuarded(conn *model.Connection, query string, timeout time.Dura
 	if err != nil {
 		return 0, err
 	}
-	// 这是专为这次任务新拨的池,不在 openConn 的缓存里:跑完必须关掉。从前只有 sqlite 关了,
-	// 网络引擎每跑一个后台任务就留下一个没人管的池(连接等空闲回收才断,池对象永不释放)。
+	// 这是专为这次任务新拨的池,不在 openConn 的缓存里:跑完必须关掉。从前没有关,
+	// 每跑一个后台任务就留下一个没人管的池(连接等空闲回收才断,池对象永不释放)。
 	// 执行期间不因存活时间被换掉;跑完当场断开。
 	defer db.Close()
 	db.SetConnMaxLifetime(0)

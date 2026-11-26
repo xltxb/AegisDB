@@ -112,7 +112,7 @@ func TestKillStatement(t *testing.T) {
 		t.Errorf("TiDB: %q", got)
 	}
 	if !killable(&model.Connection{Engine: "PolarDB MySQL"}) || killable(&model.Connection{Engine: "PostgreSQL 15"}) ||
-		killable(&model.Connection{Engine: "Oracle 19c"}) || killable(&model.Connection{Engine: "SQLite"}) {
+		killable(&model.Connection{Engine: "Oracle 19c"}) {
 		t.Error("只有 MySQL 协议系需要网关自己发 KILL")
 	}
 }

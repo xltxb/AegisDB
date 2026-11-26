@@ -22,7 +22,7 @@ func (r *Repo) GetProject(id int64) (*model.Project, error) {
 	return &p, nil
 }
 
-// GetProjectByName 按名字查项目,**不分大小写**:MySQL 的默认排序规则本来就不分,SQLite 分 ——
+// GetProjectByName 按名字查项目,**不分大小写**:MySQL 的默认排序规则本来就不分,PostgreSQL 分 ——
 // 两边行为要一致,而"Alpha"与"alpha"在人眼里是同一个项目(2026-10 黑盒测试,工单 02 第 14 条)。
 func (r *Repo) GetProjectByName(name string) (*model.Project, error) {
 	var p model.Project

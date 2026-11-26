@@ -114,7 +114,7 @@ func TestExecWindow_CannotWriteAnotherDatabaseOnRealMySQL(t *testing.T) {
 	eq(t, n, 1, "A 库 t1 没有被灌进 B 库的数据")
 }
 
-// 同一组越库写法在 SQLite 夹具上也走一遍预检(不需要真库):窗口内,预检与执行同口径。
+// 同一组越库写法在测试夹具上也走一遍预检(不需要真库):窗口内,预检与执行同口径。
 func TestExecWindow_RiskCheckRefusesCrossDatabaseForms(t *testing.T) {
 	app := newTestApp(t)
 	token := app.login("linwei@aegisdb.io", "aegisdb123")

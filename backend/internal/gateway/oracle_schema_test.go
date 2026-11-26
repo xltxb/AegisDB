@@ -43,7 +43,7 @@ func TestOracleTargetSchema_AcceptsOnlyPlainIdentifiers(t *testing.T) {
 
 // 只对 Oracle 生效:别的引擎换库就是换 Database 字段,不该走这条路。
 func TestOracleTargetSchema_OnlyAppliesToOracle(t *testing.T) {
-	for _, engine := range []string{"mysql", "postgresql", "sqlite", "tidb", "dws"} {
+	for _, engine := range []string{"mysql", "postgresql", "tidb", "dws"} {
 		c := &model.Connection{Engine: engine, TargetSchema: "SCOTT"}
 		if got := oracleTargetSchema(c); got != "" {
 			t.Errorf("%s 不该走 Oracle 的 schema 切换,实际 %q", engine, got)

@@ -13,7 +13,7 @@ import (
 	"aegisdb/pkg/totp"
 )
 
-// V-09 / V-11:重音变体不是这个账号。MySQL ai_ci 排序规则下 LOWER(email)=? 会匹配变体,SQLite 不会,
+// V-09 / V-11:重音变体不是这个账号。MySQL ai_ci 排序规则下 LOWER(email)=? 会匹配变体,测试存储库(PostgreSQL)不会,
 // 所以这里直接测比较函数覆盖的那一层:用真实流程走一遍精确邮箱,确认原有登录不受影响。
 func TestV11_LoginExactEmailUnchanged(t *testing.T) {
 	app := newTestApp(t)

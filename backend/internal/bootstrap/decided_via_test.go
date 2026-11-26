@@ -169,7 +169,7 @@ func TestDecidedVia(t *testing.T) {
 		eq(t, app.decisionNotif(token, ap.ApNo).Body, name+" 驳回了你的命令：DROP TABLE orders;", "通知")
 	})
 
-	// 列宽 512;通知正文那一列也是 512,而它前面还有姓名与命令节选 —— 测试库是 SQLite 不查列宽,
+	// 列宽 512;通知正文那一列也是 512,而它前面还有姓名与命令节选 —— 列宽不对,
 	// 生产超一个字就是 1406:要么决定失败,要么发起人收不到通知。
 	t.Run("over-long reason is clipped and nothing overflows", func(t *testing.T) {
 		app := newTestApp(t)

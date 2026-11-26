@@ -727,7 +727,7 @@ func (s *Services) CheckSQLForClient(u *model.User, cl *model.APIClient, req dto
 //
 // 5961d26 收紧成只认四个方言码之后,外部 CI 一直在传的 all / generic、引擎名(gaussdb、polardb、
 // postgres……)都变成 40001(2026-10-26 回归排查)。这些值照旧认:all / generic 与没有专属规则的
-// 引擎(PostgreSQL、SQLite)按 generic 跑通用规则,带方言词的引擎名按 review.DialectFor 映射。
+// 引擎(PostgreSQL)按 generic 跑通用规则,带方言词的引擎名按 review.DialectFor 映射。
 // 仍拒绝的只有认不出来的拼写错误 —— 那正是收紧要防的"误导人的 passed:true"。
 func validOpenDialect(d string) (string, error) {
 	d = strings.ToLower(strings.TrimSpace(d))
@@ -740,7 +740,7 @@ func validOpenDialect(d string) (string, error) {
 		}
 	}
 	switch d {
-	case review.DialectAll, review.DialectGeneric, "postgres", "postgresql", "pg", "sqlite":
+	case review.DialectAll, review.DialectGeneric, "postgres", "postgresql", "pg":
 		return review.DialectGeneric, nil
 	case "aurora":
 		// Aurora 是 MySQL 兼容引擎,引擎名里没有方言词,DialectFor 认不出(2026-10-26 回归 19)。

@@ -3,7 +3,7 @@ package bootstrap
 // 审批单执行有自己的时限(gateway.approvalExecTimeout,默认 1 小时),与终端的执行超时分开。
 //
 // 终端是交互式的,默认 30 秒;审批单里常是大表上的 DDL,用终端那 30 秒会跑到一半被取消。
-// 用真实 MySQL:SQLite 的聚合查询取消不掉,拿它测超时测不出东西。
+// 用真实 MySQL:超时要靠目标库真的能取消一条慢查询,替身测不出东西。
 
 import (
 	"database/sql"

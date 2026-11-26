@@ -273,7 +273,7 @@ type ConnectionCreateReq struct {
 	Policy   string `json:"policy"`
 	Username string `json:"username"` // real-execution credentials (optional)
 	Password string `json:"password"`
-	Database string `json:"database"` // default schema / sqlite file
+	Database string `json:"database"` // default schema
 	// Port 单独给端口(可选):host 里没带端口时合并进去;两处都给且不一致时拒绝。
 	// 从前这两个字段被静默忽略 —— 传了 port 照样落成 3306(工单 02 第 10 条)。
 	Port *int `json:"port,omitempty"`

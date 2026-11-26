@@ -9,7 +9,7 @@ import (
 
 // 审计关键字搜索的转义:_ 与 % 是字面量,不是通配符;转义字符 ! 本身也能搜。
 //
-// 这一组跑在 SQLite 上,验的是转义**语义**没有因为换转义字符而变。MySQL 上那个
+// 这一组跑在 PostgreSQL 存储库上,验的是转义**语义**没有因为换转义字符而变。MySQL 上那个
 // "ESCAPE '\' 是语法错误"的问题在这里测不出来 —— 由 repository 包的源码级守卫挡。
 func (a *testApp) auditTotal(token, q string) int64 {
 	a.t.Helper()

@@ -225,6 +225,10 @@ func (h *Handler) Exec(c *gin.Context) {
 		resp.FailErr(c, resp.CodeBadRequest, err)
 		return
 	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
+		return
+	}
 	if err != nil {
 		resp.Fail(c, resp.CodeBadRequest, "连接不存在")
 		return
@@ -264,6 +268,10 @@ func (h *Handler) ExecAsync(c *gin.Context) {
 	}
 	if err == service.ErrMFAInvalid {
 		resp.Fail(c, resp.CodeMFARequired, "MFA 验证码错误")
+		return
+	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
 		return
 	}
 	if err != nil {
@@ -751,6 +759,10 @@ func (h *Handler) ExportData(c *gin.Context) {
 	}
 	if err == service.ErrExportNotReadOnly {
 		resp.Fail(c, resp.CodeForbidden, "数据导出仅允许单条只读查询(SELECT/SHOW 等);修改类语句请走命令行审批流")
+		return
+	}
+	if ie, ok := service.AsInputError(err); ok { // 例如连接上的引擎已不再支持
+		resp.FailErr(c, resp.CodeBadRequest, ie)
 		return
 	}
 	if err != nil {

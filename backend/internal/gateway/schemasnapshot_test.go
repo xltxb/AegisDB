@@ -454,12 +454,6 @@ func TestDiffDatabaseNames(t *testing.T) {
 			}
 		}
 	}
-	t.Run("sqlite", func(t *testing.T) {
-		names, err := DiffDatabaseNames(&model.Connection{Engine: "SQLite"})
-		if err != nil || strings.Join(names, ",") != "main" {
-			t.Fatalf("%v %v", names, err)
-		}
-	})
 	t.Run("mysql", func(t *testing.T) {
 		v := os.Getenv("AEGISDB_TEST_MYSQL")
 		if v == "" {

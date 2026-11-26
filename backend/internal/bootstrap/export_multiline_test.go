@@ -9,7 +9,7 @@ import (
 // over from the terminal, which strips it client-side — used to submit fine and
 // then FAIL at execution: the worker handed the RAW text to the driver, and
 // some drivers refuse a statement with a trailing semicolon/comment tail
-// (the pg extended protocol is strict about this; sqlite used to answer "not an error (21)").
+// (the pg extended protocol is strict about this).
 // The worker must execute the normalised single statement.
 func TestExport_MultilineAndTrailingSemicolonExecute(t *testing.T) {
 	app := newTestApp(t)

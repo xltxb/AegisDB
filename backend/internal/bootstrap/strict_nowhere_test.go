@@ -40,7 +40,7 @@ func TestStrictNoWhere_IsPerTier(t *testing.T) {
 
 	// Seeded state: every tier gates a full-table write, DEV included — the same
 	// starting point a MySQL install gets from migration 0030 (2026-11-16 用户定以 MySQL 为准;
-	// 从前 SQLite 播种的 DEV 是关的,两种安装方式初始行为不一致).
+	// 从前另一种安装方式播种的 DEV 是关的,两种安装方式初始行为不一致).
 	if got := app.riskCheck(token, prod, "DELETE FROM orders"); !got.RequiresApproval {
 		t.Errorf("PROD must gate a no-WHERE DELETE, got action=%s", got.Action)
 	}

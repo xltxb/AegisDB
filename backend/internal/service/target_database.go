@@ -29,11 +29,6 @@ func applyTargetDatabase(conn *model.Connection, database string) {
 	if database = strings.TrimSpace(database); database == "" {
 		return
 	}
-	// SQLite:Database 是数据库文件路径,一个连接只有这一个库。请求带来的值若照搬过去,调用方
-	// 就能让网关打开服务器上任意路径的文件(2026-10 安全审计 H2)—— 只认管理员配置的路径。
-	if gateway.IsSQLiteEngine(conn.Engine) {
-		return
-	}
 	// Oracle: the caller's "database" is an owner (schema), and the field it would
 	// overwrite is the service name. Keep what the instance was configured with —
 	// 覆盖它会连到别的实例去。

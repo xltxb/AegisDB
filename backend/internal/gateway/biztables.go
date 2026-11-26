@@ -24,7 +24,7 @@ const maxBizTables = 5000
 //
 // Names come back as the query would write them from inside the database the
 // grant covers: bare on MySQL / Oracle (the session is switched to that database
-// / schema) and SQLite, schema-qualified on PostgreSQL unless in `public`.
+// / schema), schema-qualified on PostgreSQL unless in `public`.
 // truncated reports that the list stopped at maxBizTables.
 func RealBizTables(conn *model.Connection, database string) (names []string, truncated bool, err error) {
 	e := strings.ToLower(conn.Engine)
@@ -32,8 +32,6 @@ func RealBizTables(conn *model.Connection, database string) (names []string, tru
 	var q string
 	var args []any
 	switch {
-	case strings.Contains(e, "sqlite"):
-		q = `SELECT '' , name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' ORDER BY name`
 	case strings.Contains(e, "tidb"), strings.Contains(e, "mysql"), strings.Contains(e, "mariadb"), strings.Contains(e, "polardb"):
 		// information_schema is global: connect without a default database so a
 		// database the account cannot USE still fails as "no rows", not as a login error.

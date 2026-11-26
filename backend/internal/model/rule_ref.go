@@ -31,6 +31,7 @@ const (
 	RuleDictApprove   = "dictApprove"   // 高危命令字典判需审批
 	RuleStrictNoWhere = "strictNoWhere" // 严格模式:无 WHERE 的 DELETE / UPDATE
 	RuleWritesFile    = "writesFile"    // SELECT … INTO OUTFILE / DUMPFILE:在数据库服务器上写文件
+	// 已不再判定(SQLite 不再是目标库),保留给历史审计行显示 —— 删掉它,旧记录就显示成原始键。
 	RuleSQLiteFileOp  = "sqliteFileOp"  // SQLite 的 ATTACH / DETACH / VACUUM INTO:碰网关主机上的文件
 	RuleSQLPlusRefused = "sqlplusRefused" // SQL*Plus 命令,网关不支持(CONNECT / HOST …)(args: cmd)
 	RuleUnavailable   = "unavailable"   // 判定层读不到,按最严处理(ED3)

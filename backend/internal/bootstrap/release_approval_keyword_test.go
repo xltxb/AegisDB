@@ -4,8 +4,8 @@ package bootstrap
 //   审批单创建失败: Error 1406 (22001): Data too long for column 'keyword' at row 1
 //
 // 审批单的 keyword 列宽 32,取的却是"脚本按空白切开的第一段"。脚本以一行分隔线注释
-// 或一句不带空格的中文注释开头时，那一整行就是第一段。SQLite 不查列宽，只有真库
-// (MySQL 严格模式 / PostgreSQL)才炸;测试存储库是 PG,本用例修复前失败。
+// 或一句不带空格的中文注释开头时，那一整行就是第一段。查列宽的库
+// (MySQL 严格模式 / PostgreSQL)上就炸;测试存储库是 PG,本用例修复前失败。
 
 import (
 	"encoding/json"

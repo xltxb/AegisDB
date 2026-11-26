@@ -40,7 +40,7 @@ import (
 // 而 GORM 会把整批拼成一条语句。分批既避开这个上限,也让单条语句的锁持有时间可控。
 const metaInsertBatch = 500
 
-// metaIDBatch 按 id 删 / 改时一条语句带多少个 id(SQLite 的绑定参数上限是 999)。
+// metaIDBatch 按 id 删 / 改时一条语句带多少个 id:与 metaInsertBatch 同理,单条语句别太长。
 const metaIDBatch = 500
 
 type metaTableKey struct{ db, schema, table string }

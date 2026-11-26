@@ -22,7 +22,4 @@ func TestSQLExportPreamble_DeclaresCharset(t *testing.T) {
 			t.Errorf("%s:前言应声明字符集 %q,实际:\n%s", engine, want, got)
 		}
 	}
-	if got := s.sqlExportPreamble(&model.Connection{Engine: "SQLite"}, &model.ExportJob{}, "SELECT 1", true, time.Now()); strings.Contains(got, "SET ") {
-		t.Errorf("SQLite 不认 SET 语句,不应写:\n%s", got)
-	}
 }

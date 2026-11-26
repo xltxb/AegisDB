@@ -14,7 +14,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// 对真 MySQL 的测试。拷贝与重放的交错、cut-over 的锁竞争,拿 sqlite 或 mock 测出来
+// 对真 MySQL 的测试。拷贝与重放的交错、cut-over 的锁竞争,拿别的库或 mock 测出来
 // 的绿色是假的(ADR 0011)。需要一个开了 ROW binlog 的 MySQL 8.0.13+,账号要有建库
 // 与复制权限:
 //
