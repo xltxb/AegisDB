@@ -18,6 +18,7 @@ import { extractTables, tablesLabel } from '@/lib/sqlTables'
 import { useUIStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import type { Approval, RuleRef } from '@/types'
+import { APPROVAL_TYPES, APPROVAL_TYPE_LABEL } from '@/lib/approvalTypes'
 import './ApprovalsView.scoped.css'
 
 const pageSizes = [20, 50, 100]
@@ -199,11 +200,7 @@ export default function ApprovalsView() {
   const [typeFilter, setTypeFilter, typeFilterRef] = useStateRef('')
   const typeOpts = [
     { v: '', label: t('apTypeAll') },
-    { v: 'cmd', label: t('apType_cmd') },
-    { v: 'release', label: t('apType_release') },
-    { v: 'window', label: t('apType_window') },
-    { v: 'export', label: t('apType_export') },
-    { v: 'grant', label: t('apType_grant') },
+    ...APPROVAL_TYPES.map((v) => ({ v, label: t(APPROVAL_TYPE_LABEL[v]) })),
   ]
   const typeLabel = typeOpts.find((o) => o.v === typeFilter)?.label || ''
   function pickType(l: string) {
@@ -441,7 +438,7 @@ export default function ApprovalsView() {
                     一枚"命令单"是纯噪音;而升级/窗口/导出这三类的命令栏本来就是一句描述、
                     解析不出表名(那一格显示的是一个短横),标签补的正是那一格缺的信息。
                     类型由服务端推好带下来(a.type),前端不照着三个外键再推一遍。 */}
-                {a.type && a.type !== 'cmd' && <span className={clsx('tybadge', a.type)}>{t('apType_' + a.type)}</span>}
+                {a.type && a.type !== 'cmd' && <span className={clsx('tybadge', a.type)}>{t(APPROVAL_TYPE_LABEL[a.type])}</span>}
               </span>
               {/* 目标表用代码块;取不出表名时给一个居中的弱灰短横,而不是留空 */}
               <span className="tgtcell">
@@ -541,7 +538,7 @@ export default function ApprovalsView() {
           <div className="dcard">
             <div className="dhead">
               <span className="badge" style={{ background: riskMeta(detail).bg, color: riskMeta(detail).c }}>{t(riskMeta(detail).t)}</span>
-              <span className="dtitle">{detail.keyword} {detail.type && detail.type !== 'cmd' ? `· ${t('apType_' + detail.type)}` : t('apprCardTail')}</span>
+              <span className="dtitle">{detail.keyword} {detail.type && detail.type !== 'cmd' ? `· ${t(APPROVAL_TYPE_LABEL[detail.type])}` : t('apprCardTail')}</span>
               <span className="mono apno">#{detail.apNo}</span>
               <X size={18} className="dx" onClick={closeDetail} />
             </div>

@@ -14,6 +14,7 @@ import api from '@/api'
 import { useI18n } from '@/hooks/useI18n'
 import type { QueryGrantRequest } from '@/types'
 import { BizSourceDbFields, useBizSourceDb } from './BizSourceDbPicker'
+import { GRANT_REQUEST_STATUS_LABEL } from '@/lib/grantRequestStatus'
 import './BizApplyModal.scoped.css'
 
 /** 天数输入框的初值:7 天,上限比 7 小就取上限。 */
@@ -30,7 +31,7 @@ export function BizApplyList({ items, busyId, onWithdraw }: ListProps) {
       <div className="ba-lh">{t('qaMine')}</div>
       {items.map((r) => (
         <div key={r.id} className="ba-row" data-testid="q-apply-item">
-          <span className={clsx('ba-pill', r.status)}>{t('qaSt_' + r.status)}</span>
+          <span className={clsx('ba-pill', r.status)}>{t(GRANT_REQUEST_STATUS_LABEL[r.status])}</span>
           <div className="ba-main">
             <div className="ba-tg" title={`${r.source} / ${r.database}`}>{r.source} / <b>{r.database}</b></div>
             <div className="ba-meta">
