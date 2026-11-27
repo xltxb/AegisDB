@@ -27,14 +27,14 @@ const ROWS = [
   canExecute: false, canCancel: false, ...r,
 }))
 
-async function openPage(page: Page) {
+async function openPage(page: Page, rows = ROWS) {
   const urls: string[] = []
   await stubCommon(page)
   await page.route((u) => u.pathname.endsWith('/api/v1/approvals'), (r) => {
     const u = new URL(r.request().url())
     urls.push(u.searchParams.get('type') ?? '')
     const want = u.searchParams.get('type') || ''
-    const items = want ? ROWS.filter((x) => x.type === want) : ROWS
+    const items = want ? rows.filter((x) => x.type === want) : rows
     return r.fulfill(envelope({ items, total: items.length, pending: items.length, page: 1, pageSize: 20 }))
   })
   await page.goto('/#/approvals')
@@ -52,6 +52,15 @@ test.describe('审批列表 · 工单类型', () => {
     await expect(row('AP-9102').locator('.tybadge')).toHaveText('升级单')
     await expect(row('AP-9103').locator('.tybadge')).toHaveText('窗口单')
     await expect(row('AP-9104').locator('.tybadge')).toHaveText('导出单')
+  })
+
+  // 批准之后 executed_at 永远是空的那几类(升级单、窗口单、导出单)不能显示成"待执行";
+  // 只有命令单是。按服务端的 type 判,不在前端拿外键拼(#182:导出单曾被漏掉)。
+  test('已批准的非命令单不显示"待执行",命令单显示', async ({ page }) => {
+    await openPage(page, ROWS.map((r) => ({ ...r, status: 'approved' })))
+    const st = (no: string) => page.locator('.tr', { hasText: no }).locator('.stbadge')
+    await expect(st('AP-9101')).toHaveText('待执行')
+    for (const no of ['AP-9102', 'AP-9103', 'AP-9104']) await expect(st(no)).not.toHaveText('待执行')
   })
 
   test('选一个类型,筛选发到服务端而不是在当前页里过滤', async ({ page }) => {

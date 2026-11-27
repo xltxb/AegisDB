@@ -1178,27 +1178,15 @@ func (r *Repo) approvalScope(scope string, userID int64, runnableConnIDs []int64
 
 // applyApprovalType 把"只看这一类工单"加到查询上。
 //
-// 类型不是表上的一列,而是三个外键推出来的(见 model.ApprovalType)—— 所以这里写的是
-// 同一条推断的 SQL 形态。两处必须一致:界面上那枚类型标签按 model.ApprovalType 画,
-// 而筛选按这里的 WHERE 查,不一致的表现是"筛出来的行上挂着别的标签"。
+// 类型不是表上的一列,而是外键推出来的。WHERE 与 model.ApprovalType 出自同一张表
+// (model.ApprovalTypeWhere):界面上那枚类型标签按后者画,筛选按前者查,不能对不上。
 //
 // 认不出的类型**不加条件**。这里之所以敢这样,是因为调用方(handler)已经把取值挡在
 // 白名单里了;真让一个拼错的值原样进 WHERE,查出来会是空列表 —— 而空列表和"确实没有"
 // 长得一模一样,调用方看不出自己写错了。
 func applyApprovalType(q *gorm.DB, typ string) *gorm.DB {
-	switch typ {
-	case model.ApTypeCommand:
-		return q.Where("release_id = 0 AND window_id = 0 AND export_job_id = 0 AND osc_job_id = 0 AND query_grant_req_id = 0")
-	case model.ApTypeRelease:
-		return q.Where("release_id > 0")
-	case model.ApTypeWindow:
-		return q.Where("window_id > 0")
-	case model.ApTypeExport:
-		return q.Where("export_job_id > 0")
-	case model.ApTypeOSC:
-		return q.Where("osc_job_id > 0")
-	case model.ApTypeGrant:
-		return q.Where("query_grant_req_id > 0")
+	if cond, ok := model.ApprovalTypeWhere(typ); ok {
+		return q.Where(cond)
 	}
 	return q
 }
@@ -2264,7 +2252,7 @@ func (r *Repo) CountPendingApprovals(scope string, userID int64) (int64, error) 
 // 这里只做**可见性**筛,"此刻能不能动"由 service 逐张判(DecideBlockFor /
 // CanExecuteApproved)—— 那两条规则全系统只有一处,这里不复制第二份。
 //
-// 已批准那一路把窗口单 / 升级单 / 导出单直接排掉:它们批准即生效或由别的流程执行,
+// 已批准那一路只留要人执行的类型(model.ManualExecWhere):其余类型批准即生效或由别的流程执行,
 // executed_at 永远是空,不排掉就会被年复一年地拉出来再逐张否掉。
 //
 // 不分页、不设上限:这两类都是"还没处理完"的,天然是小集合 —— 一张等着执行的单子
@@ -2276,7 +2264,8 @@ func (r *Repo) TodoCandidates(userID int64, runnableConnIDs []int64) (decide, ex
 		return nil, nil, err
 	}
 	if err = r.approvalScope("all", userID, runnableConnIDs).
-		Where("status = ? AND executed_at IS NULL AND window_id = 0 AND release_id = 0 AND export_job_id = 0", model.StatusApproved).
+		Where("status = ? AND executed_at IS NULL", model.StatusApproved).
+		Where(model.ManualExecWhere()).
 		Order("id desc").Find(&execute).Error; err != nil {
 		return nil, nil, err
 	}

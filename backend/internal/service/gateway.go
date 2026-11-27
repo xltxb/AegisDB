@@ -863,51 +863,18 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 		// 状态、审批步骤、结果和窗口状态在同一个事务里落库(#143):任何一笔失败就整体回滚,
 		// 单子还是待审批,决定的人拿到错误、可以再点一次。所以结果要先算好,副作用放在提交之后。
 		//
-		// 通过不再执行任何命令,两条分支的区别只是**接下来由谁执行**:
-		// 发布单归流水线,普通工单归发起人。
-		var res gateway.ExecResult
-		result, title := model.ResultPending, apimsg.T("审批已通过,请前往执行")
-		if ap.QueryGrantReqID > 0 {
-			// 权限申请批的是"生成那条查询授权"。批准之前按此刻的设置重新校验一遍:校验不过就
-			// 不让批(审批人看到原因、应当驳回),不能出现"批准了、却没有授权"的单子。
-			if err := s.precheckGrantApproval(ap); err != nil {
+		// 通过不再执行任何命令,各类型的区别只是**接下来由谁做什么**(批准前的校验、结果那句话、
+		// 通知、批准后的动作),见 approvalFlows。审计行一律记 pending:真正的执行由执行它的那一刻
+		// 自己写审计。
+		flow := flowOf(ap)
+		if flow.precheck != nil {
+			if err := flow.precheck(s, ap); err != nil {
 				return nil, err
 			}
-			res.Output = "· 已批准,查询授权已生效"
-			res.OutputRef = model.NewRuleRef(model.OutApGrantLive)
-			title = apimsg.T("数据查询权限申请已通过")
-		} else if ap.WindowID > 0 {
-			// 窗口单授权的是"让那扇门在它自己的时间表内生效",不是"执行一条命令"。
-			// 批准即生效,没有什么可等发起人去做的。
-			res.Output = "· 已批准,执行窗口已生效"
-			res.OutputRef = model.NewRuleRef(model.OutApWindowLive)
-			title = apimsg.T("执行窗口审批已通过")
-		} else if ap.ExportJobID > 0 {
-			// 导出单授权的是"让导出 worker 去跑这次导出",不是"执行一条命令" ——
-			// 所以它不停在等发起人,批准即入队。
-			res.Output = "· 已批准,导出任务已进入队列"
-			res.OutputRef = model.NewRuleRef(model.OutApExportQueued)
-			title = apimsg.T("导出审批已通过,任务已开始")
-		} else if ap.ReleaseID > 0 {
-			// A release ticket authorises the pipeline; it does not run anything.
-			// The execute stage owns execution (and re-judges the statement before
-			// applying it), so running the command here as well would apply the same
-			// change twice — the second time to a pipeline that still believes it
-			// has not run. The audit row therefore stays `pending`: approved, not yet
-			// executed, with the execution audited by the stage that performs it.
-			res.Output = "· 已批准,由发布流水线继续执行"
-			res.OutputRef = model.NewRuleRef(model.OutApPipeline)
-			title = apimsg.T("审批已通过,发布流水线继续")
-		} else {
-			// 通过**不再顺带执行**。命令在审批人点下去的那一刻跑,等于让审批人替
-			// 发起人选择了执行时机 —— 而业务低峰、应用是否已停、备份是否就绪,
-			// 只有发起人知道。审批人按下的是"我同意",不是"现在就跑"。
-			//
-			// 工单就停在这里等发起人来执行(ExecuteApproved)。审计行同样记 pending:
-			// 已批准、尚未执行,真正的执行由执行它的那一刻自己写审计。
-			res.Output = model.AwaitingExecution
-			res.OutputRef = model.NewRuleRef(model.OutApAwaitingExec)
 		}
+		var res gateway.ExecResult
+		res.Output, res.OutputRef = flow.output, model.NewRuleRef(flow.outputRef)
+		result := model.ResultPending
 		claimed, cerr := s.Repo.DecideApprovalAtomic(ap.ID, model.StatusApproved, d.Via, "",
 			decisionOutcome(ap, d.ActorID, model.StatusApproved, model.WindowApproved, res, now))
 		if cerr != nil {
@@ -916,36 +883,16 @@ func (s *Services) finalizeApproval(ap *model.Approval, d decision) (*dto.ExecRe
 		if !claimed {
 			return nil, ErrAlreadyDecided // someone else already decided/expired it
 		}
-		if ap.WindowID > 0 {
-			s.auditWindowDecision(ap, true)
-		} else if ap.ExportJobID > 0 {
-			s.releaseApprovedExport(ap)
-		} else if ap.QueryGrantReqID > 0 {
-			s.grantApprovedRequest(ap, d.ActorName)
+		if flow.after != nil {
+			flow.after(s, ap, d)
 		}
 		// 动作记 approve 而不是 exec:这一刻发生的事情是一次审批决定,命令一行都
 		// 没有跑。记成 exec 会让审计里出现一条查不到对应库变更的"执行",也会让只
 		// 订阅 exec 的 webhook 在什么都没执行时收到通知。真正的执行由
 		// ExecuteApproved 自己写一条 exec —— 那条才对得上库里的变化。
 		s.recordAuditFrom(approvalAuditSource(ap), initiator, d.auditOperator(), conn, ap.Command, ap.RiskLevel, result, ap.ApNo, "approve")
-		// 话要说清"还需要你去执行" —— 一句"已通过"会让人以为事情办完了,然后那条
-		// 命令就一直挂在那里,直到有人发现变更根本没生效。
-		body := apimsg.Sprintf("%s 通过了你的命令：%s\n请到「审批」页找到这张工单并执行。",
-			d.ActorName, safeClip(ap.Command, 60))
-		if ap.QueryGrantReqID > 0 {
-			body = apimsg.Sprintf("%s 通过了你的数据查询权限申请：%s\n授权已生效,可以到「数据查询」页查询了。",
-				d.ActorName, safeClip(ap.Command, 60))
-		} else if ap.WindowID > 0 {
-			body = apimsg.Sprintf("%s 通过了你的执行窗口申请：%s\n窗口已生效,到点自动开启、到点自动关闭。",
-				d.ActorName, safeClip(ap.Command, 60))
-		} else if ap.ExportJobID > 0 {
-			body = apimsg.Sprintf("%s 通过了你的导出申请：%s\n任务已进入队列,完成后会再通知你。",
-				d.ActorName, safeClip(ap.Command, 60))
-		} else if ap.ReleaseID > 0 {
-			body = apimsg.Sprintf("%s 通过了发布单里的这一步：%s\n流水线将继续执行,无需手动操作。",
-				d.ActorName, safeClip(ap.Command, 60))
-		}
-		s.notify(ap.InitiatorID, model.NotifApprovalApproved, title, body, ap.ApNo)
+		body := flow.body(d.ActorName, safeClip(ap.Command, 60))
+		s.notify(ap.InitiatorID, model.NotifApprovalApproved, flow.title(), body, ap.ApNo)
 		return &dto.ExecResp{Risk: ap.RiskLevel, Output: res.Output, OutputRef: res.OutputRef, Rows: res.Rows, Ms: res.Ms,
 			Columns: res.Columns, Data: res.Data, Truncated: res.Truncated}, nil
 	}

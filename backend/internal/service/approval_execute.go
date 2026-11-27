@@ -167,22 +167,9 @@ func (s *Services) canExecuteApproved(actor *model.User, ap *model.Approval) err
 	if actor == nil {
 		return ErrForbidden
 	}
-	if ap.WindowID > 0 {
-		// 窗口单的 Command 是一句描述("开启执行窗口「…」"),不是可执行语句。
-		// 让它走到这里,网关会把那句话当 SQL 发给数据库。
-		return apimsg.Errorf("这是执行窗口的申请单,批准即生效,没有需要手动执行的命令")
-	}
-	if ap.ReleaseID > 0 {
-		return apimsg.Errorf("这是升级单的审批工单,执行由发布流水线的执行阶段完成,不能在这里执行")
-	}
-	if ap.QueryGrantReqID > 0 {
-		// 权限申请单的 Command 是一句描述,批准即生成授权,没有可执行的语句。
-		return apimsg.Errorf("这是数据查询权限的申请单,批准即生效,没有需要手动执行的命令")
-	}
-	if ap.ExportJobID > 0 {
-		// 导出单的 Command 是一句描述("EXPORT [含敏感字段(原值)] …"),不是可执行的
-		// 语句。放它走这条路,网关会把那句描述当成命令发给数据库。
-		return apimsg.Errorf("这是导出申请的审批工单,批准后由导出任务后台执行,不能在这里执行")
+	// 升级单、窗口单、导出单、权限申请单不走手动执行,原因各不相同(见 approvalFlows)。
+	if f := flowOf(ap).noManualExec; f != nil {
+		return f()
 	}
 	if ap.Status != model.StatusApproved {
 		switch ap.Status {

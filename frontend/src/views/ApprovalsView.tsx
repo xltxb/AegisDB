@@ -31,11 +31,15 @@ function canDecide(a: Approval) {
 
 // 行内状态比 a.status 多分了一档:approved 里"还没跑"和"跑过了"是两回事,而
 // 前者往往正等着看这一列的人去处理。挤在一个"已通过"里,他就看不见了。
+const MANUAL_EXEC_TYPES = new Set(['cmd', 'osc'])
+// 批准后不用人执行的几类,详情页落款说清"接下来归谁";导出单落在默认的"已完成"。
+const APPROVED_NOTE: Record<string, string> = { release: 'apExecuteByPipeline', window: 'apWindowLive', grant: 'apGrantLive' }
 function rowState(a: Approval) {
-  // 升级单和**窗口申请单**都不走手动执行:前者归流水线的执行阶段,后者批准即生效
-  // (它的 Command 是一句描述,不是可执行语句)。把它们显示成"待执行",人会一直在
-  // 等一个永远不该按的按钮。数据查询权限申请单(queryGrantReqId)同理:批准即生成授权。
-  if (a.status === 'approved' && !a.executedAt && !a.releaseId && !a.windowId && !a.queryGrantReqId) return 'waitrun'
+  // 只有命令单和在线变更单批准后要人去执行;升级单归流水线、窗口单与权限申请单批准即生效、
+  // 导出单由后台任务跑 —— 它们的 executed_at 永远是空,显示成"待执行",人会一直在等一个
+  // 永远不该按的按钮。按服务端推好的 type 判(与 model.ApprovalTypeManualExec 同一张表),
+  // 不在这里拿外键再拼一遍(#182)。
+  if (a.status === 'approved' && !a.executedAt && MANUAL_EXEC_TYPES.has(a.type ?? 'cmd')) return 'waitrun'
   // 最终状态以**库那边收没收下**为准。批准是人的决定,而这一列说的是那次下发的
   // 结果 —— 一条跑挂的 DROP 显示成"已通过",读的人会以为变更已经生效了。
   //
@@ -625,10 +629,9 @@ export default function ApprovalsView() {
                     ? t('apExecutedFailed', { at: shortTime(detail.executedAt) })
                     : t('apExecuted', { at: shortTime(detail.executedAt) })}
                 </span>
-              ) : detail.status === 'approved' && detail.releaseId ? <span className="waitc">{t('apExecuteByPipeline')}</span>
-                : detail.status === 'approved' && detail.windowId ? <span className="waitc">{t('apWindowLive')}</span>
-                  : detail.status === 'approved' && detail.queryGrantReqId ? <span className="waitc" data-testid="ap-grant-live">{t('apGrantLive')}</span>
-                  : <span className="waitc">{detail.status === 'approved' ? t('apDone') : t('apRejected')}</span>}
+              ) : detail.status === 'approved' && APPROVED_NOTE[detail.type ?? ''] ? (
+                <span className="waitc" data-testid={`ap-${detail.type}-live`}>{t(APPROVED_NOTE[detail.type ?? ''])}</span>
+              ) : <span className="waitc">{detail.status === 'approved' ? t('apDone') : t('apRejected')}</span>}
             </div>
           </div>
         </div>

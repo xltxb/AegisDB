@@ -370,7 +370,7 @@ export interface Approval {
    * 前端不照着 releaseId / windowId / exportJobId 再推一遍 —— 筛选的 WHERE 在服务端,
    * 标签若按另一份推断来画,迟早会出现"筛出来的行挂着别的标签"。
    */
-  type?: 'cmd' | 'release' | 'window' | 'export' | 'grant'
+  type?: 'cmd' | 'release' | 'window' | 'export' | 'osc' | 'grant'
   /**
    * 能不能**撤回**这张单。与 canDecide 分开:撤回不是"决定"。
    *
