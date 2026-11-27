@@ -49,10 +49,10 @@ func (QueryGrant) TableName() string { return "tbl_query_grant" }
 // 改回旧的、把刚撤销的授权复活。有了这张表,下发时能分清三种情况 —— 同一张单重发(幂等,
 // 不改)、新单(更新)、已被取代的旧单(拒绝)。一张审批单可以批多个人 / 多个库,所以键里带授权。
 type QueryGrantApproval struct {
-	ID         int64     `gorm:"primaryKey;autoIncrement"`
-	ClientID   int64     `gorm:"uniqueIndex:uk_query_grant_approval,priority:1;not null"`
-	ExternalID string    `gorm:"column:external_id;uniqueIndex:uk_query_grant_approval,priority:2;size:128;not null"`
-	GrantID    int64     `gorm:"uniqueIndex:uk_query_grant_approval,priority:3;not null"`
+	ID         int64  `gorm:"primaryKey;autoIncrement"`
+	ClientID   int64  `gorm:"uniqueIndex:uk_query_grant_approval,priority:1;not null"`
+	ExternalID string `gorm:"column:external_id;uniqueIndex:uk_query_grant_approval,priority:2;size:128;not null"`
+	GrantID    int64  `gorm:"uniqueIndex:uk_query_grant_approval,priority:3;not null"`
 	CreatedAt  time.Time
 }
 
@@ -109,3 +109,7 @@ type QueryGrantRequest struct {
 }
 
 func (QueryGrantRequest) TableName() string { return "tbl_query_grant_request" }
+
+// GrantReasonSize 是 QueryGrant.Reason 与 QueryGrantRequest.Reason 的列宽(字符)。gorm 标签里只能写
+// 字面量,两处 size:512 与它一致由 TestGrantReasonSizeMatchesColumns 钉住。写入时按它截断。
+const GrantReasonSize = 512

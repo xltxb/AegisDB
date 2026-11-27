@@ -25,9 +25,9 @@ import (
 // 浏览器不会带上流程 Cookie。
 const (
 	oidcFlowCookie  = "aegisdb_oidc_flow"
-	oidcFlowPath    = "/api/v1/auth/oidc"
+	oidcFlowPath    = service.OIDCPathPrefix
 	ssoTicketCookie = "aegisdb_sso"
-	ssoTicketPath   = "/api/v1/auth/sso"
+	ssoTicketPath   = service.SSOLoginPath
 )
 
 // cookiePath 是浏览器眼里的 Cookie 路径:回调地址里网关的路径前缀 + suffix。网关挂在反向代理的

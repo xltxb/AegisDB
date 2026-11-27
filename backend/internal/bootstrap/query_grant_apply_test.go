@@ -245,6 +245,25 @@ func TestGrantApply_PrecheckRefusesWhenDatabasesCannotBeListed(t *testing.T) {
 	eq(t, len(e.grantsOf("buyer@corp.io")), 0, "没有生成授权")
 }
 
+// 申请方式改成外部审批系统之后,网关里还没批的申请不能再批:批出来的授权归网关所有,外部系统
+// 既看不到也撤不掉它(#186)。
+func TestGrantApply_PrecheckRefusesAfterSwitchToExternal(t *testing.T) {
+	e := newGrantEnv(t)
+	_, tok := e.applicant("buyer@corp.io")
+	req := requestOf(t, e.apply(tok, e.applyBody(e.db)))
+	eq(t, e.app.do(http.MethodPut, "/api/v1/settings", e.admin, map[string]any{"bizQuery.applyMode": "external"}).Code, 0, "切到外部")
+
+	approver := e.app.login("zhangwei@aegisdb.io", "aegisdb123")
+	ap, _ := e.app.repo.GetApprovalByApNo(req.ApNo)
+	r := e.app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil)
+	if r.Code == 0 || !strings.Contains(r.Msg, "外部审批系统") {
+		t.Fatalf("申请方式已改为外部时不能批准,并说明原因,实际 code=%d msg=%q", r.Code, r.Msg)
+	}
+	ap, _ = e.app.repo.GetApprovalByApNo(req.ApNo)
+	eq(t, ap.Status, model.StatusPending, "没批成,单子还在待审批")
+	eq(t, len(e.grantsOf("buyer@corp.io")), 0, "没有生成授权")
+}
+
 // 批准了却没能生成授权:通知申请人"未生效",按执行失败归类,不混进"驳回"(#180)。
 func TestGrantApply_FailedGrantNotifiesAsExecFailed(t *testing.T) {
 	e := newGrantEnv(t)
