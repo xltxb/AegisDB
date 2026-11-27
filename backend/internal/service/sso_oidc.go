@@ -56,6 +56,10 @@ const (
 	OIDCErrEmail    = "email"    // 拿不到一个(已验证的)邮箱
 )
 
+// OIDCErrReasons 是上面全部的原因。前端 SSO_ERRORS(frontend/src/lib/ssoLogin.ts)与它逐项一致,
+// 由 TestOIDCErrReasonsMatchFrontend 钉住。
+var OIDCErrReasons = []string{OIDCErrDisabled, OIDCErrState, OIDCErrDenied, OIDCErrExchange, OIDCErrEmail}
+
 // OIDCError 是回调失败;Reason 是上面那几个值之一。
 type OIDCError struct {
 	Reason string

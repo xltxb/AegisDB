@@ -10,7 +10,7 @@ package service
 //     上限重新校验,再生成 / 更新授权。
 //   - 直接开通:管理员在【权限 · 查询授权】给已有账号开通。
 //
-// 两条路写授权都走 writeConsoleGrant,和开放接口共用 checkGrantLimits 与 ensureBizQueryRole:
+// 两条路写授权都走 writeGatewayGrant,和开放接口共用 checkGrantLimits 与 ensureBizQueryRole:
 // 哪条路批出来的授权,都不能比全局上限更宽,也都会给被授权人补上业务查询角色。
 
 import (
@@ -98,6 +98,10 @@ func (s *Services) sourceDatabasesOf(conn *model.Connection) ([]string, error) {
 
 // ---------------------------------------------------------------- 申请
 
+// grantReasonMaxRunes 是申请理由最多能填多少字(前端输入框的 maxLength 与它一致)。比列宽
+// model.GrantReasonSize 留一点余量:那是存储的硬上限,其它来源的理由写入时按它截断。
+const grantReasonMaxRunes = 500
+
 // ApplyQueryGrant 提交一次申请:生成申请记录与一张审批单。
 func (s *Services) ApplyQueryGrant(u *model.User, req dto.QueryGrantApplyReq) (*dto.QueryGrantRequestView, error) {
 	lim := s.BizQueryLimits()
@@ -118,8 +122,8 @@ func (s *Services) ApplyQueryGrant(u *model.User, req dto.QueryGrantApplyReq) (*
 		return nil, grantInvalid("请选择库")
 	case reason == "":
 		return nil, grantInvalid("请填写申请理由")
-	case len([]rune(reason)) > 500:
-		return nil, grantInvalid("申请理由不能超过 500 个字")
+	case len([]rune(reason)) > grantReasonMaxRunes:
+		return nil, grantInvalid("申请理由不能超过 %d 个字", grantReasonMaxRunes)
 	}
 	if err := s.checkGrantTarget(u.ID, conn, dbName, req.Days, req.AllowExport, formGrantWords(func() error {
 		return grantInvalid("数据查询的导出功能未开启,不能申请导出")
@@ -134,7 +138,7 @@ func (s *Services) ApplyQueryGrant(u *model.User, req dto.QueryGrantApplyReq) (*
 
 	q := &model.QueryGrantRequest{
 		UserID: u.ID, ConnectionID: conn.ID, DBName: dbName, Days: req.Days,
-		AllowExport: req.AllowExport, Reason: fitRunes(reason, 512),
+		AllowExport: req.AllowExport, Reason: fitRunes(reason, model.GrantReasonSize),
 	}
 	if err := s.Repo.CreateQueryGrantRequest(q); err != nil {
 		return nil, err
@@ -188,7 +192,7 @@ func formGrantWords(export func() error) grantTargetWords {
 
 // checkGrantTarget 是网关里三条路(申请、批准前预检、管理员直接开通)在给 (用户, 实例, 库) 下发
 // 授权之前都要过的检查。集中在一处,预检才永远查得和申请时一样多(#184):有效期上限、导出开关、
-// 库还在不在、这条授权是不是归仍启用的外部系统。行数 / 超时上限由 writeConsoleGrant 写入时再查。
+// 库还在不在、这条授权是不是归仍启用的外部系统。行数 / 超时上限由 writeGatewayGrant 写入时再查。
 func (s *Services) checkGrantTarget(userID int64, conn *model.Connection, db string, days int, allowExport bool, w grantTargetWords) error {
 	lim := s.BizQueryLimits()
 	if days < 1 || days > lim.MaxGrantDays {
@@ -318,6 +322,11 @@ func (s *Services) precheckGrantApproval(ap *model.Approval) error {
 	if err != nil {
 		return err
 	}
+	// 申请方式改成外部审批系统之后,授权归外部系统管;这时批出来的授权归网关,外部系统既列不出
+	// 也撤不掉它(#186)。
+	if s.BizQueryLimits().ApplyMode != BizApplyInternal {
+		return grantInvalid("数据查询权限已改为在外部审批系统申请,网关里的这张申请不能再批准,请驳回")
+	}
 	return s.checkGrantTarget(q.UserID, conn, q.DBName, q.Days, q.AllowExport, grantTargetWords{
 		days: func(max int) error {
 			return grantInvalid("申请的有效期 %d 天已超过当前上限 %d 天,请驳回后让申请人重新申请", q.Days, max)
@@ -356,7 +365,7 @@ func (s *Services) grantApprovedRequest(ap *model.Approval, approverName string)
 		return
 	}
 	now := time.Now()
-	g, err := s.writeConsoleGrant(user, user, conn, q.DBName, consoleGrant{
+	g, err := s.writeGatewayGrant(user, user, conn, q.DBName, gatewayGrant{
 		Via: grantViaApproval, ExternalID: ap.ApNo, Approver: approverName, Reason: q.Reason,
 		AllowExport: q.AllowExport, Starts: now, Ends: now.Add(time.Duration(q.Days) * 24 * time.Hour),
 	})
@@ -390,7 +399,7 @@ func (s *Services) AdminCreateQueryGrant(actor *model.User, req dto.AdminQueryGr
 	}
 	lim := s.BizQueryLimits()
 	now := time.Now()
-	g, err := s.writeConsoleGrant(actor, user, conn, dbName, consoleGrant{
+	g, err := s.writeGatewayGrant(actor, user, conn, dbName, gatewayGrant{
 		Via: grantViaConsole, ExternalID: "console-" + s.nextAuditID(), Approver: actor.Name,
 		Reason: strings.TrimSpace(req.Reason), MaxRows: req.MaxRows, TimeoutSec: req.TimeoutSec,
 		AllowExport: req.AllowExport, Starts: now, Ends: now.Add(time.Duration(req.Days) * 24 * time.Hour),
@@ -404,8 +413,8 @@ func (s *Services) AdminCreateQueryGrant(actor *model.User, req dto.AdminQueryGr
 
 // ---------------------------------------------------------------- 共用的写入
 
-// consoleGrant 是网关自己(审批 / 控制台)下发一条授权时的条件与来源。
-type consoleGrant struct {
+// gatewayGrant 是网关自己(审批通过 / 管理员在控制台直接开通)下发一条授权时的条件与来源。
+type gatewayGrant struct {
 	Via                 string // grantViaApproval / grantViaConsole,写进 client_name
 	ExternalID          string // 审批单号,或 console-<审计号>
 	Approver, Reason    string
@@ -414,8 +423,8 @@ type consoleGrant struct {
 	Starts, Ends        time.Time
 }
 
-// writeConsoleGrant 按 (被授权人, 实例, 库) 创建或更新一条网关自己下发的授权。
-func (s *Services) writeConsoleGrant(actor, user *model.User, conn *model.Connection, dbName string, c consoleGrant) (*model.QueryGrant, error) {
+// writeGatewayGrant 按 (被授权人, 实例, 库) 创建或更新一条网关自己下发的授权。
+func (s *Services) writeGatewayGrant(actor, user *model.User, conn *model.Connection, dbName string, c gatewayGrant) (*model.QueryGrant, error) {
 	lim := s.BizQueryLimits()
 	if err := checkGrantLimits(c.MaxRows, c.TimeoutSec, c.Starts, c.Ends, time.Now(), lim); err != nil {
 		return nil, err
@@ -439,7 +448,7 @@ func (s *Services) writeConsoleGrant(actor, user *model.User, conn *model.Connec
 	g.StartsAt, g.EndsAt = c.Starts, c.Ends
 	g.Status, g.RevokedAt, g.RevokedBy = model.GrantActive, nil, ""
 	g.ClientID, g.ClientName, g.ExternalID = 0, c.Via, fitRunes(c.ExternalID, 128)
-	g.Approver, g.Reason = fitRunes(c.Approver, 128), fitRunes(c.Reason, 512)
+	g.Approver, g.Reason = fitRunes(c.Approver, 128), fitRunes(c.Reason, model.GrantReasonSize)
 	if err := s.Repo.SaveQueryGrant(g); err != nil {
 		return nil, err
 	}

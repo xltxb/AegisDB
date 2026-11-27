@@ -54,11 +54,17 @@ const (
 	DefaultSSOEmailClaim = "email"
 )
 
-// 两个固定路径。回调地址必须以 OIDCCallbackPath 结尾:登录完成后要跳回的前端地址就是从它
+// SSO 的几个固定路径。Cookie 路径(handler)与回调地址校验从这里取;路由表(bootstrap.NewRouter)
+// 为了让 OpenAPI 对照测试读得到,仍写字面量,由 TestSSOPathsAreRouted 钉住与这里一致(#186)。回调地址必须以 OIDCCallbackPath 结尾:登录完成后要跳回的前端地址就是从它
 // 推出来的(去掉这一段即是网关的访问地址,网关可能挂在子路径下)。
 const (
-	OIDCStartPath    = "/api/v1/auth/oidc/start"
-	OIDCCallbackPath = "/api/v1/auth/oidc/callback"
+	APIPrefix = "/api/v1"
+	// OIDCPathPrefix 下是 start 与 callback;流程 Cookie 只发给这下面。
+	OIDCPathPrefix   = APIPrefix + "/auth/oidc"
+	OIDCStartPath    = OIDCPathPrefix + "/start"
+	OIDCCallbackPath = OIDCPathPrefix + "/callback"
+	// SSOLoginPath 用回调留下的登录结果换网关会话;登录结果 Cookie 只发给它。
+	SSOLoginPath = APIPrefix + "/auth/sso"
 )
 
 // SSOSettings 是 SSO 的一份快照,每次用时现读(见 SSOConfig)。
@@ -168,7 +174,7 @@ func ValidateSSOSettings(c SSOSettings, allowHTTP bool) error {
 		return err
 	}
 	if strings.TrimSpace(c.ClientID) == "" {
-		return errors.New("启用 SSO 必须填写 Client ID")
+		return apimsg.Errorf("启用 SSO 必须填写 Client ID")
 	}
 	if err := check(apimsg.T("回调地址"), c.RedirectURL); err != nil {
 		return err

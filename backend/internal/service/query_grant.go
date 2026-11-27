@@ -389,7 +389,7 @@ func (s *Services) UpsertQueryGrant(client *model.APIClient, actor *model.User, 
 	g.StartsAt, g.EndsAt = starts, ends
 	g.Status, g.RevokedAt, g.RevokedBy = model.GrantActive, nil, ""
 	g.ClientID, g.ClientName, g.ExternalID = client.ID, fitRunes(client.Name, 64), ext
-	g.Approver, g.Reason = fitRunes(strings.TrimSpace(req.Approver), 128), fitRunes(strings.TrimSpace(req.Reason), 512)
+	g.Approver, g.Reason = fitRunes(strings.TrimSpace(req.Approver), 128), fitRunes(strings.TrimSpace(req.Reason), model.GrantReasonSize)
 	if err := s.Repo.SaveQueryGrant(g); err != nil {
 		return nil, false, err
 	}
