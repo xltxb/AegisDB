@@ -537,7 +537,7 @@ export default function ApprovalsView() {
           <div className="dcard">
             <div className="dhead">
               <span className="badge" style={{ background: riskMeta(detail).bg, color: riskMeta(detail).c }}>{t(riskMeta(detail).t)}</span>
-              <span className="dtitle">{detail.keyword} {t('apprCardTail')}</span>
+              <span className="dtitle">{detail.keyword} {detail.type && detail.type !== 'cmd' ? `· ${t('apType_' + detail.type)}` : t('apprCardTail')}</span>
               <span className="mono apno">#{detail.apNo}</span>
               <X size={18} className="dx" onClick={closeDetail} />
             </div>
