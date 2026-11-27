@@ -2576,6 +2576,8 @@
     ma3549434: 'No menu permission',
     // 显式设置 query_dop 会让单条 SQL 在短时间内吃掉过多资源 —— DWS 本身已按 DN 并行
     m3bc8dd9a: 'Setting query_dop explicitly lets one SQL consume too many resources in a short time; DWS already parallelizes by DN',
+    // 暂时无法核实实例 %s 上的库 %s 是否还在(%v),请稍后再批
+    md464cc62: 'Cannot verify right now that database {1} still exists on instance {0} ({2}); try approving again later',
     // 暂时读不出审批链,请稍后再试
     m3b97a4a0: 'The approval chain cannot be read right now. Please try again later',
     // 更新失败
