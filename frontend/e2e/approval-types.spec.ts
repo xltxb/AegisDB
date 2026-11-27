@@ -80,4 +80,13 @@ test.describe('审批列表 · 工单类型', () => {
     await expect.poll(() => urls[urls.length - 1]).toBe('')
     await expect(page.locator('.tr')).toHaveCount(4)
   })
+
+  // 筛选项从类型表生成,不再手写一份:在线变更单曾被漏掉(#188)。
+  test('筛选列表包含全部类型,在线变更单也能筛', async ({ page }) => {
+    const urls = await openPage(page)
+    await typeSelect(page).locator('.control').click()
+    await expect(typeSelect(page).locator('.opt')).toHaveText(['全部类型', '命令单', '升级单', '窗口单', '导出单', '在线变更', '权限申请'])
+    await typeSelect(page).locator('.opt', { hasText: '在线变更' }).click()
+    await expect.poll(() => urls[urls.length - 1]).toBe('osc')
+  })
 })
