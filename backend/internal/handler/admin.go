@@ -606,12 +606,9 @@ func (h *Handler) ListApprovals(c *gin.Context) {
 	}
 	// status 只认已知的四个状态。一个拼错的值若原样进 WHERE,查出来的是空列表 ——
 	// 而空列表和"确实没有"长得一模一样,调用方看不出自己写错了。
-	// type 同理,只认四个已知类型。它不是表上的一列,而是由 releaseId / windowId /
-	// exportJobId 推出来的(见 model.ApprovalType)。
+	// type 同理,只认已知类型(model.ApprovalTypes)。
 	typ := strings.TrimSpace(c.Query("type"))
-	switch typ {
-	case "", model.ApTypeCommand, model.ApTypeRelease, model.ApTypeWindow, model.ApTypeExport, model.ApTypeGrant:
-	default:
+	if typ != "" && !model.IsApprovalType(typ) {
 		resp.Fail(c, resp.CodeBadRequest, "type 取值无效")
 		return
 	}

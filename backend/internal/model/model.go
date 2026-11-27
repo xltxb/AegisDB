@@ -1605,24 +1605,97 @@ const (
 	ApTypeGrant = "grant"
 )
 
-// ApprovalType 按外键判定一张工单的类型。判定顺序不重要:三个外键互斥,一张单不可能
-// 同时是升级单和窗口单。
+// approvalKind 是一类工单在表上的样子:挂在哪个外键上,批准之后要不要人去执行。
+//
+// 类型判定、类型筛选的 WHERE、"待执行"的 WHERE 都从这张表推出来 —— 原先它们是好几处各写
+// 一遍的外键 if 链,新增一种类型就要逐处补,漏一处就是一个只在那一处出错的类型(#182)。
+type approvalKind struct {
+	typ    string
+	column string
+	fk     func(*Approval) int64
+	// manualExec:批准之后停在那里等人执行(命令单;在线变更单的"执行"是启动迁移)。
+	// 其余类型批准即由别处接手:流水线、窗口自己生效、导出任务、生成授权。
+	manualExec bool
+}
+
+// approvalKinds 不含命令单:命令单就是"哪个外键都没挂"。外键互斥,顺序只为判定确定。
+var approvalKinds = []approvalKind{
+	{ApTypeRelease, "release_id", func(a *Approval) int64 { return a.ReleaseID }, false},
+	{ApTypeWindow, "window_id", func(a *Approval) int64 { return a.WindowID }, false},
+	{ApTypeExport, "export_job_id", func(a *Approval) int64 { return a.ExportJobID }, false},
+	{ApTypeOSC, "osc_job_id", func(a *Approval) int64 { return a.OSCJobID }, true},
+	{ApTypeGrant, "query_grant_req_id", func(a *Approval) int64 { return a.QueryGrantReqID }, false},
+}
+
+// ApprovalTypes lists every ticket type, command first.
+func ApprovalTypes() []string {
+	out := []string{ApTypeCommand}
+	for _, k := range approvalKinds {
+		out = append(out, k.typ)
+	}
+	return out
+}
+
+// IsApprovalType reports whether t is a known ticket type.
+func IsApprovalType(t string) bool {
+	for _, x := range ApprovalTypes() {
+		if x == t {
+			return true
+		}
+	}
+	return false
+}
+
+// ApprovalType 按外键判定一张工单的类型。
 func ApprovalType(a *Approval) string {
-	switch {
-	case a == nil:
+	if a == nil {
 		return ApTypeCommand
-	case a.ReleaseID > 0:
-		return ApTypeRelease
-	case a.WindowID > 0:
-		return ApTypeWindow
-	case a.ExportJobID > 0:
-		return ApTypeExport
-	case a.OSCJobID > 0:
-		return ApTypeOSC
-	case a.QueryGrantReqID > 0:
-		return ApTypeGrant
+	}
+	for _, k := range approvalKinds {
+		if k.fk(a) > 0 {
+			return k.typ
+		}
 	}
 	return ApTypeCommand
+}
+
+// ApprovalTypeManualExec 说这类工单批准之后是否要人去执行。
+func ApprovalTypeManualExec(t string) bool {
+	for _, k := range approvalKinds {
+		if k.typ == t {
+			return k.manualExec
+		}
+	}
+	return t == ApTypeCommand
+}
+
+// ApprovalTypeWhere 是 ApprovalType 的 SQL 形态,两者出自同一张表,不会对不上。认不出的类型
+// 返回 ok=false。
+func ApprovalTypeWhere(t string) (cond string, ok bool) {
+	if t == ApTypeCommand {
+		return zeroColumns(func(approvalKind) bool { return true }), true
+	}
+	for _, k := range approvalKinds {
+		if k.typ == t {
+			return k.column + " > 0", true
+		}
+	}
+	return "", false
+}
+
+// ManualExecWhere 只留批准之后要人去执行的类型:不要人执行的那几个外键都为 0。
+func ManualExecWhere() string {
+	return zeroColumns(func(k approvalKind) bool { return !k.manualExec })
+}
+
+func zeroColumns(pick func(approvalKind) bool) string {
+	var parts []string
+	for _, k := range approvalKinds {
+		if pick(k) {
+			parts = append(parts, k.column+" = 0")
+		}
+	}
+	return strings.Join(parts, " AND ")
 }
 
 // Notification kinds delivered to a user's in-app inbox.
