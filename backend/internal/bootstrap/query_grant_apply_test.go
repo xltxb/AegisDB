@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"aegisdb/internal/gateway"
 	"aegisdb/internal/model"
 )
 
@@ -217,6 +218,61 @@ func TestGrantApply_PrecheckBlocksStaleApproval(t *testing.T) {
 	eq(t, ap.Status, model.StatusPending, "没批成,单子还在待审批")
 	e.app.decideWindowTicket(req.ApNo, false)
 	eq(t, len(e.grantsOf("buyer@corp.io")), 0, "没有生成授权")
+}
+
+// 批准前要核实库还在;实例此刻列不出库时同样不让批 —— 核实不了不等于还在(#179)。
+func TestGrantApply_PrecheckRefusesWhenDatabasesCannotBeListed(t *testing.T) {
+	e := newGrantEnv(t)
+	_, tok := e.applicant("buyer@corp.io")
+	req := requestOf(t, e.apply(tok, e.applyBody(e.db)))
+
+	// 元数据缓存清空、且不许走模拟路径:实例的库列不出来
+	if err := e.app.repo.DB().Where("connection_id = ?", e.source).Delete(&model.MetaTable{}).Error; err != nil {
+		t.Fatal(err)
+	}
+	prev := gateway.AllowSimulation
+	gateway.AllowSimulation = false
+	t.Cleanup(func() { gateway.AllowSimulation = prev })
+
+	approver := e.app.login("zhangwei@aegisdb.io", "aegisdb123")
+	ap, _ := e.app.repo.GetApprovalByApNo(req.ApNo)
+	r := e.app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil)
+	if r.Code == 0 || !strings.Contains(r.Msg, "无法核实") {
+		t.Fatalf("列不出库时不能批准,并说明原因,实际 code=%d msg=%q", r.Code, r.Msg)
+	}
+	ap, _ = e.app.repo.GetApprovalByApNo(req.ApNo)
+	eq(t, ap.Status, model.StatusPending, "没批成,单子还在待审批")
+	eq(t, len(e.grantsOf("buyer@corp.io")), 0, "没有生成授权")
+}
+
+// 批准了却没能生成授权:通知申请人"未生效",按执行失败归类,不混进"驳回"(#180)。
+func TestGrantApply_FailedGrantNotifiesAsExecFailed(t *testing.T) {
+	e := newGrantEnv(t)
+	u, tok := e.applicant("buyer@corp.io")
+	req := requestOf(t, e.apply(tok, e.applyBody(e.db)))
+
+	// 预检之后、写入之前情况变了:申请人的账号没了,授权写不进去
+	ap, _ := e.app.repo.GetApprovalByApNo(req.ApNo)
+	if err := e.app.repo.DB().Delete(&model.User{}, u.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	approver := e.app.login("zhangwei@aegisdb.io", "aegisdb123")
+	eq(t, e.app.do(http.MethodPost, "/api/v1/approvals/"+itoa(ap.ID)+"/approve", approver, nil).Code, 0, "批准")
+
+	ns, _ := e.app.repo.ListNotifications(u.ID, 20)
+	var got []string
+	for _, n := range ns {
+		got = append(got, n.Type)
+		if n.RefNo == req.ApNo && n.Type == model.NotifApprovalRejected {
+			t.Fatalf("已批准的单不能按驳回通知: %+v", n)
+		}
+	}
+	for _, n := range ns {
+		if n.RefNo == req.ApNo && n.Type == model.NotifExecFailed {
+			return
+		}
+	}
+	t.Fatalf("应有一条 exec-failed 通知,实际类型 %v", got)
 }
 
 // 由仍启用的外部系统下发的授权,网关里既不能申请修改,也不能直接开通覆盖。

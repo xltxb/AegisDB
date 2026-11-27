@@ -292,8 +292,12 @@ func (s *Services) precheckGrantApproval(ap *model.Approval) error {
 	if q.AllowExport && !lim.ExportEnabled {
 		return grantInvalid("数据查询的导出功能已关闭,这张含导出的申请不能批准,请驳回")
 	}
+	// 列不出库时同样不让批:核实不了不等于还在,批下去可能给一个已经没了的库写授权
 	dbs, err := s.sourceDatabasesOf(conn)
-	if err == nil && !containsStr(dbs, q.DBName) {
+	if err != nil {
+		return grantInvalid("暂时无法核实实例 %s 上的库 %s 是否还在(%v),请稍后再批", conn.Name, q.DBName, err)
+	}
+	if !containsStr(dbs, q.DBName) {
 		return grantInvalid("实例 %s 上已没有库 %s,请驳回", conn.Name, q.DBName)
 	}
 	return s.grantOwnedByLiveClient(q.UserID, q.ConnectionID, q.DBName)
@@ -305,7 +309,8 @@ func (s *Services) grantApprovedRequest(ap *model.Approval, approverName string)
 	fail := func(err error) {
 		slog.Error("数据查询权限申请已批准,生成授权失败", "apNo", ap.ApNo, "err", err)
 		_ = s.Repo.UpdateQueryGrantRequest(ap.QueryGrantReqID, map[string]any{"error": fitRunes(err.Error(), 512)})
-		s.notify(ap.InitiatorID, model.NotifApprovalRejected, apimsg.T("数据查询权限未能生效"),
+		// 单子已经批准:按"通过了的工单执行失败"归类,不能报成驳回
+		s.notify(ap.InitiatorID, model.NotifExecFailed, apimsg.T("数据查询权限未能生效"),
 			apimsg.Sprintf("申请 %s 已批准,但生成授权时失败:%s", ap.ApNo, err.Error()), ap.ApNo)
 	}
 	q, conn, err := s.grantRequestOf(ap)
