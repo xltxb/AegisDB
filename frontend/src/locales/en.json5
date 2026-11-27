@@ -1728,6 +1728,8 @@
     m1114f13f: 'WITH RECURSIVE cannot be pushed down in distributed execution and degrades to single-node computation',
     // action 只能是 approve 或 reject
     md1235765: 'action must be approve or reject',
+    // binlog 中积压的本表变更超过 %d 行仍未重放(迁移暂停或限流过久),为免耗尽网关内存,迁移中止
+    m8696b593: 'More than {0} row changes to this table are waiting in the binlog unreplayed (the migration was paused or throttled too long); aborting the migration to avoid exhausting gateway memory',
     // binlog 位点 %s: %w
     mf7625873: 'binlog position {0}: {1}',
     // binlog 位点不是数字: %q
