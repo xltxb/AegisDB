@@ -7,8 +7,8 @@ import { KeyRound, X } from 'lucide-react'
 import VButton from '@/components/common/VButton'
 import api from '@/api'
 import { useI18n } from '@/hooks/useI18n'
-import { useMountEffect } from '@/hooks/effects'
-import type { BizApplySource, BizQueryLimits, QueryGrant } from '@/types'
+import type { BizQueryLimits, QueryGrant } from '@/types'
+import { BizSourceDbFields, useBizSourceDb } from '@/components/query/BizSourceDbPicker'
 import './QueryGrantCreateModal.scoped.css'
 
 interface Props { open: boolean; limits: BizQueryLimits | null; onCreated: (g: QueryGrant) => void; onClose: () => void }
@@ -22,12 +22,7 @@ const intOr = (v: string): number | '' => (v === '' ? '' : Math.max(0, Math.roun
 function Body({ limits, onCreated, onClose }: Omit<Props, 'open'>) {
   const { t } = useI18n()
   const maxDays = limits?.maxGrantDays || 90
-  const [sources, setSources] = useState<BizApplySource[] | null>(null)
   const [email, setEmail] = useState('')
-  const [sourceId, setSourceId] = useState(0)
-  const [dbs, setDbs] = useState<string[] | null>(null)
-  const [dbLoading, setDbLoading] = useState(false)
-  const [database, setDatabase] = useState('')
   const [days, setDays] = useState<number | ''>(Math.min(30, maxDays))
   const [maxRows, setMaxRows] = useState<number | ''>(0)
   const [timeoutSec, setTimeoutSec] = useState<number | ''>(0)
@@ -35,25 +30,8 @@ function Body({ limits, onCreated, onClose }: Omit<Props, 'open'>) {
   const [reason, setReason] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-
-  useMountEffect(() => {
-    api.bizApplySources().then((xs) => setSources(xs ?? [])).catch((e: any) => { setSources([]); setErr(e?.message || t('loadFailed')) })
-  })
-
-  async function pickSource(v: string) {
-    const id = Number(v) || 0
-    setSourceId(id)
-    setDatabase('')
-    setDbs(null)
-    if (!id) return
-    setDbLoading(true)
-    try {
-      setDbs((await api.bizApplyDatabases(id)) ?? [])
-    } catch (e: any) {
-      setDbs([])
-      setErr(e?.message || t('loadFailed'))
-    } finally { setDbLoading(false) }
-  }
+  const picker = useBizSourceDb(setErr)
+  const { sources, sourceId, database } = picker
 
   function check(): string {
     if (!email.trim()) return t('qgNewNeedEmail')
@@ -96,16 +74,7 @@ function Body({ limits, onCreated, onClose }: Omit<Props, 'open'>) {
           </div>
           <label className="fl">{t('qgNewEmail')}</label>
           <input autoFocus className="pin" type="email" placeholder="name@example.com" value={email} data-testid="qg-new-email" onChange={(e) => setEmail(e.target.value)} />
-          <label className="fl">{t('qaSource')}</label>
-          <select className="pin" value={sourceId || ''} disabled={sources === null} data-testid="qg-new-source" onChange={(e) => pickSource(e.target.value)}>
-            <option value="">{sources === null ? t('treeLoading') : sources.length ? t('qaSourcePh') : t('qaNoSources')}</option>
-            {(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.env ? ` · ${s.env}` : ''}</option>)}
-          </select>
-          <label className="fl">{t('qaDb')}</label>
-          <select className="pin" value={database} disabled={!sourceId || dbLoading} data-testid="qg-new-db" onChange={(e) => setDatabase(e.target.value)}>
-            <option value="">{dbLoading ? t('treeLoading') : dbs && !dbs.length ? t('qaDbNone') : t('qaDbPh')}</option>
-            {(dbs ?? []).map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
+          <BizSourceDbFields picker={picker} testid="qg-new" />
           <div className="qgc-grid">
             <div>
               <label className="fl">{t('qaDays')}</label>

@@ -116,29 +116,20 @@ func (s *Services) ApplyQueryGrant(u *model.User, req dto.QueryGrantApplyReq) (*
 	switch {
 	case dbName == "":
 		return nil, grantInvalid("请选择库")
-	case req.Days < 1 || req.Days > lim.MaxGrantDays:
-		return nil, grantInvalid("有效期须在 1 到 %d 天之间", lim.MaxGrantDays)
 	case reason == "":
 		return nil, grantInvalid("请填写申请理由")
 	case len([]rune(reason)) > 500:
 		return nil, grantInvalid("申请理由不能超过 500 个字")
-	case req.AllowExport && !lim.ExportEnabled:
-		return nil, grantInvalid("数据查询的导出功能未开启,不能申请导出")
 	}
-	dbs, err := s.sourceDatabasesOf(conn)
-	if err != nil {
+	if err := s.checkGrantTarget(u.ID, conn, dbName, req.Days, req.AllowExport, formGrantWords(func() error {
+		return grantInvalid("数据查询的导出功能未开启,不能申请导出")
+	})); err != nil {
 		return nil, err
-	}
-	if !containsStr(dbs, dbName) {
-		return nil, grantInvalid("实例 %s 上没有库 %s", conn.Name, dbName)
 	}
 	if _, ap, err := s.Repo.PendingQueryGrantRequest(u.ID, conn.ID, dbName); err != nil {
 		return nil, err
 	} else if ap != nil {
 		return nil, grantInvalid("你对 %s/%s 已有一张待审批的申请 %s,请等它处理完或先撤回", conn.Name, dbName, ap.ApNo)
-	}
-	if err := s.grantOwnedByLiveClient(u.ID, conn.ID, dbName); err != nil {
-		return nil, err
 	}
 
 	q := &model.QueryGrantRequest{
@@ -172,6 +163,48 @@ func (s *Services) grantOwnedByLiveClient(userID, connID int64, db string) error
 		return grantInvalid("这条授权(#%d)由外部系统 %s 下发,只能在那里申请修改", g.ID, owner.Name)
 	}
 	return nil
+}
+
+// grantTargetWords 是 checkGrantTarget 查不过时对人说的话。三条路查的是同一组条件,说法不同:
+// 申请人与管理员改了表单再提交,审批人则应当驳回。
+type grantTargetWords struct {
+	days    func(max int) error
+	export  func() error
+	listDBs func(conn *model.Connection, db string, err error) error
+	noDB    func(conn *model.Connection, db string) error
+}
+
+// formGrantWords 是表单上(申请、管理员直接开通)的说法,只有导出那句两边不同。
+func formGrantWords(export func() error) grantTargetWords {
+	return grantTargetWords{
+		days:    func(max int) error { return grantInvalid("有效期须在 1 到 %d 天之间", max) },
+		export:  export,
+		listDBs: func(_ *model.Connection, _ string, err error) error { return err },
+		noDB: func(c *model.Connection, db string) error {
+			return grantInvalid("实例 %s 上没有库 %s", c.Name, db)
+		},
+	}
+}
+
+// checkGrantTarget 是网关里三条路(申请、批准前预检、管理员直接开通)在给 (用户, 实例, 库) 下发
+// 授权之前都要过的检查。集中在一处,预检才永远查得和申请时一样多(#184):有效期上限、导出开关、
+// 库还在不在、这条授权是不是归仍启用的外部系统。行数 / 超时上限由 writeConsoleGrant 写入时再查。
+func (s *Services) checkGrantTarget(userID int64, conn *model.Connection, db string, days int, allowExport bool, w grantTargetWords) error {
+	lim := s.BizQueryLimits()
+	if days < 1 || days > lim.MaxGrantDays {
+		return w.days(lim.MaxGrantDays)
+	}
+	if allowExport && !lim.ExportEnabled {
+		return w.export()
+	}
+	dbs, err := s.sourceDatabasesOf(conn)
+	if err != nil {
+		return w.listDBs(conn, db, err)
+	}
+	if !containsStr(dbs, db) {
+		return w.noDB(conn, db)
+	}
+	return s.grantOwnedByLiveClient(userID, conn.ID, db)
 }
 
 func grantApprovalRef(conn *model.Connection, q *model.QueryGrantRequest) *model.RuleRef {
@@ -285,22 +318,21 @@ func (s *Services) precheckGrantApproval(ap *model.Approval) error {
 	if err != nil {
 		return err
 	}
-	lim := s.BizQueryLimits()
-	if q.Days > lim.MaxGrantDays {
-		return grantInvalid("申请的有效期 %d 天已超过当前上限 %d 天,请驳回后让申请人重新申请", q.Days, lim.MaxGrantDays)
-	}
-	if q.AllowExport && !lim.ExportEnabled {
-		return grantInvalid("数据查询的导出功能已关闭,这张含导出的申请不能批准,请驳回")
-	}
-	// 列不出库时同样不让批:核实不了不等于还在,批下去可能给一个已经没了的库写授权
-	dbs, err := s.sourceDatabasesOf(conn)
-	if err != nil {
-		return grantInvalid("暂时无法核实实例 %s 上的库 %s 是否还在(%v),请稍后再批", conn.Name, q.DBName, err)
-	}
-	if !containsStr(dbs, q.DBName) {
-		return grantInvalid("实例 %s 上已没有库 %s,请驳回", conn.Name, q.DBName)
-	}
-	return s.grantOwnedByLiveClient(q.UserID, q.ConnectionID, q.DBName)
+	return s.checkGrantTarget(q.UserID, conn, q.DBName, q.Days, q.AllowExport, grantTargetWords{
+		days: func(max int) error {
+			return grantInvalid("申请的有效期 %d 天已超过当前上限 %d 天,请驳回后让申请人重新申请", q.Days, max)
+		},
+		export: func() error {
+			return grantInvalid("数据查询的导出功能已关闭,这张含导出的申请不能批准,请驳回")
+		},
+		// 列不出库时同样不让批:核实不了不等于还在,批下去可能给一个已经没了的库写授权
+		listDBs: func(c *model.Connection, db string, err error) error {
+			return grantInvalid("暂时无法核实实例 %s 上的库 %s 是否还在(%v),请稍后再批", c.Name, db, err)
+		},
+		noDB: func(c *model.Connection, db string) error {
+			return grantInvalid("实例 %s 上已没有库 %s,请驳回", c.Name, db)
+		},
+	})
 }
 
 // grantApprovedRequest 在审批单批准之后生成授权。审批状态已经落库;这里失败(极少:预检之后、
@@ -351,23 +383,12 @@ func (s *Services) AdminCreateQueryGrant(actor *model.User, req dto.AdminQueryGr
 		return nil, err
 	}
 	dbName := strings.TrimSpace(req.Database)
+	if err := s.checkGrantTarget(user.ID, conn, dbName, req.Days, req.AllowExport, formGrantWords(func() error {
+		return grantInvalid("数据查询的导出功能未开启,不能开通导出")
+	})); err != nil {
+		return nil, err
+	}
 	lim := s.BizQueryLimits()
-	if req.Days < 1 || req.Days > lim.MaxGrantDays {
-		return nil, grantInvalid("有效期须在 1 到 %d 天之间", lim.MaxGrantDays)
-	}
-	if req.AllowExport && !lim.ExportEnabled {
-		return nil, grantInvalid("数据查询的导出功能未开启,不能开通导出")
-	}
-	dbs, err := s.sourceDatabasesOf(conn)
-	if err != nil {
-		return nil, err
-	}
-	if !containsStr(dbs, dbName) {
-		return nil, grantInvalid("实例 %s 上没有库 %s", conn.Name, dbName)
-	}
-	if err := s.grantOwnedByLiveClient(user.ID, conn.ID, dbName); err != nil {
-		return nil, err
-	}
 	now := time.Now()
 	g, err := s.writeConsoleGrant(actor, user, conn, dbName, consoleGrant{
 		Via: grantViaConsole, ExternalID: "console-" + s.nextAuditID(), Approver: actor.Name,
