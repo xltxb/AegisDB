@@ -12,8 +12,8 @@ import { KeyRound, X, Undo2 } from 'lucide-react'
 import VButton from '@/components/common/VButton'
 import api from '@/api'
 import { useI18n } from '@/hooks/useI18n'
-import { useMountEffect } from '@/hooks/effects'
-import type { BizApplySource, QueryGrantRequest } from '@/types'
+import type { QueryGrantRequest } from '@/types'
+import { BizSourceDbFields, useBizSourceDb } from './BizSourceDbPicker'
 import './BizApplyModal.scoped.css'
 
 /** 天数输入框的初值:7 天,上限比 7 小就取上限。 */
@@ -66,37 +66,14 @@ export default function BizApplyModal({ open, ...rest }: Props) {
 
 function Body({ maxGrantDays, exportEnabled, mine, busyId, onWithdraw, onSubmitted, onClose }: Omit<Props, 'open'>) {
   const { t } = useI18n()
-  const [sources, setSources] = useState<BizApplySource[] | null>(null)
-  const [sourceId, setSourceId] = useState(0)
-  const [dbs, setDbs] = useState<string[] | null>(null)
-  const [dbLoading, setDbLoading] = useState(false)
-  const [database, setDatabase] = useState('')
   const [days, setDays] = useState<number | ''>(defaultApplyDays(maxGrantDays))
   const [allowExport, setAllowExport] = useState(false)
   const [reason, setReason] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<QueryGrantRequest | null>(null)
-
-  useMountEffect(() => {
-    api.bizApplySources().then((xs) => setSources(xs ?? [])).catch((e: any) => { setSources([]); setErr(e?.message || t('loadFailed')) })
-  })
-
-  async function pickSource(v: string) {
-    const id = Number(v) || 0
-    setSourceId(id)
-    setDatabase('')
-    setDbs(null)
-    if (!id) return
-    setDbLoading(true)
-    try {
-      const xs = await api.bizApplyDatabases(id)
-      setDbs(xs ?? [])
-    } catch (e: any) {
-      setDbs([])
-      setErr(e?.message || t('loadFailed'))
-    } finally { setDbLoading(false) }
-  }
+  const picker = useBizSourceDb(setErr)
+  const { sources, sourceId, database } = picker
 
   // 与服务端同样的几条;服务端仍会再判一次,这里只是让人少等一个来回。
   function check(): string {
@@ -144,16 +121,7 @@ function Body({ maxGrantDays, exportEnabled, mine, busyId, onWithdraw, onSubmitt
             <div className="ba-none" data-testid="q-apply-nosrc">{t('qaNoSources')}</div>
           ) : (
             <>
-              <label className="fl">{t('qaSource')}</label>
-              <select className="pin" value={sourceId || ''} disabled={sources === null} data-testid="q-apply-source" onChange={(e) => pickSource(e.target.value)}>
-                <option value="">{sources === null ? t('treeLoading') : t('qaSourcePh')}</option>
-                {(sources ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}{s.env ? ` · ${s.env}` : ''}</option>)}
-              </select>
-              <label className="fl">{t('qaDb')}</label>
-              <select className="pin" value={database} disabled={!sourceId || dbLoading} data-testid="q-apply-db" onChange={(e) => setDatabase(e.target.value)}>
-                <option value="">{dbLoading ? t('treeLoading') : dbs && !dbs.length ? t('qaDbNone') : t('qaDbPh')}</option>
-                {(dbs ?? []).map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
+              <BizSourceDbFields picker={picker} testid="q-apply" />
               <label className="fl">{t('qaDays')}</label>
               <div className="ba-days">
                 <input
