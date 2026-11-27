@@ -170,7 +170,7 @@ func (m *Migration) Status() Status {
 	return s
 }
 
-// Pause stops copying and replaying until Resume. binlog 仍在读(由解码库缓冲),
+// Pause stops copying and replaying until Resume. binlog 仍在读(流自己排队,只攒本表的改动,见 binlog_mysql.go),
 // 暂停越久,恢复后要追的就越多。cut-over 不会在暂停期间开始。
 func (m *Migration) Pause()  { m.setPaused(true) }
 func (m *Migration) Resume() { m.setPaused(false) }

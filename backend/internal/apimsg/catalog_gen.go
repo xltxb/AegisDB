@@ -119,6 +119,7 @@ var catalog = []Entry{
 	{"WHERE 条件对列使用了函数 %s(),索引将失效", true},
 	{"WITH RECURSIVE 在分布式执行下无法下推,会退化为单点计算", true},
 	{"action 只能是 approve 或 reject", false},
+	{"binlog 中积压的本表变更超过 %d 行仍未重放(迁移暂停或限流过久),为免耗尽网关内存,迁移中止", true},
 	{"binlog 位点 %s: %w", true},
 	{"binlog 位点不是数字: %q", true},
 	{"binlog 位点超出范围: %s", true},

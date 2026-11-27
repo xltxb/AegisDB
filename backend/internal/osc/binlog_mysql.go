@@ -124,39 +124,136 @@ func (b *MySQLBinlog) Stream(_ context.Context, from Position) (Stream, error) {
 		syncer.Close()
 		return nil, apimsg.Errorf("订阅 binlog(%s): %w", from, err)
 	}
-	return &mysqlStream{syncer: syncer, streamer: streamer, file: from.File, schema: b.schema, table: b.table}, nil
+	ctx, cancel := context.WithCancel(context.Background())
+	st := &mysqlStream{
+		syncer: syncer, streamer: streamer, file: from.File, schema: b.schema, table: b.table,
+		maxRows: maxBacklogRows, ready: make(chan struct{}, 1), cancel: cancel, done: make(chan struct{}),
+	}
+	go st.pump(ctx)
+	return st, nil
 }
 
+// maxBacklogRows 是读到了、还没被重放取走的本表行变更的上限。迁移暂停或限流时重放停着,
+// 本表的改动只能攒在网关内存里;攒到这个数就让迁移失败,而不是把网关的内存吃光。
+const maxBacklogRows = 500_000
+
+// mysqlStream 由一个协程(pump)**不停地**把事件从连接上读走,放进自己的队列,Next 从队列里取。
+//
+// 不能让"读连接"跟着"重放"一起停:迁移暂停或被限流时重放不取事件,整个实例的写入照样涌进
+// binlog,解码库的缓冲(1 万个事件)一满就不再读 socket,库端写不出去,net_write_timeout
+// (默认 60 秒)一到就断开连接 —— 恢复后读到 "io.ReadFull ... EOF: connection was bad",
+// 迁移失败。
+//
+// 队列只为本表的改动占内存:只推进位点的事件(别的表、无关语句)连续出现时合并成一个,只留
+// 最新位点 —— 重放与 cut-over 对它们只关心"读到哪了"。
 type mysqlStream struct {
 	syncer   *replication.BinlogSyncer
 	streamer *replication.BinlogStreamer
-	file     string // 当前所在的 binlog 文件(RotateEvent 时更新)
+	file     string // 当前所在的 binlog 文件(RotateEvent 时更新);只有 pump 读写
 	schema   string
 	table    string
+	maxRows  int
+
+	mu    sync.Mutex
+	queue []Event
+	rows  int   // queue 里的行变更数
+	err   error // pump 停下的原因;队列取空之后才交给 Next,不越过它前面的事件
+	ready chan struct{}
+
+	cancel context.CancelFunc
+	done   chan struct{}
 }
 
-// Next returns the next event. 超时返回 ctx.Err(),流仍然可用(GetEvent 只是不再等这一次)。
-func (s *mysqlStream) Next(ctx context.Context) (Event, error) {
+func (s *mysqlStream) pump(ctx context.Context) {
+	defer close(s.done)
 	for {
 		be, err := s.streamer.GetEvent(ctx)
 		if err != nil {
-			if ctx.Err() != nil {
-				return Event{}, ctx.Err()
+			if ctx.Err() == nil {
+				s.stop(apimsg.Errorf("读取 binlog: %w", err))
 			}
-			return Event{}, apimsg.Errorf("读取 binlog: %w", err)
+			return
 		}
 		ev, ok, err := s.convert(be)
 		if err != nil {
+			s.stop(err)
+			return
+		}
+		if ok && !s.push(ev) {
+			return
+		}
+	}
+}
+
+// push queues ev; false 表示积压超限,流已停下。
+func (s *mysqlStream) push(ev Event) bool {
+	s.mu.Lock()
+	defer s.signal()
+	defer s.mu.Unlock()
+	if posOnly(ev) && len(s.queue) > 0 && posOnly(s.queue[len(s.queue)-1]) {
+		s.queue[len(s.queue)-1] = Event{Pos: ev.Pos}
+		return true
+	}
+	if posOnly(ev) {
+		ev = Event{Pos: ev.Pos}
+	}
+	s.queue = append(s.queue, ev)
+	s.rows += len(ev.Rows)
+	if s.rows > s.maxRows {
+		s.err = apimsg.Errorf("binlog 中积压的本表变更超过 %d 行仍未重放(迁移暂停或限流过久),为免耗尽网关内存,迁移中止", s.maxRows)
+		return false
+	}
+	return true
+}
+
+func (s *mysqlStream) stop(err error) {
+	s.mu.Lock()
+	if s.err == nil {
+		s.err = err
+	}
+	s.mu.Unlock()
+	s.signal()
+}
+
+func (s *mysqlStream) signal() {
+	select {
+	case s.ready <- struct{}{}:
+	default:
+	}
+}
+
+// posOnly: 这个事件对重放只意味着位点前进。
+func posOnly(ev Event) bool { return len(ev.Rows) == 0 && !ev.DDL }
+
+// Next returns the next event. 超时返回 ctx.Err(),流仍然可用。
+func (s *mysqlStream) Next(ctx context.Context) (Event, error) {
+	for {
+		s.mu.Lock()
+		if len(s.queue) > 0 {
+			ev := s.queue[0]
+			s.queue[0] = Event{} // 放掉行数据的引用
+			s.queue = s.queue[1:]
+			s.rows -= len(ev.Rows)
+			s.mu.Unlock()
+			return ev, nil
+		}
+		err := s.err
+		s.mu.Unlock()
+		if err != nil {
 			return Event{}, err
 		}
-		if ok {
-			return ev, nil
+		select {
+		case <-ctx.Done():
+			return Event{}, ctx.Err()
+		case <-s.ready:
 		}
 	}
 }
 
 func (s *mysqlStream) Close() error {
+	s.cancel()
 	s.syncer.Close()
+	<-s.done
 	return nil
 }
 
